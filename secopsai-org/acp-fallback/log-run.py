@@ -7,14 +7,31 @@ from pathlib import Path
 
 WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace')
 CONFIG_PATH = WORKSPACE / 'secopsai-dashboard' / 'config.js'
+ENV_PATH = WORKSPACE / 'secopsai-dashboard' / '.env'
+
+
+def load_env(path: Path):
+    env = {}
+    if not path.exists():
+        return env
+    for line in path.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        env[key.strip()] = value.strip()
+    return env
 
 
 def load_dashboard_config():
+    env = load_env(ENV_PATH)
+    if env.get('SUPABASE_URL') and env.get('SUPABASE_ANON_KEY'):
+        return env['SUPABASE_URL'], env['SUPABASE_ANON_KEY']
     text = CONFIG_PATH.read_text(encoding='utf-8')
     url_match = re.search(r'supabaseUrl:\s*"([^"]+)"', text)
     key_match = re.search(r'supabaseAnonKey:\s*"([^"]+)"', text)
     if not url_match or not key_match:
-        raise SystemExit('Could not extract Supabase config from secopsai-dashboard/config.js')
+        raise SystemExit('Could not extract Supabase config from secopsai-dashboard/.env or config.js')
     return url_match.group(1), key_match.group(1)
 
 
