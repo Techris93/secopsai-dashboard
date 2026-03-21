@@ -2,7 +2,7 @@ window.__SECOPSAI_APP_LOADED = true;
 
 const supabaseGlobal = window.supabase;
 const cfg = window.SECOPSAI_CONFIG || {};
-let supabase = null;
+let supabaseClient = null;
 let bootError = null;
 
 if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
@@ -10,7 +10,7 @@ if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
 } else if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) {
   bootError = 'SecOpsAI dashboard config is missing Supabase credentials.';
 } else {
-  supabase = supabaseGlobal.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  supabaseClient = supabaseGlobal.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 }
 
 const state = {
@@ -369,7 +369,7 @@ function renderAll() {
 }
 
 async function loadTable(table, options = {}) {
-  let query = supabase.from(table).select(options.select || '*');
+  let query = supabaseClient.from(table).select(options.select || '*');
   if (options.orderBy) query = query.order(options.orderBy.column, { ascending: options.orderBy.ascending ?? false });
   if (options.limit) query = query.limit(options.limit);
   const { data, error } = await query;
@@ -418,14 +418,14 @@ function openTaskModal(item = null) {
 function closeTaskModal() { el('task-modal').classList.add('hidden'); }
 
 async function createDashboardEvent(event_type, title, body, severity = 'info') {
-  const { error } = await supabase.from('dashboard_events').insert({ event_type, title, body, severity });
+  const { error } = await supabaseClient.from('dashboard_events').insert({ event_type, title, body, severity });
   if (error) console.error('dashboard_events insert failed', error);
 }
 
 async function logAgentRun({ role_label, runtime = 'dashboard', model_used = 'n/a', task_summary, task_detail = null, status = 'completed', source_surface = 'dashboard', source_channel_id = null, initiated_by = 'Techris', output_path = null, output_summary = null }) {
   const now = new Date().toISOString();
   const payload = { role_label, runtime, model_used, task_summary, task_detail, status, source_surface, source_channel_id, initiated_by, output_path, output_summary, started_at: now, completed_at: status === 'completed' ? now : null };
-  const { error } = await supabase.from('agent_runs').insert(payload);
+  const { error } = await supabaseClient.from('agent_runs').insert(payload);
   if (error) console.error('agent_runs insert failed', error);
 }
 
@@ -447,12 +447,12 @@ async function saveTask() {
   if (!payload.title) return alert('Task title is required.');
 
   if (taskModalState.editingId) {
-    const { error } = await supabase.from('work_items').update(payload).eq('id', taskModalState.editingId);
+    const { error } = await supabaseClient.from('work_items').update(payload).eq('id', taskModalState.editingId);
     if (error) return alert(`Failed to update task: ${error.message}`);
     await createDashboardEvent('task_updated', `Task updated: ${payload.title}`, `Status: ${payload.status} • Priority: ${payload.priority}`, 'info');
     await logAgentRun({ role_label: 'exec/agents-orchestrator', task_summary: `Updated work item: ${payload.title}`, task_detail: payload.description || 'Task updated from dashboard modal.', output_summary: `Status set to ${payload.status}` });
   } else {
-    const { error } = await supabase.from('work_items').insert(payload);
+    const { error } = await supabaseClient.from('work_items').insert(payload);
     if (error) return alert(`Failed to create task: ${error.message}`);
     await createDashboardEvent('task_created', `Task created: ${payload.title}`, `Domain: ${payload.domain} • Priority: ${payload.priority}`, 'success');
     await logAgentRun({ role_label: 'exec/agents-orchestrator', task_summary: `Created work item: ${payload.title}`, task_detail: payload.description || 'Task created from dashboard modal.', output_summary: `Initial status ${payload.status}` });
@@ -465,7 +465,7 @@ async function deleteTask() {
   if (!taskModalState.editingId) return;
   const item = state.workItems.find(w => w.id === taskModalState.editingId);
   if (!confirm('Delete this task?')) return;
-  const { error } = await supabase.from('work_items').delete().eq('id', taskModalState.editingId);
+  const { error } = await supabaseClient.from('work_items').delete().eq('id', taskModalState.editingId);
   if (error) return alert(`Failed to delete task: ${error.message}`);
   await createDashboardEvent('task_deleted', `Task deleted: ${item?.title || 'Untitled task'}`, 'Task removed from dashboard kanban.', 'warning');
   await logAgentRun({ role_label: 'exec/agents-orchestrator', task_summary: `Deleted work item: ${item?.title || 'Untitled task'}`, task_detail: item?.description || 'Task deleted from dashboard modal.', output_summary: 'Task removed from work_items.' });
@@ -476,7 +476,7 @@ async function deleteTask() {
 async function moveTaskToStatus(taskId, nextStatus) {
   const item = state.workItems.find(w => w.id === taskId);
   if (!item || item.status === nextStatus) return;
-  const { error } = await supabase.from('work_items').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', taskId);
+  const { error } = await supabaseClient.from('work_items').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', taskId);
   if (error) return alert(`Failed to move task: ${error.message}`);
   await createDashboardEvent('task_moved', `Task moved: ${item.title}`, `${item.status} → ${nextStatus}`, 'info');
   await logAgentRun({ role_label: 'exec/agents-orchestrator', task_summary: `Moved work item: ${item.title}`, task_detail: `Status changed from ${item.status} to ${nextStatus} via dashboard drag-and-drop.`, output_summary: `${item.status} → ${nextStatus}` });
