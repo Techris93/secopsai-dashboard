@@ -14,6 +14,10 @@ const taskModalState = {
   editingId: null
 };
 
+const dragState = {
+  taskId: null
+};
+
 const pages = ["mission-control", "agents", "tasks", "artifacts", "integrations"];
 
 function fmtDate(value) {
@@ -188,8 +192,22 @@ function renderTasks() {
 
     const col = document.createElement("div");
     col.className = "column";
+    col.dataset.status = status;
     col.innerHTML = `<h3>${label} (${items.length})</h3><div class="task-list"></div>`;
     const list = col.querySelector(".task-list");
+
+    col.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      col.classList.add('drag-over');
+    });
+    col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
+    col.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      const taskId = e.dataTransfer.getData('text/plain') || dragState.taskId;
+      if (!taskId) return;
+      await moveTaskToStatus(taskId, status);
+    });
 
     if (!items.length) {
       list.innerHTML = `<div class="empty">No items in ${label.toLowerCase()}.</div>`;
@@ -197,6 +215,8 @@ function renderTasks() {
       items.forEach(item => {
         const div = document.createElement("div");
         div.className = "task-card";
+        div.draggable = true;
+        div.dataset.taskId = item.id;
         div.innerHTML = `
           <div class="title">${escapeHtml(item.title)}</div>
           <div class="small">${escapeHtml(item.description || '')}</div>
@@ -209,7 +229,21 @@ function renderTasks() {
           </div>
           <div class="small" style="margin-top:10px;">Updated ${escapeHtml(fmtDate(item.updated_at || item.created_at))}</div>
         `;
-        div.addEventListener('click', () => openTaskModal(item));
+        div.addEventListener('dragstart', (e) => {
+          dragState.taskId = item.id;
+          e.dataTransfer.setData('text/plain', item.id);
+          e.dataTransfer.effectAllowed = 'move';
+          div.classList.add('dragging');
+        });
+        div.addEventListener('dragend', () => {
+          dragState.taskId = null;
+          div.classList.remove('dragging');
+          document.querySelectorAll('.column.drag-over').forEach(el => el.classList.remove('drag-over'));
+        });
+        div.addEventListener('click', (e) => {
+          if (dragState.taskId) return;
+          openTaskModal(item);
+        });
         list.appendChild(div);
       });
     }
@@ -370,6 +404,35 @@ function closeTaskModal() {
   document.getElementById('task-modal').classList.add('hidden');
 }
 
+async function createDashboardEvent(event_type, title, body, severity = 'info') {
+  const { error } = await supabase.from('dashboard_events').insert({ event_type, title, body, severity });
+  if (error) console.error('dashboard_events insert failed', error);
+}
+
+async function logAgentRun({ role_label, runtime = 'dashboard', model_used = 'n/a', task_summary, task_detail = null, status = 'completed', source_surface = 'dashboard', source_channel_id = null, initiated_by = 'Techris', output_path = null, output_summary = null }) {
+  const now = new Date().toISOString();
+  const payload = {
+    role_label,
+    runtime,
+    model_used,
+    task_summary,
+    task_detail,
+    status,
+    source_surface,
+    source_channel_id,
+    initiated_by,
+    output_path,
+    output_summary,
+    started_at: now,
+    completed_at: status === 'completed' ? now : null
+  };
+  const { error } = await supabase.from('agent_runs').insert(payload);
+  if (error) {
+    console.error('agent_runs insert failed', error);
+    alert(`Failed to log agent run: ${error.message}`);
+  }
+}
+
 async function saveTask() {
   const payload = {
     title: document.getElementById('task-title').value.trim(),
@@ -393,9 +456,23 @@ async function saveTask() {
   if (taskModalState.editingId) {
     const { error } = await supabase.from('work_items').update(payload).eq('id', taskModalState.editingId);
     if (error) return alert(`Failed to update task: ${error.message}`);
+    await createDashboardEvent('task_updated', `Task updated: ${payload.title}`, `Status: ${payload.status} • Priority: ${payload.priority}`, 'info');
+    await logAgentRun({
+      role_label: 'exec/agents-orchestrator',
+      task_summary: `Updated work item: ${payload.title}`,
+      task_detail: payload.description || 'Task updated from dashboard modal.',
+      output_summary: `Status set to ${payload.status}`
+    });
   } else {
     const { error } = await supabase.from('work_items').insert(payload);
     if (error) return alert(`Failed to create task: ${error.message}`);
+    await createDashboardEvent('task_created', `Task created: ${payload.title}`, `Domain: ${payload.domain} • Priority: ${payload.priority}`, 'success');
+    await logAgentRun({
+      role_label: 'exec/agents-orchestrator',
+      task_summary: `Created work item: ${payload.title}`,
+      task_detail: payload.description || 'Task created from dashboard modal.',
+      output_summary: `Initial status ${payload.status}`
+    });
   }
   closeTaskModal();
   await boot();
@@ -403,10 +480,33 @@ async function saveTask() {
 
 async function deleteTask() {
   if (!taskModalState.editingId) return;
+  const item = state.workItems.find(w => w.id === taskModalState.editingId);
   if (!confirm('Delete this task?')) return;
   const { error } = await supabase.from('work_items').delete().eq('id', taskModalState.editingId);
   if (error) return alert(`Failed to delete task: ${error.message}`);
+  await createDashboardEvent('task_deleted', `Task deleted: ${item?.title || 'Untitled task'}`, 'Task removed from dashboard kanban.', 'warning');
+  await logAgentRun({
+    role_label: 'exec/agents-orchestrator',
+    task_summary: `Deleted work item: ${item?.title || 'Untitled task'}`,
+    task_detail: item?.description || 'Task deleted from dashboard modal.',
+    output_summary: 'Task removed from work_items.'
+  });
   closeTaskModal();
+  await boot();
+}
+
+async function moveTaskToStatus(taskId, nextStatus) {
+  const item = state.workItems.find(w => w.id === taskId);
+  if (!item || item.status === nextStatus) return;
+  const { error } = await supabase.from('work_items').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', taskId);
+  if (error) return alert(`Failed to move task: ${error.message}`);
+  await createDashboardEvent('task_moved', `Task moved: ${item.title}`, `${item.status} → ${nextStatus}`, 'info');
+  await logAgentRun({
+    role_label: 'exec/agents-orchestrator',
+    task_summary: `Moved work item: ${item.title}`,
+    task_detail: `Status changed from ${item.status} to ${nextStatus} via dashboard drag-and-drop.`,
+    output_summary: `${item.status} → ${nextStatus}`
+  });
   await boot();
 }
 

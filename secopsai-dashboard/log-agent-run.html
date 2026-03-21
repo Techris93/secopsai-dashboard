@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log Agent Run • SecOpsAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; background:#0a0f1e; color:#e5eefb; margin:0; }
+    .wrap { max-width: 860px; margin: 40px auto; padding: 24px; }
+    .card { background: rgba(16,24,43,.82); border:1px solid rgba(255,255,255,.08); border-radius: 20px; padding:24px; }
+    .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+    label { display:grid; gap:7px; color:#95a4c6; font-size:.92rem; }
+    input, textarea, select { width:100%; background:rgba(255,255,255,.03); color:#e5eefb; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:11px 12px; font:inherit; }
+    .full { grid-column: 1 / -1; }
+    button { margin-top: 18px; background: linear-gradient(135deg,#6366f1,#06b6d4); color:white; border:0; border-radius:12px; padding:12px 16px; font:inherit; cursor:pointer; }
+    .status { margin-top: 14px; color:#95a4c6; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 style="margin-top:0;">Manual Agent Run Logger</h1>
+      <p style="color:#95a4c6;">Use this lightweight form to add real <code>agent_runs</code> entries while deeper automation is still being wired.</p>
+      <div class="grid">
+        <label><span>Role label</span><input id="role_label" value="exec/agents-orchestrator"></label>
+        <label><span>Runtime</span><input id="runtime" value="dashboard"></label>
+        <label><span>Model used</span><input id="model_used" value="n/a"></label>
+        <label><span>Status</span>
+          <select id="status"><option>completed</option><option>running</option><option>queued</option><option>failed</option><option>cancelled</option></select>
+        </label>
+        <label><span>Task summary</span><input id="task_summary"></label>
+        <label><span>Initiated by</span><input id="initiated_by" value="Techris"></label>
+        <label class="full"><span>Task detail</span><textarea id="task_detail" rows="4"></textarea></label>
+        <label class="full"><span>Output summary</span><textarea id="output_summary" rows="3"></textarea></label>
+      </div>
+      <button id="save">Log run</button>
+      <div class="status" id="statusMsg">Ready.</div>
+    </div>
+  </div>
+  <script src="./config.js"></script>
+  <script>
+    const supabase = window.supabase.createClient(window.SECOPSAI_CONFIG.supabaseUrl, window.SECOPSAI_CONFIG.supabaseAnonKey);
+    document.getElementById('save').addEventListener('click', async () => {
+      const payload = {
+        role_label: document.getElementById('role_label').value.trim(),
+        runtime: document.getElementById('runtime').value.trim() || 'dashboard',
+        model_used: document.getElementById('model_used').value.trim() || 'n/a',
+        status: document.getElementById('status').value,
+        task_summary: document.getElementById('task_summary').value.trim(),
+        task_detail: document.getElementById('task_detail').value.trim() || null,
+        initiated_by: document.getElementById('initiated_by').value.trim() || null,
+        output_summary: document.getElementById('output_summary').value.trim() || null,
+        source_surface: 'dashboard',
+        started_at: new Date().toISOString(),
+        completed_at: ['completed','failed','cancelled'].includes(document.getElementById('status').value) ? new Date().toISOString() : null
+      };
+      if (!payload.role_label || !payload.task_summary) {
+        document.getElementById('statusMsg').textContent = 'Role label and task summary are required.';
+        return;
+      }
+      const { error } = await supabase.from('agent_runs').insert(payload);
+      document.getElementById('statusMsg').textContent = error ? `Error: ${error.message}` : 'Run logged successfully.';
+    });
+  </script>
+</body>
+</html>
