@@ -183,7 +183,19 @@
     </div>
   </div>
 
-  <script src="./config.js?v=20260322b"></script>
-  <script src="./app.js?v=20260322b"></script>
+  <script>
+    window.__SECOPSAI_DEBUG = { htmlLoaded: true, configLoaded: false, appLoaded: false };
+    window.addEventListener('error', function (event) {
+      var el = document.getElementById('global-status');
+      if (el) el.textContent = 'JS error: ' + (event.message || 'unknown error');
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      var el = document.getElementById('global-status');
+      var reason = event.reason && (event.reason.message || String(event.reason));
+      if (el) el.textContent = 'Promise error: ' + (reason || 'unknown rejection');
+    });
+  </script>
+  <script src="./config.js?v=20260322c" onload="window.__SECOPSAI_DEBUG.configLoaded=true"></script>
+  <script src="./app.js?v=20260322c" onload="window.__SECOPSAI_DEBUG.appLoaded=!!window.__SECOPSAI_APP_LOADED"></script>
 </body>
 </html>

@@ -1,3 +1,5 @@
+window.__SECOPSAI_APP_LOADED = true;
+
 const supabaseGlobal = window.supabase;
 const cfg = window.SECOPSAI_CONFIG || {};
 let supabase = null;
