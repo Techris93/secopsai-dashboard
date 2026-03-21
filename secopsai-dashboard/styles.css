@@ -157,6 +157,10 @@ a { color: inherit; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); }
 th { color: var(--muted); font-size: 0.84rem; font-weight: 600; }
+tr.artifact-row { cursor: pointer; transition: background 0.15s ease; }
+tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
+.compact-header { margin-bottom: 16px; }
+.checkbox-card { display: flex; align-items: center; }
 
 .empty {
   border: 1px dashed rgba(255,255,255,0.14); border-radius: 16px; padding: 20px; color: var(--muted);
