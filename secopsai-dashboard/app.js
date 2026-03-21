@@ -70,6 +70,32 @@ function renderMissionControl() {
     <div class="card"><div class="metric">${secReview}</div><div class="metric-label">Needs security review</div></div>
   `;
 
+  const byDomain = state.workItems.reduce((acc, item) => {
+    acc[item.domain] = (acc[item.domain] || 0) + 1;
+    return acc;
+  }, {});
+  const topDomains = Object.entries(byDomain).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const extFacing = state.workItems.filter(w => w.external_facing).length;
+  const approvedArtifacts = state.artifacts.filter(a => a.approval_status === 'approved').length;
+  document.getElementById("mission-overview").innerHTML = `
+    <div class="card">
+      <h3>Top domains</h3>
+      <div class="kv-list">
+        ${topDomains.length ? topDomains.map(([d, count]) => `<div class="kv-row"><div class="kv-key">${escapeHtml(d)}</div><div class="kv-val">${count}</div></div>`).join('') : '<div class="empty">No work item distribution yet.</div>'}
+      </div>
+    </div>
+    <div class="card">
+      <h3>External-facing work</h3>
+      <div class="metric">${extFacing}</div>
+      <div class="metric-label">Items that need careful product/security review</div>
+    </div>
+    <div class="card">
+      <h3>Approved artifacts</h3>
+      <div class="metric">${approvedArtifacts}</div>
+      <div class="metric-label">Reusable outputs already marked approved</div>
+    </div>
+  `;
+
   const recentFeed = [...state.events]
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 6);
