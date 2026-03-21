@@ -213,6 +213,7 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
 .checkbox-row input { width: auto; }
 .modal-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
 .modal-actions-right { display: flex; gap: 10px; }
+.integration-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
 @media (max-width: 720px) {
   .main { padding: 18px; }

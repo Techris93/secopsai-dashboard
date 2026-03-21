@@ -19,7 +19,8 @@ const state = {
   artifacts: [],
   channelRoutes: [],
   events: [],
-  integrationStatus: null
+  integrationStatus: null,
+  lastDiscordTest: null
 };
 
 const taskModalState = { editingId: null };
@@ -364,7 +365,7 @@ function renderIntegrations() {
       <div class="card"><div class="metric">${state.channelRoutes.length}</div><div class="metric-label">Discord routes</div></div>
       <div class="card"><div class="metric">${state.channelRoutes.filter(r => r.active).length}</div><div class="metric-label">Active routes</div></div>
       <div class="card"><div class="metric">1</div><div class="metric-label">Supabase project</div></div>
-      <div class="card"><div class="metric">${discordWebhookCount}</div><div class="metric-label">Discord webhooks configured</div></div>`;
+      <div class="card"><div class="metric">${discordWebhookCount}</div><div class="metric-label">Discord channels wired via local helper</div></div>`;
   }
 
   const cfgEl = el('integration-config');
@@ -382,11 +383,16 @@ function renderIntegrations() {
         <h3>Discord</h3>
         <div class="kv-list">
           <div class="kv-row"><div class="kv-key">Server ID</div><div class="kv-val">${escapeHtml(cfg.serverId || '—')}</div></div>
-          <div class="kv-row"><div class="kv-key">Mapped channels</div><div class="kv-val">${state.channelRoutes.length}</div></div>
-          <div class="kv-row"><div class="kv-key">Discord mode</div><div class="kv-val">${escapeHtml(discordStatus.mode || 'browser-direct')}</div></div>
-          <div class="kv-row"><div class="kv-key">ops-log webhook</div><div class="kv-val">${discordStatus['ops-log'] ? 'Configured' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">kanban-updates webhook</div><div class="kv-val">${discordStatus['kanban-updates'] ? 'Configured' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Discord mode</div><div class="kv-val">${escapeHtml(discordStatus.mode || 'local-helper')}</div></div>
+          <div class="kv-row"><div class="kv-key">ops-log route</div><div class="kv-val">${discordStatus['ops-log'] ? 'Configured' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">kanban-updates route</div><div class="kv-val">${discordStatus['kanban-updates'] ? 'Configured' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Last test</div><div class="kv-val">${escapeHtml(state.lastDiscordTest?.summary || 'Not run yet')}</div></div>
         </div>
+        <div class="integration-actions">
+          <button id="test-ops-log-btn" class="secondary-btn">Send ops-log test</button>
+          <button id="test-kanban-btn" class="secondary-btn">Send kanban-updates test</button>
+        </div>
+        <div id="discord-test-status" class="small" style="margin-top:12px;">${escapeHtml(state.lastDiscordTest?.detail || 'Use the buttons to verify local Discord delivery.')}</div>
       </div>`;
   }
 
@@ -398,7 +404,7 @@ function renderIntegrations() {
   }
   table.innerHTML = `
     <div class="table-wrap"><table>
-      <thead><tr><th>Channel</th><th>Channel ID</th><th>Default role</th><th>Override</th><th>Summaries</th><th>Run logs</th><th>Webhook wired</th><th>Active</th></tr></thead>
+      <thead><tr><th>Channel</th><th>Channel ID</th><th>Default role</th><th>Override</th><th>Summaries</th><th>Run logs</th><th>Local helper route</th><th>Active</th></tr></thead>
       <tbody>${state.channelRoutes.map(r => `
         <tr>
           <td>${escapeHtml(r.channel_name)}</td>
@@ -509,6 +515,16 @@ function buildDiscordMessage(title, lines = []) {
   return [`**${title}**`, ...lines.filter(Boolean)].join('\n');
 }
 
+function formatDiscordError(data, fallbackStatus) {
+  if (data?.errorDetail?.discord_code === 1010) {
+    return 'Discord/Cloudflare blocked the webhook request from this machine (code 1010).';
+  }
+  if (data?.errorDetail?.http_status) {
+    return `Discord webhook HTTP ${data.errorDetail.http_status}${data.errorDetail.discord_code ? ` (code ${data.errorDetail.discord_code})` : ''}`;
+  }
+  return data?.error || `Discord notify HTTP ${fallbackStatus}`;
+}
+
 async function postDiscordUpdate(channelName, content) {
   try {
     const res = await fetch(cfg.discordNotifyEndpoint || '/api/discord-notify', {
@@ -517,7 +533,10 @@ async function postDiscordUpdate(channelName, content) {
       body: JSON.stringify({ channel: channelName, content })
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Discord notify HTTP ${res.status}`);
+    if (!res.ok || data.ok === false) {
+      const message = formatDiscordError(data, res.status);
+      return { ok: false, reason: message, skipped: data.skipped || false };
+    }
     return data;
   } catch (error) {
     console.error(`Discord post failed for ${channelName}`, error);
@@ -585,9 +604,11 @@ async function announceTaskChange(kind, item, details, severity = 'info') {
     sourceChannelName: 'ops-log'
   });
 
-  await postDiscordUpdate('ops-log', buildDiscordMessage(details.title, [details.body, `Role: exec/agents-orchestrator`, run?.id ? `Run ID: ${run.id}` : null]));
+  const opsResult = await postDiscordUpdate('ops-log', buildDiscordMessage(details.title, [details.body, `Role: exec/agents-orchestrator`, run?.id ? `Run ID: ${run.id}` : null]));
+  if (!opsResult.ok && !opsResult.skipped) console.warn('ops-log notification failed:', opsResult.reason);
   if (kind === 'task_moved' || kind === 'task_created' || kind === 'task_deleted' || kind === 'task_updated') {
-    await postDiscordUpdate('kanban-updates', buildDiscordMessage(details.kanbanTitle || details.title, [details.kanbanBody || details.body]));
+    const kanbanResult = await postDiscordUpdate('kanban-updates', buildDiscordMessage(details.kanbanTitle || details.title, [details.kanbanBody || details.body]));
+    if (!kanbanResult.ok && !kanbanResult.skipped) console.warn('kanban notification failed:', kanbanResult.reason);
   }
   return { event, run };
 }
@@ -602,8 +623,27 @@ async function announceArtifactChange(kind, artifact, details, severity = 'info'
     outputPath: artifact?.path_or_url || null,
     sourceChannelName: 'ops-log'
   });
-  await postDiscordUpdate('ops-log', buildDiscordMessage(details.title, [details.body, artifact?.path_or_url ? `Artifact: ${artifact.path_or_url}` : null, run?.id ? `Run ID: ${run.id}` : null]));
+  const opsResult = await postDiscordUpdate('ops-log', buildDiscordMessage(details.title, [details.body, artifact?.path_or_url ? `Artifact: ${artifact.path_or_url}` : null, run?.id ? `Run ID: ${run.id}` : null]));
+  if (!opsResult.ok && !opsResult.skipped) console.warn('artifact ops-log notification failed:', opsResult.reason);
   return run;
+}
+
+async function runDiscordTest(channelName) {
+  const result = await postDiscordUpdate(channelName, buildDiscordMessage('SecOpsAI dashboard test', [`Channel: ${channelName}`, `Sent at: ${new Date().toLocaleString()}`]));
+  if (result.ok) {
+    state.lastDiscordTest = {
+      summary: `${channelName} test ok`,
+      detail: `Delivered through local helper at ${new Date().toLocaleTimeString()}.`
+    };
+    await createDashboardEvent('discord_test_ok', `Discord test ok: ${channelName}`, 'Local helper accepted the test notification.', 'success');
+  } else {
+    state.lastDiscordTest = {
+      summary: `${channelName} test failed`,
+      detail: result.reason || 'Unknown Discord delivery failure.'
+    };
+    await createDashboardEvent('discord_test_failed', `Discord test failed: ${channelName}`, result.reason || 'Unknown Discord delivery failure.', 'error');
+  }
+  renderIntegrations();
 }
 
 async function saveTask() {
@@ -782,6 +822,8 @@ function bindEvents() {
   });
   document.addEventListener('click', (event) => {
     if (event.target?.id === 'new-artifact-btn') openArtifactModal();
+    if (event.target?.id === 'test-ops-log-btn') runDiscordTest('ops-log');
+    if (event.target?.id === 'test-kanban-btn') runDiscordTest('kanban-updates');
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);

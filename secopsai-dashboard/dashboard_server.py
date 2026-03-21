@@ -2,6 +2,7 @@
 import json
 import os
 import urllib.request
+import urllib.error
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
@@ -89,7 +90,27 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 status = getattr(resp, 'status', 200)
-            return json_response(self, 200, {'ok': True, 'status': status})
+                body = resp.read().decode('utf-8', 'ignore')
+            return json_response(self, 200, {'ok': True, 'status': status, 'response': body or None})
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode('utf-8', 'ignore')
+            detail = {'http_status': exc.code, 'raw': body}
+            discord_code = None
+            if body:
+                try:
+                    parsed_body = json.loads(body)
+                    discord_code = parsed_body.get('code')
+                    detail['parsed'] = parsed_body
+                except Exception:
+                    pass
+                if discord_code is None:
+                    import re
+                    m = re.search(r'error code:\s*(\d+)', body)
+                    if m:
+                        discord_code = int(m.group(1))
+            if discord_code is not None:
+                detail['discord_code'] = discord_code
+            return json_response(self, 502, {'ok': False, 'error': f'Discord webhook HTTP {exc.code}', 'errorDetail': detail})
         except Exception as exc:
             return json_response(self, 502, {'ok': False, 'error': str(exc)})
 
