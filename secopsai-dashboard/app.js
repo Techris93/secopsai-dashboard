@@ -367,15 +367,16 @@ function renderAgents() {
       const card = document.createElement("div");
       card.className = "card role-card";
       card.style.borderColor = `${cfg.departments?.[dept] || '#06b6d4'}33`;
+      const hasRun = !!run;
       card.innerHTML = `
         <div class="role">${escapeHtml(role)}</div>
         <div class="dept">${escapeHtml(dept)}</div>
         <div class="mini">
-          <div><span>Last task:</span> ${escapeHtml(run?.task_summary || 'No data yet')}</div>
-          <div><span>Status:</span> ${escapeHtml(run?.status || 'N/A')}</div>
-          <div><span>Runtime:</span> ${escapeHtml(run?.runtime || 'N/A')}</div>
-          <div><span>Model:</span> ${escapeHtml(run?.model_used || 'N/A')}</div>
-          <div><span>Last active:</span> ${escapeHtml(run?.created_at ? fmtDate(run.created_at) : 'N/A')}</div>
+          <div><span>Last task:</span> ${escapeHtml(hasRun ? (run?.task_summary || '—') : 'Not run yet')}</div>
+          <div><span>Status:</span> ${escapeHtml(hasRun ? (run?.status || '—') : 'Not run yet')}</div>
+          <div><span>Runtime:</span> ${escapeHtml(hasRun ? (run?.runtime || '—') : '—')}</div>
+          <div><span>Model:</span> ${escapeHtml(hasRun ? (run?.model_used || '—') : '—')}</div>
+          <div><span>Last active:</span> ${escapeHtml(hasRun ? (run?.created_at ? fmtDate(run.created_at) : '—') : 'Never')}</div>
         </div>
       `;
       grid.appendChild(card);
