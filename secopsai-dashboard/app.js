@@ -177,7 +177,9 @@ function openPromptModal(item, roleLabel = null) {
   promptModalState.prompt = prompt;
   el('prompt-modal-title').textContent = 'Agent prompt';
   const route = findRouteForRole(role);
-  el('prompt-modal-meta').textContent = `Suggested role: ${role}${route ? ` • Channel: #${route.channel_name}` : ' • No mapped Discord channel'}`;
+  const reviewer = item?.reviewer_role || null;
+  const reviewerRoute = reviewer ? findRouteForRole(reviewer) : null;
+  el('prompt-modal-meta').textContent = `Suggested role: ${role}${route ? ` • Channel: #${route.channel_name}` : ' • No mapped Discord channel'}${reviewer ? ` • Reviewer: ${reviewer}${reviewerRoute ? ` (#${reviewerRoute.channel_name})` : ''}` : ''}`;
   el('prompt-output').value = prompt;
   el('prompt-modal').classList.remove('hidden');
 }
@@ -216,6 +218,16 @@ async function sendPromptToRole(roleLabel, modeLabel = 'agent') {
     console.error(`send to ${modeLabel} failed`, error);
     setStatus(`Failed to send prompt: ${error.message || String(error)}`, true);
   }
+}
+
+
+async function sendPromptToReviewer() {
+  const reviewer = promptModalState.item?.reviewer_role || null;
+  if (!reviewer) {
+    setStatus('No reviewer_role set on this task.', true);
+    return;
+  }
+  await sendPromptToRole(reviewer, `reviewer ${reviewer}`);
 }
 
 async function sendPromptToSuggestedAgent() {
@@ -984,6 +996,7 @@ function bindEvents() {
   el('prompt-copy-btn')?.addEventListener('click', copyPromptToClipboard);
   el('prompt-send-orchestrator-btn')?.addEventListener('click', sendPromptToOrchestrator);
   el('prompt-send-suggested-btn')?.addEventListener('click', sendPromptToSuggestedAgent);
+  el('prompt-send-reviewer-btn')?.addEventListener('click', sendPromptToReviewer);
   el('artifact-modal-close')?.addEventListener('click', closeArtifactModal);
   el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
   el('artifact-save-btn')?.addEventListener('click', saveArtifact);
