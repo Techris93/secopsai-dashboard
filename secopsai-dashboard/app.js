@@ -10,6 +10,10 @@ const state = {
   events: []
 };
 
+const taskModalState = {
+  editingId: null
+};
+
 const pages = ["mission-control", "agents", "tasks", "artifacts", "integrations"];
 
 function fmtDate(value) {
@@ -126,6 +130,17 @@ function renderAgents() {
   const host = document.getElementById("agents-groups");
   host.innerHTML = "";
 
+  const completedRuns = state.runs.filter(r => r.status === 'completed').length;
+  const failedRuns = state.runs.filter(r => r.status === 'failed').length;
+  const uniqueRoles = new Set(state.runs.map(r => r.role_label)).size;
+  const activeRoles = new Set(state.runs.filter(r => ['queued','running','completed'].includes(r.status)).map(r => r.role_label)).size;
+  document.getElementById("agent-summary").innerHTML = `
+    <div class="card"><div class="metric">${state.runs.length}</div><div class="metric-label">Tracked runs</div></div>
+    <div class="card"><div class="metric">${uniqueRoles}</div><div class="metric-label">Roles with activity</div></div>
+    <div class="card"><div class="metric">${completedRuns}</div><div class="metric-label">Completed runs</div></div>
+    <div class="card"><div class="metric">${failedRuns}</div><div class="metric-label">Failed runs</div></div>
+  `;
+
   Object.entries(groups).forEach(([dept, roles]) => {
     const wrap = document.createElement("section");
     wrap.className = "role-group";
@@ -194,6 +209,7 @@ function renderTasks() {
           </div>
           <div class="small" style="margin-top:10px;">Updated ${escapeHtml(fmtDate(item.updated_at || item.created_at))}</div>
         `;
+        div.addEventListener('click', () => openTaskModal(item));
         list.appendChild(div);
       });
     }
@@ -312,6 +328,88 @@ async function loadTable(table, options = {}) {
   return data || [];
 }
 
+function resetTaskForm() {
+  taskModalState.editingId = null;
+  document.getElementById('task-modal-title').textContent = 'New task';
+  document.getElementById('task-title').value = '';
+  document.getElementById('task-domain').value = 'exec';
+  document.getElementById('task-priority').value = 'normal';
+  document.getElementById('task-status').value = 'inbox';
+  document.getElementById('task-owner-role').value = '';
+  document.getElementById('task-reviewer-role').value = '';
+  document.getElementById('task-due-date').value = '';
+  document.getElementById('task-created-by').value = 'Techris';
+  document.getElementById('task-external-facing').checked = false;
+  document.getElementById('task-security-review').checked = false;
+  document.getElementById('task-description').value = '';
+  document.getElementById('task-delete-btn').classList.add('hidden');
+}
+
+function openTaskModal(item = null) {
+  resetTaskForm();
+  if (item) {
+    taskModalState.editingId = item.id;
+    document.getElementById('task-modal-title').textContent = 'Edit task';
+    document.getElementById('task-title').value = item.title || '';
+    document.getElementById('task-domain').value = item.domain || 'exec';
+    document.getElementById('task-priority').value = item.priority || 'normal';
+    document.getElementById('task-status').value = item.status || 'inbox';
+    document.getElementById('task-owner-role').value = item.owner_role || '';
+    document.getElementById('task-reviewer-role').value = item.reviewer_role || '';
+    document.getElementById('task-due-date').value = item.due_date || '';
+    document.getElementById('task-created-by').value = item.created_by || 'Techris';
+    document.getElementById('task-external-facing').checked = !!item.external_facing;
+    document.getElementById('task-security-review').checked = !!item.requires_security_review;
+    document.getElementById('task-description').value = item.description || '';
+    document.getElementById('task-delete-btn').classList.remove('hidden');
+  }
+  document.getElementById('task-modal').classList.remove('hidden');
+}
+
+function closeTaskModal() {
+  document.getElementById('task-modal').classList.add('hidden');
+}
+
+async function saveTask() {
+  const payload = {
+    title: document.getElementById('task-title').value.trim(),
+    domain: document.getElementById('task-domain').value,
+    priority: document.getElementById('task-priority').value,
+    status: document.getElementById('task-status').value,
+    owner_role: document.getElementById('task-owner-role').value.trim() || null,
+    reviewer_role: document.getElementById('task-reviewer-role').value.trim() || null,
+    due_date: document.getElementById('task-due-date').value || null,
+    created_by: document.getElementById('task-created-by').value.trim() || null,
+    external_facing: document.getElementById('task-external-facing').checked,
+    requires_security_review: document.getElementById('task-security-review').checked,
+    description: document.getElementById('task-description').value.trim() || null,
+    updated_at: new Date().toISOString()
+  };
+  if (!payload.title) {
+    alert('Task title is required.');
+    return;
+  }
+
+  if (taskModalState.editingId) {
+    const { error } = await supabase.from('work_items').update(payload).eq('id', taskModalState.editingId);
+    if (error) return alert(`Failed to update task: ${error.message}`);
+  } else {
+    const { error } = await supabase.from('work_items').insert(payload);
+    if (error) return alert(`Failed to create task: ${error.message}`);
+  }
+  closeTaskModal();
+  await boot();
+}
+
+async function deleteTask() {
+  if (!taskModalState.editingId) return;
+  if (!confirm('Delete this task?')) return;
+  const { error } = await supabase.from('work_items').delete().eq('id', taskModalState.editingId);
+  if (error) return alert(`Failed to delete task: ${error.message}`);
+  closeTaskModal();
+  await boot();
+}
+
 async function boot() {
   try {
     state.channelRoutes = await loadTable("channel_routes", { orderBy: { column: "channel_name", ascending: true } });
@@ -331,6 +429,11 @@ document.querySelectorAll(".nav-btn").forEach(btn => {
 });
 
 document.getElementById("refresh-btn").addEventListener("click", boot);
+document.getElementById('new-task-btn').addEventListener('click', () => openTaskModal());
+document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
+document.getElementById('task-cancel-btn').addEventListener('click', closeTaskModal);
+document.getElementById('task-save-btn').addEventListener('click', saveTask);
+document.getElementById('task-delete-btn').addEventListener('click', deleteTask);
 
 setPage("mission-control");
 boot();

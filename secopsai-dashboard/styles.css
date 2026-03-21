@@ -168,8 +168,41 @@ th { color: var(--muted); font-size: 0.84rem; font-weight: 600; }
   .sidebar { position: relative; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
 }
 
+.task-card { cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease; }
+.task-card:hover { transform: translateY(-2px); border-color: rgba(99,102,241,0.35); }
+
+.modal.hidden { display: none; }
+.modal {
+  position: fixed; inset: 0; background: rgba(4, 8, 18, 0.72); backdrop-filter: blur(6px);
+  display: grid; place-items: center; z-index: 1000; padding: 20px;
+}
+.modal-card {
+  width: min(860px, 100%); background: #0d1528; border: 1px solid var(--border);
+  border-radius: 22px; padding: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.45);
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.icon-btn, .primary-btn, .secondary-btn, .danger-btn {
+  border-radius: 12px; border: 1px solid var(--border); cursor: pointer; font: inherit;
+}
+.icon-btn { background: rgba(255,255,255,0.04); color: var(--text); width: 38px; height: 38px; }
+.primary-btn { background: linear-gradient(135deg, var(--indigo), var(--cyan)); color: white; padding: 10px 14px; border: 0; }
+.secondary-btn { background: rgba(255,255,255,0.04); color: var(--text); padding: 10px 14px; }
+.danger-btn { background: rgba(239,68,68,0.12); color: #fca5a5; padding: 10px 14px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.form-grid label { display: grid; gap: 7px; font-size: 0.9rem; color: var(--muted); }
+.form-grid label.full { grid-column: 1 / -1; }
+.form-grid input, .form-grid select, .form-grid textarea {
+  width: 100%; background: rgba(255,255,255,0.03); color: var(--text); border: 1px solid var(--border);
+  border-radius: 12px; padding: 11px 12px; font: inherit;
+}
+.checkbox-row { display: flex !important; align-items: center; gap: 10px; margin-top: 18px; }
+.checkbox-row input { width: auto; }
+.modal-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
+.modal-actions-right { display: flex; gap: 10px; }
+
 @media (max-width: 720px) {
   .main { padding: 18px; }
   .grid.cols-5, .grid.cols-4, .grid.cols-3, .grid.cols-2 { grid-template-columns: 1fr; }
   .page-header { flex-direction: column; }
+  .form-grid { grid-template-columns: 1fr; }
 }

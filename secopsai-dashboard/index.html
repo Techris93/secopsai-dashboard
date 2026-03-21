@@ -80,6 +80,7 @@
             <p>Role-based monitor for the exec, platform, security, product, revenue, and support teams using live data from <code>agent_runs</code>.</p>
           </div>
         </div>
+        <div class="grid cols-4" id="agent-summary"></div>
         <div id="agents-groups"></div>
       </section>
 
@@ -87,8 +88,9 @@
         <div class="page-header">
           <div>
             <h2>Tasks</h2>
-            <p>Kanban view over <code>work_items</code>. v1 is read-first and status-aware, with room for edit/create workflows next.</p>
+            <p>Kanban view over <code>work_items</code>. v1 now supports create, edit, and status updates directly against Supabase.</p>
           </div>
+          <div class="status-pill" id="new-task-btn" style="cursor:pointer;"><span class="dot"></span> New task</div>
         </div>
         <div class="kanban" id="task-board"></div>
       </section>
@@ -118,6 +120,60 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="task-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="task-modal-title">New task</h3>
+        <button id="task-modal-close" class="icon-btn">✕</button>
+      </div>
+      <div class="form-grid">
+        <label><span>Title</span><input id="task-title" type="text" /></label>
+        <label><span>Domain</span>
+          <select id="task-domain">
+            <option value="exec">exec</option>
+            <option value="platform">platform</option>
+            <option value="security">security</option>
+            <option value="product">product</option>
+            <option value="revenue">revenue</option>
+            <option value="support">support</option>
+          </select>
+        </label>
+        <label><span>Priority</span>
+          <select id="task-priority">
+            <option value="low">low</option>
+            <option value="normal">normal</option>
+            <option value="high">high</option>
+            <option value="urgent">urgent</option>
+          </select>
+        </label>
+        <label><span>Status</span>
+          <select id="task-status">
+            <option value="inbox">inbox</option>
+            <option value="planned">planned</option>
+            <option value="in_progress">in_progress</option>
+            <option value="review">review</option>
+            <option value="blocked">blocked</option>
+            <option value="done">done</option>
+          </select>
+        </label>
+        <label><span>Owner role</span><input id="task-owner-role" type="text" /></label>
+        <label><span>Reviewer role</span><input id="task-reviewer-role" type="text" /></label>
+        <label><span>Due date</span><input id="task-due-date" type="date" /></label>
+        <label><span>Created by</span><input id="task-created-by" type="text" value="Techris" /></label>
+        <label class="checkbox-row"><input id="task-external-facing" type="checkbox" /> <span>External-facing</span></label>
+        <label class="checkbox-row"><input id="task-security-review" type="checkbox" /> <span>Requires security review</span></label>
+        <label class="full"><span>Description</span><textarea id="task-description" rows="4"></textarea></label>
+      </div>
+      <div class="modal-actions">
+        <button id="task-delete-btn" class="danger-btn hidden">Delete</button>
+        <div class="modal-actions-right">
+          <button id="task-cancel-btn" class="secondary-btn">Cancel</button>
+          <button id="task-save-btn" class="primary-btn">Save task</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="./config.js"></script>
