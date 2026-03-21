@@ -180,6 +180,8 @@
       <div class="modal-actions">
         <button id="task-delete-btn" class="danger-btn hidden">Delete</button>
         <div class="modal-actions-right">
+          <button id="task-assign-btn" class="secondary-btn">Assign to agent</button>
+          <button id="task-generate-prompt-btn" class="secondary-btn">Generate agent prompt</button>
           <button id="task-cancel-btn" class="secondary-btn">Cancel</button>
           <button id="task-save-btn" class="primary-btn">Save task</button>
         </div>
@@ -243,5 +245,25 @@
   </script>
   <script src="./config.js?v=20260322d" onload="window.__SECOPSAI_DEBUG.configLoaded=true"></script>
   <script src="./app.js?v=20260322d" onload="window.__SECOPSAI_DEBUG.appLoaded=!!window.__SECOPSAI_APP_LOADED"></script>
+
+
+  <div id="prompt-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="prompt-modal-title">Agent prompt</h3>
+        <button id="prompt-modal-close" class="icon-btn">✕</button>
+      </div>
+      <div class="small" id="prompt-modal-meta" style="margin-bottom:10px;"></div>
+      <textarea id="prompt-output" rows="16" readonly style="width:100%; background: rgba(255,255,255,0.03); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font: inherit;"></textarea>
+      <div class="modal-actions">
+        <div class="small">Use this in Discord or via the ACP fallback launcher.</div>
+        <div class="modal-actions-right">
+          <button id="prompt-copy-btn" class="secondary-btn">Copy prompt</button>
+          <button id="prompt-close-btn" class="primary-btn">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

@@ -221,3 +221,8 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
   .page-header { flex-direction: column; }
   .form-grid { grid-template-columns: 1fr; }
 }
+
+.prompt-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+.task-card-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.mini-btn { background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 6px 9px; font: inherit; font-size: 0.78rem; cursor: pointer; }
+.mini-btn:hover { border-color: rgba(99,102,241,0.35); }

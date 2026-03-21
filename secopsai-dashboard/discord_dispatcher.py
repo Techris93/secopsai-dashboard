@@ -16,7 +16,9 @@ STATE_PATH = DASH_DIR / '.discord-dispatcher-state.json'
 INBOX_DIR = WORKSPACE / 'secopsai-org' / 'acp-fallback' / 'inbox'
 RUNS_DIR = INBOX_DIR / 'runs'
 
-SUPABASE_TABLES = ['channel_routes', 'agent_runs', 'dashboard_events']
+
+def utc_now():
+    return datetime.now(timezone.utc).isoformat()
 
 
 def load_env(path: Path):
@@ -41,11 +43,22 @@ def env_required(env, name):
 def load_state():
     if STATE_PATH.exists():
         return json.loads(STATE_PATH.read_text(encoding='utf-8'))
-    return {'last_seen': {}}
+    return {'last_seen': {}, 'processed': {}, 'reply_map': {}}
 
 
 def save_state(state):
     STATE_PATH.write_text(json.dumps(state, indent=2), encoding='utf-8')
+
+
+def prune_state(state, max_per_channel=200):
+    for ch, items in list(state.get('processed', {}).items()):
+        if len(items) > max_per_channel:
+            keys = sorted(items.keys(), key=lambda k: int(k))[-max_per_channel:]
+            state['processed'][ch] = {k: items[k] for k in keys}
+    for ch, items in list(state.get('reply_map', {}).items()):
+        if len(items) > max_per_channel:
+            keys = sorted(items.keys(), key=lambda k: int(k))[-max_per_channel:]
+            state['reply_map'][ch] = {k: items[k] for k in keys}
 
 
 def discord_request(method, path, token, payload=None, query=None):
@@ -90,9 +103,15 @@ def supabase_request(method, table, anon_key, payload=None, query='select=*'):
     return json.loads(body) if body else []
 
 
-def get_channel_routes(anon_key):
+def get_channel_routes(anon_key, watch_set=None):
     rows = supabase_request('GET', 'channel_routes', anon_key, query='select=*&active=eq.true')
-    return {row['channel_id']: row for row in rows}
+    out = {}
+    for row in rows:
+        cid = row['channel_id']
+        if watch_set and cid not in watch_set:
+            continue
+        out[cid] = row
+    return out
 
 
 def post_event(anon_key, payload):
@@ -102,6 +121,12 @@ def post_event(anon_key, payload):
 
 def post_run(anon_key, payload):
     rows = supabase_request('POST', 'agent_runs', anon_key, payload=payload)
+    return rows[0] if rows else None
+
+
+def patch_run(anon_key, run_id, payload):
+    q = f'id=eq.{run_id}&select=*'
+    rows = supabase_request('PATCH', 'agent_runs', anon_key, payload=payload, query=q)
     return rows[0] if rows else None
 
 
@@ -125,24 +150,43 @@ def run_claude(prompt_text):
         '--output-format', 'text', prompt_text
     ]
     result = subprocess.run(cmd, cwd=str(WORKSPACE), capture_output=True, text=True, timeout=1800)
-    return {
-        'ok': result.returncode == 0,
-        'stdout': result.stdout.strip(),
-        'stderr': result.stderr.strip(),
-        'returncode': result.returncode,
-    }
+    return {'ok': result.returncode == 0, 'stdout': result.stdout.strip(), 'stderr': result.stderr.strip(), 'returncode': result.returncode}
 
 
-def summarize_output(text, max_chars=1200):
+def summarize_output(text, max_chars=1400):
     text = (text or '').strip()
     return text if len(text) <= max_chars else text[:max_chars] + '\n…'
 
 
-def process_message(msg, route, token, anon_key):
+def upsert_status_message(token, channel_id, state, source_msg_id, content):
+    reply_map = state.setdefault('reply_map', {}).setdefault(channel_id, {})
+    existing = reply_map.get(source_msg_id)
+    if existing:
+        discord_request('PATCH', f'/channels/{channel_id}/messages/{existing}', token, {'content': content[:1900]})
+        return existing
+    msg = discord_request('POST', f'/channels/{channel_id}/messages', token, {'content': content[:1900]})
+    reply_map[source_msg_id] = msg['id']
+    return msg['id']
+
+
+def should_process_message(msg, state):
+    if msg.get('author', {}).get('bot'):
+        return False
+    if not (msg.get('content') or '').strip():
+        return False
+    channel_id = msg['channel_id']
+    processed = state.setdefault('processed', {}).setdefault(channel_id, {})
+    if msg['id'] in processed:
+        return False
+    return True
+
+
+def process_message(msg, route, token, anon_key, state):
     channel_id = msg['channel_id']
     role_label = route['default_role_label']
     content = (msg.get('content') or '').strip()
-    if not content:
+    processed = state.setdefault('processed', {}).setdefault(channel_id, {})
+    if msg['id'] in processed:
         return
 
     queued_run = post_run(anon_key, {
@@ -155,23 +199,34 @@ def process_message(msg, route, token, anon_key):
         'source_surface': 'discord',
         'source_channel_id': channel_id,
         'initiated_by': msg['author'].get('username') or 'discord-user',
-        'started_at': datetime.now(timezone.utc).isoformat(),
+        'started_at': utc_now(),
     })
+    run_id = queued_run.get('id') if queued_run else None
 
     post_event(anon_key, {
         'event_type': 'discord_request_received',
         'title': f'Discord request queued: {role_label}',
         'body': content[:500],
         'severity': 'info',
-        'related_run_id': queued_run.get('id') if queued_run else None,
+        'related_run_id': run_id,
     })
+
+    status_msg = upsert_status_message(token, channel_id, state, msg['id'], f'Queued `{role_label}` request. Preparing prompt…')
+    save_state(state)
 
     prompt = render_prompt(role_label, content)
     prompt_path = write_prompt_file(role_label, msg['id'], prompt)
-
-    discord_request('POST', f'/channels/{channel_id}/messages', token, {
-        'content': f'Queued for `{role_label}`. Running now via ACP fallback. Prompt saved: `{prompt_path.relative_to(WORKSPACE)}`'
+    if run_id:
+        patch_run(anon_key, run_id, {'status': 'running', 'output_path': str(prompt_path)})
+    post_event(anon_key, {
+        'event_type': 'discord_request_running',
+        'title': f'Discord request running: {role_label}',
+        'body': content[:500],
+        'severity': 'info',
+        'related_run_id': run_id,
     })
+    upsert_status_message(token, channel_id, state, msg['id'], f'Running `{role_label}` via ACP fallback.\nPrompt saved: `{prompt_path.relative_to(WORKSPACE)}`')
+    save_state(state)
 
     run_result = run_claude(prompt)
     status = 'completed' if run_result['ok'] else 'failed'
@@ -180,33 +235,44 @@ def process_message(msg, route, token, anon_key):
     output_path = prompt_path.with_suffix('.out.md')
     output_path.write_text(output_text, encoding='utf-8')
 
-    post_run(anon_key, {
-        'role_label': role_label,
-        'runtime': 'discord-dispatcher',
-        'model_used': 'claude-cli',
-        'task_summary': f'Discord run result: {content[:120]}',
-        'task_detail': content,
-        'status': status,
-        'source_surface': 'discord',
-        'source_channel_id': channel_id,
-        'initiated_by': msg['author'].get('username') or 'discord-user',
-        'output_path': str(output_path),
-        'output_summary': output_summary,
-        'started_at': datetime.now(timezone.utc).isoformat(),
-        'completed_at': datetime.now(timezone.utc).isoformat(),
-    })
+    if run_id:
+        patch_run(anon_key, run_id, {
+            'status': status,
+            'output_path': str(output_path),
+            'output_summary': output_summary,
+            'completed_at': utc_now(),
+        })
+    else:
+        post_run(anon_key, {
+            'role_label': role_label,
+            'runtime': 'discord-dispatcher',
+            'model_used': 'claude-cli',
+            'task_summary': f'Discord run result: {content[:120]}',
+            'task_detail': content,
+            'status': status,
+            'source_surface': 'discord',
+            'source_channel_id': channel_id,
+            'initiated_by': msg['author'].get('username') or 'discord-user',
+            'output_path': str(output_path),
+            'output_summary': output_summary,
+            'started_at': utc_now(),
+            'completed_at': utc_now(),
+        })
 
     post_event(anon_key, {
         'event_type': 'discord_request_completed' if run_result['ok'] else 'discord_request_failed',
         'title': f'Discord request {status}: {role_label}',
         'body': output_summary[:500],
         'severity': 'success' if run_result['ok'] else 'error',
+        'related_run_id': run_id,
     })
 
-    reply = f'Finished `{role_label}` request.\n\n{output_summary}'
-    discord_request('POST', f'/channels/{channel_id}/messages', token, {
-        'content': reply[:1900]
-    })
+    final = f'{"Completed" if run_result["ok"] else "Failed"} `{role_label}` request.\n\n{output_summary}'
+    upsert_status_message(token, channel_id, state, msg['id'], final)
+    processed[msg['id']] = {'status': status, 'run_id': run_id, 'completed_at': utc_now(), 'status_message_id': status_msg}
+    state.setdefault('last_seen', {})[channel_id] = msg['id']
+    prune_state(state)
+    save_state(state)
 
 
 def main():
@@ -214,28 +280,31 @@ def main():
     token = env_required(env, 'DISCORD_BOT_TOKEN')
     anon_key = env_required(env, 'SUPABASE_ANON_KEY')
     poll_seconds = float(env.get('DISCORD_DISPATCHER_POLL_SECONDS', '5'))
+    watch_raw = env.get('DISCORD_DISPATCHER_CHANNELS', '').strip()
+    watch_set = {c.strip() for c in watch_raw.split(',') if c.strip()} or None
 
     state = load_state()
-    routes = get_channel_routes(anon_key)
+    routes = get_channel_routes(anon_key, watch_set)
     if not routes:
-        raise SystemExit('No active channel_routes found in Supabase.')
+        raise SystemExit('No active watched channel_routes found in Supabase.')
 
     print(f'Discord dispatcher watching {len(routes)} routed channels...')
     while True:
         try:
-            routes = get_channel_routes(anon_key)
+            routes = get_channel_routes(anon_key, watch_set)
             for channel_id, route in routes.items():
-                msgs = discord_request('GET', f'/channels/{channel_id}/messages', token, query={'limit': 10}) or []
-                msgs = [m for m in msgs if not m.get('author', {}).get('bot')]
+                msgs = discord_request('GET', f'/channels/{channel_id}/messages', token, query={'limit': 20}) or []
                 msgs.sort(key=lambda m: int(m['id']))
-                last_seen = int(state['last_seen'].get(channel_id, '0'))
+                last_seen = int(state.get('last_seen', {}).get(channel_id, '0'))
                 for msg in msgs:
                     msg_id = int(msg['id'])
-                    if msg_id <= last_seen:
+                    if msg_id <= last_seen and not should_process_message(msg, state):
                         continue
-                    process_message(msg, route, token, anon_key)
-                    state['last_seen'][channel_id] = str(msg_id)
-                    save_state(state)
+                    if not should_process_message(msg, state):
+                        state.setdefault('last_seen', {})[channel_id] = msg['id']
+                        continue
+                    process_message(msg, route, token, anon_key, state)
+            save_state(state)
             time.sleep(poll_seconds)
         except KeyboardInterrupt:
             print('Stopping dispatcher.')

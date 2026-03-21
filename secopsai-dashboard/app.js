@@ -25,6 +25,7 @@ const state = {
 
 const taskModalState = { editingId: null };
 const artifactModalState = { editingId: null };
+const promptModalState = { item: null, role: null, prompt: null };
 const dragState = { taskId: null };
 const pages = ["mission-control", "agents", "tasks", "artifacts", "integrations"];
 
@@ -120,6 +121,88 @@ function artifactWorkItemOptions() {
     id: item.id,
     label: item.title
   }));
+}
+
+
+function suggestRoleForTask(item) {
+  if (item?.owner_role) return item.owner_role;
+  const domainMap = {
+    exec: 'exec/agents-orchestrator',
+    platform: 'platform/backend-architect',
+    security: 'security/security-engineer',
+    product: 'product/product-manager',
+    revenue: 'revenue/content-creator',
+    support: 'support/support-responder'
+  };
+  return domainMap[item?.domain] || 'exec/agents-orchestrator';
+}
+
+function buildAgentPrompt(item, roleLabel = null) {
+  const role = roleLabel || suggestRoleForTask(item);
+  const pathHints = ['secopsai-dashboard/index.html','secopsai-dashboard/app.js','secopsai-dashboard/styles.css'];
+  const goals = [
+    'improve the implementation directly',
+    'preserve current working behavior unless a change is required',
+    'keep the solution simple and maintainable'
+  ];
+  if (item?.description) goals.unshift(item.description.trim());
+  return `Have ${role} improve this SecOpsAI task.
+
+Task:
+- Title: ${item?.title || 'Untitled task'}
+- Domain: ${item?.domain || 'exec'}
+- Priority: ${item?.priority || 'normal'}
+- Status: ${item?.status || 'inbox'}
+- Owner role: ${item?.owner_role || 'not set'}
+- Reviewer role: ${item?.reviewer_role || 'not set'}
+
+Relevant paths:
+${pathHints.map(p => `- ${p}`).join('\n')}
+
+Goals:
+${goals.map(g => `- ${g}`).join('\n')}
+
+Return:
+- what changed
+- files touched
+- blockers
+- next actions`;
+}
+
+function openPromptModal(item, roleLabel = null) {
+  const role = roleLabel || suggestRoleForTask(item);
+  const prompt = buildAgentPrompt(item, role);
+  promptModalState.item = item;
+  promptModalState.role = role;
+  promptModalState.prompt = prompt;
+  el('prompt-modal-title').textContent = 'Agent prompt';
+  el('prompt-modal-meta').textContent = `Suggested role: ${role}`;
+  el('prompt-output').value = prompt;
+  el('prompt-modal').classList.remove('hidden');
+}
+
+function closePromptModal() { el('prompt-modal').classList.add('hidden'); }
+
+async function copyPromptToClipboard() {
+  const text = el('prompt-output')?.value || '';
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  setStatus('<span class="dot"></span> Agent prompt copied to clipboard');
+}
+
+function assignTaskToSuggestedAgent() {
+  const currentId = taskModalState.editingId;
+  const item = state.workItems.find(w => w.id === currentId) || {
+    title: el('task-title')?.value?.trim() || '',
+    domain: el('task-domain')?.value || 'exec',
+    priority: el('task-priority')?.value || 'normal',
+    status: el('task-status')?.value || 'inbox',
+    description: el('task-description')?.value?.trim() || ''
+  };
+  const role = suggestRoleForTask(item);
+  el('task-owner-role').value = role;
+  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`);
+  openPromptModal({ ...item, owner_role: role }, role);
 }
 
 function renderMissionControl() {
@@ -288,6 +371,10 @@ function renderTasks() {
             ${item.requires_security_review ? `<span class="badge review">security review</span>` : ''}
           </div>
           <div class="small" style="margin-top:10px;">Updated ${escapeHtml(fmtDate(item.updated_at || item.created_at))}</div>
+          <div class="task-card-actions">
+            <button class="mini-btn" data-action="assign">Assign</button>
+            <button class="mini-btn" data-action="prompt">Prompt</button>
+          </div>
         `;
         div.addEventListener('dragstart', (e) => {
           dragState.taskId = item.id;
@@ -300,7 +387,13 @@ function renderTasks() {
           div.classList.remove('dragging');
           document.querySelectorAll('.column.drag-over').forEach(elm => elm.classList.remove('drag-over'));
         });
-        div.addEventListener('click', () => { if (!dragState.taskId) openTaskModal(item); });
+        div.addEventListener('click', (event) => {
+          if (dragState.taskId) return;
+          const action = event.target?.dataset?.action;
+          if (action === 'assign') { event.stopPropagation(); openTaskModal(item); setTimeout(() => assignTaskToSuggestedAgent(), 0); return; }
+          if (action === 'prompt') { event.stopPropagation(); openPromptModal(item); return; }
+          openTaskModal(item);
+        });
         list.appendChild(div);
       });
     }
@@ -829,6 +922,22 @@ function bindEvents() {
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);
   el('task-save-btn')?.addEventListener('click', saveTask);
   el('task-delete-btn')?.addEventListener('click', deleteTask);
+  el('task-assign-btn')?.addEventListener('click', assignTaskToSuggestedAgent);
+  el('task-generate-prompt-btn')?.addEventListener('click', () => {
+    const item = state.workItems.find(w => w.id === taskModalState.editingId) || {
+      title: el('task-title')?.value?.trim() || '',
+      domain: el('task-domain')?.value || 'exec',
+      priority: el('task-priority')?.value || 'normal',
+      status: el('task-status')?.value || 'inbox',
+      owner_role: el('task-owner-role')?.value?.trim() || null,
+      reviewer_role: el('task-reviewer-role')?.value?.trim() || null,
+      description: el('task-description')?.value?.trim() || ''
+    };
+    openPromptModal(item);
+  });
+  el('prompt-modal-close')?.addEventListener('click', closePromptModal);
+  el('prompt-close-btn')?.addEventListener('click', closePromptModal);
+  el('prompt-copy-btn')?.addEventListener('click', copyPromptToClipboard);
   el('artifact-modal-close')?.addEventListener('click', closeArtifactModal);
   el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
   el('artifact-save-btn')?.addEventListener('click', saveArtifact);
