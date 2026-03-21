@@ -183,6 +183,35 @@ function openPromptModal(item, roleLabel = null) {
 
 function closePromptModal() { el('prompt-modal').classList.add('hidden'); }
 
+
+async function sendPromptToOrchestrator() {
+  const route = state.channelRoutes.find(r => r.default_role_label === 'exec/agents-orchestrator' || r.channel_name === 'orchestrator');
+  if (!route) {
+    setStatus('No orchestrator channel route found.', true);
+    return;
+  }
+  const prompt = promptModalState.prompt || el('prompt-output')?.value || '';
+  if (!prompt) {
+    setStatus('No prompt to send.', true);
+    return;
+  }
+  try {
+    const res = await fetch('/api/discord-send-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId: route.channel_id, content: prompt })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || `Discord send HTTP ${res.status}`);
+    await createDashboardEvent('prompt_sent_to_orchestrator', 'Prompt sent to orchestrator', `Task prompt sent to Discord channel ${route.channel_name}.`, 'success');
+    setStatus('<span class="dot"></span> Prompt sent to orchestrator');
+    closePromptModal();
+  } catch (error) {
+    console.error('send to orchestrator failed', error);
+    setStatus(`Failed to send prompt: ${error.message || String(error)}`, true);
+  }
+}
+
 async function copyPromptToClipboard() {
   const text = el('prompt-output')?.value || '';
   if (!text) return;
@@ -938,6 +967,7 @@ function bindEvents() {
   el('prompt-modal-close')?.addEventListener('click', closePromptModal);
   el('prompt-close-btn')?.addEventListener('click', closePromptModal);
   el('prompt-copy-btn')?.addEventListener('click', copyPromptToClipboard);
+  el('prompt-send-orchestrator-btn')?.addEventListener('click', sendPromptToOrchestrator);
   el('artifact-modal-close')?.addEventListener('click', closeArtifactModal);
   el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
   el('artifact-save-btn')?.addEventListener('click', saveArtifact);
