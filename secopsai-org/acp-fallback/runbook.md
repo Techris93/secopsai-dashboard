@@ -15,6 +15,7 @@ Use this fallback in surfaces where thread-bound persistent sessions are unavail
 Current pattern:
 - role definitions live in `../agents/`
 - routing rules live in `../orchestration-runbook.md`
+- operator dispatch defaults live in `../dispatch-matrix.md`
 - execution happens as ACP one-shot runs
 - continuity is preserved by stable labels, profile files, and wrapper prompts
 

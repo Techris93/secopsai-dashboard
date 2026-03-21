@@ -3,6 +3,9 @@
 ## Purpose
 This runbook defines how SecOpsAI should operate right now using the working ACP one-shot fallback model.
 
+Operator routing reference:
+- `dispatch-matrix.md`
+
 ## Current model
 - Control plane: `exec/agents-orchestrator`
 - Specialist execution: ACP one-shot runs
