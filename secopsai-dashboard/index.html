@@ -92,6 +92,12 @@
           </div>
           <div class="status-pill" id="new-task-btn" style="cursor:pointer;"><span class="dot"></span> New task</div>
         </div>
+        <div class="grid cols-4" style="margin-bottom:18px;">
+          <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
+          <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option><option value="product">product</option><option value="revenue">revenue</option><option value="support">support</option></select></label></div>
+          <div class="card"><label><span class="small">Priority</span><select id="task-filter-priority"><option value="">All</option><option value="urgent">urgent</option><option value="high">high</option><option value="normal">normal</option><option value="low">low</option></select></label></div>
+          <div class="card"><label><span class="small">Owner contains</span><input id="task-filter-owner" type="text" placeholder="e.g. security" /></label></div>
+        </div>
         <div class="kanban" id="task-board"></div>
         <div class="small" style="margin-top:14px;">Tip: drag task cards between columns to update status instantly. Task changes also create dashboard events automatically.</div>
       </section>
