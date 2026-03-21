@@ -38,8 +38,6 @@ def main():
         '__SUPABASE_ANON_KEY__': js_escape(merged.get('SUPABASE_ANON_KEY', '')),
         '__APP_NAME__': js_escape(merged.get('APP_NAME', 'SecOpsAI Mission Control')),
         '__DISCORD_SERVER_ID__': js_escape(merged.get('DISCORD_SERVER_ID', '1484917962245668874')),
-        '__DISCORD_OPS_LOG_WEBHOOK__': js_escape(merged.get('DISCORD_OPS_LOG_WEBHOOK', '')),
-        '__DISCORD_KANBAN_UPDATES_WEBHOOK__': js_escape(merged.get('DISCORD_KANBAN_UPDATES_WEBHOOK', '')),
     }
 
     text = TEMPLATE_PATH.read_text(encoding='utf-8')

@@ -16,7 +16,5 @@ fi
 
 python3 "$DIR/generate-config.py"
 
-echo "Serving SecOpsAI dashboard from: $DIR"
-echo "URL: http://$HOST:$PORT"
-echo "Loaded config from: $DIR/.env"
-python3 -m http.server "$PORT" --bind "$HOST"
+export PORT HOST
+exec python3 "$DIR/dashboard_server.py"

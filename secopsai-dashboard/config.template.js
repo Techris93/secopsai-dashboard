@@ -3,6 +3,8 @@ window.SECOPSAI_CONFIG = {
   supabaseAnonKey: "__SUPABASE_ANON_KEY__",
   appName: "__APP_NAME__",
   serverId: "__DISCORD_SERVER_ID__",
+  discordNotifyEndpoint: "/api/discord-notify",
+  integrationStatusEndpoint: "/api/integration-status",
   departments: {
     exec: "#06B6D4",
     platform: "#3B82F6",
@@ -33,9 +35,5 @@ window.SECOPSAI_CONFIG = {
       "revenue/sales-engineer"
     ],
     support: ["support/support-responder"]
-  },
-  discordWebhooks: {
-    "ops-log": "__DISCORD_OPS_LOG_WEBHOOK__",
-    "kanban-updates": "__DISCORD_KANBAN_UPDATES_WEBHOOK__"
   }
 };

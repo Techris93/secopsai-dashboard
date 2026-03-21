@@ -18,7 +18,8 @@ const state = {
   workItems: [],
   artifacts: [],
   channelRoutes: [],
-  events: []
+  events: [],
+  integrationStatus: null
 };
 
 const taskModalState = { editingId: null };
@@ -356,7 +357,8 @@ function renderArtifacts() {
 
 function renderIntegrations() {
   const summary = el('integration-summary');
-  const discordWebhookCount = Object.keys(cfg.discordWebhooks || {}).filter(k => cfg.discordWebhooks[k]).length;
+  const discordStatus = state.integrationStatus?.discord || {};
+  const discordWebhookCount = ['ops-log', 'kanban-updates'].filter(name => discordStatus[name]).length;
   if (summary) {
     summary.innerHTML = `
       <div class="card"><div class="metric">${state.channelRoutes.length}</div><div class="metric-label">Discord routes</div></div>
@@ -381,8 +383,9 @@ function renderIntegrations() {
         <div class="kv-list">
           <div class="kv-row"><div class="kv-key">Server ID</div><div class="kv-val">${escapeHtml(cfg.serverId || '—')}</div></div>
           <div class="kv-row"><div class="kv-key">Mapped channels</div><div class="kv-val">${state.channelRoutes.length}</div></div>
-          <div class="kv-row"><div class="kv-key">ops-log webhook</div><div class="kv-val">${cfg.discordWebhooks?.['ops-log'] ? 'Configured' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">kanban-updates webhook</div><div class="kv-val">${cfg.discordWebhooks?.['kanban-updates'] ? 'Configured' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Discord mode</div><div class="kv-val">${escapeHtml(discordStatus.mode || 'browser-direct')}</div></div>
+          <div class="kv-row"><div class="kv-key">ops-log webhook</div><div class="kv-val">${discordStatus['ops-log'] ? 'Configured' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">kanban-updates webhook</div><div class="kv-val">${discordStatus['kanban-updates'] ? 'Configured' : 'Missing'}</div></div>
         </div>
       </div>`;
   }
@@ -404,7 +407,7 @@ function renderIntegrations() {
           <td>${r.allow_orchestrator_override ? 'Yes' : 'No'}</td>
           <td>${r.post_summaries ? 'Yes' : 'No'}</td>
           <td>${r.post_run_logs ? 'Yes' : 'No'}</td>
-          <td>${cfg.discordWebhooks?.[r.channel_name] ? 'Yes' : 'No'}</td>
+          <td>${discordStatus[r.channel_name] ? 'Yes' : 'No'}</td>
           <td>${r.active ? 'Yes' : 'No'}</td>
         </tr>`).join("")}</tbody>
     </table></div>`;
@@ -507,19 +510,29 @@ function buildDiscordMessage(title, lines = []) {
 }
 
 async function postDiscordUpdate(channelName, content) {
-  const webhookUrl = cfg.discordWebhooks?.[channelName];
-  if (!webhookUrl) return { skipped: true, reason: `No webhook configured for ${channelName}` };
   try {
-    const res = await fetch(webhookUrl, {
+    const res = await fetch(cfg.discordNotifyEndpoint || '/api/discord-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ channel: channelName, content })
     });
-    if (!res.ok) throw new Error(`Discord webhook HTTP ${res.status}`);
-    return { ok: true };
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Discord notify HTTP ${res.status}`);
+    return data;
   } catch (error) {
     console.error(`Discord post failed for ${channelName}`, error);
     return { ok: false, reason: error.message || String(error) };
+  }
+}
+
+async function loadIntegrationStatus() {
+  try {
+    const res = await fetch(cfg.integrationStatusEndpoint || '/api/integration-status');
+    if (!res.ok) throw new Error(`Integration status HTTP ${res.status}`);
+    state.integrationStatus = await res.json();
+  } catch (error) {
+    console.error('integration status load failed', error);
+    state.integrationStatus = { ok: false, discord: { mode: 'local-helper', 'ops-log': false, 'kanban-updates': false } };
   }
 }
 
@@ -743,6 +756,7 @@ async function boot() {
     state.workItems = await loadTable('work_items', { orderBy: { column: 'updated_at', ascending: false }, limit: 200 });
     state.artifacts = await loadTable('artifacts', { orderBy: { column: 'created_at', ascending: false }, limit: 200 });
     state.events = await loadTable('dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
+    await loadIntegrationStatus();
     renderAll();
   } catch (err) {
     console.error(err);
