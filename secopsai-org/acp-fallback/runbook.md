@@ -4,6 +4,20 @@
 
 Run SecOpsAI role agents through ACP one-shot sessions when persistent thread-bound sessions are not available.
 
+This runbook covers both:
+1. the **12 role wrappers** for direct specialist execution
+2. the **orchestrator wrapper** for routing and merged outputs
+
+## When to use this model
+
+Use this fallback in surfaces where thread-bound persistent sessions are unavailable.
+
+Current pattern:
+- role definitions live in `../agents/`
+- routing rules live in `../orchestration-runbook.md`
+- execution happens as ACP one-shot runs
+- continuity is preserved by stable labels, profile files, and wrapper prompts
+
 ## Standard runtime
 
 Use this runtime shape:
@@ -17,6 +31,42 @@ Use this runtime shape:
   "cwd": "/Users/chrixchange/.openclaw/workspace"
 }
 ```
+
+Notes:
+- default ACP harness: `codex`
+- swap `agentId` later if you want a different allowed ACP agent
+- these are one-shot runs, not persistent sessions
+
+## Available wrappers
+
+### Specialists
+- `platform/software-architect`
+- `platform/backend-architect`
+- `platform/ai-engineer`
+- `platform/devops-automator`
+- `security/security-engineer`
+- `security/threat-detection-engineer`
+- `product/product-manager`
+- `product/ui-designer`
+- `revenue/content-creator`
+- `revenue/outbound-strategist`
+- `revenue/sales-engineer`
+- `support/support-responder`
+
+### Control plane
+- `exec/agents-orchestrator`
+
+## Prompt sources
+
+Prompt wrappers live under:
+- `prompts/<department>__<role>.md`
+
+Examples:
+- `prompts/platform__software-architect.md`
+- `prompts/security__security-engineer.md`
+- `prompts/exec__agents-orchestrator.md`
+
+Each wrapper points back to the authoritative profile or runbook files.
 
 ## Standard task structure
 
@@ -44,16 +94,66 @@ Constraints:
 - Do not invent a different role
 - Return a concise result with clear bullets
 ```
+
+## Fast operator workflow
+
+### Option A — direct role run
+Use this when the owning role is obvious.
+
+1. pick the matching wrapper from `prompts/`
+2. replace `{{TASK}}` with the exact task
+3. spawn an ACP one-shot run
+4. use the output directly or hand it back to the orchestrator
+
+### Option B — orchestrated run
+Use this when the task spans multiple functions or needs role selection.
+
+1. use `prompts/exec__agents-orchestrator.md`
+2. ask it to classify the request and produce a dispatch plan
+3. run only the specialist roles it recommends
+4. merge outputs into one final answer with owners, blockers, and next actions
+
+## Routing guidance
+
+Use the orchestrator when the task is ambiguous, cross-functional, or externally sensitive.
+
+Quick ownership guide:
+- scope, prioritization, product definition -> `product/product-manager`
+- architecture and irreversible design trade-offs -> `platform/software-architect`
+- backend/data/API design -> `platform/backend-architect`
+- AI workflows and evals -> `platform/ai-engineer`
+- CI/CD, infra, rollout safety -> `platform/devops-automator`
+- appsec, trust boundaries, security claims -> `security/security-engineer`
+- detections, ATT&CK, hunt logic -> `security/threat-detection-engineer`
+- interface quality and accessibility -> `product/ui-designer`
+- content and messaging -> `revenue/content-creator`
+- outbound strategy -> `revenue/outbound-strategist`
+- demos, POCs, technical sales support -> `revenue/sales-engineer`
+- support triage and customer issue handling -> `support/support-responder`
+
+## Launcher shortcut
+
+Use the included script to render a final prompt:
+
+```bash
+secopsai-org/acp-fallback/launch-role.sh <department/role> <task...>
 ```
 
-## Suggested operator workflow
+Examples:
 
-- Use the matching prompt file from `prompts/`
-- Replace the task placeholder with the actual assignment
-- Spawn an ACP one-shot run
-- Save useful role-specific outputs back into the SecOpsAI workspace if desired
+```bash
+secopsai-org/acp-fallback/launch-role.sh \
+  platform/software-architect \
+  "Review the current SecOpsAI org structure and propose a minimal orchestrator design."
+```
 
-## Example: software architect
+```bash
+secopsai-org/acp-fallback/launch-role.sh \
+  exec/agents-orchestrator \
+  "Classify this request, choose the smallest role set needed, and return a dispatch plan plus merged operator summary: design a secure detections dashboard and prepare launch messaging."
+```
+
+## Example: specialist one-shot
 
 ```text
 You are acting as SecOpsAI role: platform/software-architect.
@@ -71,7 +171,46 @@ Constraints:
 - Return a concise result with clear bullets
 ```
 
+## Example: orchestrated intake
+
+```text
+You are acting as SecOpsAI role: exec/agents-orchestrator.
+
+Use these files as source of truth:
+- /Users/chrixchange/.openclaw/workspace/secopsai-org/agents/exec/agents-orchestrator.md
+- /Users/chrixchange/.openclaw/workspace/secopsai-org/orchestration-runbook.md
+
+Internalize that role for this run, then complete the following task:
+Classify this request, choose the smallest role set needed, and return a dispatch plan plus merged operator summary: create a launch-ready proposal for a secure detections dashboard with clear backend scope, security claims guardrails, and GTM messaging.
+
+Constraints:
+- Work in /Users/chrixchange/.openclaw/workspace
+- Treat the source files as authoritative for routing behavior, ownership, and operating rules
+- Do not invent a different control plane
+- Prefer the smallest set of roles needed
+- Make ownership explicit
+- If delegation is needed, return a dispatch plan with:
+  - requested role
+  - why that role owns the work
+  - exact subtask to send
+  - required reviewers/sign-off
+- After the dispatch plan, include a merged operator summary with:
+  - decisions
+  - owners
+  - blockers
+  - next actions
+```
+
 ## Limitation reminder
 
 These are not persistent sessions.
 They are reusable one-shot ACP role runs that preserve role identity through prompt structure rather than thread-bound session continuity.
+
+## Recommended discipline
+
+- preserve stable labels in prompts and outputs
+- keep profile files as the source of truth
+- route to the smallest useful set of roles
+- require security review for external security claims
+- require product review for scope/priority decisions
+- let the orchestrator merge outputs instead of dumping raw multi-role fragments

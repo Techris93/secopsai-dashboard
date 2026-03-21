@@ -1,7 +1,7 @@
 # SecOpsAI Fallback Launcher
 
 ## Purpose
-Generate a ready-to-run prompt for any SecOpsAI role using the ACP one-shot fallback model.
+Generate a ready-to-run prompt for any SecOpsAI role or the orchestrator using the ACP one-shot fallback model.
 
 ## Script
 `launch-role.sh`
@@ -11,11 +11,18 @@ Generate a ready-to-run prompt for any SecOpsAI role using the ACP one-shot fall
 secopsai-org/acp-fallback/launch-role.sh <department/role> <task...>
 ```
 
-Example:
+Example specialist run:
 ```bash
 secopsai-org/acp-fallback/launch-role.sh \
   platform/software-architect \
   "Propose a minimal orchestrator design for the first 12 roles"
+```
+
+Example orchestrator run:
+```bash
+secopsai-org/acp-fallback/launch-role.sh \
+  exec/agents-orchestrator \
+  "Classify this request, choose the smallest role set needed, and return a dispatch plan: design a secure detections dashboard and prepare launch messaging"
 ```
 
 ## What it does
@@ -36,6 +43,7 @@ secopsai-org/acp-fallback/launch-role.sh \
 - `revenue/outbound-strategist`
 - `revenue/sales-engineer`
 - `support/support-responder`
+- `exec/agents-orchestrator`
 
 ## Preferred ACP agent
 Default:

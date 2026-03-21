@@ -16,7 +16,9 @@ So this fallback keeps the same role structure, labels, and source-of-truth prof
 ## Files
 
 - `runbook.md` — how to run any role as a one-shot ACP task
-- `prompts/*.md` — one prompt wrapper per role
+- `prompts/*.md` — one prompt wrapper per role, plus the orchestrator wrapper
+- `launch-role.sh` — renders a ready-to-run one-shot prompt for a role or the orchestrator
+- `launcher.md` — launcher usage notes
 
 ## Recommended harness
 
@@ -53,3 +55,4 @@ Starter roles covered:
 - revenue/outbound-strategist
 - revenue/sales-engineer
 - support/support-responder
+- exec/agents-orchestrator
