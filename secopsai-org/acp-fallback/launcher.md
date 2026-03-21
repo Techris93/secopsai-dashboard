@@ -61,4 +61,9 @@ The launcher prints the final role prompt. Use that prompt with an ACP one-shot 
 - `mode: run`
 - `thread: false`
 
+After real runs, log them into Mission Control with:
+```bash
+secopsai-org/acp-fallback/log-run.sh secopsai-org/acp-fallback/examples/orchestrator-run-log.example.json
+```
+
 This keeps the launcher simple and portable even when direct thread-bound ACP execution is unavailable from the current UI surface.

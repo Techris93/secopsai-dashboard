@@ -132,6 +132,31 @@ Quick ownership guide:
 - demos, POCs, technical sales support -> `revenue/sales-engineer`
 - support triage and customer issue handling -> `support/support-responder`
 
+## Logging ACP fallback runs into Mission Control
+
+When a real ACP fallback run starts or completes, log it into Supabase so Mission Control reflects actual orchestrator activity rather than dashboard-only mutations.
+
+Helpers:
+- `secopsai-org/acp-fallback/log-run.sh <payload.json>`
+- `secopsai-org/acp-fallback/log-run.py <payload.json>`
+- example payload: `secopsai-org/acp-fallback/examples/orchestrator-run-log.example.json`
+
+The logger reads the Supabase URL + anon key from:
+- `/Users/chrixchange/.openclaw/workspace/secopsai-dashboard/config.js`
+
+Minimal pattern:
+1. create a JSON payload with a `run` object for `agent_runs`
+2. optionally include an `event` object for `dashboard_events`
+3. call `log-run.sh payload.json`
+4. keep `role_label` stable (`exec/agents-orchestrator` or the specialist role)
+5. use `source_surface: "acp-fallback"` for these workflow-originated entries
+
+Suggested status mapping:
+- before execution: `queued` or `running`
+- after success: `completed`
+- after failure: `failed`
+- on operator stop: `cancelled`
+
 ## Launcher shortcut
 
 Use the included script to render a final prompt:
