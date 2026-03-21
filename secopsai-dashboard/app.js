@@ -176,7 +176,8 @@ function openPromptModal(item, roleLabel = null) {
   promptModalState.role = role;
   promptModalState.prompt = prompt;
   el('prompt-modal-title').textContent = 'Agent prompt';
-  el('prompt-modal-meta').textContent = `Suggested role: ${role}`;
+  const route = findRouteForRole(role);
+  el('prompt-modal-meta').textContent = `Suggested role: ${role}${route ? ` • Channel: #${route.channel_name}` : ' • No mapped Discord channel'}`;
   el('prompt-output').value = prompt;
   el('prompt-modal').classList.remove('hidden');
 }
@@ -184,10 +185,15 @@ function openPromptModal(item, roleLabel = null) {
 function closePromptModal() { el('prompt-modal').classList.add('hidden'); }
 
 
-async function sendPromptToOrchestrator() {
-  const route = state.channelRoutes.find(r => r.default_role_label === 'exec/agents-orchestrator' || r.channel_name === 'orchestrator');
+
+function findRouteForRole(roleLabel) {
+  return state.channelRoutes.find(r => r.default_role_label === roleLabel && r.active) || null;
+}
+
+async function sendPromptToRole(roleLabel, modeLabel = 'agent') {
+  const route = findRouteForRole(roleLabel);
   if (!route) {
-    setStatus('No orchestrator channel route found.', true);
+    setStatus(`No active Discord route found for ${roleLabel}.`, true);
     return;
   }
   const prompt = promptModalState.prompt || el('prompt-output')?.value || '';
@@ -203,13 +209,22 @@ async function sendPromptToOrchestrator() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) throw new Error(data.error || `Discord send HTTP ${res.status}`);
-    await createDashboardEvent('prompt_sent_to_orchestrator', 'Prompt sent to orchestrator', `Task prompt sent to Discord channel ${route.channel_name}.`, 'success');
-    setStatus('<span class="dot"></span> Prompt sent to orchestrator');
+    await createDashboardEvent('prompt_sent_to_agent', `Prompt sent to ${modeLabel}`, `Task prompt sent to Discord channel ${route.channel_name} for ${roleLabel}.`, 'success');
+    setStatus(`<span class="dot"></span> Prompt sent to ${escapeHtml(modeLabel)}`);
     closePromptModal();
   } catch (error) {
-    console.error('send to orchestrator failed', error);
+    console.error(`send to ${modeLabel} failed`, error);
     setStatus(`Failed to send prompt: ${error.message || String(error)}`, true);
   }
+}
+
+async function sendPromptToSuggestedAgent() {
+  const role = promptModalState.role || suggestRoleForTask(promptModalState.item || {});
+  await sendPromptToRole(role, role);
+}
+
+async function sendPromptToOrchestrator() {
+  await sendPromptToRole('exec/agents-orchestrator', 'orchestrator');
 }
 
 async function copyPromptToClipboard() {
@@ -968,6 +983,7 @@ function bindEvents() {
   el('prompt-close-btn')?.addEventListener('click', closePromptModal);
   el('prompt-copy-btn')?.addEventListener('click', copyPromptToClipboard);
   el('prompt-send-orchestrator-btn')?.addEventListener('click', sendPromptToOrchestrator);
+  el('prompt-send-suggested-btn')?.addEventListener('click', sendPromptToSuggestedAgent);
   el('artifact-modal-close')?.addEventListener('click', closeArtifactModal);
   el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
   el('artifact-save-btn')?.addEventListener('click', saveArtifact);
