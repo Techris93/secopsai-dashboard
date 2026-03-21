@@ -1,14 +1,15 @@
 const supabaseGlobal = window.supabase;
+const cfg = window.SECOPSAI_CONFIG || {};
+let supabase = null;
+let bootError = null;
+
 if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
-  throw new Error('Supabase client library failed to load.');
+  bootError = 'Supabase client library failed to load.';
+} else if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) {
+  bootError = 'SecOpsAI dashboard config is missing Supabase credentials.';
+} else {
+  supabase = supabaseGlobal.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 }
-
-const cfg = window.SECOPSAI_CONFIG;
-if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) {
-  throw new Error('SecOpsAI dashboard config is missing Supabase credentials.');
-}
-
-const supabase = supabaseGlobal.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
 const state = {
   runs: [],
@@ -496,8 +497,20 @@ async function boot() {
 
 function bindEvents() {
   document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
-  el('refresh-btn')?.addEventListener('click', boot);
-  el('new-task-btn')?.addEventListener('click', () => openTaskModal());
+  el('refresh-btn')?.addEventListener('click', () => {
+    if (bootError) {
+      setStatus(bootError, true);
+      return;
+    }
+    boot();
+  });
+  el('new-task-btn')?.addEventListener('click', () => {
+    if (bootError) {
+      setStatus(bootError, true);
+      return;
+    }
+    openTaskModal();
+  });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);
   el('task-save-btn')?.addEventListener('click', saveTask);
@@ -511,5 +524,9 @@ function bindEvents() {
 window.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   setPage('mission-control');
+  if (bootError) {
+    setStatus(bootError, true);
+    return;
+  }
   boot();
 });
