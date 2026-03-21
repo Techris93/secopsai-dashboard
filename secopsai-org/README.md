@@ -42,3 +42,13 @@ Start with these first:
 For persistent agents, create long-lived sessions and label them with the values above.
 Use ACP sessions for coding-heavy roles when you want Codex/Claude Code/Gemini-style harnesses.
 Use native subagents for lighter planning, writing, analysis, coordination, and review roles.
+
+## Current operating mode
+
+Right now, the practical working mode is the ACP one-shot fallback documented in:
+- `acp-fallback/README.md`
+- `acp-fallback/runbook.md`
+- `orchestration-runbook.md`
+- `adr/0001-acp-one-shot-operating-model.md`
+
+Why: persistent thread-bound sessions are currently unavailable in the active webchat/control-ui surfaces, while ACP one-shot runs are working.
