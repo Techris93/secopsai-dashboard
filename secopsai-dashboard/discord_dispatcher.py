@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -144,13 +146,29 @@ def render_prompt(role_label, task_text):
     return result.stdout
 
 
-def run_claude(prompt_text):
-    cmd = [
-        'claude', '--print', '--permission-mode', 'bypassPermissions',
-        '--output-format', 'text', prompt_text
-    ]
-    result = subprocess.run(cmd, cwd=str(WORKSPACE), capture_output=True, text=True, timeout=1800)
-    return {'ok': result.returncode == 0, 'stdout': result.stdout.strip(), 'stderr': result.stderr.strip(), 'returncode': result.returncode}
+def resolve_executor(env):
+    executor = (env.get('DISCORD_DISPATCHER_EXECUTOR') or 'codex').strip().lower()
+    if executor != 'codex':
+        return {'ok': False, 'executor': executor, 'reason': f'Unsupported dispatcher executor: {executor}. Only codex is allowed.'}
+
+    command_template = (env.get('DISCORD_DISPATCHER_CODEX_COMMAND') or '').strip()
+    if not command_template:
+        codex_bin = shutil.which('codex')
+        return {
+            'ok': False,
+            'executor': 'codex',
+            'reason': 'Codex-only mode is enabled, but DISCORD_DISPATCHER_CODEX_COMMAND is not configured.',
+            'details': f'codex binary detected at {codex_bin}' if codex_bin else 'codex binary is not installed on PATH'
+        }
+
+    return {'ok': True, 'executor': 'codex', 'command_template': command_template}
+
+
+def run_codex(prompt_text, prompt_path, executor_config):
+    command_template = executor_config['command_template']
+    command = command_template.replace('{prompt_file}', shlex.quote(str(prompt_path))).replace('{prompt}', shlex.quote(prompt_text))
+    result = subprocess.run(command, cwd=str(WORKSPACE), capture_output=True, text=True, timeout=1800, shell=True)
+    return {'ok': result.returncode == 0, 'stdout': result.stdout.strip(), 'stderr': result.stderr.strip(), 'returncode': result.returncode, 'command': command}
 
 
 def summarize_output(text, max_chars=1400):
@@ -181,7 +199,32 @@ def should_process_message(msg, state):
     return True
 
 
-def process_message(msg, route, token, anon_key, state):
+def fail_request(msg, route, token, anon_key, state, run_id, status_msg_id, error_message, detail=None):
+    channel_id = msg['channel_id']
+    role_label = route['default_role_label']
+    processed = state.setdefault('processed', {}).setdefault(channel_id, {})
+    summary = summarize_output(detail or error_message)
+    if run_id:
+        patch_run(anon_key, run_id, {
+            'status': 'failed',
+            'output_summary': summary,
+            'completed_at': utc_now(),
+        })
+    post_event(anon_key, {
+        'event_type': 'discord_request_failed',
+        'title': f'Discord request failed: {role_label}',
+        'body': summary[:500],
+        'severity': 'error',
+        'related_run_id': run_id,
+    })
+    upsert_status_message(token, channel_id, state, msg['id'], f'Failed `{role_label}` request.\n\n{summary}')
+    processed[msg['id']] = {'status': 'failed', 'run_id': run_id, 'completed_at': utc_now(), 'status_message_id': status_msg_id, 'error': summary}
+    state.setdefault('last_seen', {})[channel_id] = msg['id']
+    prune_state(state)
+    save_state(state)
+
+
+def process_message(msg, route, token, anon_key, state, executor_config):
     channel_id = msg['channel_id']
     role_label = route['default_role_label']
     content = (msg.get('content') or '').strip()
@@ -192,7 +235,7 @@ def process_message(msg, route, token, anon_key, state):
     queued_run = post_run(anon_key, {
         'role_label': role_label,
         'runtime': 'discord-dispatcher',
-        'model_used': 'claude-cli',
+        'model_used': 'codex',
         'task_summary': f'Discord request: {content[:120]}',
         'task_detail': content,
         'status': 'queued',
@@ -214,8 +257,22 @@ def process_message(msg, route, token, anon_key, state):
     status_msg = upsert_status_message(token, channel_id, state, msg['id'], f'Queued `{role_label}` request. Preparing prompt…')
     save_state(state)
 
-    prompt = render_prompt(role_label, content)
-    prompt_path = write_prompt_file(role_label, msg['id'], prompt)
+    try:
+        prompt = render_prompt(role_label, content)
+        prompt_path = write_prompt_file(role_label, msg['id'], prompt)
+    except Exception as exc:
+        fail_request(msg, route, token, anon_key, state, run_id, status_msg, 'Prompt preparation failed.', str(exc))
+        return
+
+    if not executor_config.get('ok'):
+        detail = executor_config.get('reason', 'Codex executor is not ready.')
+        if executor_config.get('details'):
+            detail += f" {executor_config['details']}"
+        if run_id:
+            patch_run(anon_key, run_id, {'output_path': str(prompt_path)})
+        fail_request(msg, route, token, anon_key, state, run_id, status_msg, 'Codex executor is not configured.', detail)
+        return
+
     if run_id:
         patch_run(anon_key, run_id, {'status': 'running', 'output_path': str(prompt_path)})
     post_event(anon_key, {
@@ -225,13 +282,20 @@ def process_message(msg, route, token, anon_key, state):
         'severity': 'info',
         'related_run_id': run_id,
     })
-    upsert_status_message(token, channel_id, state, msg['id'], f'Running `{role_label}` via ACP fallback.\nPrompt saved: `{prompt_path.relative_to(WORKSPACE)}`')
+    upsert_status_message(token, channel_id, state, msg['id'], f'Running `{role_label}` via ACP fallback + Codex.\nPrompt saved: `{prompt_path.relative_to(WORKSPACE)}`')
     save_state(state)
 
-    run_result = run_claude(prompt)
+    try:
+        run_result = run_codex(prompt, prompt_path, executor_config)
+    except Exception as exc:
+        fail_request(msg, route, token, anon_key, state, run_id, status_msg, 'Codex execution crashed before completion.', str(exc))
+        return
+
     status = 'completed' if run_result['ok'] else 'failed'
     output_text = run_result['stdout'] or run_result['stderr'] or 'No output.'
     output_summary = summarize_output(output_text)
+    if not run_result['ok'] and run_result.get('command'):
+        output_summary = summarize_output(f"Command: {run_result['command']}\n\n{output_text}")
     output_path = prompt_path.with_suffix('.out.md')
     output_path.write_text(output_text, encoding='utf-8')
 
@@ -246,7 +310,7 @@ def process_message(msg, route, token, anon_key, state):
         post_run(anon_key, {
             'role_label': role_label,
             'runtime': 'discord-dispatcher',
-            'model_used': 'claude-cli',
+            'model_used': 'codex',
             'task_summary': f'Discord run result: {content[:120]}',
             'task_detail': content,
             'status': status,
@@ -279,6 +343,7 @@ def main():
     env = load_env(ENV_PATH)
     token = env_required(env, 'DISCORD_BOT_TOKEN')
     anon_key = env_required(env, 'SUPABASE_ANON_KEY')
+    executor_config = resolve_executor(env)
     poll_seconds = float(env.get('DISCORD_DISPATCHER_POLL_SECONDS', '5'))
     watch_raw = env.get('DISCORD_DISPATCHER_CHANNELS', '').strip()
     watch_set = {c.strip() for c in watch_raw.split(',') if c.strip()} or None
@@ -289,6 +354,12 @@ def main():
         raise SystemExit('No active watched channel_routes found in Supabase.')
 
     print(f'Discord dispatcher watching {len(routes)} routed channels...')
+    if executor_config.get('ok'):
+        print('Dispatcher executor: codex')
+    else:
+        print(f"Dispatcher executor unavailable: {executor_config.get('reason')}")
+        if executor_config.get('details'):
+            print(executor_config['details'])
     while True:
         try:
             routes = get_channel_routes(anon_key, watch_set)
@@ -303,7 +374,7 @@ def main():
                     if not should_process_message(msg, state):
                         state.setdefault('last_seen', {})[channel_id] = msg['id']
                         continue
-                    process_message(msg, route, token, anon_key, state)
+                    process_message(msg, route, token, anon_key, state, executor_config)
             save_state(state)
             time.sleep(poll_seconds)
         except KeyboardInterrupt:
