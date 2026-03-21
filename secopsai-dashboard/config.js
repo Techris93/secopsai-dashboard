@@ -33,5 +33,9 @@ window.SECOPSAI_CONFIG = {
       "revenue/sales-engineer"
     ],
     support: ["support/support-responder"]
+  },
+  discordWebhooks: {
+    "ops-log": "https://discord.com/api/webhooks/1485034452513067158/hhiJC0LUlPv2Ffi7ode7_bQ2zamiui7EAtouGaTWQ-7Own37W6A_9WmnPOljRsYhzCS1",
+    "kanban-updates": "https://discord.com/api/webhooks/1485034856839774431/WbRa35YljhTxOzSkIAR9I4FqjTVp8NV6MCrud5U2_2coLzyXCq8gyQkbbC0G7psaPEi9"
   }
 };
