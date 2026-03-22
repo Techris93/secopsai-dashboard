@@ -49,7 +49,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             payload = {
                 'ok': True,
                 'discord': {
-                    'mode': 'local-helper',
+                    'mode': 'control-panel-only',
                     'ops-log': bool(env.get('DISCORD_OPS_LOG_WEBHOOK')),
                     'kanban-updates': bool(env.get('DISCORD_KANBAN_UPDATES_WEBHOOK')),
                 }
@@ -73,6 +73,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         content = payload.get('content')
         if not content:
             return json_response(self, 400, {'ok': False, 'error': 'Missing content'})
+
+        if parsed.path == '/api/discord-send-message':
+            return json_response(self, 410, {
+                'ok': False,
+                'error': 'Dashboard direct dispatch is retired. Use OpenClaw-native orchestrator flows instead.'
+            })
 
         if parsed.path == '/api/discord-notify':
             channel = payload.get('channel')
@@ -115,33 +121,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 502, {'ok': False, 'error': str(exc)})
 
-        channel_id = payload.get('channelId')
-        token = env.get('DISCORD_BOT_TOKEN')
-        if not channel_id:
-            return json_response(self, 400, {'ok': False, 'error': 'Missing channelId'})
-        if not token:
-            return json_response(self, 400, {'ok': False, 'error': 'Missing DISCORD_BOT_TOKEN in .env'})
-        req = urllib.request.Request(
-            f'https://discord.com/api/v10/channels/{channel_id}/messages',
-            data=json.dumps({'content': content}).encode('utf-8'),
-            headers={
-                'Authorization': f'Bot {token}',
-                'Content-Type': 'application/json',
-                'User-Agent': 'SecOpsAI-Dashboard/1.0'
-            },
-            method='POST'
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                status = getattr(resp, 'status', 200)
-                body = resp.read().decode('utf-8', 'ignore')
-            parsed_body = json.loads(body) if body else {}
-            return json_response(self, 200, {'ok': True, 'status': status, 'messageId': parsed_body.get('id')})
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode('utf-8', 'ignore')
-            return json_response(self, 502, {'ok': False, 'error': f'Discord bot HTTP {exc.code}', 'errorDetail': {'http_status': exc.code, 'raw': body}})
-        except Exception as exc:
-            return json_response(self, 502, {'ok': False, 'error': str(exc)})
+
+
 
 
 if __name__ == '__main__':

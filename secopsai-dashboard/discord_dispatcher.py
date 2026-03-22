@@ -1,3 +1,6 @@
+# RETIRED: dashboard-side conversation dispatch is no longer the intended path.
+# Keep this file only as historical reference while migrating to OpenClaw-native orchestration.
+
 #!/usr/bin/env python3
 import json
 import os

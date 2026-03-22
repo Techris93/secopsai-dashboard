@@ -25,7 +25,7 @@ const state = {
 
 const taskModalState = { editingId: null };
 const artifactModalState = { editingId: null };
-const promptModalState = { item: null, role: null, prompt: null };
+const promptModalState = { item: null, role: null, brief: null };
 const dragState = { taskId: null };
 const pages = ["mission-control", "agents", "tasks", "artifacts", "integrations"];
 
@@ -137,7 +137,7 @@ function suggestRoleForTask(item) {
   return domainMap[item?.domain] || 'exec/agents-orchestrator';
 }
 
-function buildAgentPrompt(item, roleLabel = null) {
+function buildWorkBrief(item, roleLabel = null) {
   const role = roleLabel || suggestRoleForTask(item);
   const pathHints = ['secopsai-dashboard/index.html','secopsai-dashboard/app.js','secopsai-dashboard/styles.css'];
   const goals = [
@@ -146,7 +146,9 @@ function buildAgentPrompt(item, roleLabel = null) {
     'keep the solution simple and maintainable'
   ];
   if (item?.description) goals.unshift(item.description.trim());
-  return `Have ${role} improve this SecOpsAI task.
+  return `Prepare work for ${role} through the OpenClaw-native orchestrator.
+
+Context: this dashboard is control-plane only; the orchestrator owns live conversations and dispatch.
 
 Task:
 - Title: ${item?.title || 'Untitled task'}
@@ -169,17 +171,20 @@ Return:
 - next actions`;
 }
 
+function findRouteForRole(roleLabel) {
+  return state.channelRoutes.find(r => r.default_role_label === roleLabel && r.active) || null;
+}
+
 function openPromptModal(item, roleLabel = null) {
   const role = roleLabel || suggestRoleForTask(item);
-  const prompt = buildAgentPrompt(item, role);
+  const prompt = buildWorkBrief(item, role);
   promptModalState.item = item;
   promptModalState.role = role;
-  promptModalState.prompt = prompt;
-  el('prompt-modal-title').textContent = 'Agent prompt';
+  promptModalState.brief = prompt;
+  el('prompt-modal-title').textContent = 'Work brief';
   const route = findRouteForRole(role);
   const reviewer = item?.reviewer_role || null;
-  const reviewerRoute = reviewer ? findRouteForRole(reviewer) : null;
-  el('prompt-modal-meta').textContent = `Suggested role: ${role}${route ? ` • Channel: #${route.channel_name}` : ' • No mapped Discord channel'}${reviewer ? ` • Reviewer: ${reviewer}${reviewerRoute ? ` (#${reviewerRoute.channel_name})` : ''}` : ''}`;
+  el('prompt-modal-meta').textContent = `Suggested owner: ${role}${reviewer ? ` • Reviewer: ${reviewer}` : ''}${route ? ` • Route metadata: #${route.channel_name}` : ''} • Direct dashboard-side sending retired`;
   el('prompt-output').value = prompt;
   el('prompt-modal').classList.remove('hidden');
 }
@@ -187,63 +192,12 @@ function openPromptModal(item, roleLabel = null) {
 function closePromptModal() { el('prompt-modal').classList.add('hidden'); }
 
 
-
-function findRouteForRole(roleLabel) {
-  return state.channelRoutes.find(r => r.default_role_label === roleLabel && r.active) || null;
-}
-
-async function sendPromptToRole(roleLabel, modeLabel = 'agent') {
-  const route = findRouteForRole(roleLabel);
-  if (!route) {
-    setStatus(`No active Discord route found for ${roleLabel}.`, true);
-    return;
-  }
-  const prompt = promptModalState.prompt || el('prompt-output')?.value || '';
-  if (!prompt) {
-    setStatus('No prompt to send.', true);
-    return;
-  }
-  try {
-    const res = await fetch('/api/discord-send-message', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channelId: route.channel_id, content: prompt })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) throw new Error(data.error || `Discord send HTTP ${res.status}`);
-    await createDashboardEvent('prompt_sent_to_agent', `Prompt sent to ${modeLabel}`, `Task prompt sent to Discord channel ${route.channel_name} for ${roleLabel}.`, 'success');
-    setStatus(`<span class="dot"></span> Prompt sent to ${escapeHtml(modeLabel)}`);
-    closePromptModal();
-  } catch (error) {
-    console.error(`send to ${modeLabel} failed`, error);
-    setStatus(`Failed to send prompt: ${error.message || String(error)}`, true);
-  }
-}
-
-
-async function sendPromptToReviewer() {
-  const reviewer = promptModalState.item?.reviewer_role || null;
-  if (!reviewer) {
-    setStatus('No reviewer_role set on this task.', true);
-    return;
-  }
-  await sendPromptToRole(reviewer, `reviewer ${reviewer}`);
-}
-
-async function sendPromptToSuggestedAgent() {
-  const role = promptModalState.role || suggestRoleForTask(promptModalState.item || {});
-  await sendPromptToRole(role, role);
-}
-
-async function sendPromptToOrchestrator() {
-  await sendPromptToRole('exec/agents-orchestrator', 'orchestrator');
-}
-
 async function copyPromptToClipboard() {
   const text = el('prompt-output')?.value || '';
   if (!text) return;
   await navigator.clipboard.writeText(text);
-  setStatus('<span class="dot"></span> Agent prompt copied to clipboard');
+  await createDashboardEvent('work_brief_copied', 'Work brief copied', `Copied work brief for ${promptModalState.role || 'unassigned role'}.`, 'info', { related_work_item_id: promptModalState.item?.id || null });
+  setStatus('<span class="dot"></span> Work brief copied to clipboard');
 }
 
 function assignTaskToSuggestedAgent() {
@@ -512,10 +466,10 @@ function renderIntegrations() {
   const discordWebhookCount = ['ops-log', 'kanban-updates'].filter(name => discordStatus[name]).length;
   if (summary) {
     summary.innerHTML = `
-      <div class="card"><div class="metric">${state.channelRoutes.length}</div><div class="metric-label">Discord routes</div></div>
+      <div class="card"><div class="metric">${state.channelRoutes.length}</div><div class="metric-label">Channel routes</div></div>
       <div class="card"><div class="metric">${state.channelRoutes.filter(r => r.active).length}</div><div class="metric-label">Active routes</div></div>
       <div class="card"><div class="metric">1</div><div class="metric-label">Supabase project</div></div>
-      <div class="card"><div class="metric">${discordWebhookCount}</div><div class="metric-label">Discord channels wired via local helper</div></div>`;
+      <div class="card"><div class="metric">${discordWebhookCount}</div><div class="metric-label">Webhook channels wired for audit posts</div></div>`;
   }
 
   const cfgEl = el('integration-config');
@@ -530,19 +484,19 @@ function renderIntegrations() {
         </div>
       </div>
       <div class="card">
-        <h3>Discord</h3>
+        <h3>Audit notifications</h3>
         <div class="kv-list">
           <div class="kv-row"><div class="kv-key">Server ID</div><div class="kv-val">${escapeHtml(cfg.serverId || '—')}</div></div>
-          <div class="kv-row"><div class="kv-key">Discord mode</div><div class="kv-val">${escapeHtml(discordStatus.mode || 'local-helper')}</div></div>
-          <div class="kv-row"><div class="kv-key">ops-log route</div><div class="kv-val">${discordStatus['ops-log'] ? 'Configured' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">kanban-updates route</div><div class="kv-val">${discordStatus['kanban-updates'] ? 'Configured' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Notification mode</div><div class="kv-val">${escapeHtml(discordStatus.mode || 'local-helper')}</div></div>
+          <div class="kv-row"><div class="kv-key">ops-log webhook</div><div class="kv-val">${discordStatus['ops-log'] ? 'Configured' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">kanban-updates webhook</div><div class="kv-val">${discordStatus['kanban-updates'] ? 'Configured' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Last test</div><div class="kv-val">${escapeHtml(state.lastDiscordTest?.summary || 'Not run yet')}</div></div>
         </div>
         <div class="integration-actions">
           <button id="test-ops-log-btn" class="secondary-btn">Send ops-log test</button>
           <button id="test-kanban-btn" class="secondary-btn">Send kanban-updates test</button>
         </div>
-        <div id="discord-test-status" class="small" style="margin-top:12px;">${escapeHtml(state.lastDiscordTest?.detail || 'Use the buttons to verify local Discord delivery.')}</div>
+        <div id="discord-test-status" class="small" style="margin-top:12px;">${escapeHtml(state.lastDiscordTest?.detail || 'Use the buttons to verify audit-notification delivery. Live conversations should stay in OpenClaw.')}</div>
       </div>`;
   }
 
@@ -995,9 +949,6 @@ function bindEvents() {
   el('prompt-modal-close')?.addEventListener('click', closePromptModal);
   el('prompt-close-btn')?.addEventListener('click', closePromptModal);
   el('prompt-copy-btn')?.addEventListener('click', copyPromptToClipboard);
-  el('prompt-send-orchestrator-btn')?.addEventListener('click', sendPromptToOrchestrator);
-  el('prompt-send-suggested-btn')?.addEventListener('click', sendPromptToSuggestedAgent);
-  el('prompt-send-reviewer-btn')?.addEventListener('click', sendPromptToReviewer);
   el('artifact-modal-close')?.addEventListener('click', closeArtifactModal);
   el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
   el('artifact-save-btn')?.addEventListener('click', saveArtifact);
