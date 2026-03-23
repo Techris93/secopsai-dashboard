@@ -222,16 +222,32 @@ function findRouteForRole(roleLabel) {
   return state.channelRoutes.find(r => r.default_role_label === roleLabel && r.active) || null;
 }
 
-function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '' } = {}) {
+function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '', viewUrl = null } = {}) {
   const box = el('prompt-run-status');
   const pill = el('prompt-run-status-pill');
   const statusLine = el('prompt-run-status-line');
   const statusDetail = el('prompt-run-status-detail');
-  if (!box || !pill || !statusLine || !statusDetail) return;
+  const actions = el('prompt-run-status-actions');
+  if (!box || !pill || !statusLine || !statusDetail || !actions) return;
 
   box.style.display = status ? 'block' : 'none';
   statusLine.textContent = line;
   statusDetail.textContent = detail || '';
+
+  // Actions
+  actions.innerHTML = '';
+  if (viewUrl) {
+    actions.style.display = 'flex';
+    const a = document.createElement('a');
+    a.href = viewUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.className = 'secondary-btn';
+    a.textContent = 'View output';
+    actions.appendChild(a);
+  } else {
+    actions.style.display = 'none';
+  }
 
   // Basic pill text
   pill.innerHTML = `<span class="dot"></span> ${escapeHtml(status)}`;
@@ -365,11 +381,11 @@ async function runPromptNow() {
       const detail = data?.output_summary || data?.error || '';
       setRunStatusUI({ status: st, line, detail });
 
-      // If complete and an output path exists, show a link.
+      // If complete and an output path exists, show a button.
       if (['completed','failed','cancelled'].includes(st) && data?.output_path) {
         const rel = String(data.output_path).replace('/Users/chrixchange/.openclaw/workspace/', '');
-        const link = `View output: http://127.0.0.1:45680/view-run-output.html?path=${encodeURIComponent(rel)}&role=${encodeURIComponent(data.role_label || '')}&id=${encodeURIComponent(data.id || '')}`;
-        setRunStatusUI({ status: st, line, detail: `${detail}\n\n${link}` });
+        const viewUrl = `http://127.0.0.1:45680/view-run-output.html?path=${encodeURIComponent(rel)}&role=${encodeURIComponent(data.role_label || '')}&id=${encodeURIComponent(data.id || '')}`;
+        setRunStatusUI({ status: st, line, detail, viewUrl });
       }
       if (['completed','failed','cancelled'].includes(st)) {
         stopRunStatusPolling();
