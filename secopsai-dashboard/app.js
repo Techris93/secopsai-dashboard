@@ -247,6 +247,57 @@ async function copyPromptToClipboard() {
   setStatus('<span class="dot"></span> Work brief copied to clipboard');
 }
 
+async function runPromptNow() {
+  const role = promptModalState.role;
+  const item = promptModalState.item;
+  const prompt = el('prompt-output')?.value || promptModalState.brief || '';
+  if (!role || !prompt) return;
+
+  const route = findRouteForRole(role);
+  if (!route) {
+    await createDashboardEvent('run_now_failed', 'Run now failed', `No active channel route found for role ${role}. Configure channel_routes.default_role_label + active=true.`, 'warning', { related_work_item_id: item?.id || null });
+    setStatus(`No active route for ${escapeHtml(role)}.`, true);
+    return;
+  }
+
+  // Create an audit run row (queued) in agent_runs.
+  const run = await createOrchestratorRun({
+    taskSummary: `Run now requested for ${role}`,
+    taskDetail: prompt,
+    status: 'queued',
+    outputSummary: 'Dashboard requested immediate execution via route dispatch.',
+    relatedWorkItemId: item?.id || null,
+    sourceChannelName: route.channel_name
+  });
+
+  await createDashboardEvent(
+    'run_now_requested',
+    `Run now: ${role}`,
+    `Dispatched prompt to route #${route.channel_name}.`,
+    'info',
+    { related_work_item_id: item?.id || null, related_run_id: run?.id || null }
+  );
+
+  // Best-effort dispatch: send to the route's channel via the existing local helper.
+  const content = buildDiscordMessage('SecOpsAI run now', [
+    `Role: ${role}`,
+    run?.id ? `Run ID: ${run.id}` : null,
+    '---',
+    prompt
+  ]);
+
+  const result = await postDiscordUpdate(route.channel_name, content);
+  if (!result.ok && !result.skipped) {
+    await createDashboardEvent('run_now_dispatch_failed', `Run dispatch failed: ${role}`, result.reason || 'Unknown dispatch failure', 'error', { related_work_item_id: item?.id || null, related_run_id: run?.id || null });
+    setStatus(`Dispatch failed: ${escapeHtml(result.reason || 'unknown error')}`, true);
+    return;
+  }
+
+  setStatus(`<span class="dot"></span> Run dispatched for ${escapeHtml(role)} via #${escapeHtml(route.channel_name)}`);
+  closePromptModal();
+  await boot();
+}
+
 function assignTaskToSuggestedAgent() {
   const currentId = taskModalState.editingId;
   const item = state.workItems.find(w => w.id === currentId) || {
@@ -1104,6 +1155,7 @@ function bindEvents() {
   el('prompt-modal-close')?.addEventListener('click', closePromptModal);
   el('prompt-close-btn')?.addEventListener('click', closePromptModal);
   el('prompt-copy-btn')?.addEventListener('click', copyPromptToClipboard);
+  el('prompt-run-btn')?.addEventListener('click', runPromptNow);
   el('artifact-modal-close')?.addEventListener('click', closeArtifactModal);
   el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
   el('artifact-save-btn')?.addEventListener('click', saveArtifact);
