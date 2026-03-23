@@ -27,6 +27,10 @@
           <span class="title">Mission Control</span>
           <span class="desc">Runs, blockers, review queue</span>
         </button>
+        <button class="nav-btn" data-page="org-map">
+          <span class="title">Org Map</span>
+          <span class="desc">Role topology + last run status</span>
+        </button>
         <button class="nav-btn" data-page="agents">
           <span class="title">Agents</span>
           <span class="desc">12-role org activity monitor</span>
@@ -73,6 +77,16 @@
         </div>
       </section>
 
+      <section class="page" id="page-org-map">
+        <div class="page-header">
+          <div>
+            <h2>Org Map</h2>
+            <p>Role map of the SecOpsAI org. This is the fastest way to see which roles are active, idle, or have never been run yet.</p>
+          </div>
+        </div>
+        <div id="org-map-groups"></div>
+      </section>
+
       <section class="page" id="page-agents">
         <div class="page-header">
           <div>
@@ -97,10 +111,13 @@
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
           <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option><option value="product">product</option><option value="revenue">revenue</option><option value="support">support</option></select></label></div>
           <div class="card"><label><span class="small">Priority</span><select id="task-filter-priority"><option value="">All</option><option value="urgent">urgent</option><option value="high">high</option><option value="normal">normal</option><option value="low">low</option></select></label></div>
+          <div class="card"><label><span class="small">Status</span><select id="task-filter-status"><option value="">All</option><option value="inbox">inbox</option><option value="planned">planned</option><option value="in_progress">in_progress</option><option value="review">review</option><option value="blocked">blocked</option><option value="done">done</option></select></label></div>
           <div class="card"><label><span class="small">Owner contains</span><input id="task-filter-owner" type="text" placeholder="e.g. security" /></label></div>
           <div class="card"><label><span class="small">Reviewer contains</span><input id="task-filter-reviewer" type="text" placeholder="e.g. product" /></label></div>
-          <div class="card checkbox-card"><label class="checkbox-row"><input id="task-filter-external" type="checkbox" /> <span>External-facing only</span></label></div>
-          <div class="card checkbox-card"><label class="checkbox-row"><input id="task-filter-security" type="checkbox" /> <span>Security review only</span></label></div>
+          <div class="card"><div class="small" style="margin-bottom:10px;">Flags</div>
+            <label class="checkbox-row" style="margin-top:0;"><input id="task-filter-external" type="checkbox" /> <span>External-facing only</span></label>
+            <label class="checkbox-row" style="margin-top:10px;"><input id="task-filter-security" type="checkbox" /> <span>Security review only</span></label>
+          </div>
         </div>
         <div class="kanban" id="task-board"></div>
         <div class="small" style="margin-top:14px;">Tip: drag task cards between columns to update status instantly. Use this dashboard to manage state; let OpenClaw-native orchestrators handle actual conversations and dispatch.</div>
@@ -169,8 +186,8 @@
             <option value="done">done</option>
           </select>
         </label>
-        <label><span>Owner role</span><input id="task-owner-role" type="text" /></label>
-        <label><span>Reviewer role</span><input id="task-reviewer-role" type="text" /></label>
+        <label><span>Owner role</span><select id="task-owner-role"></select></label>
+        <label><span>Reviewer role</span><select id="task-reviewer-role"></select></label>
         <label><span>Due date</span><input id="task-due-date" type="date" /></label>
         <label><span>Created by</span><input id="task-created-by" type="text" value="Techris" /></label>
         <label class="checkbox-row"><input id="task-external-facing" type="checkbox" /> <span>External-facing</span></label>
@@ -215,7 +232,7 @@
             <option value="rejected">rejected</option>
           </select>
         </label>
-        <label><span>Approved by role</span><input id="artifact-approved-by-role" type="text" placeholder="e.g. product/product-manager" /></label>
+        <label><span>Approved by role</span><select id="artifact-approved-by-role"></select></label>
         <label><span>Work item</span><select id="artifact-work-item-id"></select></label>
         <label><span>Run</span><select id="artifact-run-id"></select></label>
         <label class="full"><span>Path or URL</span><input id="artifact-path" type="text" placeholder="https://... or /path/to/file" /></label>

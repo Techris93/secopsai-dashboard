@@ -185,6 +185,24 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
 .task-card { cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease; }
 .task-card:hover { transform: translateY(-2px); border-color: rgba(99,102,241,0.35); }
 
+.task-card-actions { display: flex; gap: 8px; margin-top: 12px; }
+.mini-btn {
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.mini-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(99,102,241,0.35);
+  background: rgba(99,102,241,0.10);
+}
+
 .modal.hidden { display: none; }
 .modal {
   position: fixed; inset: 0; background: rgba(4, 8, 18, 0.72); backdrop-filter: blur(6px);

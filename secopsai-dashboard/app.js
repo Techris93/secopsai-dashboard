@@ -13,6 +13,33 @@ if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
   supabaseClient = supabaseGlobal.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 }
 
+const ROLE_LABELS = [
+  // Exec
+  'exec/agents-orchestrator',
+  // Platform
+  'platform/software-architect',
+  'platform/backend-architect',
+  'platform/ai-engineer',
+  'platform/devops-automator',
+  // Security
+  'security/security-engineer',
+  'security/threat-detection-engineer',
+  // Product
+  'product/product-manager',
+  'product/ui-designer',
+  // Revenue
+  'revenue/content-creator',
+  'revenue/outbound-strategist',
+  'revenue/sales-engineer',
+  // Support
+  'support/support-responder'
+];
+
+const ROLE_OPTIONS_HTML = (() => {
+  const opts = ROLE_LABELS.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  return `<option value="">Unassigned</option>${opts}`;
+})();
+
 const state = {
   runs: [],
   workItems: [],
@@ -27,7 +54,7 @@ const taskModalState = { editingId: null };
 const artifactModalState = { editingId: null };
 const promptModalState = { item: null, role: null, brief: null };
 const dragState = { taskId: null };
-const pages = ["mission-control", "agents", "tasks", "artifacts", "integrations"];
+const pages = ["mission-control", "org-map", "agents", "tasks", "artifacts", "integrations"];
 
 function el(id) { return document.getElementById(id); }
 
@@ -85,6 +112,7 @@ function getTaskFilters() {
     search: (el('task-search')?.value || '').trim().toLowerCase(),
     domain: el('task-filter-domain')?.value || '',
     priority: el('task-filter-priority')?.value || '',
+    status: el('task-filter-status')?.value || '',
     owner: (el('task-filter-owner')?.value || '').trim().toLowerCase(),
     reviewer: (el('task-filter-reviewer')?.value || '').trim().toLowerCase(),
     external: !!el('task-filter-external')?.checked,
@@ -97,6 +125,7 @@ function filteredWorkItems() {
   return state.workItems.filter(item => {
     if (filters.domain && item.domain !== filters.domain) return false;
     if (filters.priority && item.priority !== filters.priority) return false;
+    if (filters.status && item.status !== filters.status) return false;
     if (filters.owner && !(item.owner_role || '').toLowerCase().includes(filters.owner)) return false;
     if (filters.reviewer && !(item.reviewer_role || '').toLowerCase().includes(filters.reviewer)) return false;
     if (filters.external && !item.external_facing) return false;
@@ -125,7 +154,8 @@ function artifactWorkItemOptions() {
 
 
 function suggestRoleForTask(item) {
-  if (item?.owner_role) return item.owner_role;
+  const explicit = item?.owner_role;
+  if (explicit && ROLE_LABELS.includes(explicit)) return explicit;
   const domainMap = {
     exec: 'exec/agents-orchestrator',
     platform: 'platform/backend-architect',
@@ -134,7 +164,8 @@ function suggestRoleForTask(item) {
     revenue: 'revenue/content-creator',
     support: 'support/support-responder'
   };
-  return domainMap[item?.domain] || 'exec/agents-orchestrator';
+  const suggested = domainMap[item?.domain] || 'exec/agents-orchestrator';
+  return ROLE_LABELS.includes(suggested) ? suggested : 'exec/agents-orchestrator';
 }
 
 function buildWorkBrief(item, roleLabel = null) {
@@ -211,8 +242,18 @@ function assignTaskToSuggestedAgent() {
   };
   const role = suggestRoleForTask(item);
   el('task-owner-role').value = role;
+
+  // Reviewer automation (matches SecOpsAI orchestration rules)
+  const requiresSec = !!(item?.requires_security_review ?? el('task-security-review')?.checked);
+  const externalFacing = !!(item?.external_facing ?? el('task-external-facing')?.checked);
+  const currentReviewer = (el('task-reviewer-role')?.value || '').trim();
+  if (!currentReviewer) {
+    if (requiresSec) el('task-reviewer-role').value = 'security/security-engineer';
+    else if (externalFacing) el('task-reviewer-role').value = 'product/product-manager';
+  }
+
   setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`);
-  openPromptModal({ ...item, owner_role: role }, role);
+  openPromptModal({ ...item, owner_role: role, reviewer_role: el('task-reviewer-role')?.value || null }, role);
 }
 
 function renderMissionControl() {
@@ -287,6 +328,44 @@ function renderMissionControl() {
       </div>
     `).join("") : `<div class="empty">No agent runs yet.</div>`;
   }
+}
+
+function renderOrgMap() {
+  const latest = latestRunByRole(state.runs);
+  const groups = cfg.roleGroups || {};
+  const host = el("org-map-groups");
+  if (!host) return;
+  host.innerHTML = "";
+
+  Object.entries(groups).forEach(([dept, roles]) => {
+    const wrap = document.createElement("section");
+    wrap.className = "role-group";
+    wrap.innerHTML = `<h3>${escapeHtml(dept)}</h3><div class="grid cols-3" id="org-${dept}"></div>`;
+    host.appendChild(wrap);
+    const grid = wrap.querySelector(`#org-${dept}`);
+
+    roles.forEach(role => {
+      const run = latest.get(role);
+      const card = document.createElement("div");
+      card.className = "card role-card";
+      card.style.borderColor = `${cfg.departments?.[dept] || '#06b6d4'}33`;
+      const hasRun = !!run;
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+          <div>
+            <div class="role">${escapeHtml(role)}</div>
+            <div class="dept">${escapeHtml(dept)}</div>
+          </div>
+          <div class="status-pill" style="padding:6px 10px; font-size:0.78rem;">${escapeHtml(hasRun ? (run?.status || '—') : 'Not run yet')}</div>
+        </div>
+        <div class="mini">
+          <div><span>Last task:</span> ${escapeHtml(hasRun ? (run?.task_summary || '—') : 'Not run yet')}</div>
+          <div><span>Last active:</span> ${escapeHtml(hasRun ? (run?.created_at ? fmtDate(run.created_at) : '—') : 'Never')}</div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  });
 }
 
 function renderAgents() {
@@ -525,6 +604,7 @@ function renderIntegrations() {
 
 function renderAll() {
   renderMissionControl();
+  renderOrgMap();
   renderAgents();
   renderTasks();
   renderArtifacts();
@@ -548,6 +628,9 @@ function resetTaskForm() {
   el('task-domain').value = 'exec';
   el('task-priority').value = 'normal';
   el('task-status').value = 'inbox';
+  // Ensure role pickers have options
+  if (el('task-owner-role')) el('task-owner-role').innerHTML = ROLE_OPTIONS_HTML;
+  if (el('task-reviewer-role')) el('task-reviewer-role').innerHTML = ROLE_OPTIONS_HTML;
   el('task-owner-role').value = '';
   el('task-reviewer-role').value = '';
   el('task-due-date').value = '';
@@ -589,6 +672,7 @@ function resetArtifactForm() {
   el('artifact-path').value = '';
   el('artifact-summary').value = '';
   el('artifact-approval-status').value = 'draft';
+  if (el('artifact-approved-by-role')) el('artifact-approved-by-role').innerHTML = ROLE_OPTIONS_HTML;
   el('artifact-approved-by-role').value = '';
   el('artifact-work-item-id').innerHTML = `<option value="">None</option>${artifactWorkItemOptions().map(o => `<option value="${o.id}">${escapeHtml(o.label)}</option>`).join('')}`;
   el('artifact-run-id').innerHTML = `<option value="">None</option>${artifactRunOptions().map(o => `<option value="${o.id}">${escapeHtml(o.label)}</option>`).join('')}`;
@@ -953,7 +1037,7 @@ function bindEvents() {
   el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
   el('artifact-save-btn')?.addEventListener('click', saveArtifact);
   el('artifact-delete-btn')?.addEventListener('click', deleteArtifact);
-  ['task-search', 'task-filter-domain', 'task-filter-priority', 'task-filter-owner', 'task-filter-reviewer'].forEach(id => {
+  ['task-search', 'task-filter-domain', 'task-filter-priority', 'task-filter-status', 'task-filter-owner', 'task-filter-reviewer'].forEach(id => {
     el(id)?.addEventListener('input', renderTasks);
     el(id)?.addEventListener('change', renderTasks);
   });
