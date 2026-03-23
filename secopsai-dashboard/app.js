@@ -254,46 +254,50 @@ async function runPromptNow() {
   if (!role || !prompt) return;
 
   const route = findRouteForRole(role);
-  if (!route) {
-    await createDashboardEvent('run_now_failed', 'Run now failed', `No active channel route found for role ${role}. Configure channel_routes.default_role_label + active=true.`, 'warning', { related_work_item_id: item?.id || null });
-    setStatus(`No active route for ${escapeHtml(role)}.`, true);
-    return;
-  }
+
+  // The local helper endpoint intentionally supports ONLY ops-log / kanban-updates.
+  // Direct dashboard-side dispatch to arbitrary channels is retired by design.
+  const notifyChannel = 'ops-log';
 
   // Create an audit run row (queued) in agent_runs.
   const run = await createOrchestratorRun({
     taskSummary: `Run now requested for ${role}`,
     taskDetail: prompt,
     status: 'queued',
-    outputSummary: 'Dashboard requested immediate execution via route dispatch.',
+    outputSummary: route
+      ? `Dashboard requested immediate execution. Suggested route: #${route.channel_name}.`
+      : 'Dashboard requested immediate execution (no active route found).',
     relatedWorkItemId: item?.id || null,
-    sourceChannelName: route.channel_name
+    sourceChannelName: notifyChannel
   });
 
   await createDashboardEvent(
     'run_now_requested',
     `Run now: ${role}`,
-    `Dispatched prompt to route #${route.channel_name}.`,
-    'info',
+    route
+      ? `Posted run request to #${notifyChannel}. Suggested route metadata: #${route.channel_name}.`
+      : `Posted run request to #${notifyChannel}. No active route metadata found for this role.`,
+    route ? 'info' : 'warning',
     { related_work_item_id: item?.id || null, related_run_id: run?.id || null }
   );
 
-  // Best-effort dispatch: send to the route's channel via the existing local helper.
-  const content = buildDiscordMessage('SecOpsAI run now', [
+  // Best-effort dispatch: post to ops-log. A separate orchestrator/dispatcher should pick it up.
+  const content = buildDiscordMessage('SecOpsAI run now (request)', [
     `Role: ${role}`,
     run?.id ? `Run ID: ${run.id}` : null,
+    route ? `Suggested route: #${route.channel_name}` : 'Suggested route: (none found)',
     '---',
     prompt
   ]);
 
-  const result = await postDiscordUpdate(route.channel_name, content);
+  const result = await postDiscordUpdate(notifyChannel, content);
   if (!result.ok && !result.skipped) {
     await createDashboardEvent('run_now_dispatch_failed', `Run dispatch failed: ${role}`, result.reason || 'Unknown dispatch failure', 'error', { related_work_item_id: item?.id || null, related_run_id: run?.id || null });
     setStatus(`Dispatch failed: ${escapeHtml(result.reason || 'unknown error')}`, true);
     return;
   }
 
-  setStatus(`<span class="dot"></span> Run dispatched for ${escapeHtml(role)} via #${escapeHtml(route.channel_name)}`);
+  setStatus(`<span class="dot"></span> Run request posted to #${notifyChannel} for ${escapeHtml(role)}`);
   closePromptModal();
   await boot();
 }
