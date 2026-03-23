@@ -30,6 +30,7 @@ ROLE="$1"
 shift
 TASK="$*"
 PROMPT_FILE="$PROMPTS_DIR/${ROLE//\//__}.md"
+export TASK PROMPT_FILE
 
 if [[ ! -f "$PROMPT_FILE" ]]; then
   echo "Unknown role: $ROLE" >&2
@@ -37,8 +38,18 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
   exit 2
 fi
 
+# Safe template substitution preserving newlines and avoiding sed escaping issues.
 TMP_PROMPT="$(mktemp)"
-sed "s|{{TASK}}|$TASK|g" "$PROMPT_FILE" > "$TMP_PROMPT"
+export TMP_PROMPT
+python3 - <<'PY'
+import os, pathlib
+prompt_file = pathlib.Path(os.environ['PROMPT_FILE'])
+task = os.environ['TASK']
+out_path = pathlib.Path(os.environ['TMP_PROMPT'])
+text = prompt_file.read_text('utf-8')
+text = text.replace('{{TASK}}', task)
+out_path.write_text(text, 'utf-8')
+PY
 
 MESSAGE="$(cat "$TMP_PROMPT")"
 rm -f "$TMP_PROMPT"
