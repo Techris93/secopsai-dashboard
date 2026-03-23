@@ -519,7 +519,7 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
     save_state(state)
 
 
-def process_run_request(req, anon_key, executor_config, env):
+def process_run_request(req, anon_key, executor_config, env, token=None, routes=None):
     request_id = req.get('id')
     role_label = req.get('role_label')
     prompt_text = (req.get('prompt_text') or '').strip()
@@ -595,6 +595,27 @@ def process_run_request(req, anon_key, executor_config, env):
         'related_run_id': related_run_id,
     })
 
+    # If initiated from Discord commands, post results back to the command channel + audit to ops-log.
+    try:
+        initiated_by = (req.get('initiated_by') or '').lower()
+        command_channel_id = (env.get('DISCORD_COMMAND_CHANNEL_ID') or '').strip()
+        ops_log_channel_id = find_channel_id_by_name(routes or {}, 'ops-log') if routes else None
+        if token and initiated_by == 'discord' and command_channel_id:
+            rel = str(output_path).replace(str(WORKSPACE) + '/', '')
+            view_url = f"http://127.0.0.1:45680/view-run-output.html?path={urllib.parse.quote(rel)}&role={urllib.parse.quote(role_label)}&id={urllib.parse.quote(str(request_id))}"
+            header = f"✅ Completed" if status == 'completed' else f"❌ Failed"
+            msg = "\n".join([
+                f"{header}: `{role_label}`",
+                f"RunRequest: `{request_id}`" + (f" • Run: `{related_run_id}`" if related_run_id else ""),
+                output_summary[:900],
+                f"View output: {view_url}",
+            ])
+            discord_send_message(command_channel_id, token, msg)
+            if ops_log_channel_id:
+                discord_send_message(ops_log_channel_id, token, f"[AUDIT] {header}: `{role_label}` • RunRequest `{request_id}`")
+    except Exception as exc:
+        print(f'completion postback failed: {exc}', file=sys.stderr)
+
 
 def dispatch_once(routes, token, anon_key, state, executor_config, env):
     # 0) Process Discord command channel (/orchestrate, /run)
@@ -655,7 +676,7 @@ def dispatch_once(routes, token, anon_key, state, executor_config, env):
     # 1) Process queued dashboard run requests (if the table exists)
     try:
         for req in get_run_requests(anon_key, limit=5) or []:
-            process_run_request(req, anon_key, executor_config, env)
+            process_run_request(req, anon_key, executor_config, env, token=token, routes=routes)
     except Exception as exc:
         # Table may not exist yet; keep dispatcher alive.
         if 'run_requests' not in str(exc):
