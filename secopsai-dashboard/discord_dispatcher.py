@@ -130,6 +130,42 @@ def patch_run_request(anon_key, request_id, payload):
     return rows[0] if rows else None
 
 
+def post_run_request(anon_key, payload):
+    rows = supabase_request('POST', 'run_requests', anon_key, payload=payload)
+    return rows[0] if rows else None
+
+
+def discord_send_message(channel_id, token, content):
+    return discord_request('POST', f'/channels/{channel_id}/messages', token, payload={
+        'content': content
+    })
+
+
+def find_channel_id_by_name(routes, name):
+    for cid, route in routes.items():
+        if route.get('channel_name') == name:
+            return cid
+    return None
+
+
+def parse_command(content):
+    # /orchestrate <task...>
+    # /run <role_label> <task...>
+    c = (content or '').strip()
+    if not c.startswith('/'):
+        return None
+    parts = c.split(' ', 2)
+    cmd = parts[0].lower()
+    if cmd == '/orchestrate' and len(parts) >= 2:
+        task = c[len('/orchestrate'):].strip()
+        return {'type': 'orchestrate', 'role_label': 'exec/agents-orchestrator', 'task_text': task}
+    if cmd == '/run' and len(parts) >= 3:
+        role = parts[1].strip()
+        task = parts[2].strip()
+        return {'type': 'run', 'role_label': role, 'task_text': task}
+    return None
+
+
 def build_role_aliases(routes):
     aliases = {}
     for route in routes.values():
@@ -561,6 +597,61 @@ def process_run_request(req, anon_key, executor_config, env):
 
 
 def dispatch_once(routes, token, anon_key, state, executor_config, env):
+    # 0) Process Discord command channel (/orchestrate, /run)
+    command_channel_id = (env.get('DISCORD_COMMAND_CHANNEL_ID') or '').strip()
+    ops_log_channel_id = find_channel_id_by_name(routes, 'ops-log')
+
+    if command_channel_id:
+        try:
+            msgs = discord_request('GET', f'/channels/{command_channel_id}/messages', token, query={'limit': 20}) or []
+            msgs.sort(key=lambda m: int(m['id']))
+            last_seen = int(state.get('last_seen', {}).get(command_channel_id, '0'))
+            for msg in msgs:
+                msg_id = int(msg['id'])
+                if msg_id <= last_seen:
+                    continue
+                state.setdefault('last_seen', {})[command_channel_id] = msg['id']
+                content = (msg.get('content') or '').strip()
+                cmd = parse_command(content)
+                if not cmd:
+                    continue
+
+                role_label = cmd['role_label']
+                task_text = cmd['task_text']
+
+                # Create an agent_runs audit row
+                run = post_run(anon_key, {
+                    'role_label': role_label,
+                    'runtime': 'discord-command',
+                    'model_used': executor_config.get('executor', 'unknown'),
+                    'task_summary': (task_text[:120] + '…') if len(task_text) > 120 else task_text,
+                    'task_detail': task_text,
+                    'status': 'queued',
+                    'source_surface': 'discord',
+                    'source_channel_id': command_channel_id,
+                    'initiated_by': (msg.get('author') or {}).get('username') or 'discord',
+                    'started_at': None,
+                    'completed_at': None,
+                })
+
+                # Create a run_requests queue row
+                req = post_run_request(anon_key, {
+                    'status': 'queued',
+                    'role_label': role_label,
+                    'prompt_text': task_text,
+                    'suggested_channel_name': None,
+                    'related_run_id': run.get('id') if run else None,
+                    'initiated_by': 'discord',
+                })
+
+                ack = f"Queued `{role_label}` ({cmd['type']})." + (f" RunRequest: `{req.get('id')}`" if req else '') + (f" Run: `{run.get('id')}`" if run else '')
+                discord_send_message(command_channel_id, token, ack)
+
+                if ops_log_channel_id:
+                    discord_send_message(ops_log_channel_id, token, f"[AUDIT] {ack}")
+        except Exception as exc:
+            print(f'command channel poll error: {exc}', file=sys.stderr)
+
     # 1) Process queued dashboard run requests (if the table exists)
     try:
         for req in get_run_requests(anon_key, limit=5) or []:
