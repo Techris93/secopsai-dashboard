@@ -271,6 +271,16 @@
         <button id="prompt-modal-close" class="icon-btn">✕</button>
       </div>
       <div class="small" id="prompt-modal-meta" style="margin-bottom:10px;"></div>
+      <div class="card" id="prompt-run-status" style="margin-bottom:12px; display:none;">
+        <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+          <div>
+            <h4 style="margin:0 0 6px;">Run status</h4>
+            <div class="small" id="prompt-run-status-line">Not started</div>
+          </div>
+          <div class="status-pill" id="prompt-run-status-pill" style="padding:6px 10px; font-size:0.78rem;"><span class="dot"></span> idle</div>
+        </div>
+        <div class="small" id="prompt-run-status-detail" style="margin-top:10px;"></div>
+      </div>
       <textarea id="prompt-output" rows="16" readonly style="width:100%; background: rgba(255,255,255,0.03); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font: inherit;"></textarea>
       <div class="modal-actions">
         <div class="small">Copy this brief into OpenClaw-native orchestrator flows or ACP runs. Direct dashboard-side sending is retired.</div>

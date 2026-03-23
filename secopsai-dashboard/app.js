@@ -68,7 +68,7 @@ const state = {
 
 const taskModalState = { editingId: null };
 const artifactModalState = { editingId: null };
-const promptModalState = { item: null, role: null, brief: null };
+const promptModalState = { item: null, role: null, brief: null, runRequestId: null, relatedRunId: null, pollTimer: null };
 const dragState = { taskId: null };
 const pages = ["mission-control", "org-map", "agents", "tasks", "artifacts", "integrations"];
 
@@ -222,21 +222,51 @@ function findRouteForRole(roleLabel) {
   return state.channelRoutes.find(r => r.default_role_label === roleLabel && r.active) || null;
 }
 
+function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '' } = {}) {
+  const box = el('prompt-run-status');
+  const pill = el('prompt-run-status-pill');
+  const statusLine = el('prompt-run-status-line');
+  const statusDetail = el('prompt-run-status-detail');
+  if (!box || !pill || !statusLine || !statusDetail) return;
+
+  box.style.display = status ? 'block' : 'none';
+  statusLine.textContent = line;
+  statusDetail.textContent = detail || '';
+
+  // Basic pill text
+  pill.innerHTML = `<span class="dot"></span> ${escapeHtml(status)}`;
+}
+
+function stopRunStatusPolling() {
+  if (promptModalState.pollTimer) {
+    clearInterval(promptModalState.pollTimer);
+    promptModalState.pollTimer = null;
+  }
+}
+
 function openPromptModal(item, roleLabel = null) {
   const role = roleLabel || suggestRoleForTask(item);
   const prompt = buildWorkBrief(item, role);
   promptModalState.item = item;
   promptModalState.role = role;
   promptModalState.brief = prompt;
+  promptModalState.runRequestId = null;
+  promptModalState.relatedRunId = null;
+  stopRunStatusPolling();
+
   el('prompt-modal-title').textContent = 'Work brief';
   const route = findRouteForRole(role);
   const reviewer = item?.reviewer_role || null;
   el('prompt-modal-meta').textContent = `Suggested owner: ${role}${reviewer ? ` • Reviewer: ${reviewer}` : ''}${route ? ` • Route metadata: #${route.channel_name}` : ''} • Direct dashboard-side sending retired`;
   el('prompt-output').value = prompt;
+  setRunStatusUI({ status: 'idle', line: 'Not started', detail: '' });
   el('prompt-modal').classList.remove('hidden');
 }
 
-function closePromptModal() { el('prompt-modal').classList.add('hidden'); }
+function closePromptModal() {
+  stopRunStatusPolling();
+  el('prompt-modal').classList.add('hidden');
+}
 
 
 async function copyPromptToClipboard() {
@@ -272,18 +302,28 @@ async function runPromptNow() {
   });
 
   // Insert a run_requests queue item (picked up by discord_dispatcher.py).
+  let runReq = null;
   try {
-    await supabaseClient.from('run_requests').insert({
-      role_label: role,
-      prompt_text: prompt,
-      suggested_channel_name: route?.channel_name || null,
-      related_work_item_id: item?.id || null,
-      related_run_id: run?.id || null,
-      initiated_by: 'dashboard'
-    });
+    const { data, error } = await supabaseClient
+      .from('run_requests')
+      .insert({
+        role_label: role,
+        prompt_text: prompt,
+        suggested_channel_name: route?.channel_name || null,
+        related_work_item_id: item?.id || null,
+        related_run_id: run?.id || null,
+        initiated_by: 'dashboard'
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    runReq = data;
   } catch (e) {
     console.warn('run_requests insert failed (table may not exist yet):', e);
   }
+
+  promptModalState.runRequestId = runReq?.id || null;
+  promptModalState.relatedRunId = run?.id || null;
 
   await createDashboardEvent(
     'run_now_requested',
@@ -305,17 +345,42 @@ async function runPromptNow() {
   ]);
 
   const result = await postDiscordUpdate(notifyChannel, content);
+
+  // Start polling status in the modal (even if notify fails).
+  setRunStatusUI({ status: 'queued', line: 'Queued', detail: runReq?.id ? `Request: ${runReq.id}` : (run?.id ? `Run: ${run.id}` : '') });
+
+  // Poll run_requests for status updates.
+  stopRunStatusPolling();
+  promptModalState.pollTimer = setInterval(async () => {
+    try {
+      if (!promptModalState.runRequestId) return;
+      const { data, error } = await supabaseClient
+        .from('run_requests')
+        .select('*')
+        .eq('id', promptModalState.runRequestId)
+        .single();
+      if (error) throw error;
+      const st = data?.status || 'unknown';
+      const line = st.charAt(0).toUpperCase() + st.slice(1);
+      const detail = data?.output_summary || data?.error || '';
+      setRunStatusUI({ status: st, line, detail });
+      if (['completed','failed','cancelled'].includes(st)) {
+        stopRunStatusPolling();
+      }
+    } catch (e) {
+      // Keep polling quiet; surface minimal info.
+      setRunStatusUI({ status: 'poll-error', line: 'Polling error', detail: e?.message || String(e) });
+    }
+  }, 2000);
+
   if (!result.ok && !result.skipped) {
     // Non-fatal: the run request is already queued in Supabase. Treat Discord notify as best-effort.
     await createDashboardEvent('run_now_notify_failed', `Run notify failed: ${role}`, result.reason || 'Unknown notify failure', 'warning', { related_work_item_id: item?.id || null, related_run_id: run?.id || null });
     setStatus(`Run queued, but notify failed: ${escapeHtml(result.reason || 'unknown error')}`, true);
-    closePromptModal();
-    await boot();
     return;
   }
 
   setStatus(`<span class="dot"></span> Run request queued for ${escapeHtml(role)} (notified #${notifyChannel})`);
-  closePromptModal();
   await boot();
 }
 
