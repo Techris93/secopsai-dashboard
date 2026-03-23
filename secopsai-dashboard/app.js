@@ -306,12 +306,15 @@ async function runPromptNow() {
 
   const result = await postDiscordUpdate(notifyChannel, content);
   if (!result.ok && !result.skipped) {
-    await createDashboardEvent('run_now_dispatch_failed', `Run dispatch failed: ${role}`, result.reason || 'Unknown dispatch failure', 'error', { related_work_item_id: item?.id || null, related_run_id: run?.id || null });
-    setStatus(`Dispatch failed: ${escapeHtml(result.reason || 'unknown error')}`, true);
+    // Non-fatal: the run request is already queued in Supabase. Treat Discord notify as best-effort.
+    await createDashboardEvent('run_now_notify_failed', `Run notify failed: ${role}`, result.reason || 'Unknown notify failure', 'warning', { related_work_item_id: item?.id || null, related_run_id: run?.id || null });
+    setStatus(`Run queued, but notify failed: ${escapeHtml(result.reason || 'unknown error')}`, true);
+    closePromptModal();
+    await boot();
     return;
   }
 
-  setStatus(`<span class="dot"></span> Run request posted to #${notifyChannel} for ${escapeHtml(role)}`);
+  setStatus(`<span class="dot"></span> Run request queued for ${escapeHtml(role)} (notified #${notifyChannel})`);
   closePromptModal();
   await boot();
 }
