@@ -685,7 +685,7 @@ function renderTasks() {
           <div class="title">${escapeHtml(item.title)}</div>
           <div class="small">${escapeHtml(item.description || '')}</div>
           <div class="badges">
-            <span class="badge">${escapeHtml(item.domain)}</span>
+            <span class="badge domain-${escapeHtml(item.domain)}">${escapeHtml(item.domain)}</span>
             <span class="badge priority-${escapeHtml(item.priority)}">${escapeHtml(item.priority)}</span>
             ${item.owner_role ? `<span class="badge">${escapeHtml(item.owner_role)}</span>` : ''}
             ${item.external_facing ? `<span class="badge external">external-facing</span>` : ''}
