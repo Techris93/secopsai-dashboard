@@ -13,27 +13,43 @@ if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
   supabaseClient = supabaseGlobal.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 }
 
-const ROLE_LABELS = [
-  // Exec
-  'exec/agents-orchestrator',
-  // Platform
-  'platform/software-architect',
-  'platform/backend-architect',
-  'platform/ai-engineer',
-  'platform/devops-automator',
-  // Security
-  'security/security-engineer',
-  'security/threat-detection-engineer',
-  // Product
-  'product/product-manager',
-  'product/ui-designer',
-  // Revenue
-  'revenue/content-creator',
-  'revenue/outbound-strategist',
-  'revenue/sales-engineer',
-  // Support
-  'support/support-responder'
-];
+function getRoleLabelsFromConfig(config) {
+  try {
+    const groups = config?.roleGroups || {};
+    const flat = Object.values(groups).flat().filter(Boolean);
+    // preserve order, unique
+    const uniq = [];
+    for (const r of flat) {
+      if (!uniq.includes(r)) uniq.push(r);
+    }
+    // ensure orchestrator is present
+    if (!uniq.includes('exec/agents-orchestrator')) uniq.unshift('exec/agents-orchestrator');
+    return uniq;
+  } catch {
+    return [];
+  }
+}
+
+const ROLE_LABELS = (() => {
+  const fromCfg = getRoleLabelsFromConfig(cfg);
+  if (fromCfg.length) return fromCfg;
+  // fallback
+  return [
+    'exec/agents-orchestrator',
+    'platform/software-architect',
+    'platform/backend-architect',
+    'platform/ai-engineer',
+    'platform/devops-automator',
+    'security/security-engineer',
+    'security/threat-detection-engineer',
+    'product/product-manager',
+    'product/ui-designer',
+    'revenue/content-creator',
+    'revenue/outbound-strategist',
+    'revenue/sales-engineer',
+    'support/support-responder'
+  ];
+})();
 
 const ROLE_OPTIONS_HTML = (() => {
   const opts = ROLE_LABELS.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
@@ -266,15 +282,34 @@ function renderMissionControl() {
   }).length;
   const secReview = state.workItems.filter(w => w.requires_security_review).length;
 
+  function drillToTasks({ status = '', external = null, security = null } = {}) {
+    setPage('tasks');
+    if (el('task-filter-status')) el('task-filter-status').value = status;
+    if (external !== null && el('task-filter-external')) el('task-filter-external').checked = !!external;
+    if (security !== null && el('task-filter-security')) el('task-filter-security').checked = !!security;
+    renderTasks();
+  }
+
   const missionStats = el("mission-stats");
   if (missionStats) {
     missionStats.innerHTML = `
-      <div class="card"><div class="metric">${activeRuns}</div><div class="metric-label">Active runs</div></div>
-      <div class="card"><div class="metric">${blocked}</div><div class="metric-label">Blocked items</div></div>
-      <div class="card"><div class="metric">${inReview}</div><div class="metric-label">In review</div></div>
-      <div class="card"><div class="metric">${doneToday}</div><div class="metric-label">Done today</div></div>
-      <div class="card"><div class="metric">${secReview}</div><div class="metric-label">Needs security review</div></div>
+      <div class="card metric-card" data-drill="runs"><div class="metric">${activeRuns}</div><div class="metric-label">Active runs</div></div>
+      <div class="card metric-card" data-drill="blocked"><div class="metric">${blocked}</div><div class="metric-label">Blocked items</div></div>
+      <div class="card metric-card" data-drill="review"><div class="metric">${inReview}</div><div class="metric-label">In review</div></div>
+      <div class="card metric-card" data-drill="done"><div class="metric">${doneToday}</div><div class="metric-label">Done today</div></div>
+      <div class="card metric-card" data-drill="sec"><div class="metric">${secReview}</div><div class="metric-label">Needs security review</div></div>
     `;
+
+    missionStats.querySelectorAll('.metric-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const kind = card.dataset.drill;
+        if (kind === 'blocked') return drillToTasks({ status: 'blocked' });
+        if (kind === 'review') return drillToTasks({ status: 'review' });
+        if (kind === 'done') return drillToTasks({ status: 'done' });
+        if (kind === 'sec') return drillToTasks({ status: '', security: true });
+        // active runs: stay on mission control for now (could deep-link to a runs page later)
+      });
+    });
   }
 
   const byDomain = state.workItems.reduce((acc, item) => {
@@ -293,7 +328,7 @@ function renderMissionControl() {
           ${topDomains.length ? topDomains.map(([d, count]) => `<div class="kv-row"><div class="kv-key">${escapeHtml(d)}</div><div class="kv-val">${count}</div></div>`).join('') : '<div class="empty">No work item distribution yet.</div>'}
         </div>
       </div>
-      <div class="card">
+      <div class="card metric-card" id="mc-external-facing" style="cursor:pointer;">
         <h3>External-facing work</h3>
         <div class="metric">${extFacing}</div>
         <div class="metric-label">Items that need careful product/security review</div>
@@ -304,6 +339,13 @@ function renderMissionControl() {
         <div class="metric-label">Reusable outputs already marked approved</div>
       </div>
     `;
+
+    el('mc-external-facing')?.addEventListener('click', () => {
+      setPage('tasks');
+      if (el('task-filter-external')) el('task-filter-external').checked = true;
+      if (el('task-filter-status')) el('task-filter-status').value = '';
+      renderTasks();
+    });
   }
 
   const recentFeed = [...state.events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 6);
@@ -362,7 +404,36 @@ function renderOrgMap() {
           <div><span>Last task:</span> ${escapeHtml(hasRun ? (run?.task_summary || '—') : 'Not run yet')}</div>
           <div><span>Last active:</span> ${escapeHtml(hasRun ? (run?.created_at ? fmtDate(run.created_at) : '—') : 'Never')}</div>
         </div>
+        <div class="task-card-actions">
+          <button class="mini-btn" data-action="brief" data-role="${escapeHtml(role)}" data-dept="${escapeHtml(dept)}">Brief</button>
+          <button class="mini-btn" data-action="copy-brief" data-role="${escapeHtml(role)}" data-dept="${escapeHtml(dept)}">Copy brief</button>
+        </div>
       `;
+
+      card.addEventListener('click', async (event) => {
+        const action = event.target?.dataset?.action;
+        if (!action) return;
+        event.stopPropagation();
+        const roleLabel = event.target.dataset.role;
+        const deptName = event.target.dataset.dept;
+        // Build a lightweight work item stub so we can reuse the existing prompt modal.
+        const stub = {
+          id: null,
+          title: `Quick task for ${roleLabel}`,
+          domain: deptName,
+          priority: 'normal',
+          status: 'inbox',
+          owner_role: roleLabel,
+          reviewer_role: null,
+          description: ''
+        };
+        openPromptModal(stub, roleLabel);
+        if (action === 'copy-brief') {
+          // allow DOM update
+          setTimeout(() => copyPromptToClipboard(), 0);
+        }
+      });
+
       grid.appendChild(card);
     });
   });

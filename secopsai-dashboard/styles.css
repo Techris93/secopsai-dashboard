@@ -91,6 +91,9 @@ a { color: inherit; }
   backdrop-filter: blur(14px);
   box-shadow: 0 10px 40px rgba(0,0,0,0.24);
 }
+
+.metric-card { cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease; }
+.metric-card:hover { transform: translateY(-2px); border-color: rgba(99,102,241,0.35); }
 .card h3, .card h4 { margin: 0 0 10px; }
 .card-subtle { color: var(--muted); font-size: 0.9rem; }
 .metric { font-size: 2rem; font-weight: 800; margin: 10px 0 2px; }
