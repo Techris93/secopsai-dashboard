@@ -3,6 +3,7 @@ import json
 import os
 import urllib.request
 import urllib.error
+import urllib.parse
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
@@ -55,6 +56,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 }
             }
             return json_response(self, 200, payload)
+
+        if parsed.path == '/api/run-output':
+            # Serve run output text from within the OpenClaw workspace only.
+            qs = urllib.parse.parse_qs(parsed.query or '')
+            rel = (qs.get('path') or [None])[0]
+            if not rel:
+                return json_response(self, 400, {'ok': False, 'error': 'Missing path'})
+
+            try:
+                workspace_root = Path('/Users/chrixchange/.openclaw/workspace').resolve()
+                target = (workspace_root / rel).resolve()
+                if workspace_root not in target.parents and target != workspace_root:
+                    return json_response(self, 403, {'ok': False, 'error': 'Path outside workspace'})
+                if not target.exists() or not target.is_file():
+                    return json_response(self, 404, {'ok': False, 'error': 'File not found'})
+                text = target.read_text(encoding='utf-8', errors='ignore')
+                return json_response(self, 200, {'ok': True, 'text': text})
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
         return super().do_GET()
 
     def do_POST(self):

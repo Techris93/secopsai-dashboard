@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Run output</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="main" style="max-width: 980px; margin: 0 auto;">
+    <div class="page-header">
+      <div>
+        <h2>Run output</h2>
+        <p class="small" id="meta">Loading…</p>
+      </div>
+      <a class="status-pill" id="back" href="/">← Back to dashboard</a>
+    </div>
+
+    <div class="card">
+      <pre id="output" style="white-space: pre-wrap; word-break: break-word; margin:0;"></pre>
+    </div>
+  </main>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const path = qs.get('path');
+    const role = qs.get('role');
+    const id = qs.get('id');
+    const meta = document.getElementById('meta');
+    const out = document.getElementById('output');
+
+    if (!path) {
+      meta.textContent = 'Missing path parameter.';
+    } else {
+      meta.textContent = `${role ? role + ' • ' : ''}${id ? id + ' • ' : ''}${path}`;
+      fetch(`/api/run-output?path=${encodeURIComponent(path)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data.ok) {
+            out.textContent = data.error || 'Failed to load output.';
+            return;
+          }
+          out.textContent = data.text || '';
+        })
+        .catch(err => {
+          out.textContent = err.message || String(err);
+        });
+    }
+  </script>
+</body>
+</html>

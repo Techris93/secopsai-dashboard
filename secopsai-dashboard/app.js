@@ -364,6 +364,13 @@ async function runPromptNow() {
       const line = st.charAt(0).toUpperCase() + st.slice(1);
       const detail = data?.output_summary || data?.error || '';
       setRunStatusUI({ status: st, line, detail });
+
+      // If complete and an output path exists, show a link.
+      if (['completed','failed','cancelled'].includes(st) && data?.output_path) {
+        const rel = String(data.output_path).replace('/Users/chrixchange/.openclaw/workspace/', '');
+        const link = `View output: http://127.0.0.1:45680/view-run-output.html?path=${encodeURIComponent(rel)}&role=${encodeURIComponent(data.role_label || '')}&id=${encodeURIComponent(data.id || '')}`;
+        setRunStatusUI({ status: st, line, detail: `${detail}\n\n${link}` });
+      }
       if (['completed','failed','cancelled'].includes(st)) {
         stopRunStatusPolling();
       }
