@@ -271,18 +271,32 @@ async function runPromptNow() {
     sourceChannelName: notifyChannel
   });
 
+  // Insert a run_requests queue item (picked up by discord_dispatcher.py).
+  try {
+    await supabaseClient.from('run_requests').insert({
+      role_label: role,
+      prompt_text: prompt,
+      suggested_channel_name: route?.channel_name || null,
+      related_work_item_id: item?.id || null,
+      related_run_id: run?.id || null,
+      initiated_by: 'dashboard'
+    });
+  } catch (e) {
+    console.warn('run_requests insert failed (table may not exist yet):', e);
+  }
+
   await createDashboardEvent(
     'run_now_requested',
     `Run now: ${role}`,
     route
-      ? `Posted run request to #${notifyChannel}. Suggested route metadata: #${route.channel_name}.`
-      : `Posted run request to #${notifyChannel}. No active route metadata found for this role.`,
+      ? `Queued run request. Suggested route metadata: #${route.channel_name}.`
+      : `Queued run request. No active route metadata found for this role.`,
     route ? 'info' : 'warning',
     { related_work_item_id: item?.id || null, related_run_id: run?.id || null }
   );
 
-  // Best-effort dispatch: post to ops-log. A separate orchestrator/dispatcher should pick it up.
-  const content = buildDiscordMessage('SecOpsAI run now (request)', [
+  // Best-effort notify: post to ops-log. A separate orchestrator/dispatcher should pick it up.
+  const content = buildDiscordMessage('SecOpsAI run now (queued)', [
     `Role: ${role}`,
     run?.id ? `Run ID: ${run.id}` : null,
     route ? `Suggested route: #${route.channel_name}` : 'Suggested route: (none found)',
