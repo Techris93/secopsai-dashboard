@@ -106,7 +106,7 @@
         <div class="page-header">
           <div>
             <h2>Tasks</h2>
-            <p>Kanban view over <code>work_items</code>. Supports filtering, modal CRUD, drag-drop status updates, and orchestrator audit logging.</p>
+            <p>Kanban view over work items. Supports filtering, modal CRUD, drag-drop status updates, and orchestrator audit logging.</p>
           </div>
           <div class="status-pill" id="new-task-btn" style="cursor:pointer;"><span class="dot"></span> New task</div>
         </div>
@@ -115,7 +115,7 @@
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
           <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option><option value="product">product</option><option value="revenue">revenue</option><option value="support">support</option></select></label></div>
           <div class="card"><label><span class="small">Priority</span><select id="task-filter-priority"><option value="">All</option><option value="urgent">urgent</option><option value="high">high</option><option value="normal">normal</option><option value="low">low</option></select></label></div>
-          <div class="card"><label><span class="small">Status</span><select id="task-filter-status"><option value="">All</option><option value="inbox">inbox</option><option value="planned">planned</option><option value="in_progress">in_progress</option><option value="review">review</option><option value="blocked">blocked</option><option value="done">done</option></select></label></div>
+          <div class="card"><label><span class="small">Status</span><select id="task-filter-status"><option value="">All</option><option value="inbox">Inbox</option><option value="planned">Planned</option><option value="in_progress">In Progress</option><option value="review">Review</option><option value="blocked">Blocked</option><option value="done">Done</option></select></label></div>
           <div class="card"><label><span class="small">Owner contains</span><input id="task-filter-owner" type="text" placeholder="e.g. security" /></label></div>
           <div class="card"><label><span class="small">Reviewer contains</span><input id="task-filter-reviewer" type="text" placeholder="e.g. product" /></label></div>
           <div class="card"><div class="small" style="margin-bottom:10px;">Flags</div>
@@ -212,12 +212,12 @@
         </label>
         <label><span>Status</span>
           <select id="task-status">
-            <option value="inbox">inbox</option>
-            <option value="planned">planned</option>
-            <option value="in_progress">in_progress</option>
-            <option value="review">review</option>
-            <option value="blocked">blocked</option>
-            <option value="done">done</option>
+            <option value="inbox">Inbox</option>
+            <option value="planned">Planned</option>
+            <option value="in_progress">In Progress</option>
+            <option value="review">Review</option>
+            <option value="blocked">Blocked</option>
+            <option value="done">Done</option>
           </select>
         </label>
         <label><span>Owner role</span><select id="task-owner-role"></select></label>
@@ -232,7 +232,7 @@
         <button id="task-delete-btn" type="button" class="danger-btn hidden">Delete</button>
         <div class="modal-actions-right">
           <button id="task-assign-btn" class="secondary-btn">Assign suggested owner</button>
-          <button id="task-generate-prompt-btn" class="secondary-btn">Generate work brief</button>
+          <button id="task-generate-prompt-btn" class="secondary-btn">Generate intelligent brief</button>
           <button id="task-cancel-btn" class="secondary-btn">Cancel</button>
           <button id="task-save-btn" class="primary-btn">Save task</button>
         </div>
@@ -264,7 +264,7 @@
         <label><span>Approval status</span>
           <select id="artifact-approval-status">
             <option value="draft">draft</option>
-            <option value="review">review</option>
+            <option value="review">Review</option>
             <option value="approved">approved</option>
             <option value="rejected">rejected</option>
           </select>
@@ -308,6 +308,18 @@
         <button id="prompt-modal-close" class="icon-btn">✕</button>
       </div>
       <div class="small" id="prompt-modal-meta" style="margin-bottom:10px;"></div>
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+          <label style="min-width:220px; flex:1 1 220px;">
+            <span class="small">Brief mode</span>
+            <select id="prompt-mode-select">
+              <option value="smart-local">Smart local brief</option>
+              <option value="agent-ready">Agent-ready handoff</option>
+            </select>
+          </label>
+          <div class="small" id="prompt-mode-hint" style="flex:2 1 320px;">Smart local brief selected. Uses task metadata plus heuristics to infer likely repos, paths, and constraints now.</div>
+        </div>
+      </div>
       <div class="card" id="prompt-run-status" style="margin-bottom:12px; display:none;">
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
           <div>
