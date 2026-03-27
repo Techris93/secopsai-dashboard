@@ -1263,6 +1263,40 @@ function openTaskModal(item = null) {
 }
 
 function closeTaskModal() { el('task-modal').classList.add('hidden'); }
+function upsertWorkItemInState(item) {
+  if (!item) return;
+  const idx = state.workItems.findIndex(w => w.id === item.id);
+  if (idx >= 0) state.workItems[idx] = item;
+  else state.workItems.unshift(item);
+}
+
+function removeWorkItemFromState(taskId) {
+  state.workItems = state.workItems.filter(w => w.id !== taskId);
+}
+
+function refreshTaskViewsOnly() {
+  renderTasks();
+  renderMissionControl();
+  renderFindings();
+}
+
+async function backgroundRefreshOpsData() {
+  try {
+    const [runs, events] = await Promise.all([
+      loadTable('agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }),
+      loadTable('dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 })
+    ]);
+    state.runs = runs;
+    state.events = events;
+    renderMissionControl();
+    renderAgents();
+    renderIntegrations();
+    renderArtifacts();
+    renderFindings();
+  } catch (e) {
+    console.warn('background ops refresh failed', e);
+  }
+}
 
 function resetArtifactForm() {
   artifactModalState.editingId = null;
@@ -1436,6 +1470,8 @@ async function runDiscordTest(channelName) {
 
 async function saveTask() {
   const sourceFinding = taskModalState.sourceFinding;
+  const saveBtn = el('task-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
   const payload = {
     title: el('task-title').value.trim(),
     domain: el('task-domain').value,
@@ -1450,48 +1486,68 @@ async function saveTask() {
     description: el('task-description').value.trim() || null,
     updated_at: new Date().toISOString()
   };
-  if (!payload.title) return alert('Task title is required.');
-
-  let item = null;
-  if (taskModalState.editingId) {
-    const { data, error } = await supabaseClient.from('work_items').update(payload).eq('id', taskModalState.editingId).select().single();
-    if (error) return alert(`Failed to update task: ${error.message}`);
-    item = data;
-    await announceTaskChange('task_updated', item, {
-      title: `Task updated: ${payload.title}`,
-      body: `Status: ${payload.status} • Priority: ${payload.priority}`,
-      runSummary: `Updated work item: ${payload.title}`,
-      runDetail: payload.description || 'Task updated from dashboard modal.',
-      outputSummary: `Status set to ${payload.status}`,
-      kanbanTitle: `Kanban update: ${payload.title}`,
-      kanbanBody: `${payload.status} • ${payload.priority}`
-    }, 'info');
-  } else {
-    const { data, error } = await supabaseClient.from('work_items').insert(payload).select().single();
-    if (error) return alert(`Failed to create task: ${error.message}`);
-    item = data;
-    const linked = await bestEffortLinkFindingToTask(sourceFinding, item);
-    await announceTaskChange('task_created', item, {
-      title: `Task created: ${payload.title}`,
-      body: `Domain: ${payload.domain} • Priority: ${payload.priority}${sourceFinding ? ` • From finding: ${findingTitle(sourceFinding)}` : ''}`,
-      runSummary: `Created work item: ${payload.title}`,
-      runDetail: payload.description || 'Task created from dashboard modal.',
-      outputSummary: `Initial status ${payload.status}${linked ? ' • finding linked' : ''}`,
-      kanbanTitle: `Kanban new item: ${payload.title}`,
-      kanbanBody: `${payload.domain} • ${payload.status}`
-    }, 'success');
+  if (!payload.title) {
+    if (saveBtn) saveBtn.disabled = false;
+    return alert('Task title is required.');
   }
-  closeTaskModal();
-  await boot();
+
+  try {
+    let item = null;
+    if (taskModalState.editingId) {
+      const { data, error } = await supabaseClient.from('work_items').update(payload).eq('id', taskModalState.editingId).select().single();
+      if (error) return alert(`Failed to update task: ${error.message}`);
+      item = data;
+      upsertWorkItemInState(item);
+      closeTaskModal();
+      refreshTaskViewsOnly();
+      setStatus(`<span class="dot"></span> Task saved: ${escapeHtml(payload.title)}`);
+      Promise.resolve().then(() => announceTaskChange('task_updated', item, {
+        title: `Task updated: ${payload.title}`,
+        body: `Status: ${payload.status} • Priority: ${payload.priority}`,
+        runSummary: `Updated work item: ${payload.title}`,
+        runDetail: payload.description || 'Task updated from dashboard modal.',
+        outputSummary: `Status set to ${payload.status}`,
+        kanbanTitle: `Kanban update: ${payload.title}`,
+        kanbanBody: `${payload.status} • ${payload.priority}`
+      }, 'info')).then(backgroundRefreshOpsData).catch(e => console.warn('task_updated side effects failed', e));
+    } else {
+      const { data, error } = await supabaseClient.from('work_items').insert(payload).select().single();
+      if (error) return alert(`Failed to create task: ${error.message}`);
+      item = data;
+      upsertWorkItemInState(item);
+      closeTaskModal();
+      refreshTaskViewsOnly();
+      setStatus(`<span class="dot"></span> Task created: ${escapeHtml(payload.title)}`);
+      Promise.resolve().then(async () => {
+        const linked = await bestEffortLinkFindingToTask(sourceFinding, item);
+        await announceTaskChange('task_created', item, {
+          title: `Task created: ${payload.title}`,
+          body: `Domain: ${payload.domain} • Priority: ${payload.priority}${sourceFinding ? ` • From finding: ${findingTitle(sourceFinding)}` : ''}`,
+          runSummary: `Created work item: ${payload.title}`,
+          runDetail: payload.description || 'Task created from dashboard modal.',
+          outputSummary: `Initial status ${payload.status}${linked ? ' • finding linked' : ''}`,
+          kanbanTitle: `Kanban new item: ${payload.title}`,
+          kanbanBody: `${payload.domain} • ${payload.status}`
+        }, 'success');
+      }).then(backgroundRefreshOpsData).catch(e => console.warn('task_created side effects failed', e));
+    }
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
 }
 
 async function deleteTask() {
   if (!taskModalState.editingId) return;
   const item = state.workItems.find(w => w.id === taskModalState.editingId);
   if (!confirm('Delete this task?')) return;
-  const { error } = await supabaseClient.from('work_items').delete().eq('id', taskModalState.editingId);
+  const taskId = taskModalState.editingId;
+  const { error } = await supabaseClient.from('work_items').delete().eq('id', taskId);
   if (error) return alert(`Failed to delete task: ${error.message}`);
-  await announceTaskChange('task_deleted', item, {
+  removeWorkItemFromState(taskId);
+  closeTaskModal();
+  refreshTaskViewsOnly();
+  setStatus(`<span class="dot"></span> Task deleted: ${escapeHtml(item?.title || 'Untitled task')}`);
+  Promise.resolve().then(() => announceTaskChange('task_deleted', item, {
     title: `Task deleted: ${item?.title || 'Untitled task'}`,
     body: 'Task removed from dashboard kanban.',
     runSummary: `Deleted work item: ${item?.title || 'Untitled task'}`,
@@ -1499,9 +1555,7 @@ async function deleteTask() {
     outputSummary: 'Task removed from work_items.',
     kanbanTitle: `Kanban deleted: ${item?.title || 'Untitled task'}`,
     kanbanBody: 'Removed from board.'
-  }, 'warning');
-  closeTaskModal();
-  await boot();
+  }, 'warning')).then(backgroundRefreshOpsData).catch(e => console.warn('task_deleted side effects failed', e));
 }
 
 async function moveTaskToStatus(taskId, nextStatus) {
@@ -1509,7 +1563,9 @@ async function moveTaskToStatus(taskId, nextStatus) {
   if (!item || item.status === nextStatus) return;
   const { data, error } = await supabaseClient.from('work_items').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', taskId).select().single();
   if (error) return alert(`Failed to move task: ${error.message}`);
-  await announceTaskChange('task_moved', data, {
+  upsertWorkItemInState(data);
+  refreshTaskViewsOnly();
+  Promise.resolve().then(() => announceTaskChange('task_moved', data, {
     title: `Task moved: ${item.title}`,
     body: `${item.status} → ${nextStatus}`,
     runSummary: `Moved work item: ${item.title}`,
@@ -1517,9 +1573,9 @@ async function moveTaskToStatus(taskId, nextStatus) {
     outputSummary: `${item.status} → ${nextStatus}`,
     kanbanTitle: `Kanban moved: ${item.title}`,
     kanbanBody: `${statusLabel(item.status)} → ${statusLabel(nextStatus)}`
-  }, 'info');
-  await boot();
+  }, 'info')).then(backgroundRefreshOpsData).catch(e => console.warn('task_moved side effects failed', e));
 }
+
 
 async function saveArtifact() {
   const payload = {
