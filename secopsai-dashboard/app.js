@@ -1542,6 +1542,7 @@ async function saveTask() {
 }
 
 async function deleteTask() {
+  console.debug('deleteTask invoked', { editingId: taskModalState.editingId });
   const item = currentTaskModalItem();
   const taskId = taskModalState.editingId || item?.id || null;
   if (!taskId) {
@@ -1693,7 +1694,20 @@ function bindEvents() {
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);
   el('task-save-btn')?.addEventListener('click', saveTask);
-  el('task-delete-btn')?.addEventListener('click', deleteTask);
+  const taskDeleteBtn = el('task-delete-btn');
+  if (taskDeleteBtn && taskDeleteBtn.dataset.bound !== '1') {
+    taskDeleteBtn.dataset.bound = '1';
+    taskDeleteBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        await deleteTask();
+      } catch (e) {
+        console.error('deleteTask click failed', e);
+        alert(`Delete failed: ${e?.message || e}`);
+      }
+    });
+  }
   el('task-assign-btn')?.addEventListener('click', assignTaskToSuggestedAgent);
   el('task-generate-prompt-btn')?.addEventListener('click', () => {
     const item = state.workItems.find(w => w.id === taskModalState.editingId) || {
