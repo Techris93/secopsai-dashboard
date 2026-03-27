@@ -58,19 +58,25 @@ const ROLE_OPTIONS_HTML = (() => {
 
 const state = {
   runs: [],
+  runRequests: [],
+  findings: [],
   workItems: [],
   artifacts: [],
   channelRoutes: [],
   events: [],
   integrationStatus: null,
-  lastDiscordTest: null
+  lastDiscordTest: null,
+  optionalTables: {
+    findings: true,
+    run_requests: true
+  }
 };
 
 const taskModalState = { editingId: null };
 const artifactModalState = { editingId: null };
 const promptModalState = { item: null, role: null, brief: null, runRequestId: null, relatedRunId: null, pollTimer: null };
 const dragState = { taskId: null };
-const pages = ["mission-control", "org-map", "agents", "tasks", "artifacts", "integrations"];
+const pages = ["mission-control", "org-map", "agents", "tasks", "findings", "artifacts", "integrations"];
 
 function el(id) { return document.getElementById(id); }
 
@@ -166,6 +172,72 @@ function artifactWorkItemOptions() {
     id: item.id,
     label: item.title
   }));
+}
+
+function renderStatusPill(status, label = null) {
+  const raw = String(status || 'unknown').toLowerCase();
+  const safeClass = raw.replace(/[^a-z0-9_-]+/g, '-');
+  return `<span class="status-pill status-${safeClass}"><span class="dot"></span> ${escapeHtml(label || raw)}</span>`;
+}
+
+function optionalLoadTable(table, options = {}) {
+  return loadTable(table, options)
+    .then(data => {
+      state.optionalTables[table] = true;
+      return data;
+    })
+    .catch(error => {
+      console.warn(`optional table load failed: ${table}`, error);
+      state.optionalTables[table] = false;
+      return [];
+    });
+}
+
+function findingSeverity(finding) {
+  return finding?.severity || finding?.priority || 'unknown';
+}
+
+function findingTitle(finding) {
+  return finding?.title || finding?.name || finding?.summary || finding?.indicator || 'Untitled finding';
+}
+
+function findingBody(finding) {
+  return finding?.summary || finding?.description || finding?.details || '';
+}
+
+function findingStatus(finding) {
+  return finding?.status || finding?.triage_status || finding?.state || 'open';
+}
+
+function relatedTasksForFinding(finding) {
+  const text = `${findingTitle(finding)} ${findingBody(finding)}`.toLowerCase();
+  return state.workItems.filter(item => {
+    const hay = `${item.title || ''} ${item.description || ''}`.toLowerCase();
+    return !!text && !!hay && (hay.includes(text.slice(0, 24)) || text.includes((item.title || '').toLowerCase()));
+  }).slice(0, 3);
+}
+
+function buildFindingTaskDraft(finding = null) {
+  const title = finding ? `Investigate: ${findingTitle(finding)}` : 'Investigate finding';
+  const desc = finding ? `${findingBody(finding) || 'Review finding context and determine next action.'}
+
+Finding status: ${findingStatus(finding)}
+Severity: ${findingSeverity(finding)}` : 'Review finding context and determine next action.';
+  return {
+    title,
+    description: desc.trim(),
+    domain: 'security',
+    priority: String(findingSeverity(finding)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(finding)).toLowerCase() === 'high' ? 'high' : 'normal',
+    status: 'inbox',
+    owner_role: 'security/security-engineer',
+    reviewer_role: 'product/product-manager',
+    external_facing: false,
+    requires_security_review: true
+  };
+}
+
+function openFindingTaskModal(finding = null) {
+  openTaskModal(buildFindingTaskDraft(finding));
 }
 
 
@@ -722,6 +794,73 @@ function renderTasks() {
   });
 }
 
+function renderFindings() {
+  const summary = el('finding-summary');
+  const findingsAvailable = state.optionalTables.findings !== false;
+  const total = state.findings.length;
+  const openCount = state.findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
+  const linkedCount = state.findings.filter(f => relatedTasksForFinding(f).length > 0).length;
+  const securityTasks = state.workItems.filter(w => w.domain === 'security' || w.requires_security_review).length;
+  if (summary) {
+    summary.innerHTML = `
+      <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div></div>
+      <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div></div>
+      <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With related tasks</div></div>
+      <div class="card"><div class="metric">${securityTasks}</div><div class="metric-label">Security work items</div></div>
+    `;
+  }
+
+  const table = el('findings-table');
+  if (table) {
+    if (!findingsAvailable) {
+      table.innerHTML = `<div class="empty">The <code>findings</code> table is not available yet. You can still create investigation tasks from this view and wire the table later without changing the UI again.</div>`;
+    } else if (!state.findings.length) {
+      table.innerHTML = `<div class="empty">No findings yet. Once data lands in <code>findings</code>, this queue will show severity, status, and related task actions.</div>`;
+    } else {
+      table.innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Related work</th><th>Actions</th></tr></thead>
+          <tbody>${state.findings.map(f => {
+            const related = relatedTasksForFinding(f);
+            return `<tr>
+              <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(findingBody(f).slice(0, 120) || '—')}</div></td>
+              <td>${escapeHtml(findingSeverity(f))}</td>
+              <td>${renderStatusPill(String(findingStatus(f)).toLowerCase(), findingStatus(f))}</td>
+              <td>${related.length ? related.map(item => `<div class="small">${escapeHtml(item.title)}</div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
+              <td><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(f.id || '')}">Create task</button></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>`;
+      table.querySelectorAll('.finding-task-btn').forEach(btn => {
+        btn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const finding = state.findings.find(f => String(f.id) === String(btn.dataset.findingId));
+          openFindingTaskModal(finding || null);
+        });
+      });
+    }
+  }
+
+  const intel = el('intel-summary');
+  if (intel) {
+    const correlated = state.findings.filter(f => relatedTasksForFinding(f).length > 0).slice(0, 5);
+    const queuedRuns = state.runRequests.filter(r => ['queued', 'running'].includes(r.status)).length;
+    const byRole = {};
+    state.runRequests.forEach(r => { byRole[r.role_label] = (byRole[r.role_label] || 0) + 1; });
+    const hottestRole = Object.entries(byRole).sort((a,b) => b[1]-a[1])[0];
+    intel.innerHTML = `
+      <div class="kv-list">
+        <div class="kv-row"><div class="kv-key">Correlated findings</div><div class="kv-val">${correlated.length}</div></div>
+        <div class="kv-row"><div class="kv-key">Queued / running requests</div><div class="kv-val">${queuedRuns}</div></div>
+        <div class="kv-row"><div class="kv-key">Most-requested role</div><div class="kv-val">${escapeHtml(hottestRole?.[0] || '—')}</div></div>
+      </div>
+      <div style="margin-top:14px;">
+        ${correlated.length ? correlated.map(f => `<div class="feed-item"><div><strong>${escapeHtml(findingTitle(f))}</strong></div><div class="small">Related work: ${escapeHtml(relatedTasksForFinding(f).map(x => x.title).join(', '))}</div></div>`).join('') : '<div class="empty">No correlation highlights yet. This section will surface overlaps between findings, task backlog, and run requests.</div>'}
+      </div>
+    `;
+  }
+}
+
 function renderArtifacts() {
   const host = el("artifacts-table");
   if (!host) return;
@@ -743,15 +882,18 @@ function renderArtifacts() {
   host.innerHTML += `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Title</th><th>Type</th><th>Approval</th><th>Work item</th><th>Run</th><th>Path / URL</th><th>Created</th></tr></thead>
+        <thead><tr><th>Title</th><th>Type / output</th><th>Approval</th><th>Audience</th><th>Work item</th><th>Run</th><th>Path / URL</th><th>Created</th></tr></thead>
         <tbody>${state.artifacts.map(a => {
           const workItem = state.workItems.find(w => w.id === a.work_item_id);
           const run = state.runs.find(r => r.id === a.run_id);
+          const summary = `${a.summary || ''}`.toLowerCase();
+          const audience = summary.includes('customer') || a.artifact_type === 'copy' ? 'customer/promoted' : run?.role_label?.startsWith('support/') || run?.role_label?.startsWith('security/') ? 'operator' : 'internal';
           return `
           <tr class="artifact-row" data-artifact-id="${a.id}">
-            <td>${escapeHtml(a.title)}</td>
+            <td><strong>${escapeHtml(a.title)}</strong><div class="small">${escapeHtml(a.summary || '—')}</div></td>
             <td>${escapeHtml(a.artifact_type)}</td>
-            <td>${escapeHtml(a.approval_status)}</td>
+            <td>${renderStatusPill(String(a.approval_status || 'draft').toLowerCase(), a.approval_status || 'draft')}</td>
+            <td>${escapeHtml(audience)}</td>
             <td>${escapeHtml(workItem?.title || '—')}</td>
             <td>${escapeHtml(run?.role_label || '—')}</td>
             <td>${escapeHtml(a.path_or_url)}</td>
@@ -770,16 +912,46 @@ function renderArtifacts() {
   });
 }
 
+function renderRunRequests() {
+  const host = el('run-requests-table');
+  if (!host) return;
+  if (state.optionalTables.run_requests === false) {
+    host.innerHTML = `<div class="empty">The <code>run_requests</code> table is not available yet. Apply the migration and this panel will immediately start showing queue state.</div>`;
+    return;
+  }
+  if (!state.runRequests.length) {
+    host.innerHTML = `<div class="empty">No run requests yet. Use “Run now” from a work brief to populate this queue.</div>`;
+    return;
+  }
+  host.innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Status</th><th>Role</th><th>Requested</th><th>Related work</th><th>Channel hint</th><th>Result</th></tr></thead>
+      <tbody>${state.runRequests.map(req => {
+        const workItem = state.workItems.find(w => w.id === req.related_work_item_id);
+        return `<tr>
+          <td>${renderStatusPill(String(req.status || 'queued').toLowerCase(), req.status || 'queued')}</td>
+          <td><strong>${escapeHtml(req.role_label)}</strong><div class="small">${escapeHtml((req.prompt_text || '').slice(0, 90))}${(req.prompt_text || '').length > 90 ? '…' : ''}</div></td>
+          <td>${escapeHtml(fmtDate(req.created_at))}</td>
+          <td>${escapeHtml(workItem?.title || '—')}</td>
+          <td>${escapeHtml(req.suggested_channel_name || '—')}</td>
+          <td><div class="small">${escapeHtml(req.output_summary || req.error || 'Waiting for dispatcher / worker pickup')}</div></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
 function renderIntegrations() {
   const summary = el('integration-summary');
   const discordStatus = state.integrationStatus?.discord || {};
   const discordWebhookCount = ['ops-log', 'kanban-updates'].filter(name => discordStatus[name]).length;
+  const queuedRequests = state.runRequests.filter(r => r.status === 'queued').length;
+  const runningRequests = state.runRequests.filter(r => r.status === 'running').length;
   if (summary) {
     summary.innerHTML = `
       <div class="card"><div class="metric">${state.channelRoutes.length}</div><div class="metric-label">Channel routes</div></div>
       <div class="card"><div class="metric">${state.channelRoutes.filter(r => r.active).length}</div><div class="metric-label">Active routes</div></div>
-      <div class="card"><div class="metric">1</div><div class="metric-label">Supabase project</div></div>
-      <div class="card"><div class="metric">${discordWebhookCount}</div><div class="metric-label">Webhook channels wired for audit posts</div></div>`;
+      <div class="card"><div class="metric">${queuedRequests}</div><div class="metric-label">Queued run requests</div></div>
+      <div class="card"><div class="metric">${runningRequests}</div><div class="metric-label">Running run requests</div></div>`;
   }
 
   const cfgEl = el('integration-config');
@@ -838,7 +1010,9 @@ function renderAll() {
   renderOrgMap();
   renderAgents();
   renderTasks();
+  renderFindings();
   renderArtifacts();
+  renderRunRequests();
   renderIntegrations();
   setStatus(`<span class="dot"></span> Supabase connected • ${state.channelRoutes.length} routes loaded`);
 }
@@ -1212,6 +1386,8 @@ async function boot() {
   try {
     state.channelRoutes = await loadTable('channel_routes', { orderBy: { column: 'channel_name', ascending: true } });
     state.runs = await loadTable('agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 });
+    state.runRequests = await optionalLoadTable('run_requests', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
+    state.findings = await optionalLoadTable('findings', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
     state.workItems = await loadTable('work_items', { orderBy: { column: 'updated_at', ascending: false }, limit: 200 });
     state.artifacts = await loadTable('artifacts', { orderBy: { column: 'created_at', ascending: false }, limit: 200 });
     state.events = await loadTable('dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
@@ -1238,6 +1414,13 @@ function bindEvents() {
       return;
     }
     openTaskModal();
+  });
+  el('new-finding-task-btn')?.addEventListener('click', () => {
+    if (bootError) {
+      setStatus(bootError, true);
+      return;
+    }
+    openFindingTaskModal();
   });
   document.addEventListener('click', (event) => {
     if (event.target?.id === 'new-artifact-btn') openArtifactModal();

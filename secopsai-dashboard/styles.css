@@ -95,6 +95,12 @@ a { color: inherit; }
 .status-pill.status-completed .dot { background: var(--status-completed); }
 .status-pill.status-failed .dot { background: var(--status-failed); }
 .status-pill.status-cancelled .dot { background: var(--status-cancelled); }
+.status-pill.status-review .dot { background: var(--status-review); }
+.status-pill.status-blocked .dot { background: var(--status-blocked); }
+.status-pill.status-open .dot { background: var(--amber); }
+.status-pill.status-resolved .dot,
+.status-pill.status-closed .dot,
+.status-pill.status-done .dot { background: var(--green); }
 
 .grid { display: grid; gap: 18px; }
 .grid.cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }

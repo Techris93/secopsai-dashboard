@@ -39,9 +39,13 @@
           <span class="title">Tasks</span>
           <span class="desc">Work queue → owner → reviewer → artifact</span>
         </button>
+        <button class="nav-btn" data-page="findings">
+          <span class="title">Findings</span>
+          <span class="desc">Detection backlog, related work, quick task creation</span>
+        </button>
         <button class="nav-btn" data-page="artifacts">
           <span class="title">Artifacts</span>
-          <span class="desc">Reusable outputs (approved claims, specs, reports)</span>
+          <span class="desc">Promoted outputs, customer deliverables, operator notes</span>
         </button>
         <button class="nav-btn" data-page="integrations">
           <span class="title">Integrations</span>
@@ -123,6 +127,27 @@
         <div class="small" style="margin-top:14px;">Tip: drag task cards between columns to update status instantly. Use this dashboard to manage state; let OpenClaw-native orchestrators handle actual conversations and dispatch.</div>
       </section>
 
+      <section class="page" id="page-findings">
+        <div class="page-header">
+          <div>
+            <h2>Findings</h2>
+            <p>Lightweight findings queue with related work visibility. If <code>findings</code> is not available yet, the page stays useful with an empty-state and quick-create actions.</p>
+          </div>
+          <div class="status-pill" id="new-finding-task-btn" style="cursor:pointer;"><span class="dot"></span> New task from finding</div>
+        </div>
+        <div class="grid cols-4" id="finding-summary"></div>
+        <div class="grid cols-2" style="margin-top:18px;">
+          <div class="card">
+            <h3>Findings queue</h3>
+            <div id="findings-table"></div>
+          </div>
+          <div class="card">
+            <h3>Intel / correlation</h3>
+            <div id="intel-summary"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="page" id="page-artifacts">
         <div class="page-header">
           <div>
@@ -142,6 +167,15 @@
         </div>
         <div class="grid cols-4" id="integration-summary"></div>
         <div class="grid cols-2" id="integration-config" style="margin-top:18px;"></div>
+        <div class="card" style="margin-top:18px;">
+          <div class="page-header compact-header">
+            <div>
+              <h3 style="margin:0;">Run requests</h3>
+              <p class="small" style="margin:6px 0 0;">Queue visibility for dashboard-triggered executions and dispatcher pickup.</p>
+            </div>
+          </div>
+          <div id="run-requests-table"></div>
+        </div>
         <div class="card" style="margin-top:18px;">
           <h3>Channel route metadata</h3>
           <div id="routes-table"></div>
@@ -221,6 +255,9 @@
             <option value="copy">copy</option>
             <option value="schema">schema</option>
             <option value="runbook">runbook</option>
+            <option value="promoted_output">promoted_output</option>
+            <option value="customer_output">customer_output</option>
+            <option value="operator_output">operator_output</option>
             <option value="other">other</option>
           </select>
         </label>
