@@ -41,7 +41,7 @@
         </button>
         <button class="nav-btn" data-page="findings">
           <span class="title">Findings</span>
-          <span class="desc">Detection backlog, related work, quick task creation</span>
+          <span class="desc">Detection backlog, richer correlation, task linkage</span>
         </button>
         <button class="nav-btn" data-page="artifacts">
           <span class="title">Artifacts</span>
@@ -131,18 +131,18 @@
         <div class="page-header">
           <div>
             <h2>Findings</h2>
-            <p>Lightweight findings queue with related work visibility. If <code>findings</code> is not available yet, the page stays useful with an empty-state and quick-create actions.</p>
+            <p>Findings triage view with stronger task/run correlation, richer context, and graceful fallback when optional finding fields or tables are missing.</p>
           </div>
           <div class="status-pill" id="new-finding-task-btn" style="cursor:pointer;"><span class="dot"></span> New task from finding</div>
         </div>
-        <div class="grid cols-4" id="finding-summary"></div>
+        <div class="grid cols-5" id="finding-summary"></div>
         <div class="grid cols-2" style="margin-top:18px;">
           <div class="card">
             <h3>Findings queue</h3>
             <div id="findings-table"></div>
           </div>
           <div class="card">
-            <h3>Intel / correlation</h3>
+            <h3>Correlation / detail</h3>
             <div id="intel-summary"></div>
           </div>
         </div>

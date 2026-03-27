@@ -66,13 +66,14 @@ const state = {
   events: [],
   integrationStatus: null,
   lastDiscordTest: null,
+  selectedFindingId: null,
   optionalTables: {
     findings: true,
     run_requests: true
   }
 };
 
-const taskModalState = { editingId: null };
+const taskModalState = { editingId: null, sourceFinding: null };
 const artifactModalState = { editingId: null };
 const promptModalState = { item: null, role: null, brief: null, runRequestId: null, relatedRunId: null, pollTimer: null };
 const dragState = { taskId: null };
@@ -194,42 +195,191 @@ function optionalLoadTable(table, options = {}) {
 }
 
 function findingSeverity(finding) {
-  return finding?.severity || finding?.priority || 'unknown';
+  return finding?.severity || finding?.priority || finding?.risk_level || 'unknown';
 }
 
 function findingTitle(finding) {
-  return finding?.title || finding?.name || finding?.summary || finding?.indicator || 'Untitled finding';
+  return finding?.title || finding?.name || finding?.summary || finding?.indicator || finding?.rule_name || 'Untitled finding';
 }
 
 function findingBody(finding) {
-  return finding?.summary || finding?.description || finding?.details || '';
+  return finding?.summary || finding?.description || finding?.details || finding?.evidence_summary || '';
 }
 
 function findingStatus(finding) {
   return finding?.status || finding?.triage_status || finding?.state || 'open';
 }
 
+function findingSource(finding) {
+  return finding?.source || finding?.source_name || finding?.vendor || finding?.provider || finding?.detector || finding?.tool || 'Unknown source';
+}
+
+function findingConfidence(finding) {
+  return finding?.confidence ?? finding?.score ?? finding?.confidence_score ?? null;
+}
+
+function findingDetectedAt(finding) {
+  return finding?.detected_at || finding?.first_seen_at || finding?.observed_at || finding?.created_at || null;
+}
+
+function findingFingerprint(finding) {
+  return finding?.fingerprint || finding?.dedupe_key || finding?.indicator || finding?.ioc || finding?.hostname || finding?.asset || null;
+}
+
+function findingDomainHint(finding) {
+  const text = `${findingTitle(finding)} ${findingBody(finding)} ${findingSource(finding)}`.toLowerCase();
+  if (["phish", "credential", "malware", "cve", "ransom", "threat", "vuln", "ioc", "alert"].some(x => text.includes(x))) return 'security';
+  if (["deploy", "infra", "pipeline", "service", "backend"].some(x => text.includes(x))) return 'platform';
+  if (["customer", "copy", "launch", "website"].some(x => text.includes(x))) return 'revenue';
+  return 'security';
+}
+
+function findingExplicitTaskIds(finding) {
+  const raw = [
+    finding?.related_work_item_id,
+    finding?.work_item_id,
+    finding?.linked_work_item_id,
+    finding?.task_id,
+    finding?.linked_task_id,
+    ...(Array.isArray(finding?.related_work_item_ids) ? finding.related_work_item_ids : []),
+    ...(Array.isArray(finding?.linked_task_ids) ? finding.linked_task_ids : [])
+  ].filter(Boolean).map(String);
+  return [...new Set(raw)];
+}
+
+function tokenizeForMatch(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter(token => token.length >= 4)
+    .filter(token => !['with','from','that','this','have','been','into','about','their','review','finding','status','severity','source','unknown'].includes(token));
+}
+
+function findingTaskMatches(finding) {
+  const explicitIds = new Set(findingExplicitTaskIds(finding));
+  const titleTokens = tokenizeForMatch(findingTitle(finding));
+  const bodyTokens = tokenizeForMatch(findingBody(finding)).slice(0, 12);
+  const sourceTokens = tokenizeForMatch(findingSource(finding)).slice(0, 4);
+  const fingerprint = String(findingFingerprint(finding) || '').toLowerCase();
+  const desiredDomain = findingDomainHint(finding);
+
+  return state.workItems.map(item => {
+    let score = 0;
+    const reasons = [];
+    const hay = `${item.title || ''} ${item.description || ''} ${item.owner_role || ''} ${item.reviewer_role || ''}`.toLowerCase();
+    if (!hay.trim()) return null;
+
+    if (explicitIds.has(String(item.id))) {
+      score += 120;
+      reasons.push('explicit link');
+    }
+    if (item.linked_run_id && String(item.linked_run_id) === String(finding?.related_run_id || finding?.run_id || '')) {
+      score += 35;
+      reasons.push('same run');
+    }
+    if (item.domain === desiredDomain) {
+      score += 8;
+      reasons.push(`${desiredDomain} domain`);
+    }
+    const titleHits = titleTokens.filter(token => hay.includes(token));
+    const bodyHits = bodyTokens.filter(token => hay.includes(token));
+    const sourceHits = sourceTokens.filter(token => hay.includes(token));
+    if (titleHits.length) {
+      score += titleHits.length * 18;
+      reasons.push(`title overlap: ${titleHits.slice(0, 2).join(', ')}`);
+    }
+    if (bodyHits.length) {
+      score += bodyHits.length * 10;
+      reasons.push(`context overlap: ${bodyHits.slice(0, 2).join(', ')}`);
+    }
+    if (sourceHits.length) {
+      score += sourceHits.length * 6;
+      reasons.push(`source overlap: ${sourceHits.slice(0, 2).join(', ')}`);
+    }
+    if (fingerprint && hay.includes(fingerprint)) {
+      score += 28;
+      reasons.push('fingerprint match');
+    }
+    if ((item.requires_security_review || item.domain === 'security') && desiredDomain === 'security') {
+      score += 6;
+    }
+
+    if (score < 12) return null;
+    return { item, score, reasons: [...new Set(reasons)].slice(0, 3) };
+  }).filter(Boolean).sort((a, b) => b.score - a.score);
+}
+
 function relatedTasksForFinding(finding) {
-  const text = `${findingTitle(finding)} ${findingBody(finding)}`.toLowerCase();
-  return state.workItems.filter(item => {
-    const hay = `${item.title || ''} ${item.description || ''}`.toLowerCase();
-    return !!text && !!hay && (hay.includes(text.slice(0, 24)) || text.includes((item.title || '').toLowerCase()));
-  }).slice(0, 3);
+  return findingTaskMatches(finding).slice(0, 4);
+}
+
+function correlatedRunRequestsForFinding(finding) {
+  const text = `${findingTitle(finding)} ${findingBody(finding)} ${findingSource(finding)}`.toLowerCase();
+  const desiredDomain = findingDomainHint(finding);
+  return state.runRequests.map(req => {
+    let score = 0;
+    const prompt = `${req.prompt_text || ''} ${req.output_summary || ''} ${req.role_label || ''}`.toLowerCase();
+    if (!prompt.trim()) return null;
+    const titleTokens = tokenizeForMatch(findingTitle(finding)).slice(0, 6);
+    const bodyTokens = tokenizeForMatch(findingBody(finding)).slice(0, 8);
+    const hits = [...titleTokens, ...bodyTokens].filter(token => prompt.includes(token));
+    if (hits.length) score += hits.length * 10;
+    if ((req.role_label || '').startsWith(`${desiredDomain}/`)) score += 14;
+    if (prompt.includes(String(findingFingerprint(finding) || '').toLowerCase()) && findingFingerprint(finding)) score += 20;
+    if ((req.related_work_item_id || '') && relatedTasksForFinding(finding).some(match => String(match.item.id) === String(req.related_work_item_id))) score += 20;
+    if (score < 10) return null;
+    return { request: req, score, reasons: hits.slice(0, 3) };
+  }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, 4);
+}
+
+function selectFinding(findingId = null) {
+  const nextId = findingId || state.findings?.[0]?.id || null;
+  state.selectedFindingId = nextId;
+}
+
+function currentSelectedFinding() {
+  if (!state.findings.length) return null;
+  return state.findings.find(f => String(f.id) === String(state.selectedFindingId)) || state.findings[0] || null;
+}
+
+async function bestEffortLinkFindingToTask(finding, task) {
+  if (!finding?.id || !task?.id || state.optionalTables.findings === false) return false;
+  const candidates = ['related_work_item_id', 'work_item_id', 'linked_work_item_id', 'task_id', 'linked_task_id'];
+  for (const column of candidates) {
+    try {
+      const { error } = await supabaseClient.from('findings').update({ [column]: task.id }).eq('id', finding.id);
+      if (!error) return true;
+    } catch {}
+  }
+  return false;
 }
 
 function buildFindingTaskDraft(finding = null) {
+  const related = finding ? relatedTasksForFinding(finding) : [];
+  const correlatedRequests = finding ? correlatedRunRequestsForFinding(finding) : [];
   const title = finding ? `Investigate: ${findingTitle(finding)}` : 'Investigate finding';
   const desc = finding ? `${findingBody(finding) || 'Review finding context and determine next action.'}
 
 Finding status: ${findingStatus(finding)}
-Severity: ${findingSeverity(finding)}` : 'Review finding context and determine next action.';
+Severity: ${findingSeverity(finding)}
+Source: ${findingSource(finding)}${findingConfidence(finding) !== null ? `
+Confidence: ${findingConfidence(finding)}` : ''}${findingFingerprint(finding) ? `
+Fingerprint: ${findingFingerprint(finding)}` : ''}${findingDetectedAt(finding) ? `
+Detected at: ${findingDetectedAt(finding)}` : ''}${related.length ? `
+
+Existing related work:
+${related.map(match => `- ${match.item.title} (score ${match.score})`).join('\n')}` : ''}${correlatedRequests.length ? `
+
+Related run requests:
+${correlatedRequests.map(match => `- ${match.request.role_label} (${match.request.status || 'queued'})`).join('\n')}` : ''}` : 'Review finding context and determine next action.';
   return {
     title,
     description: desc.trim(),
-    domain: 'security',
+    domain: finding ? findingDomainHint(finding) : 'security',
     priority: String(findingSeverity(finding)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(finding)).toLowerCase() === 'high' ? 'high' : 'normal',
     status: 'inbox',
-    owner_role: 'security/security-engineer',
+    owner_role: finding && findingDomainHint(finding) === 'platform' ? 'platform/backend-architect' : 'security/security-engineer',
     reviewer_role: 'product/product-manager',
     external_facing: false,
     requires_security_review: true
@@ -237,6 +387,7 @@ Severity: ${findingSeverity(finding)}` : 'Review finding context and determine n
 }
 
 function openFindingTaskModal(finding = null) {
+  taskModalState.sourceFinding = finding || null;
   openTaskModal(buildFindingTaskDraft(finding));
 }
 
@@ -795,18 +946,24 @@ function renderTasks() {
 }
 
 function renderFindings() {
-  const summary = el('finding-summary');
   const findingsAvailable = state.optionalTables.findings !== false;
+  if (findingsAvailable && state.findings.length && !state.selectedFindingId) selectFinding();
+  const summary = el('finding-summary');
   const total = state.findings.length;
   const openCount = state.findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
+  const criticalCount = state.findings.filter(f => ['critical', 'urgent'].includes(String(findingSeverity(f)).toLowerCase())).length;
   const linkedCount = state.findings.filter(f => relatedTasksForFinding(f).length > 0).length;
-  const securityTasks = state.workItems.filter(w => w.domain === 'security' || w.requires_security_review).length;
+  const actionableCount = state.findings.filter(f => {
+    const related = relatedTasksForFinding(f);
+    return related.length === 0 || (related[0]?.item?.status && !['done', 'review'].includes(related[0].item.status));
+  }).length;
   if (summary) {
     summary.innerHTML = `
       <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div></div>
       <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div></div>
-      <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With related tasks</div></div>
-      <div class="card"><div class="metric">${securityTasks}</div><div class="metric-label">Security work items</div></div>
+      <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div></div>
+      <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With task correlation</div></div>
+      <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div></div>
     `;
   }
 
@@ -815,49 +972,86 @@ function renderFindings() {
     if (!findingsAvailable) {
       table.innerHTML = `<div class="empty">The <code>findings</code> table is not available yet. You can still create investigation tasks from this view and wire the table later without changing the UI again.</div>`;
     } else if (!state.findings.length) {
-      table.innerHTML = `<div class="empty">No findings yet. Once data lands in <code>findings</code>, this queue will show severity, status, and related task actions.</div>`;
+      table.innerHTML = `<div class="empty">No findings yet. Once data lands in <code>findings</code>, this queue will show severity, confidence, correlation, and task actions.</div>`;
     } else {
       table.innerHTML = `
         <div class="table-wrap"><table>
-          <thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Related work</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Correlation</th><th>Linked work</th><th>Actions</th></tr></thead>
           <tbody>${state.findings.map(f => {
             const related = relatedTasksForFinding(f);
-            return `<tr>
-              <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(findingBody(f).slice(0, 120) || '—')}</div></td>
-              <td>${escapeHtml(findingSeverity(f))}</td>
+            const best = related[0] || null;
+            const selected = String(state.selectedFindingId) === String(f.id);
+            return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(f.id || '')}">
+              <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(findingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(findingBody(f).slice(0, 120) || '—')}</div></td>
+              <td><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
               <td>${renderStatusPill(String(findingStatus(f)).toLowerCase(), findingStatus(f))}</td>
-              <td>${related.length ? related.map(item => `<div class="small">${escapeHtml(item.title)}</div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
-              <td><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(f.id || '')}">Create task</button></td>
+              <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
+              <td>${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
+              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(f.id || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(f.id || '')}">Create task</button></div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
-      table.querySelectorAll('.finding-task-btn').forEach(btn => {
-        btn.addEventListener('click', (event) => {
-          event.stopPropagation();
-          const finding = state.findings.find(f => String(f.id) === String(btn.dataset.findingId));
-          openFindingTaskModal(finding || null);
-        });
-      });
+      table.querySelectorAll('.finding-task-btn').forEach(btn => btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const finding = state.findings.find(f => String(f.id) === String(btn.dataset.findingId));
+        if (finding) openFindingTaskModal(finding);
+      }));
+      table.querySelectorAll('.finding-select-btn, .finding-row').forEach(row => row.addEventListener('click', (event) => {
+        const target = event.target.closest('[data-finding-id]');
+        if (!target) return;
+        selectFinding(target.dataset.findingId);
+        renderFindings();
+      }));
     }
   }
 
   const intel = el('intel-summary');
   if (intel) {
-    const correlated = state.findings.filter(f => relatedTasksForFinding(f).length > 0).slice(0, 5);
-    const queuedRuns = state.runRequests.filter(r => ['queued', 'running'].includes(r.status)).length;
-    const byRole = {};
-    state.runRequests.forEach(r => { byRole[r.role_label] = (byRole[r.role_label] || 0) + 1; });
-    const hottestRole = Object.entries(byRole).sort((a,b) => b[1]-a[1])[0];
+    const selected = currentSelectedFinding();
+    if (!findingsAvailable) {
+      intel.innerHTML = `<div class="empty">Correlation detail will appear here once the optional <code>findings</code> table exists.</div>`;
+      return;
+    }
+    if (!selected) {
+      intel.innerHTML = `<div class="empty">Select a finding to inspect correlation, related requests, and suggested next actions.</div>`;
+      return;
+    }
+    const related = relatedTasksForFinding(selected);
+    const requests = correlatedRunRequestsForFinding(selected);
     intel.innerHTML = `
-      <div class="kv-list">
-        <div class="kv-row"><div class="kv-key">Correlated findings</div><div class="kv-val">${correlated.length}</div></div>
-        <div class="kv-row"><div class="kv-key">Queued / running requests</div><div class="kv-val">${queuedRuns}</div></div>
-        <div class="kv-row"><div class="kv-key">Most-requested role</div><div class="kv-val">${escapeHtml(hottestRole?.[0] || '—')}</div></div>
+      <div class="finding-detail-header">
+        <div>
+          <h4>${escapeHtml(findingTitle(selected))}</h4>
+          <div class="small">${escapeHtml(findingSource(selected))} • ${escapeHtml(fmtDate(findingDetectedAt(selected)))}${findingFingerprint(selected) ? ` • ${escapeHtml(findingFingerprint(selected))}` : ''}</div>
+        </div>
+        <div>${renderStatusPill(String(findingStatus(selected)).toLowerCase(), findingStatus(selected))}</div>
       </div>
-      <div style="margin-top:14px;">
-        ${correlated.length ? correlated.map(f => `<div class="feed-item"><div><strong>${escapeHtml(findingTitle(f))}</strong></div><div class="small">Related work: ${escapeHtml(relatedTasksForFinding(f).map(x => x.title).join(', '))}</div></div>`).join('') : '<div class="empty">No correlation highlights yet. This section will surface overlaps between findings, task backlog, and run requests.</div>'}
+      <div class="finding-detail-grid">
+        <div class="card finding-detail-card">
+          <h4>Overview</h4>
+          <div class="kv-list">
+            <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val">${escapeHtml(findingSeverity(selected))}</div></div>
+            <div class="kv-row"><div class="kv-key">Confidence</div><div class="kv-val">${escapeHtml(findingConfidence(selected) ?? '—')}</div></div>
+            <div class="kv-row"><div class="kv-key">Suggested domain</div><div class="kv-val">${escapeHtml(findingDomainHint(selected))}</div></div>
+          </div>
+          <div class="small" style="margin-top:12px;">${escapeHtml(findingBody(selected) || 'No additional finding narrative available.')}</div>
+        </div>
+        <div class="card finding-detail-card">
+          <h4>Task linkage</h4>
+          ${related.length ? related.map(match => `<div class="feed-item"><div><strong>${escapeHtml(match.item.title)}</strong></div><div class="small">${escapeHtml(match.item.status || 'unknown')} • score ${match.score}</div><div class="small">${escapeHtml(match.reasons.join(' • '))}</div></div>`).join('') : '<div class="empty">No convincing task match yet. Create a dedicated investigation task.</div>'}
+        </div>
+      </div>
+      <div class="card finding-detail-card" style="margin-top:14px;">
+        <h4>Run-request correlation</h4>
+        ${requests.length ? requests.map(match => `<div class="feed-item"><div><strong>${escapeHtml(match.request.role_label)}</strong></div><div class="small">${escapeHtml(match.request.status || 'queued')} • score ${match.score}</div><div class="small">${escapeHtml((match.request.prompt_text || '').slice(0, 180) || '—')}</div></div>`).join('') : '<div class="empty">No strong run-request overlap yet. This gracefully stays empty when the queue or text hints are absent.</div>'}
+        <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}</div>
       </div>
     `;
+    el('selected-finding-task-btn')?.addEventListener('click', () => openFindingTaskModal(selected));
+    el('selected-finding-prompt-btn')?.addEventListener('click', () => {
+      const top = related[0]?.item;
+      if (top) openPromptModal(top);
+    });
   }
 }
 
@@ -1028,6 +1222,7 @@ async function loadTable(table, options = {}) {
 
 function resetTaskForm() {
   taskModalState.editingId = null;
+  taskModalState.sourceFinding = null;
   el('task-modal-title').textContent = 'New task';
   el('task-title').value = '';
   el('task-domain').value = 'exec';
@@ -1240,6 +1435,7 @@ async function runDiscordTest(channelName) {
 }
 
 async function saveTask() {
+  const sourceFinding = taskModalState.sourceFinding;
   const payload = {
     title: el('task-title').value.trim(),
     domain: el('task-domain').value,
@@ -1274,12 +1470,13 @@ async function saveTask() {
     const { data, error } = await supabaseClient.from('work_items').insert(payload).select().single();
     if (error) return alert(`Failed to create task: ${error.message}`);
     item = data;
+    const linked = await bestEffortLinkFindingToTask(sourceFinding, item);
     await announceTaskChange('task_created', item, {
       title: `Task created: ${payload.title}`,
-      body: `Domain: ${payload.domain} • Priority: ${payload.priority}`,
+      body: `Domain: ${payload.domain} • Priority: ${payload.priority}${sourceFinding ? ` • From finding: ${findingTitle(sourceFinding)}` : ''}`,
       runSummary: `Created work item: ${payload.title}`,
       runDetail: payload.description || 'Task created from dashboard modal.',
-      outputSummary: `Initial status ${payload.status}`,
+      outputSummary: `Initial status ${payload.status}${linked ? ' • finding linked' : ''}`,
       kanbanTitle: `Kanban new item: ${payload.title}`,
       kanbanBody: `${payload.domain} • ${payload.status}`
     }, 'success');
