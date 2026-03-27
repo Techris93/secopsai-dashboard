@@ -1244,7 +1244,8 @@ function resetTaskForm() {
 function openTaskModal(item = null) {
   resetTaskForm();
   if (item) {
-    taskModalState.editingId = item.id;
+    taskModalState.editingId = item.id || null;
+    taskModalState.sourceFinding = item.sourceFinding || taskModalState.sourceFinding || null;
     el('task-modal-title').textContent = 'Edit task';
     el('task-title').value = item.title || '';
     el('task-domain').value = item.domain || 'exec';
@@ -1263,6 +1264,10 @@ function openTaskModal(item = null) {
 }
 
 function closeTaskModal() { el('task-modal').classList.add('hidden'); }
+
+function currentTaskModalItem() {
+  return state.workItems.find(w => w.id === taskModalState.editingId) || null;
+}
 function upsertWorkItemInState(item) {
   if (!item) return;
   const idx = state.workItems.findIndex(w => w.id === item.id);
@@ -1537,13 +1542,18 @@ async function saveTask() {
 }
 
 async function deleteTask() {
-  if (!taskModalState.editingId) return;
-  const item = state.workItems.find(w => w.id === taskModalState.editingId);
-  if (!confirm('Delete this task?')) return;
-  const taskId = taskModalState.editingId;
+  const item = currentTaskModalItem();
+  const taskId = taskModalState.editingId || item?.id || null;
+  if (!taskId) {
+    alert('No task is selected for deletion. Close and reopen the task, then try again.');
+    return;
+  }
+  if (!confirm(`Delete this task${item?.title ? `: ${item.title}` : ''}?`)) return;
   const { error } = await supabaseClient.from('work_items').delete().eq('id', taskId);
   if (error) return alert(`Failed to delete task: ${error.message}`);
   removeWorkItemFromState(taskId);
+  taskModalState.editingId = null;
+  taskModalState.sourceFinding = null;
   closeTaskModal();
   refreshTaskViewsOnly();
   setStatus(`<span class="dot"></span> Task deleted: ${escapeHtml(item?.title || 'Untitled task')}`);
