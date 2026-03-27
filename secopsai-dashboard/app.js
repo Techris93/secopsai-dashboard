@@ -75,7 +75,7 @@ const state = {
 
 const taskModalState = { editingId: null, sourceFinding: null };
 const artifactModalState = { editingId: null };
-const promptModalState = { item: null, role: null, brief: null, runRequestId: null, relatedRunId: null, pollTimer: null };
+const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null };
 const dragState = { taskId: null };
 const pages = ["mission-control", "org-map", "agents", "tasks", "findings", "artifacts", "integrations"];
 
@@ -407,38 +407,169 @@ function suggestRoleForTask(item) {
   return ROLE_LABELS.includes(suggested) ? suggested : 'exec/agents-orchestrator';
 }
 
-function buildWorkBrief(item, roleLabel = null) {
-  const role = roleLabel || suggestRoleForTask(item);
-  const pathHints = ['secopsai-dashboard/index.html','secopsai-dashboard/app.js','secopsai-dashboard/styles.css'];
-  const goals = [
-    'improve the implementation directly',
-    'preserve current working behavior unless a change is required',
-    'keep the solution simple and maintainable'
-  ];
-  if (item?.description) goals.unshift(item.description.trim());
-  return `Prepare work for ${role} through the OpenClaw-native orchestrator.
+function normalizeText(value = '') {
+  return String(value || '').trim().toLowerCase();
+}
 
+function uniqueList(values = []) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function inferTaskRepoContext(item = {}, roleLabel = null) {
+  const role = roleLabel || suggestRoleForTask(item);
+  const haystack = normalizeText([
+    item?.title,
+    item?.description,
+    item?.domain,
+    item?.owner_role,
+    item?.reviewer_role,
+    role
+  ].join(' '));
+
+  const repoRules = [
+    {
+      repo: 'secopsai-dashboard',
+      confidence: haystack.includes('dashboard') ? 'high' : 'medium',
+      when: /dashboard|ui|ux|kanban|supabase|modal|prompt|brief|mission control|control panel|index\.html|app\.js|styles\.css/.test(haystack),
+      paths: ['secopsai-dashboard/app.js', 'secopsai-dashboard/index.html', 'secopsai-dashboard/styles.css', 'secopsai-dashboard/README.md'],
+      reasons: ['task language points at dashboard UI/control-plane code']
+    },
+    {
+      repo: 'secopsai',
+      confidence: 'medium',
+      when: /dispatcher|orchestrator|discord|telemetry|agent run|finding|detection|intel|pipeline|backend|api|worker/.test(haystack),
+      paths: ['secopsai/discord_dispatcher.py', 'secopsai/orchestrator/', 'secopsai/backend/', 'secopsai/README.md'],
+      reasons: ['task language points at backend/orchestration/detection work']
+    }
+  ];
+
+  const matched = repoRules.filter(rule => rule.when);
+  const repos = matched.length ? matched : [repoRules[0]];
+  const primary = repos[0];
+  const secondary = repos.slice(1);
+  const paths = uniqueList(repos.flatMap(r => r.paths));
+  const reasons = uniqueList(repos.flatMap(r => r.reasons));
+
+  return {
+    role,
+    primaryRepo: primary.repo,
+    primaryConfidence: primary.confidence,
+    secondaryRepos: secondary.map(r => r.repo),
+    likelyRepos: repos.map(r => r.repo),
+    likelyPaths: paths,
+    reasons
+  };
+}
+
+function inferWorkBriefPlan(item = {}, roleLabel = null) {
+  const repo = inferTaskRepoContext(item, roleLabel);
+  const role = repo.role;
+  const title = item?.title || 'Untitled task';
+  const description = (item?.description || '').trim();
+  const dueDate = item?.due_date || null;
+
+  const focus = [];
+  if (description) focus.push(description);
+  focus.push('Improve the implementation directly instead of producing generic advice.');
+  focus.push('Preserve current working behavior unless changing it is required to complete the task.');
+  if (repo.secondaryRepos.length) focus.push(`Handle cross-repo implications between ${repo.primaryRepo} and ${repo.secondaryRepos.join(', ')} explicitly.`);
+  focus.push('Keep the solution practical, local-first, and shippable now.');
+
+  const constraints = [
+    'This dashboard is control-plane only; live conversations and dispatch belong to orchestrator flows.',
+    'Prefer existing metadata and lightweight heuristics over a hard dependency on a new backend.',
+    'Validate syntax/basic behavior before handing off.'
+  ];
+  if (item?.requires_security_review) constraints.push('Flag security-sensitive changes and leave reviewer-ready notes.');
+  if (item?.external_facing) constraints.push('Assume output may be visible outside the operator team; keep UX copy clear.');
+
+  const deliverables = [
+    'What changed and why',
+    'Files touched',
+    'Any blockers or follow-ups',
+    'How to use the result from the dashboard UI'
+  ];
+
+  const acceptanceChecks = [
+    'The brief should mention the most likely repo and file paths instead of only a generic dashboard template.',
+    'If the task appears cross-repo, explain what likely lives in each repo.',
+    'If a future intelligent/agent-generated path exists, keep it additive rather than required for today.'
+  ];
+  if (dueDate) acceptanceChecks.push(`Keep urgency in mind: target due date is ${dueDate}.`);
+
+  return { role, repo, title, description, focus, constraints, deliverables, acceptanceChecks };
+}
+
+function buildSmartLocalBrief(item, roleLabel = null) {
+  const plan = inferWorkBriefPlan(item, roleLabel);
+  return `Prepare work for ${plan.role}.
+
+Mode: smart local brief
 Context: this dashboard is control-plane only; the orchestrator owns live conversations and dispatch.
 
-Task:
-- Title: ${item?.title || 'Untitled task'}
+Task summary:
+- Title: ${plan.title}
 - Domain: ${item?.domain || 'exec'}
 - Priority: ${item?.priority || 'normal'}
 - Status: ${item?.status || 'inbox'}
 - Owner role: ${item?.owner_role || 'not set'}
 - Reviewer role: ${item?.reviewer_role || 'not set'}
+- Likely primary repo: ${plan.repo.primaryRepo} (${plan.repo.primaryConfidence} confidence)
+${plan.repo.secondaryRepos.length ? `- Likely secondary repo(s): ${plan.repo.secondaryRepos.join(', ')}
+` : ''}- Why: ${plan.repo.reasons.join('; ')}
 
-Relevant paths:
-${pathHints.map(p => `- ${p}`).join('\n')}
+Likely paths / starting points:
+${plan.repo.likelyPaths.map(p => `- ${p}`).join('\n')}
 
-Goals:
-${goals.map(g => `- ${g}`).join('\n')}
+Execution focus:
+${plan.focus.map(line => `- ${line}`).join('\n')}
+
+Constraints:
+${plan.constraints.map(line => `- ${line}`).join('\n')}
+
+Acceptance checks:
+${plan.acceptanceChecks.map(line => `- ${line}`).join('\n')}
 
 Return:
-- what changed
-- files touched
-- blockers
-- next actions`;
+${plan.deliverables.map(line => `- ${line}`).join('\n')}`;
+}
+
+function buildAgentReadyBrief(item, roleLabel = null) {
+  const plan = inferWorkBriefPlan(item, roleLabel);
+  return `SYSTEM / ORCHESTRATOR HANDOFF
+
+You are preparing an implementation pass for ${plan.role}.
+Use the local smart brief below as grounded context, but feel free to improve repo/path inference if stronger evidence appears during code inspection.
+Do not require an external planning backend before doing useful work.
+
+STRUCTURED INPUT
+- task_title: ${plan.title}
+- domain: ${item?.domain || 'exec'}
+- priority: ${item?.priority || 'normal'}
+- status: ${item?.status || 'inbox'}
+- owner_role: ${item?.owner_role || 'not set'}
+- reviewer_role: ${item?.reviewer_role || 'not set'}
+- likely_primary_repo: ${plan.repo.primaryRepo}
+- likely_secondary_repos: ${plan.repo.secondaryRepos.join(', ') || 'none'}
+- likely_paths: ${plan.repo.likelyPaths.join(' | ')}
+- repo_inference_basis: ${plan.repo.reasons.join('; ')}
+
+OBJECTIVE
+${plan.focus.map(line => `- ${line}`).join('\n')}
+
+OPERATING CONSTRAINTS
+${plan.constraints.map(line => `- ${line}`).join('\n')}
+
+EXPECTED OUTPUT
+${plan.deliverables.map(line => `- ${line}`).join('\n')}
+
+NOTE
+This mode is intentionally compatible with a future intelligent brief generator. Until that exists, the inferred repo/path metadata above is the local fallback and should be treated as editable guidance, not rigid truth.`;
+}
+
+function buildWorkBrief(item, roleLabel = null, mode = 'smart-local') {
+  if (mode === 'agent-ready') return buildAgentReadyBrief(item, roleLabel);
+  return buildSmartLocalBrief(item, roleLabel);
 }
 
 function findRouteForRole(roleLabel) {
@@ -483,21 +614,35 @@ function stopRunStatusPolling() {
   }
 }
 
+function refreshPromptBrief() {
+  const item = promptModalState.item;
+  const role = promptModalState.role || suggestRoleForTask(item);
+  const mode = promptModalState.mode || 'smart-local';
+  const prompt = buildWorkBrief(item, role, mode);
+  promptModalState.brief = prompt;
+  if (el('prompt-output')) el('prompt-output').value = prompt;
+  const modeHint = mode === 'agent-ready'
+    ? 'Agent-ready handoff format selected. Good for future orchestration hooks or richer agent generation later.'
+    : 'Smart local brief selected. Uses task metadata plus heuristics to infer likely repos, paths, and constraints now.';
+  const modeHintEl = el('prompt-mode-hint');
+  if (modeHintEl) modeHintEl.textContent = modeHint;
+}
+
 function openPromptModal(item, roleLabel = null) {
   const role = roleLabel || suggestRoleForTask(item);
-  const prompt = buildWorkBrief(item, role);
   promptModalState.item = item;
   promptModalState.role = role;
-  promptModalState.brief = prompt;
+  promptModalState.mode = el('prompt-mode-select')?.value || promptModalState.mode || 'smart-local';
   promptModalState.runRequestId = null;
   promptModalState.relatedRunId = null;
   stopRunStatusPolling();
 
-  el('prompt-modal-title').textContent = 'Work brief';
+  el('prompt-modal-title').textContent = 'Intelligent work brief';
   const route = findRouteForRole(role);
   const reviewer = item?.reviewer_role || null;
   el('prompt-modal-meta').textContent = `Suggested owner: ${role}${reviewer ? ` • Reviewer: ${reviewer}` : ''}${route ? ` • Route metadata: #${route.channel_name}` : ''} • Direct dashboard-side sending retired`;
-  el('prompt-output').value = prompt;
+  if (el('prompt-mode-select')) el('prompt-mode-select').value = promptModalState.mode;
+  refreshPromptBrief();
   setRunStatusUI({ status: 'idle', line: 'Not started', detail: '' });
   el('prompt-modal').classList.remove('hidden');
 }
@@ -1725,6 +1870,10 @@ function bindEvents() {
   el('prompt-close-btn')?.addEventListener('click', closePromptModal);
   el('prompt-copy-btn')?.addEventListener('click', copyPromptToClipboard);
   el('prompt-run-btn')?.addEventListener('click', runPromptNow);
+  el('prompt-mode-select')?.addEventListener('change', (event) => {
+    promptModalState.mode = event?.target?.value || 'smart-local';
+    refreshPromptBrief();
+  });
   el('artifact-modal-close')?.addEventListener('click', closeArtifactModal);
   el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
   el('artifact-save-btn')?.addEventListener('click', saveArtifact);
