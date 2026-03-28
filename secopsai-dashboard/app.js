@@ -1273,6 +1273,34 @@ function summarizePromptText(prompt) {
   return compactText(text, 100);
 }
 
+function runRequestOutcomeFlags(req) {
+  const raw = String(req?.output_summary || req?.error || '').replace(/\[[0-9;]*m/g, ' ').replace(/\s+/g, ' ').trim();
+  const normalized = raw.toLowerCase();
+  const refusalPatterns = [
+    /i can't fulfil/,
+    /i can't fulfill/,
+    /cannot fulfill/,
+    /can't comply/,
+    /cannot comply/,
+    /i can.t help with that/,
+    /i can.t assist with that/,
+    /refus/,
+    /unable to complete/,
+    /could not complete/,
+    /blocked/,
+    /need[s]? review/,
+    /not enough context/
+  ];
+  const hasBadOutcome = refusalPatterns.some(rx => rx.test(normalized));
+  return {
+    raw,
+    hasBadOutcome,
+    displayStatus: hasBadOutcome && String(req?.status || '').toLowerCase() === 'completed' ? 'needs_review' : String(req?.status || 'queued').toLowerCase(),
+    displayLabel: hasBadOutcome && String(req?.status || '').toLowerCase() === 'completed' ? 'Needs Review' : humanizeSnake(req?.status || 'queued'),
+    outcomeHint: hasBadOutcome ? 'Completed technically, but output suggests refusal, blocker, or incomplete delivery.' : ''
+  };
+}
+
 function summarizeRunRequestResult(req) {
   const text = req?.output_summary || req?.error || '';
   if (!text) {
@@ -1325,10 +1353,11 @@ function renderRunRequests() {
       <thead><tr><th>Status</th><th>Request</th><th>Task</th><th>Route</th><th>Result</th><th>Actions</th></tr></thead>
       <tbody>${state.runRequests.map(req => {
         const workItem = state.workItems.find(w => w.id === req.related_work_item_id);
-        const status = String(req.status || 'queued').toLowerCase();
-        const canCancel = ['queued', 'running'].includes(status);
+        const outcome = runRequestOutcomeFlags(req);
+        const status = outcome.displayStatus;
+        const canCancel = ['queued', 'running'].includes(String(req.status || '').toLowerCase());
         return `<tr>
-          <td>${renderStatusPill(status, humanizeSnake(req.status || 'queued'))}</td>
+          <td>${renderStatusPill(status, outcome.displayLabel)}${outcome.outcomeHint ? `<div class="small rr-sub" style="margin-top:8px;">${escapeHtml(outcome.outcomeHint)}</div>` : ''}</td>
           <td>
             <div class="rr-main"><strong>${escapeHtml(req.role_label || 'Unknown role')}</strong></div>
             <div class="small rr-sub">${escapeHtml(summarizePromptText(req.prompt_text))}</div>
