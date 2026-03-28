@@ -1166,10 +1166,16 @@ function renderTasks() {
         div.className = `task-card priority-${String(item.priority || 'normal').toLowerCase()}`;
         div.draggable = true;
         div.dataset.taskId = item.id;
+        const liveReq = latestRunRequestForTask(item.id);
+        const liveRun = liveReq ? relatedRunForRequest(liveReq) : null;
+        const liveLifecycle = liveReq ? runRequestLifecycle(liveReq, liveRun) : null;
         div.innerHTML = `
           <div class="task-card-top">
             <div class="title">${escapeHtml(item.title)}</div>
-            <div class="task-card-status">${escapeHtml(label)}</div>
+            <div class="task-card-top-right">
+              <div class="task-card-status">${escapeHtml(label)}</div>
+              ${liveLifecycle ? `<div class="task-card-live ${escapeHtml(liveLifecycle.displayStatus)}">${escapeHtml(liveLifecycle.displayLabel)}</div>` : ''}
+            </div>
           </div>
           <div class="small task-card-desc">${escapeHtml(item.description || 'No description yet.')}</div>
           <div class="badges">
@@ -1476,6 +1482,13 @@ function runRequestWorkerIdentity(req, run = null) {
     run?.model_used ? `${run.model_used}${run.runtime ? ` via ${run.runtime}` : ''}` : '',
     run?.role_label
   );
+}
+
+function latestRunRequestForTask(taskId) {
+  if (!taskId) return null;
+  return state.runRequests
+    .filter(r => String(r.related_work_item_id || '') === String(taskId))
+    .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))[0] || null;
 }
 
 function runRequestLifecycle(req, run = null) {
