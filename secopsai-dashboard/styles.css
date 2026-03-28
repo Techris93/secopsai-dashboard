@@ -550,3 +550,8 @@ input, select, textarea { width: 100%; max-width: 100%; }
 #task-status-help {
   margin-top: 8px;
 }
+
+
+.is-disabled-soft {
+  opacity: 0.72;
+}

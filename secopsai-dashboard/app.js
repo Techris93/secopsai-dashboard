@@ -663,6 +663,7 @@ function openPromptModal(item, roleLabel = null) {
   el('prompt-modal-meta').textContent = `Suggested owner: ${role}${reviewer ? ` • Reviewer: ${reviewer}` : ''}${route ? ` • Route metadata: #${route.channel_name}` : ''} • Direct dashboard-side sending retired`;
   if (el('prompt-mode-select')) el('prompt-mode-select').value = promptModalState.mode;
   refreshPromptBrief();
+  syncPromptRunButtonState();
   setRunStatusUI({ status: 'idle', line: 'Not started', detail: '' });
   el('prompt-modal').classList.remove('hidden');
 }
@@ -795,6 +796,7 @@ async function runPromptNow() {
       setRunStatusUI({ status: lifecycle.displayStatus, line, detailHtml, viewUrl });
       if (['completed','failed','cancelled','needs_review','completed_with_gaps'].includes(lifecycle.displayStatus) || ['completed','failed','cancelled'].includes(st)) {
         stopRunStatusPolling();
+        syncPromptRunButtonState();
       }
     } catch (e) {
       // Keep polling quiet; surface minimal info.
