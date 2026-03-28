@@ -773,6 +773,80 @@ async function copyPromptToClipboard() {
   setStatus('<span class="dot"></span> Work brief copied to clipboard');
 }
 
+async function queueTaskExecutionDirect(item, promptOverride = null) {
+  const role = item?.owner_role || suggestRoleForTask(item);
+  const prompt = promptOverride || buildWorkBrief(item, role, 'smart-local');
+  const route = findRouteForRole(role);
+  const notifyChannel = 'ops-log';
+
+  const run = await createOrchestratorRun({
+    taskSummary: `Run now requested for ${role}`,
+    taskDetail: prompt,
+    status: 'queued',
+    outputSummary: route
+      ? `Dashboard requested immediate execution. Suggested route: #${route.channel_name}.`
+      : 'Dashboard requested immediate execution (no active route found).',
+    relatedWorkItemId: item?.id || null,
+    sourceChannelName: notifyChannel
+  });
+
+  let movedItem = item;
+  if (item?.id && String(item.status || '').toLowerCase() === 'inbox') {
+    try {
+      const { data: moved, error: moveErr } = await supabaseClient
+        .from('work_items')
+        .update({ status: 'planned', updated_at: new Date().toISOString() })
+        .eq('id', item.id)
+        .select()
+        .single();
+      if (!moveErr && moved) {
+        movedItem = moved;
+        upsertWorkItemInState(moved);
+        refreshTaskViewsOnly();
+      }
+    } catch (e) {
+      console.warn('failed to move task from inbox after direct queue', e);
+    }
+  }
+
+  const { data: runReq, error: rrErr } = await supabaseClient
+    .from('run_requests')
+    .insert({
+      role_label: role,
+      prompt_text: prompt,
+      status: 'queued',
+      initiated_by: el('task-created-by')?.value?.trim() || 'dashboard-auto',
+      related_work_item_id: movedItem?.id || item?.id || null,
+      related_run_id: run?.id || null,
+      suggested_channel_name: route?.channel_name || null,
+      worker_name: 'dashboard-orchestrator',
+      worker_identity: 'dashboard'
+    })
+    .select()
+    .single();
+  if (rrErr) throw rrErr;
+
+  state.runRequests.unshift(runReq);
+  renderTasks();
+  renderIntegrations();
+  setStatus(`<span class="dot"></span> Task saved and queued for ${escapeHtml(role)}`);
+
+  const content = compactMultiline([
+    `SecOpsAI run now (queued)`,
+    `Role: ${role}`,
+    run?.id ? `Run ID: ${run.id}` : null,
+    route ? `Suggested route: #${route.channel_name}` : 'Suggested route: (none found)',
+    '---',
+    prompt
+  ]);
+  const result = await postDiscordUpdate(notifyChannel, content);
+  if (!result.ok && !result.skipped) {
+    await createDashboardEvent('run_now_notify_failed', `Run notify failed: ${role}`, result.reason || 'Unknown notify failure', 'warning', { related_work_item_id: movedItem?.id || item?.id || null, related_run_id: run?.id || null });
+  }
+  backgroundRefreshOpsData();
+  return { run, runReq };
+}
+
 async function runPromptNow() {
   const runBtn = el('prompt-run-btn');
   setButtonBusy(runBtn, true, 'Queueing…');
@@ -953,7 +1027,8 @@ function assignTaskToSuggestedAgent() {
     else if (externalFacing) el('task-reviewer-role').value = 'product/product-manager';
   }
 
-  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`);
+  const reviewer = el('task-reviewer-role')?.value?.trim();
+  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}${reviewer ? ` • reviewer ${escapeHtml(reviewer)}` : ''}`);
 }
 
 function renderMissionControl() {
@@ -2202,12 +2277,14 @@ async function runDiscordTest(channelName) {
 async function saveTask(options = {}) {
   const sourceFinding = taskModalState.sourceFinding;
   const saveBtn = el('task-save-btn');
+  const saveRunBtn = el('task-save-run-btn');
   if (saveBtn) saveBtn.disabled = true;
+  if (saveRunBtn) saveRunBtn.disabled = true;
   const payload = {
     title: el('task-title').value.trim(),
     domain: el('task-domain').value,
     priority: el('task-priority').value,
-    status: el('task-status').value,
+    status: options.runAfterSave ? 'planned' : el('task-status').value,
     owner_role: el('task-owner-role').value.trim() || null,
     reviewer_role: el('task-reviewer-role').value.trim() || null,
     due_date: el('task-due-date').value || null,
@@ -2219,6 +2296,7 @@ async function saveTask(options = {}) {
   };
   if (!payload.title) {
     if (saveBtn) saveBtn.disabled = false;
+    if (saveRunBtn) saveRunBtn.disabled = false;
     return alert('Task title is required.');
   }
 
@@ -2250,7 +2328,7 @@ async function saveTask(options = {}) {
       refreshTaskViewsOnly();
       setStatus(`<span class="dot"></span> Task created: ${escapeHtml(payload.title)}`);
       if (options.runAfterSave) {
-        setTimeout(() => openPromptModal(item, item.owner_role || null), 0);
+        await queueTaskExecutionDirect(item);
       }
       Promise.resolve().then(async () => {
         const linked = await bestEffortLinkFindingToTask(sourceFinding, item);
@@ -2267,6 +2345,7 @@ async function saveTask(options = {}) {
     }
   } finally {
     if (saveBtn) saveBtn.disabled = false;
+    if (saveRunBtn) saveRunBtn.disabled = false;
   }
 }
 
