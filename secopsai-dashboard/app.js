@@ -1578,6 +1578,13 @@ function deriveSuggestedReviewer(item = {}, fallbackReviewer = '') {
   if (existing) return existing;
   if (item?.requires_security_review) return 'security/security-engineer';
   if (item?.external_facing) return 'product/product-manager';
+  const domain = String(item?.domain || '').toLowerCase();
+  if (domain === 'security') return 'security/security-engineer';
+  if (domain === 'product') return 'product/product-manager';
+  if (domain === 'platform') return 'platform/software-architect';
+  if (domain === 'support') return 'support/support-responder';
+  if (domain === 'revenue') return 'product/product-manager';
+  if (domain === 'exec') return 'exec/agents-orchestrator';
   return '';
 }
 
