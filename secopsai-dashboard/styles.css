@@ -328,3 +328,11 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
 .task-card-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
 .mini-btn { background: rgba(15,23,42,0.04); color: var(--text); border: 1px solid rgba(15,23,42,0.10); border-radius: 10px; padding: 6px 9px; font: inherit; font-size: 0.78rem; cursor: pointer; }
 .mini-btn:hover { border-color: rgba(37,99,235,0.35); }
+
+
+.run-requests-grid td { vertical-align: top; }
+.rr-main { font-weight: 600; }
+.rr-sub { margin-top: 4px; color: var(--text-muted); }
+.rr-meta { margin-top: 8px; color: var(--text-muted); }
+.rr-result { max-width: 340px; line-height: 1.45; color: var(--text); }
+.rr-actions { display: flex; flex-wrap: wrap; gap: 8px; }

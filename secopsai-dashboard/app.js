@@ -1251,32 +1251,121 @@ function renderArtifacts() {
   });
 }
 
+function humanizeSnake(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\w/g, c => c.toUpperCase());
+}
+
+function compactText(value, max = 120) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '—';
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+function summarizePromptText(prompt) {
+  const text = String(prompt || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '—';
+  if (/SYSTEM \/ ORCHESTRATOR HANDOFF/i.test(text)) return 'Structured orchestrator handoff prompt';
+  if (/Prepare work for/i.test(text)) return compactText(text, 100);
+  return compactText(text, 100);
+}
+
+function summarizeRunRequestResult(req) {
+  const text = req?.output_summary || req?.error || '';
+  if (!text) {
+    return req?.status === 'queued' ? 'Waiting for dispatcher / worker pickup' : '—';
+  }
+  return compactText(text.replace(/\[[0-9;]*m/g, ''), 140);
+}
+
+async function removeRunRequest(requestId) {
+  const req = state.runRequests.find(r => r.id === requestId);
+  if (!req) return;
+  const actionLabel = ['queued', 'failed', 'cancelled', 'completed'].includes(String(req.status || '').toLowerCase()) ? 'remove' : 'delete';
+  if (!confirm(`Remove this run request${req.role_label ? ` for ${req.role_label}` : ''}?`)) return;
+  const { error } = await supabaseClient.from('run_requests').delete().eq('id', requestId);
+  if (error) return alert(`Failed to remove run request: ${error.message}`);
+  state.runRequests = state.runRequests.filter(r => r.id !== requestId);
+  renderRunRequests();
+  renderIntegrations();
+  setStatus(`<span class="dot"></span> Run request removed`);
+  Promise.resolve().then(() => createDashboardEvent('run_request_removed', `Run request removed`, `${req.role_label || 'Unknown role'} • ${req.id}`, 'info', { related_run_id: req.related_run_id || null, related_work_item_id: req.related_work_item_id || null })).catch(e => console.warn('run_request_removed event failed', e));
+}
+
+async function cancelRunRequest(requestId) {
+  const req = state.runRequests.find(r => r.id === requestId);
+  if (!req) return;
+  if (!confirm(`Cancel queued run request${req.role_label ? ` for ${req.role_label}` : ''}?`)) return;
+  const { data, error } = await supabaseClient.from('run_requests').update({ status: 'cancelled' }).eq('id', requestId).select().single();
+  if (error) return alert(`Failed to cancel run request: ${error.message}`);
+  const idx = state.runRequests.findIndex(r => r.id === requestId);
+  if (idx >= 0) state.runRequests[idx] = data;
+  renderRunRequests();
+  renderIntegrations();
+  setStatus(`<span class="dot"></span> Run request cancelled`);
+  Promise.resolve().then(() => createDashboardEvent('run_request_cancelled', `Run request cancelled`, `${req.role_label || 'Unknown role'} • ${req.id}`, 'warning', { related_run_id: req.related_run_id || null, related_work_item_id: req.related_work_item_id || null })).catch(e => console.warn('run_request_cancelled event failed', e));
+}
+
 function renderRunRequests() {
   const host = el('run-requests-table');
   if (!host) return;
   if (state.optionalTables.run_requests === false) {
-    host.innerHTML = `<div class="empty">The <code>run_requests</code> table is not available yet. Apply the migration and this panel will immediately start showing queue state.</div>`;
+    host.innerHTML = `<div class="empty">The run requests table is not available yet. Apply the migration and this panel will start showing queue state.</div>`;
     return;
   }
   if (!state.runRequests.length) {
-    host.innerHTML = `<div class="empty">No run requests yet. Use “Run now” from a work brief to populate this queue.</div>`;
+    host.innerHTML = `<div class="empty">No run requests yet. Use “Run now” from an intelligent brief to populate this queue.</div>`;
     return;
   }
   host.innerHTML = `
-    <div class="table-wrap"><table>
-      <thead><tr><th>Status</th><th>Role</th><th>Requested</th><th>Related work</th><th>Channel hint</th><th>Result</th></tr></thead>
+    <div class="table-wrap"><table class="run-requests-grid">
+      <thead><tr><th>Status</th><th>Request</th><th>Task</th><th>Route</th><th>Result</th><th>Actions</th></tr></thead>
       <tbody>${state.runRequests.map(req => {
         const workItem = state.workItems.find(w => w.id === req.related_work_item_id);
+        const status = String(req.status || 'queued').toLowerCase();
+        const canCancel = ['queued', 'running'].includes(status);
         return `<tr>
-          <td>${renderStatusPill(String(req.status || 'queued').toLowerCase(), req.status || 'queued')}</td>
-          <td><strong>${escapeHtml(req.role_label)}</strong><div class="small">${escapeHtml((req.prompt_text || '').slice(0, 90))}${(req.prompt_text || '').length > 90 ? '…' : ''}</div></td>
-          <td>${escapeHtml(fmtDate(req.created_at))}</td>
-          <td>${escapeHtml(workItem?.title || '—')}</td>
-          <td>${escapeHtml(req.suggested_channel_name || '—')}</td>
-          <td><div class="small">${escapeHtml(req.output_summary || req.error || 'Waiting for dispatcher / worker pickup')}</div></td>
+          <td>${renderStatusPill(status, humanizeSnake(req.status || 'queued'))}</td>
+          <td>
+            <div class="rr-main"><strong>${escapeHtml(req.role_label || 'Unknown role')}</strong></div>
+            <div class="small rr-sub">${escapeHtml(summarizePromptText(req.prompt_text))}</div>
+            <div class="small rr-meta">${escapeHtml(fmtDate(req.created_at))}</div>
+          </td>
+          <td>
+            <div class="rr-main">${escapeHtml(workItem?.title || '—')}</div>
+            <div class="small rr-sub">${req.related_work_item_id ? `ID: ${escapeHtml(String(req.related_work_item_id).slice(0, 8))}…` : 'No linked task'}</div>
+          </td>
+          <td>
+            <div class="rr-main">${escapeHtml(req.suggested_channel_name || '—')}</div>
+            <div class="small rr-sub">${escapeHtml(req.initiated_by || 'dashboard')}</div>
+          </td>
+          <td>
+            <div class="small rr-result">${escapeHtml(summarizeRunRequestResult(req))}</div>
+          </td>
+          <td>
+            <div class="task-card-actions rr-actions">
+              ${canCancel ? `<button class="mini-btn" data-runreq-action="cancel" data-runreq-id="${escapeHtml(req.id)}">Cancel</button>` : ''}
+              <button class="mini-btn" data-runreq-action="remove" data-runreq-id="${escapeHtml(req.id)}">Remove</button>
+            </div>
+          </td>
         </tr>`;
       }).join('')}</tbody>
     </table></div>`;
+
+  host.querySelectorAll('[data-runreq-action]').forEach(btn => {
+    btn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = event.currentTarget.dataset.runreqId;
+      const action = event.currentTarget.dataset.runreqAction;
+      if (!id || !action) return;
+      if (action === 'cancel') return cancelRunRequest(id);
+      if (action === 'remove') return removeRunRequest(id);
+    });
+  });
 }
 
 function renderIntegrations() {
