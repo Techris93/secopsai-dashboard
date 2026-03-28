@@ -904,6 +904,9 @@ async function runPromptNow() {
         viewUrl = `http://127.0.0.1:45680/view-run-output.html?path=${encodeURIComponent(rel)}&role=${encodeURIComponent(data.role_label || '')}&id=${encodeURIComponent(data.id || '')}`;
       }
       setRunStatusUI({ status: lifecycle.displayStatus, line, detailHtml, viewUrl });
+      if (lifecycle.displayStatus === 'completed' && data?.related_work_item_id) {
+        try { await advanceTaskAfterSuccessfulRun(data.related_work_item_id); } catch (e) { console.warn('advanceTaskAfterSuccessfulRun failed', e); }
+      }
       if (['completed','failed','cancelled','needs_review','completed_with_gaps'].includes(lifecycle.displayStatus) || ['completed','failed','cancelled'].includes(st)) {
         stopRunStatusPolling();
         syncPromptRunButtonState();
@@ -1987,6 +1990,23 @@ function refreshTaskViewsOnly() {
   renderFindings();
 }
 
+async function advanceTaskAfterSuccessfulRun(itemId) {
+  if (!itemId) return;
+  const task = state.workItems.find(w => String(w.id) === String(itemId));
+  if (!task) return;
+  const nextStatus = task.reviewer_role ? 'review' : 'done';
+  if (String(task.status || '').toLowerCase() === nextStatus) return;
+  const { data, error } = await supabaseClient
+    .from('work_items')
+    .update({ status: nextStatus, updated_at: new Date().toISOString() })
+    .eq('id', itemId)
+    .select()
+    .single();
+  if (error) throw error;
+  upsertWorkItemInState(data);
+  refreshTaskViewsOnly();
+}
+
 async function backgroundRefreshOpsData() {
   try {
     const [runs, events] = await Promise.all([
@@ -2175,7 +2195,7 @@ async function runDiscordTest(channelName) {
   renderIntegrations();
 }
 
-async function saveTask() {
+async function saveTask(options = {}) {
   const sourceFinding = taskModalState.sourceFinding;
   const saveBtn = el('task-save-btn');
   if (saveBtn) saveBtn.disabled = true;
@@ -2225,6 +2245,9 @@ async function saveTask() {
       closeTaskModal();
       refreshTaskViewsOnly();
       setStatus(`<span class="dot"></span> Task created: ${escapeHtml(payload.title)}`);
+      if (options.runAfterSave) {
+        setTimeout(() => openPromptModal(item, item.owner_role || null), 0);
+      }
       Promise.resolve().then(async () => {
         const linked = await bestEffortLinkFindingToTask(sourceFinding, item);
         await announceTaskChange('task_created', item, {
@@ -2402,7 +2425,8 @@ function bindEvents() {
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);
-  el('task-save-btn')?.addEventListener('click', saveTask);
+  el('task-save-btn')?.addEventListener('click', () => saveTask());
+  el('task-save-run-btn')?.addEventListener('click', () => saveTask({ runAfterSave: true }));
   const taskDeleteBtn = el('task-delete-btn');
   if (taskDeleteBtn && taskDeleteBtn.dataset.bound !== '1') {
     taskDeleteBtn.dataset.bound = '1';
