@@ -760,6 +760,24 @@ async function runPromptNow() {
     sourceChannelName: notifyChannel
   });
 
+  // Move the task out of Inbox once execution is explicitly queued.
+  if (item?.id && String(item.status || '').toLowerCase() === 'inbox') {
+    try {
+      const { data: moved, error: moveErr } = await supabaseClient
+        .from('work_items')
+        .update({ status: 'planned', updated_at: new Date().toISOString() })
+        .eq('id', item.id)
+        .select()
+        .single();
+      if (!moveErr && moved) {
+        upsertWorkItemInState(moved);
+        refreshTaskViewsOnly();
+      }
+    } catch (e) {
+      console.warn('failed to move task from inbox after run-now queue', e);
+    }
+  }
+
   // Insert a run_requests queue item (picked up by discord_dispatcher.py).
   let runReq = null;
   try {
@@ -1164,7 +1182,7 @@ function renderTasks() {
           <div class="small" style="margin-top:10px;">Updated ${escapeHtml(fmtDate(item.updated_at || item.created_at))}</div>
           <div class="task-card-actions">
             <button class="mini-btn" data-action="assign">Assign</button>
-            <button class="mini-btn" data-action="prompt">Brief</button>
+            <button class="mini-btn" data-action="prompt">Execute</button>
           </div>
         `;
         div.addEventListener('dragstart', (e) => {
