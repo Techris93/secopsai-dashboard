@@ -277,10 +277,10 @@ def render_prompt(role_label, task_text, executor_config=None):
 
 def build_bounded_prompt(role_label, task_body, channel_context, role_memory, executor_config=None, env=None):
     env = env or {}
-    task_limit = int(env.get('DISCORD_DISPATCHER_TASK_MAX_CHARS', '12000'))
-    context_limit = int(env.get('DISCORD_DISPATCHER_CONTEXT_MAX_CHARS', '2500'))
-    memory_limit = int(env.get('DISCORD_DISPATCHER_MEMORY_MAX_CHARS', '2500'))
-    prompt_limit = int(env.get('DISCORD_DISPATCHER_PROMPT_MAX_CHARS', '18000'))
+    task_limit = int(env.get('DISCORD_DISPATCHER_TASK_MAX_CHARS', '7000'))
+    context_limit = int(env.get('DISCORD_DISPATCHER_CONTEXT_MAX_CHARS', '1200'))
+    memory_limit = int(env.get('DISCORD_DISPATCHER_MEMORY_MAX_CHARS', '800'))
+    prompt_limit = int(env.get('DISCORD_DISPATCHER_PROMPT_MAX_CHARS', '11000'))
 
     bounded_task = trim_text_block(task_body, task_limit, 'task')
     bounded_context = trim_text_block(channel_context, context_limit, 'channel context')
