@@ -956,6 +956,17 @@ async function runPromptNow() {
       if (error) throw error;
       const st = String(data?.status || 'unknown').toLowerCase();
       const run = relatedRunForRequest(data) || (promptModalState.relatedRunId ? state.runs.find(r => String(r.id) === String(promptModalState.relatedRunId)) : null);
+      if (!data.fetched_output_text) {
+        const outputPath = firstNonEmpty(data?.output_path, run?.output_path);
+        const rel = outputPath ? String(outputPath).replace('/Users/chrixchange/.openclaw/workspace/', '') : '';
+        if (rel) {
+          try {
+            const resp = await fetch(`/api/run-output?path=${encodeURIComponent(rel)}`);
+            const payload = await resp.json();
+            if (payload?.ok && payload?.text) data.fetched_output_text = payload.text;
+          } catch {}
+        }
+      }
       const lifecycle = runRequestLifecycle(data, run);
       const artifacts = parseRunRequestArtifacts(data, run);
       const detailHtml = `
@@ -1013,21 +1024,17 @@ function assignTaskToSuggestedAgent() {
     domain: el('task-domain')?.value || 'exec',
     priority: el('task-priority')?.value || 'normal',
     status: el('task-status')?.value || 'inbox',
-    description: el('task-description')?.value?.trim() || ''
+    description: el('task-description')?.value?.trim() || '',
+    requires_security_review: !!el('task-security-review')?.checked,
+    external_facing: !!el('task-external-facing')?.checked,
+    reviewer_role: el('task-reviewer-role')?.value?.trim() || ''
   };
+  item.requires_security_review = !!(item?.requires_security_review ?? el('task-security-review')?.checked);
+  item.external_facing = !!(item?.external_facing ?? el('task-external-facing')?.checked);
   const role = suggestRoleForTask(item);
+  const reviewer = deriveSuggestedReviewer(item, el('task-reviewer-role')?.value?.trim());
   el('task-owner-role').value = role;
-
-  // Reviewer automation (matches SecOpsAI orchestration rules)
-  const requiresSec = !!(item?.requires_security_review ?? el('task-security-review')?.checked);
-  const externalFacing = !!(item?.external_facing ?? el('task-external-facing')?.checked);
-  const currentReviewer = (el('task-reviewer-role')?.value || '').trim();
-  if (!currentReviewer) {
-    if (requiresSec) el('task-reviewer-role').value = 'security/security-engineer';
-    else if (externalFacing) el('task-reviewer-role').value = 'product/product-manager';
-  }
-
-  const reviewer = el('task-reviewer-role')?.value?.trim();
+  if (el('task-reviewer-role')) el('task-reviewer-role').value = reviewer;
   setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}${reviewer ? ` • reviewer ${escapeHtml(reviewer)}` : ''}`);
 }
 
@@ -1328,7 +1335,7 @@ function renderTasks() {
         div.addEventListener('click', (event) => {
           if (dragState.taskId) return;
           const action = event.target?.dataset?.action;
-          if (action === 'assign') { event.stopPropagation(); const role = suggestRoleForTask(item); const reviewer = item?.reviewer_role || ((item?.requires_security_review) ? 'security/security-engineer' : (item?.external_facing ? 'product/product-manager' : null)); const payload = { ...item, owner_role: role, reviewer_role: reviewer || null, updated_at: new Date().toISOString() }; Promise.resolve().then(async () => { const { data, error } = await supabaseClient.from('work_items').update({ owner_role: payload.owner_role, reviewer_role: payload.reviewer_role, updated_at: payload.updated_at }).eq('id', item.id).select().single(); if (error) throw error; upsertWorkItemInState(data); refreshTaskViewsOnly(); setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`); }).catch(err => { console.error('assign suggested owner failed', err); alert(`Failed to assign suggested owner: ${err.message || err}`); }); return; }
+          if (action === 'assign') { event.stopPropagation(); const role = suggestRoleForTask(item); const reviewer = deriveSuggestedReviewer(item); const payload = { ...item, owner_role: role, reviewer_role: reviewer || null, updated_at: new Date().toISOString() }; Promise.resolve().then(async () => { const { data, error } = await supabaseClient.from('work_items').update({ owner_role: payload.owner_role, reviewer_role: payload.reviewer_role, updated_at: payload.updated_at }).eq('id', item.id).select().single(); if (error) throw error; upsertWorkItemInState(data); refreshTaskViewsOnly(); setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}${reviewer ? ` • reviewer ${escapeHtml(reviewer)}` : ''}`); }).catch(err => { console.error('assign suggested owner failed', err); alert(`Failed to assign suggested owner: ${err.message || err}`); }); return; }
           if (action === 'prompt') { event.stopPropagation(); openPromptModal(item); return; }
           openTaskModal(item);
         });
@@ -1566,14 +1573,29 @@ function relatedRunForRequest(req) {
   return state.runs.find(run => String(run.id) === String(req.related_run_id)) || null;
 }
 
+function deriveSuggestedReviewer(item = {}, fallbackReviewer = '') {
+  const existing = String(fallbackReviewer || item?.reviewer_role || '').trim();
+  if (existing) return existing;
+  if (item?.requires_security_review) return 'security/security-engineer';
+  if (item?.external_facing) return 'product/product-manager';
+  return '';
+}
+
 function collectRunRequestText(req, run = null) {
   return stripAnsi([
     req?.output_summary,
     req?.error,
     req?.result_text,
+    req?.stdout,
+    req?.stderr,
     run?.output_summary,
     run?.task_summary,
-    run?.task_detail
+    run?.task_detail,
+    run?.stdout,
+    run?.stderr,
+    run?.result_text,
+    req?.fetched_output_text,
+    run?.fetched_output_text
   ].filter(Boolean).join('\n'));
 }
 
@@ -1597,8 +1619,16 @@ function extractCommitEvidence(text) {
   const urlMatch = normalized.match(/https?:\/\/github\.com\/[^\s)]+\/commit\/([a-f0-9]{7,40})\b/i);
   if (urlMatch) return urlMatch[1];
 
-  const labeledLine = normalized.match(/(?:^|\n)(?:[-*]\s*)?(?:commit(?:\s+exists)?|commit\s+hash|sha|revision)\s*[:\-]\s*`?([a-f0-9]{7,40})`?/i);
+  const labeledLine = normalized.match(/(?:^|\n)(?:[-*]\s*)?(?:commit(?:\s+exists)?|commit\s+hash|commit id|commit oid|commit sha|sha(?:1)?|revision|head commit|new commit|created commit)\s*[:\-=]\s*`?([a-f0-9]{7,40})`?/i);
   if (labeledLine && labeledLine[1]) return labeledLine[1];
+
+  const inlineMatch = normalized.match(/(?:\bcommit(?:ted)?\b[^\n]{0,80}?\b(?:as|at|to|is)?\s*`?([a-f0-9]{7,40})`?)|(?:\b([a-f0-9]{7,40})\b[^\n]{0,60}?\bcommit\b)/i);
+  if (inlineMatch) return inlineMatch[1] || inlineMatch[2] || '';
+
+  const gitStyleMatch = normalized.match(/\b[0-9]+\s+files? changed[\s\S]{0,160}?\b([a-f0-9]{7,40})\b/i)
+    || normalized.match(/(?:^|\n)([a-f0-9]{7,40})\s+-\s+/i)
+    || normalized.match(/(?:^|\n)\s*\*\s*([a-f0-9]{7,40})\b/i);
+  if (gitStyleMatch) return gitStyleMatch[1];
 
   const regex = /\b([a-f0-9]{7,40})\b/ig;
   let match;
@@ -1606,11 +1636,11 @@ function extractCommitEvidence(text) {
     const token = match[1];
     const idx = match.index;
     if (looksLikeUuidContext(normalized, idx, token)) continue;
-    const before = normalized.slice(Math.max(0, idx - 48), idx);
-    const after = normalized.slice(idx + token.length, Math.min(normalized.length, idx + token.length + 48));
+    const before = normalized.slice(Math.max(0, idx - 72), idx);
+    const after = normalized.slice(idx + token.length, Math.min(normalized.length, idx + token.length + 96));
     if (/-$/.test(before) || /^-/.test(after)) continue;
     const context = `${before}${token}${after}`;
-    if (/(?:\bcommit(?:ted)?\b|\bsha\b|\brevision\b|\bhash\b|\bhead\b)/i.test(context)) return token;
+    if (/(?:\bcommit(?:ted)?\b|\bsha(?:1)?\b|\brevision\b|\bhash\b|\bhead\b|\boid\b|\bcherry-pick\b)/i.test(context)) return token;
   }
   return '';
 }
@@ -1722,8 +1752,8 @@ function latestRunRequestForTask(taskId) {
 }
 
 function runRequestLifecycle(req, run = null) {
-  const rawStatus = String(req?.status || '').toLowerCase();
-  const parsedOutput = tryParseJsonBlob(req?.output_summary);
+  const rawStatus = String(req?.status || run?.status || '').toLowerCase();
+  const parsedOutput = tryParseJsonBlob(req?.output_summary) || tryParseJsonBlob(run?.output_summary);
   const aborted = !!parsedOutput?.result?.meta?.aborted;
   const outcomeText = collectRunRequestText(req, run).toLowerCase();
   const artifacts = parseRunRequestArtifacts(req, run);
@@ -2070,11 +2100,11 @@ function refreshTaskViewsOnly() {
 }
 
 async function advanceTaskAfterSuccessfulRun(itemId) {
-  if (!itemId) return;
+  if (!itemId) return false;
   const task = state.workItems.find(w => String(w.id) === String(itemId));
-  if (!task) return;
+  if (!task) return false;
   const nextStatus = task.reviewer_role ? 'review' : 'done';
-  if (String(task.status || '').toLowerCase() === nextStatus) return;
+  if (String(task.status || '').toLowerCase() === nextStatus) return false;
   const { data, error } = await supabaseClient
     .from('work_items')
     .update({ status: nextStatus, updated_at: new Date().toISOString() })
@@ -2083,7 +2113,60 @@ async function advanceTaskAfterSuccessfulRun(itemId) {
     .single();
   if (error) throw error;
   upsertWorkItemInState(data);
-  refreshTaskViewsOnly();
+  return true;
+}
+
+async function synchronizeSuccessfulTaskTransitions() {
+  const pendingTaskIds = [...new Set(state.runRequests
+    .map(req => {
+      const run = relatedRunForRequest(req);
+      const lifecycle = runRequestLifecycle(req, run);
+      return lifecycle.displayStatus === 'completed' ? req?.related_work_item_id : null;
+    })
+    .filter(Boolean)
+    .map(id => String(id)))];
+  if (!pendingTaskIds.length) return false;
+  let changed = false;
+  for (const taskId of pendingTaskIds) {
+    try {
+      const updated = await advanceTaskAfterSuccessfulRun(taskId);
+      changed = changed || updated;
+    } catch (e) {
+      console.warn('synchronizeSuccessfulTaskTransitions failed', taskId, e);
+    }
+  }
+  if (changed) refreshTaskViewsOnly();
+  return changed;
+}
+
+async function hydrateRunRequestOutputEvidence() {
+  const candidates = state.runRequests.filter(req => {
+    const run = relatedRunForRequest(req);
+    const lifecycle = runRequestLifecycle(req, run);
+    if (!['completed', 'completed_with_gaps', 'needs_review'].includes(lifecycle.displayStatus)) return false;
+    const hasCommit = !!parseRunRequestArtifacts(req, run).commit;
+    const outputPath = firstNonEmpty(req?.output_path, run?.output_path);
+    const rel = outputPath ? String(outputPath).replace('/Users/chrixchange/.openclaw/workspace/', '') : '';
+    return !hasCommit && rel && !req?.fetched_output_text;
+  }).slice(0, 6);
+  if (!candidates.length) return false;
+  let changed = false;
+  await Promise.all(candidates.map(async (req) => {
+    const run = relatedRunForRequest(req);
+    const outputPath = firstNonEmpty(req?.output_path, run?.output_path);
+    const rel = outputPath ? String(outputPath).replace('/Users/chrixchange/.openclaw/workspace/', '') : '';
+    if (!rel) return;
+    try {
+      const resp = await fetch(`/api/run-output?path=${encodeURIComponent(rel)}`);
+      const payload = await resp.json();
+      if (!payload?.ok || !payload?.text) return;
+      req.fetched_output_text = payload.text;
+      changed = true;
+    } catch (e) {
+      console.warn('hydrateRunRequestOutputEvidence failed', rel, e);
+    }
+  }));
+  return changed;
 }
 
 async function backgroundRefreshOpsData() {
@@ -2462,6 +2545,8 @@ async function backgroundRefreshLiveExecutionState() {
     ]);
     state.runs = runs;
     state.runRequests = runRequests;
+    await hydrateRunRequestOutputEvidence();
+    await synchronizeSuccessfulTaskTransitions();
     renderTasks();
     renderMissionControl();
     renderIntegrations();
@@ -2486,6 +2571,8 @@ async function boot() {
     state.workItems = await loadTable('work_items', { orderBy: { column: 'updated_at', ascending: false }, limit: 200 });
     state.artifacts = await loadTable('artifacts', { orderBy: { column: 'created_at', ascending: false }, limit: 200 });
     state.events = await loadTable('dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
+    await hydrateRunRequestOutputEvidence();
+    await synchronizeSuccessfulTaskTransitions();
     await loadIntegrationStatus();
     renderAll();
     startLiveExecutionRefreshLoop();
