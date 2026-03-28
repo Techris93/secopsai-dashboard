@@ -591,7 +591,7 @@ function findRouteForRole(roleLabel) {
   return state.channelRoutes.find(r => r.default_role_label === roleLabel && r.active) || null;
 }
 
-function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '', viewUrl = null } = {}) {
+function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '', detailHtml = '', viewUrl = null } = {}) {
   const box = el('prompt-run-status');
   const pill = el('prompt-run-status-pill');
   const statusLine = el('prompt-run-status-line');
@@ -601,9 +601,12 @@ function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '', vi
 
   box.style.display = status ? 'block' : 'none';
   statusLine.textContent = line;
-  statusDetail.textContent = detail || '';
+  if (detailHtml) {
+    statusDetail.innerHTML = detailHtml;
+  } else {
+    statusDetail.textContent = detail || '';
+  }
 
-  // Actions
   actions.innerHTML = '';
   if (viewUrl) {
     actions.style.display = 'flex';
@@ -618,8 +621,8 @@ function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '', vi
     actions.style.display = 'none';
   }
 
-  // Basic pill text
-  pill.innerHTML = `<span class="dot"></span> ${escapeHtml(status)}`;
+  pill.className = `status-pill status-${String(status || 'idle').toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}`;
+  pill.innerHTML = `<span class="dot"></span> ${escapeHtml(humanizeSnake(status))}`;
 }
 
 function stopRunStatusPolling() {
@@ -765,18 +768,29 @@ async function runPromptNow() {
         .eq('id', promptModalState.runRequestId)
         .single();
       if (error) throw error;
-      const st = data?.status || 'unknown';
-      const line = st.charAt(0).toUpperCase() + st.slice(1);
-      const detail = data?.output_summary || data?.error || '';
-      setRunStatusUI({ status: st, line, detail });
-
-      // If complete and an output path exists, show a button.
-      if (['completed','failed','cancelled'].includes(st) && data?.output_path) {
-        const rel = String(data.output_path).replace('/Users/chrixchange/.openclaw/workspace/', '');
-        const viewUrl = `http://127.0.0.1:45680/view-run-output.html?path=${encodeURIComponent(rel)}&role=${encodeURIComponent(data.role_label || '')}&id=${encodeURIComponent(data.id || '')}`;
-        setRunStatusUI({ status: st, line, detail, viewUrl });
+      const st = String(data?.status || 'unknown').toLowerCase();
+      const run = relatedRunForRequest(data) || (promptModalState.relatedRunId ? state.runs.find(r => String(r.id) === String(promptModalState.relatedRunId)) : null);
+      const lifecycle = runRequestLifecycle(data, run);
+      const artifacts = parseRunRequestArtifacts(data, run);
+      const detailHtml = `
+        <div class="rr-proof-list">
+          <div><strong>Worker:</strong> ${escapeHtml(runRequestWorkerIdentity(data, run) || 'unknown')}</div>
+          <div><strong>Run:</strong> ${escapeHtml(data?.related_run_id || run?.id || '—')}</div>
+          <div><strong>Repo:</strong> ${escapeHtml(firstNonEmpty(data?.repo_path, run?.repo_path) || '—')}</div>
+          <div><strong>Output:</strong> ${escapeHtml(firstNonEmpty(data?.output_path, run?.output_path) || '—')}</div>
+          <div><strong>Commit:</strong> ${escapeHtml(artifacts.commit || '—')}</div>
+          <div><strong>PR:</strong> ${escapeHtml(artifacts.prUrl || (artifacts.prNumber ? `#${artifacts.prNumber}` : '—'))}</div>
+          <div><strong>Summary:</strong> ${escapeHtml(summarizeRunRequestResult(data, run))}</div>
+        </div>`;
+      const line = lifecycle.displayLabel;
+      const finalOutputPath = firstNonEmpty(data?.output_path, run?.output_path);
+      let viewUrl = null;
+      if (['completed','failed','cancelled','needs_review','completed_with_gaps'].includes(lifecycle.displayStatus) && finalOutputPath) {
+        const rel = String(finalOutputPath).replace('/Users/chrixchange/.openclaw/workspace/', '');
+        viewUrl = `http://127.0.0.1:45680/view-run-output.html?path=${encodeURIComponent(rel)}&role=${encodeURIComponent(data.role_label || '')}&id=${encodeURIComponent(data.id || '')}`;
       }
-      if (['completed','failed','cancelled'].includes(st)) {
+      setRunStatusUI({ status: lifecycle.displayStatus, line, detailHtml, viewUrl });
+      if (['completed','failed','cancelled','needs_review','completed_with_gaps'].includes(lifecycle.displayStatus) || ['completed','failed','cancelled'].includes(st)) {
         stopRunStatusPolling();
       }
     } catch (e) {
@@ -1314,40 +1328,116 @@ function summarizePromptText(prompt) {
   return compactText(text, 100);
 }
 
-function runRequestOutcomeFlags(req) {
-  const raw = String(req?.output_summary || req?.error || '').replace(/\[[0-9;]*m/g, ' ').replace(/\s+/g, ' ').trim();
-  const normalized = raw.toLowerCase();
-  const refusalPatterns = [
-    /i can't fulfil/,
-    /i can't fulfill/,
-    /cannot fulfill/,
-    /can't comply/,
-    /cannot comply/,
-    /i can.t help with that/,
-    /i can.t assist with that/,
-    /refus/,
-    /unable to complete/,
-    /could not complete/,
-    /blocked/,
-    /need[s]? review/,
-    /not enough context/
-  ];
-  const hasBadOutcome = refusalPatterns.some(rx => rx.test(normalized));
+function stripAnsi(value) {
+  return String(value || '').replace(/\[[0-9;]*m/g, ' ');
+}
+
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function relatedRunForRequest(req) {
+  if (!req?.related_run_id) return null;
+  return state.runs.find(run => String(run.id) === String(req.related_run_id)) || null;
+}
+
+function collectRunRequestText(req, run = null) {
+  return stripAnsi([
+    req?.output_summary,
+    req?.error,
+    req?.result_text,
+    run?.output_summary,
+    run?.task_summary,
+    run?.task_detail
+  ].filter(Boolean).join('\n'));
+}
+
+function parseRunRequestArtifacts(req, run = null) {
+  const text = collectRunRequestText(req, run);
+  const commitMatch = text.match(/\b([a-f0-9]{7,40})\b/i);
+  const prUrlMatch = text.match(/https?:\/\/github\.com\/[^\s)]+\/pull\/\d+/i);
+  const prNumberMatch = text.match(/\bPR\s*#(\d+)\b/i) || text.match(/\bpull request\s*#?(\d+)\b/i);
+  const changedMatch = text.match(/(?:files? changed|changed files?)\s*[:\-]?\s*(\d{1,4})\b/i)
+    || text.match(/(\d{1,4})\s+files? changed\b/i);
+  const summaryMatch = text.match(/(?:summary|result|outcome)\s*[:\-]\s*([^\n]{12,220})/i);
   return {
-    raw,
-    hasBadOutcome,
-    displayStatus: hasBadOutcome && String(req?.status || '').toLowerCase() === 'completed' ? 'needs_review' : String(req?.status || 'queued').toLowerCase(),
-    displayLabel: hasBadOutcome && String(req?.status || '').toLowerCase() === 'completed' ? 'Needs Review' : humanizeSnake(req?.status || 'queued'),
-    outcomeHint: hasBadOutcome ? 'Completed technically, but output suggests refusal, blocker, or incomplete delivery.' : ''
+    commit: commitMatch ? commitMatch[1] : firstNonEmpty(req?.commit_hash, run?.commit_hash),
+    prUrl: prUrlMatch ? prUrlMatch[0] : firstNonEmpty(req?.pr_url, run?.pr_url),
+    prNumber: prNumberMatch ? prNumberMatch[1] : firstNonEmpty(req?.pr_number, run?.pr_number),
+    filesChanged: changedMatch ? changedMatch[1] : firstNonEmpty(req?.files_changed, run?.files_changed),
+    summary: firstNonEmpty(req?.output_summary, run?.output_summary, summaryMatch ? summaryMatch[1] : '')
   };
 }
 
-function summarizeRunRequestResult(req) {
-  const text = req?.output_summary || req?.error || '';
+function runRequestWorkerIdentity(req, run = null) {
+  return firstNonEmpty(
+    req?.worker_identity,
+    req?.worker_name,
+    req?.agent_identity,
+    req?.agent_name,
+    req?.picked_up_by,
+    run?.initiated_by,
+    run?.model_used ? `${run.model_used}${run.runtime ? ` via ${run.runtime}` : ''}` : '',
+    run?.role_label
+  );
+}
+
+function runRequestLifecycle(req, run = null) {
+  const rawStatus = String(req?.status || '').toLowerCase();
+  const outcomeText = collectRunRequestText(req, run).toLowerCase();
+  const badPatterns = [
+    /i can't fulfil/, /i can't fulfill/, /cannot fulfill/, /can't comply/, /cannot comply/,
+    /i can.t help with that/, /i can.t assist with that/, /refus/, /unable to complete/,
+    /could not complete/, /blocked/, /need[s]? review/, /not enough context/,
+    /waiting on/, /missing access/, /requires approval/, /incomplete/, /partial/
+  ];
+  const successPatterns = [/completed successfully/, /done\b/, /finished\b/, /opened pr/, /commit(ed)?\b/, /files? changed\b/];
+  const hasBadOutcome = badPatterns.some(rx => rx.test(outcomeText));
+  const hasPositiveEvidence = successPatterns.some(rx => rx.test(outcomeText));
+
+  let displayStatus = rawStatus || 'queued';
+  let displayLabel = humanizeSnake(displayStatus);
+  let outcomeHint = '';
+
+  if (rawStatus === 'queued' && (run?.started_at || req?.started_at || req?.picked_up_at)) {
+    displayStatus = 'picked_up';
+    displayLabel = 'Picked Up';
+  } else if (rawStatus === 'running' && (req?.picked_up_at || run?.started_at)) {
+    displayStatus = 'running';
+    displayLabel = 'Running';
+  } else if (rawStatus === 'completed' && hasBadOutcome) {
+    displayStatus = 'needs_review';
+    displayLabel = 'Needs Review';
+    outcomeHint = 'Marked completed, but the output reads like a refusal, blocker, missing access, or incomplete delivery.';
+  } else if (rawStatus === 'completed' && !hasPositiveEvidence) {
+    displayStatus = 'completed_with_gaps';
+    displayLabel = 'Completed (low proof)';
+    outcomeHint = 'Completed with limited proof in the available fields. Check related run, output path, or summary.';
+  } else if (rawStatus === 'completed') {
+    outcomeHint = 'Completion evidence found in output summary or related run metadata.';
+  }
+
+  const evidence = [
+    req?.created_at ? `Requested ${fmtDate(req.created_at)}` : null,
+    (req?.picked_up_at || run?.started_at) ? `Picked up ${fmtDate(req?.picked_up_at || run?.started_at)}` : null,
+    req?.updated_at ? `Last update ${fmtDate(req.updated_at)}` : null,
+    (req?.completed_at || run?.completed_at) ? `Finished ${fmtDate(req?.completed_at || run?.completed_at)}` : null
+  ].filter(Boolean);
+
+  return { rawStatus, hasBadOutcome, hasPositiveEvidence, displayStatus, displayLabel, outcomeHint, evidence };
+}
+
+function summarizeRunRequestResult(req, run = null) {
+  const text = firstNonEmpty(req?.output_summary, req?.error, run?.output_summary, run?.task_summary);
   if (!text) {
     return req?.status === 'queued' ? 'Waiting for dispatcher / worker pickup' : '—';
   }
-  return compactText(text.replace(/\[[0-9;]*m/g, ''), 140);
+  return compactText(stripAnsi(text), 160);
 }
 
 async function removeRunRequest(requestId) {
@@ -1391,29 +1481,53 @@ function renderRunRequests() {
   }
   host.innerHTML = `
     <div class="table-wrap"><table class="run-requests-grid">
-      <thead><tr><th>Status</th><th>Request</th><th>Task</th><th>Route</th><th>Result</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Lifecycle proof</th><th>Request</th><th>Worker / Run</th><th>Paths / Output</th><th>Result evidence</th><th>Actions</th></tr></thead>
       <tbody>${state.runRequests.map(req => {
         const workItem = state.workItems.find(w => w.id === req.related_work_item_id);
-        const outcome = runRequestOutcomeFlags(req);
-        const status = outcome.displayStatus;
-        const canCancel = ['queued', 'running'].includes(String(req.status || '').toLowerCase());
+        const run = relatedRunForRequest(req);
+        const lifecycle = runRequestLifecycle(req, run);
+        const artifacts = parseRunRequestArtifacts(req, run);
+        const worker = runRequestWorkerIdentity(req, run);
+        const canCancel = ['queued', 'running', 'picked_up'].includes(String(lifecycle.displayStatus || '').toLowerCase());
         return `<tr>
-          <td>${renderStatusPill(status, outcome.displayLabel)}${outcome.outcomeHint ? `<div class="small rr-sub" style="margin-top:8px;">${escapeHtml(outcome.outcomeHint)}</div>` : ''}</td>
+          <td>
+            ${renderStatusPill(lifecycle.displayStatus, lifecycle.displayLabel)}
+            ${lifecycle.outcomeHint ? `<div class="small rr-sub" style="margin-top:8px;">${escapeHtml(lifecycle.outcomeHint)}</div>` : ''}
+            ${lifecycle.evidence.length ? `<div class="small rr-proof-list">${lifecycle.evidence.map(line => `<div>${escapeHtml(line)}</div>`).join('')}</div>` : ''}
+          </td>
           <td>
             <div class="rr-main"><strong>${escapeHtml(req.role_label || 'Unknown role')}</strong></div>
             <div class="small rr-sub">${escapeHtml(summarizePromptText(req.prompt_text))}</div>
             <div class="small rr-meta">${escapeHtml(fmtDate(req.created_at))}</div>
+            <div class="small rr-proof-list" style="margin-top:8px;">
+              <div><strong>Task:</strong> ${escapeHtml(workItem?.title || '—')}</div>
+              <div>${req.related_work_item_id ? `Work item ${escapeHtml(String(req.related_work_item_id))}` : 'No linked task id'}</div>
+              <div>${escapeHtml(req.suggested_channel_name ? `Suggested route #${req.suggested_channel_name}` : 'No suggested route')}</div>
+            </div>
           </td>
           <td>
-            <div class="rr-main">${escapeHtml(workItem?.title || '—')}</div>
-            <div class="small rr-sub">${req.related_work_item_id ? `ID: ${escapeHtml(String(req.related_work_item_id).slice(0, 8))}…` : 'No linked task'}</div>
+            <div class="rr-main">${escapeHtml(worker || 'Worker unknown')}</div>
+            <div class="small rr-sub">${escapeHtml(run?.runtime || req?.initiated_by || 'dashboard')}</div>
+            <div class="small rr-proof-list" style="margin-top:8px;">
+              <div>${req.related_run_id ? `Related run ${escapeHtml(String(req.related_run_id))}` : 'No related run id'}</div>
+              <div>${escapeHtml(firstNonEmpty(run?.source_surface, run?.source_channel_id) || 'No source surface metadata')}</div>
+              <div>${escapeHtml(firstNonEmpty(run?.model_used, req?.agent_model) || 'No model/agent field')}</div>
+            </div>
           </td>
           <td>
-            <div class="rr-main">${escapeHtml(req.suggested_channel_name || '—')}</div>
-            <div class="small rr-sub">${escapeHtml(req.initiated_by || 'dashboard')}</div>
+            <div class="small rr-proof-list">
+              <div><strong>Repo:</strong> ${escapeHtml(firstNonEmpty(req?.repo_path, run?.repo_path) || '—')}</div>
+              <div><strong>Output:</strong> ${escapeHtml(firstNonEmpty(req?.output_path, run?.output_path) || '—')}</div>
+              <div><strong>Summary:</strong> ${escapeHtml(compactText(artifacts.summary || summarizeRunRequestResult(req, run), 120))}</div>
+            </div>
           </td>
           <td>
-            <div class="small rr-result">${escapeHtml(summarizeRunRequestResult(req))}</div>
+            <div class="small rr-result">${escapeHtml(summarizeRunRequestResult(req, run))}</div>
+            <div class="small rr-proof-list" style="margin-top:8px;">
+              <div><strong>Files changed:</strong> ${escapeHtml(String(artifacts.filesChanged || '—'))}</div>
+              <div><strong>Commit:</strong> ${escapeHtml(artifacts.commit || '—')}</div>
+              <div><strong>PR:</strong> ${escapeHtml(artifacts.prUrl || (artifacts.prNumber ? `#${artifacts.prNumber}` : '—'))}</div>
+            </div>
           </td>
           <td>
             <div class="task-card-actions rr-actions">

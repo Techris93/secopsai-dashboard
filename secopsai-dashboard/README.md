@@ -230,18 +230,19 @@ Includes:
 - local notification helper info
 - `run_requests` queue visibility
 
-For `run_requests`, the UI shows:
-- status
-- role
-- request time
-- related work item
-- suggested channel
-- output/error summary
+For `run_requests`, the UI now shows stronger execution proof signals with graceful fallback:
+- lifecycle evidence beyond raw status (`queued`, `picked up`, `running`, `completed`, `failed`, `cancelled`, `needs review`, `completed (low proof)`)
+- request time, last update time, and finish time when present
+- linked work item, route hint, related run id, and worker/agent identity when available
+- repo path and output path when present on the request or linked run
+- best-effort extraction of files changed, commit hash, PR link/number, and output summary from existing fields/text
+- improved final outcome classification so refusal/blocker/incomplete outputs are not shown as clean success
 
 Useful for:
 - checking queue health
-- seeing what the dashboard has requested to run
+- seeing whether a dashboard request was likely picked up by a worker/orchestrator
 - validating route metadata
+- verifying whether there is concrete evidence of completion versus a weak or suspicious “completed” state
 
 ---
 
@@ -306,10 +307,12 @@ Typical required values:
 - Supabase anon key
 - optional helper endpoint config
 - optional Discord webhook/helper settings
+- `DISCORD_DISPATCHER_EXECUTOR` for queued task execution (`openclaw` recommended)
 
 Important:
 - `config.js` is used directly by the browser app
 - server-side secrets should stay in `.env` / helper-side code, not client-side JS
+- when `DISCORD_DISPATCHER_EXECUTOR=openclaw`, the dispatcher renders role prompts directly from `../secopsai-org/acp-fallback/prompts/*.md` and runs them through `openclaw agent`; this avoids ACP backend/plugin requirements for dashboard handoffs
 
 ---
 

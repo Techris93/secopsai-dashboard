@@ -1,7 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "secopsai-dashboard/start-discord-dispatcher.sh is retired."
-echo "This dashboard now runs in control-panel-only mode."
-echo "Use OpenClaw-native orchestrators for live conversations and dispatch."
-exit 1
+DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DIR"
+
+if [[ ! -f .env ]]; then
+  echo "Missing $DIR/.env"
+  echo "Create it from .env.example first."
+  exit 1
+fi
+
+exec python3 "$DIR/discord_dispatcher.py"

@@ -24,6 +24,9 @@
   --status-cancelled: #64748b;
   --status-blocked: #ef4444;
   --status-review: #f59e0b;
+  --status-picked-up: #7c3aed;
+  --status-needs-review: #f59e0b;
+  --status-completed-with-gaps: #0ea5e9;
 }
 
 * { box-sizing: border-box; }
@@ -92,10 +95,16 @@ a { color: inherit; }
 /* Status pills */
 .status-pill.status-queued .dot { background: var(--status-queued); }
 .status-pill.status-running .dot { background: var(--status-running); }
+.status-pill.status-picked_up .dot,
+.status-pill.status-picked-up .dot { background: var(--status-picked-up); }
 .status-pill.status-completed .dot { background: var(--status-completed); }
+.status-pill.status-completed_with_gaps .dot,
+.status-pill.status-completed-with-gaps .dot { background: var(--status-completed-with-gaps); }
 .status-pill.status-failed .dot { background: var(--status-failed); }
 .status-pill.status-cancelled .dot { background: var(--status-cancelled); }
-.status-pill.status-review .dot { background: var(--status-review); }
+.status-pill.status-review .dot,
+.status-pill.status-needs_review .dot,
+.status-pill.status-needs-review .dot { background: var(--status-needs-review); }
 .status-pill.status-blocked .dot { background: var(--status-blocked); }
 .status-pill.status-open .dot { background: var(--amber); }
 .status-pill.status-resolved .dot,
@@ -332,10 +341,12 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
 
 .run-requests-grid td { vertical-align: top; }
 .rr-main { font-weight: 600; }
-.rr-sub { margin-top: 4px; color: var(--text-muted); }
-.rr-meta { margin-top: 8px; color: var(--text-muted); }
+.rr-sub { margin-top: 4px; color: var(--muted); }
+.rr-meta { margin-top: 8px; color: var(--muted); }
 .rr-result { max-width: 340px; line-height: 1.45; color: var(--text); }
 .rr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rr-proof-list { margin-top: 8px; display: grid; gap: 4px; color: var(--muted); line-height: 1.4; }
+.rr-proof-list strong { color: var(--text); font-weight: 600; }
 
 
 .primary-btn.is-loading, .secondary-btn.is-loading, .danger-btn.is-loading, .status-pill.is-loading {

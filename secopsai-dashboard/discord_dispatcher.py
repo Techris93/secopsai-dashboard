@@ -16,7 +16,9 @@ WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace')
 DASH_DIR = WORKSPACE / 'secopsai-dashboard'
 ENV_PATH = DASH_DIR / '.env'
 STATE_PATH = DASH_DIR / '.discord-dispatcher-state.json'
-INBOX_DIR = WORKSPACE / 'secopsai-org' / 'acp-fallback' / 'inbox'
+ACP_FALLBACK_DIR = WORKSPACE / 'secopsai-org' / 'acp-fallback'
+PROMPTS_DIR = ACP_FALLBACK_DIR / 'prompts'
+INBOX_DIR = ACP_FALLBACK_DIR / 'inbox'
 RUNS_DIR = INBOX_DIR / 'runs'
 SELFTEST_MARKER = '[SELFTEST]'
 
@@ -231,8 +233,24 @@ def write_prompt_file(role_label, message_id, content):
     return path
 
 
-def render_prompt(role_label, task_text):
-    cmd = [str(WORKSPACE / 'secopsai-org' / 'acp-fallback' / 'launch-role.sh'), role_label, task_text]
+def prompt_template_path(role_label):
+    return PROMPTS_DIR / f'{role_label.replace("/", "__")}.md'
+
+
+def render_prompt_from_template(role_label, task_text):
+    template_path = prompt_template_path(role_label)
+    if not template_path.exists():
+        raise FileNotFoundError(f'Unknown role: {role_label}. Expected prompt file: {template_path}')
+    template = template_path.read_text(encoding='utf-8')
+    return template.replace('{{TASK}}', task_text)
+
+
+def render_prompt(role_label, task_text, executor_config=None):
+    executor = (executor_config or {}).get('executor', 'openclaw')
+    if executor == 'openclaw':
+        return render_prompt_from_template(role_label, task_text)
+
+    cmd = [str(ACP_FALLBACK_DIR / 'launch-role.sh'), role_label, task_text]
     result = subprocess.run(cmd, cwd=str(WORKSPACE), capture_output=True, text=True, check=True)
     return result.stdout
 
@@ -423,7 +441,7 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
     queued_run = post_run(anon_key, {
         'role_label': role_label,
         'runtime': 'discord-dispatcher',
-        'model_used': 'codex',
+        'model_used': executor_config.get('executor', 'unknown'),
         'task_summary': f'Discord request: {task_body[:120]}',
         'task_detail': final_task,
         'status': 'queued',
@@ -447,19 +465,19 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
     save_state(state)
 
     try:
-        prompt = render_prompt(role_label, final_task)
+        prompt = render_prompt(role_label, final_task, executor_config)
         prompt_path = write_prompt_file(role_label, msg['id'], prompt)
     except Exception as exc:
         fail_request(msg, role_label, token, anon_key, state, run_id, status_msg, 'Prompt preparation failed.', str(exc))
         return
 
     if not executor_config.get('ok'):
-        detail = executor_config.get('reason', 'Codex executor is not ready.')
+        detail = executor_config.get('reason', 'Dispatcher executor is not ready.')
         if executor_config.get('details'):
             detail += f" {executor_config['details']}"
         if run_id:
             patch_run(anon_key, run_id, {'output_path': str(prompt_path)})
-        fail_request(msg, role_label, token, anon_key, state, run_id, status_msg, 'Codex executor is not configured.', detail)
+        fail_request(msg, role_label, token, anon_key, state, run_id, status_msg, 'Dispatcher executor is not configured.', detail)
         return
 
     if run_id:
@@ -477,7 +495,7 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
     try:
         run_result = run_executor(prompt, prompt_path, executor_config)
     except Exception as exc:
-        fail_request(msg, role_label, token, anon_key, state, run_id, status_msg, 'Codex execution crashed before completion.', str(exc))
+        fail_request(msg, role_label, token, anon_key, state, run_id, status_msg, 'Dispatcher execution crashed before completion.', str(exc))
         return
 
     status = 'completed' if run_result['ok'] else 'failed'
@@ -535,7 +553,7 @@ def process_run_request(req, anon_key, executor_config, env, token=None, routes=
 
     # Render full role prompt wrapper
     try:
-        prompt = render_prompt(role_label, prompt_text)
+        prompt = render_prompt(role_label, prompt_text, executor_config)
         prompt_path = write_prompt_file(role_label, f'runreq-{request_id}', prompt)
     except Exception as exc:
         patch_run_request(anon_key, request_id, { 'status': 'failed', 'error': str(exc) })
