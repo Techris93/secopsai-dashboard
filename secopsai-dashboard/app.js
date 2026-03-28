@@ -591,6 +591,53 @@ function findRouteForRole(roleLabel) {
   return state.channelRoutes.find(r => r.default_role_label === roleLabel && r.active) || null;
 }
 
+function latestExecutionForItem(item) {
+  if (!item?.id) return null;
+  const requests = state.runRequests
+    .filter(r => String(r.related_work_item_id || '') === String(item.id))
+    .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
+  if (requests.length) {
+    const req = requests[0];
+    const run = relatedRunForRequest(req);
+    const lifecycle = runRequestLifecycle(req, run);
+    return { source: 'request', req, run, lifecycle };
+  }
+  const runs = state.runs
+    .filter(r => String(r.related_work_item_id || '') === String(item.id))
+    .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
+  if (runs.length) {
+    const run = runs[0];
+    return { source: 'run', run, lifecycle: { displayStatus: String(run.status || 'queued').toLowerCase(), displayLabel: humanizeSnake(run.status || 'queued') } };
+  }
+  return null;
+}
+
+function syncPromptRunButtonState() {
+  const btn = el('prompt-run-btn');
+  if (!btn) return;
+  const latest = latestExecutionForItem(promptModalState.item);
+  const status = latest?.lifecycle?.displayStatus || '';
+  btn.disabled = false;
+  btn.classList.remove('is-disabled-soft');
+  if (status === 'queued') {
+    btn.textContent = 'Queued';
+    btn.disabled = true;
+    btn.classList.add('is-disabled-soft');
+    return;
+  }
+  if (status === 'running' || status === 'picked_up') {
+    btn.textContent = 'Running';
+    btn.disabled = true;
+    btn.classList.add('is-disabled-soft');
+    return;
+  }
+  if (['completed','completed_with_gaps','needs_review','failed','cancelled'].includes(status)) {
+    btn.textContent = 'Run again';
+    return;
+  }
+  btn.textContent = 'Run now';
+}
+
 function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '', detailHtml = '', viewUrl = null } = {}) {
   const box = el('prompt-run-status');
   const pill = el('prompt-run-status-pill');
