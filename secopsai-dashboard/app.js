@@ -75,7 +75,7 @@ const state = {
 
 const taskModalState = { editingId: null, sourceFinding: null };
 const artifactModalState = { editingId: null };
-const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null };
+const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
 const pages = ["mission-control", "org-map", "agents", "tasks", "findings", "artifacts", "integrations"];
 
@@ -648,6 +648,8 @@ function refreshPromptBrief() {
 
 function openPromptModal(item, roleLabel = null) {
   const role = roleLabel || suggestRoleForTask(item);
+  promptModalState.launchedFromTaskModal = !el('task-modal')?.classList.contains('hidden');
+  if (promptModalState.launchedFromTaskModal) closeTaskModal();
   promptModalState.item = item;
   promptModalState.role = role;
   promptModalState.mode = el('prompt-mode-select')?.value || promptModalState.mode || 'smart-local';
@@ -668,6 +670,7 @@ function openPromptModal(item, roleLabel = null) {
 function closePromptModal() {
   stopRunStatusPolling();
   el('prompt-modal').classList.add('hidden');
+  promptModalState.launchedFromTaskModal = false;
 }
 
 
@@ -804,10 +807,13 @@ async function runPromptNow() {
     await createDashboardEvent('run_now_notify_failed', `Run notify failed: ${role}`, result.reason || 'Unknown notify failure', 'warning', { related_work_item_id: item?.id || null, related_run_id: run?.id || null });
     setStatus(`Run queued, but notify failed: ${escapeHtml(result.reason || 'unknown error')}`, true);
     setButtonBusy(runBtn, false);
+    setTimeout(() => closePromptModal(), 1400);
     return;
   }
 
   setStatus(`<span class="dot"></span> Run request queued for ${escapeHtml(role)} (notified #${notifyChannel})`);
+  setButtonBusy(runBtn, false);
+  setTimeout(() => closePromptModal(), 1400);
   await boot();
 }
 
