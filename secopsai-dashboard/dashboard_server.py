@@ -94,6 +94,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         content = payload.get('content')
         if not content:
             return json_response(self, 400, {'ok': False, 'error': 'Missing content'})
+        content = str(content)
+        if len(content) > 1800:
+            content = content[:1797] + '…'
 
         if parsed.path == '/api/discord-send-message':
             return json_response(self, 410, {
