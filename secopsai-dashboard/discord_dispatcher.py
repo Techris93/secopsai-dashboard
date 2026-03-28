@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -126,10 +127,21 @@ def get_run_requests(anon_key, limit=10):
     return supabase_request('GET', 'run_requests', anon_key, query=query)
 
 
-def patch_run_request(anon_key, request_id, payload):
-    q = f'id=eq.{request_id}&select=*'
+def patch_run_request(anon_key, request_id, payload, extra_query=''):
+    q = f'id=eq.{request_id}'
+    if extra_query:
+        q += f'&{extra_query}'
+    q += '&select=*'
     rows = supabase_request('PATCH', 'run_requests', anon_key, payload=payload, query=q)
     return rows[0] if rows else None
+
+
+def claim_run_request(anon_key, request_id, worker_id):
+    payload = {
+        'status': 'running',
+        'error': None,
+    }
+    return patch_run_request(anon_key, request_id, payload, extra_query='status=eq.queued')
 
 
 def post_run_request(anon_key, payload):
@@ -245,6 +257,14 @@ def render_prompt_from_template(role_label, task_text):
     return template.replace('{{TASK}}', task_text)
 
 
+def trim_text_block(text, max_chars, label):
+    text = (text or '').strip()
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    suffix = f'\n\n[{label} truncated to fit dispatcher prompt budget.]'
+    return text[: max_chars - len(suffix)].rstrip() + suffix
+
+
 def render_prompt(role_label, task_text, executor_config=None):
     executor = (executor_config or {}).get('executor', 'openclaw')
     if executor == 'openclaw':
@@ -253,6 +273,47 @@ def render_prompt(role_label, task_text, executor_config=None):
     cmd = [str(ACP_FALLBACK_DIR / 'launch-role.sh'), role_label, task_text]
     result = subprocess.run(cmd, cwd=str(WORKSPACE), capture_output=True, text=True, check=True)
     return result.stdout
+
+
+def build_bounded_prompt(role_label, task_body, channel_context, role_memory, executor_config=None, env=None):
+    env = env or {}
+    task_limit = int(env.get('DISCORD_DISPATCHER_TASK_MAX_CHARS', '12000'))
+    context_limit = int(env.get('DISCORD_DISPATCHER_CONTEXT_MAX_CHARS', '2500'))
+    memory_limit = int(env.get('DISCORD_DISPATCHER_MEMORY_MAX_CHARS', '2500'))
+    prompt_limit = int(env.get('DISCORD_DISPATCHER_PROMPT_MAX_CHARS', '18000'))
+
+    bounded_task = trim_text_block(task_body, task_limit, 'task')
+    bounded_context = trim_text_block(channel_context, context_limit, 'channel context')
+    bounded_memory = trim_text_block(role_memory, memory_limit, 'role memory')
+
+    variants = [
+        (bounded_context, bounded_memory),
+        (bounded_context, ''),
+        ('', ''),
+    ]
+
+    prompt = None
+    final_task = None
+    for ctx, mem in variants:
+        final_task = build_task_text(bounded_task, role_label, ctx, mem)
+        prompt = render_prompt(role_label, final_task, executor_config)
+        if len(prompt) <= prompt_limit:
+            return prompt, final_task, {
+                'task_truncated': bounded_task != (task_body or '').strip(),
+                'context_truncated': ctx != (channel_context or '').strip(),
+                'memory_truncated': mem != (role_memory or '').strip(),
+                'prompt_truncated': False,
+                'prompt_chars': len(prompt),
+            }
+
+    prompt = trim_text_block(prompt or '', prompt_limit, 'rendered prompt')
+    return prompt, final_task, {
+        'task_truncated': bounded_task != (task_body or '').strip(),
+        'context_truncated': True if channel_context else False,
+        'memory_truncated': True if role_memory else False,
+        'prompt_truncated': True,
+        'prompt_chars': len(prompt),
+    }
 
 
 def resolve_executor(env):
@@ -292,26 +353,88 @@ def resolve_executor(env):
     return {'ok': False, 'executor': executor, 'reason': f'Unsupported dispatcher executor: {executor}. Supported: openclaw, codex, claude.'}
 
 
-def run_executor(prompt_text, prompt_path, executor_config):
+def parse_openclaw_json(stdout):
+    stdout = (stdout or '').strip()
+    if not stdout:
+        return None
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if not line or not line.startswith('{'):
+            continue
+        try:
+            return json.loads(line)
+        except Exception:
+            continue
+    return None
+
+
+def summarize_run_result(run_result, max_chars=1400):
+    text = (run_result.get('stdout') or run_result.get('stderr') or 'No output.').strip()
+    cleaned = re.sub(r'\x1b\[[0-9;]*m', ' ', text)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+    lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+    headline = ''
+    for line in lines:
+        if line.startswith('{') or line.startswith('['):
+            continue
+        if re.match(r'^(executor|returncode|aborted|partial|timed_out|prompt_chars|ok|command)\b', line, re.I):
+            continue
+        headline = line
+        break
+    if not headline:
+        headline = cleaned[:240] if cleaned else 'No output.'
+    meta = {
+        'executor': run_result.get('executor'),
+        'returncode': run_result.get('returncode'),
+        'aborted': bool(run_result.get('aborted')),
+        'partial': bool(run_result.get('partial')),
+        'timed_out': bool(run_result.get('timed_out')),
+    }
+    if run_result.get('prompt_chars') is not None:
+        meta['prompt_chars'] = run_result.get('prompt_chars')
+    summary = {
+        'summary': headline[:240],
+        'excerpt': cleaned[:max_chars],
+        'result': {
+            'ok': bool(run_result.get('ok')),
+            'summary': headline[:240],
+            'meta': meta,
+        }
+    }
+    return json.dumps(summary, ensure_ascii=False)
+
+
+def run_executor(prompt_text, prompt_path, executor_config, env=None):
+    env = env or {}
     executor = executor_config['executor']
     if executor in {'codex', 'claude'}:
         command_template = executor_config['command_template']
         command = command_template.replace('{prompt_file}', shlex.quote(str(prompt_path))).replace('{prompt}', shlex.quote(prompt_text))
-        result = subprocess.run(command, cwd=str(WORKSPACE), capture_output=True, text=True, timeout=1800, shell=True)
-        return {'ok': result.returncode == 0, 'stdout': result.stdout.strip(), 'stderr': result.stderr.strip(), 'returncode': result.returncode, 'command': command}
+        result = subprocess.run(command, cwd=str(WORKSPACE), capture_output=True, text=True, timeout=int(env.get('DISCORD_DISPATCHER_EXEC_TIMEOUT_SECONDS', '3600')), shell=True)
+        return {'ok': result.returncode == 0, 'stdout': result.stdout.strip(), 'stderr': result.stderr.strip(), 'returncode': result.returncode, 'command': command, 'executor': executor}
 
-    command = ['openclaw', 'agent', '--agent', 'main', '--message', prompt_text, '--json', '--timeout', '180']
-    result = subprocess.run(command, cwd=str(WORKSPACE), capture_output=True, text=True, timeout=240)
-    stdout = result.stdout.strip()
-    if result.returncode == 0:
-        try:
-            payload = json.loads(stdout.split('\n')[-1])
-            texts = [item.get('text', '').strip() for item in payload.get('payloads', []) if item.get('text')]
-            merged = '\n\n'.join([t for t in texts if t]).strip()
-            return {'ok': True, 'stdout': merged or stdout, 'stderr': result.stderr.strip(), 'returncode': 0, 'command': ' '.join(command)}
-        except Exception:
-            return {'ok': True, 'stdout': stdout, 'stderr': result.stderr.strip(), 'returncode': 0, 'command': ' '.join(command)}
-    return {'ok': False, 'stdout': stdout, 'stderr': result.stderr.strip(), 'returncode': result.returncode, 'command': ' '.join(command)}
+    agent_timeout = int(env.get('DISCORD_DISPATCHER_OPENCLAW_TIMEOUT_SECONDS', '900'))
+    process_timeout = int(env.get('DISCORD_DISPATCHER_OPENCLAW_PROCESS_TIMEOUT_SECONDS', str(agent_timeout + 120)))
+    command = ['openclaw', 'agent', '--agent', 'main', '--message', prompt_text, '--json', '--timeout', str(agent_timeout)]
+    try:
+        result = subprocess.run(command, cwd=str(WORKSPACE), capture_output=True, text=True, timeout=process_timeout)
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or '').strip() if exc.stdout else ''
+        stderr = (exc.stderr or '').strip() if exc.stderr else ''
+        return {
+            'ok': False, 'stdout': stdout, 'stderr': stderr or f'openclaw process exceeded {process_timeout}s timeout', 'returncode': 124, 'command': ' '.join(command), 'executor': executor, 'timed_out': True, 'aborted': True, 'partial': bool(stdout)
+        }
+    stdout = (result.stdout or '').strip()
+    parsed = parse_openclaw_json(stdout)
+    if parsed:
+        texts = [item.get('text', '').strip() for item in parsed.get('payloads', []) if item.get('text')]
+        merged = '\n\n'.join([t for t in texts if t]).strip()
+        meta = parsed.get('result', {}).get('meta') or {}
+        aborted = bool(meta.get('aborted'))
+        partial = aborted or bool(meta.get('partial'))
+        ok = result.returncode == 0 and not aborted
+        return {'ok': ok, 'stdout': merged or stdout, 'stderr': (result.stderr or '').strip(), 'returncode': result.returncode, 'command': ' '.join(command), 'executor': executor, 'aborted': aborted, 'partial': partial, 'raw_json': parsed}
+    return {'ok': result.returncode == 0, 'stdout': stdout, 'stderr': (result.stderr or '').strip(), 'returncode': result.returncode, 'command': ' '.join(command), 'executor': executor}
 
 
 def summarize_output(text, max_chars=1400):
@@ -436,19 +559,18 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
 
     context_block = recent_channel_context(channel_msgs, msg['id'])
     memory_block = recent_role_memory(role_label)
-    final_task = build_task_text(task_body, role_label, context_block, memory_block)
 
     queued_run = post_run(anon_key, {
         'role_label': role_label,
         'runtime': 'discord-dispatcher',
         'model_used': executor_config.get('executor', 'unknown'),
         'task_summary': f'Discord request: {task_body[:120]}',
-        'task_detail': final_task,
+        'task_detail': build_task_text(task_body, role_label, context_block, memory_block),
         'status': 'queued',
         'source_surface': 'discord',
         'source_channel_id': channel_id,
         'initiated_by': msg['author'].get('username') or 'discord-user',
-        'started_at': utc_now(),
+        'started_at': None,
     })
     run_id = queued_run.get('id') if queued_run else None
 
@@ -465,7 +587,7 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
     save_state(state)
 
     try:
-        prompt = render_prompt(role_label, final_task, executor_config)
+        prompt, final_task, prompt_meta = build_bounded_prompt(role_label, task_body, context_block, memory_block, executor_config, env)
         prompt_path = write_prompt_file(role_label, msg['id'], prompt)
     except Exception as exc:
         fail_request(msg, role_label, token, anon_key, state, run_id, status_msg, 'Prompt preparation failed.', str(exc))
@@ -481,7 +603,7 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
         return
 
     if run_id:
-        patch_run(anon_key, run_id, {'status': 'running', 'output_path': str(prompt_path)})
+        patch_run(anon_key, run_id, {'status': 'running', 'output_path': str(prompt_path), 'task_detail': final_task, 'started_at': utc_now()})
     post_event(anon_key, {
         'event_type': 'discord_request_running',
         'title': f'Discord request running: {role_label}',
@@ -493,16 +615,19 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
     save_state(state)
 
     try:
-        run_result = run_executor(prompt, prompt_path, executor_config)
+        run_result = run_executor(prompt, prompt_path, executor_config, env)
+        run_result['prompt_chars'] = prompt_meta.get('prompt_chars')
     except Exception as exc:
         fail_request(msg, role_label, token, anon_key, state, run_id, status_msg, 'Dispatcher execution crashed before completion.', str(exc))
         return
 
     status = 'completed' if run_result['ok'] else 'failed'
     output_text = run_result['stdout'] or run_result['stderr'] or 'No output.'
-    output_summary = summarize_output(output_text)
+    human_summary = summarize_output(output_text)
+    output_summary = summarize_run_result(run_result)
     if not run_result['ok'] and run_result.get('command'):
-        output_summary = summarize_output(f"Command: {run_result['command']}\n\n{output_text}")
+        output_summary = summarize_run_result({**run_result, 'stdout': f"Command: {run_result['command']}\n\n{output_text}"})
+        human_summary = summarize_output(f"Command: {run_result['command']}\n\n{output_text}")
     output_path = prompt_path.with_suffix('.out.md')
     output_path.write_text(output_text, encoding='utf-8')
 
@@ -517,7 +642,7 @@ def process_message(msg, channel_route, token, anon_key, state, executor_config,
     post_event(anon_key, {
         'event_type': 'discord_request_completed' if run_result['ok'] else 'discord_request_failed',
         'title': f'Discord request {status}: {role_label}',
-        'body': output_summary[:500],
+        'body': human_summary[:500],
         'severity': 'success' if run_result['ok'] else 'error',
         'related_run_id': run_id,
     })
@@ -546,14 +671,14 @@ def process_run_request(req, anon_key, executor_config, env, token=None, routes=
     if not request_id or not role_label or not prompt_text:
         return
 
-    # Mark running
-    patch_run_request(anon_key, request_id, { 'status': 'running' })
-    if related_run_id:
-        patch_run(anon_key, related_run_id, { 'status': 'running', 'started_at': utc_now() })
+    worker_id = f"{os.uname().nodename}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+    claimed = claim_run_request(anon_key, request_id, worker_id)
+    if not claimed:
+        return
 
-    # Render full role prompt wrapper
+    # Render full role prompt wrapper with prompt-size guardrails
     try:
-        prompt = render_prompt(role_label, prompt_text, executor_config)
+        prompt, final_task, prompt_meta = build_bounded_prompt(role_label, prompt_text, '', '', executor_config, env)
         prompt_path = write_prompt_file(role_label, f'runreq-{request_id}', prompt)
     except Exception as exc:
         patch_run_request(anon_key, request_id, { 'status': 'failed', 'error': str(exc) })
@@ -568,6 +693,9 @@ def process_run_request(req, anon_key, executor_config, env, token=None, routes=
         })
         return
 
+    if related_run_id:
+        patch_run(anon_key, related_run_id, { 'status': 'running', 'started_at': utc_now(), 'task_detail': final_task })
+
     if not executor_config.get('ok'):
         reason = executor_config.get('reason', 'Executor unavailable')
         patch_run_request(anon_key, request_id, { 'status': 'failed', 'error': reason, 'output_path': str(prompt_path) })
@@ -577,7 +705,8 @@ def process_run_request(req, anon_key, executor_config, env, token=None, routes=
 
     # Execute
     try:
-        run_result = run_executor(prompt, prompt_path, executor_config)
+        run_result = run_executor(prompt, prompt_path, executor_config, env)
+        run_result['prompt_chars'] = prompt_meta.get('prompt_chars')
     except Exception as exc:
         patch_run_request(anon_key, request_id, { 'status': 'failed', 'error': str(exc), 'output_path': str(prompt_path) })
         if related_run_id:
@@ -586,7 +715,8 @@ def process_run_request(req, anon_key, executor_config, env, token=None, routes=
 
     status = 'completed' if run_result['ok'] else 'failed'
     output_text = run_result.get('stdout') or run_result.get('stderr') or 'No output.'
-    output_summary = summarize_output(output_text)
+    human_summary = summarize_output(output_text)
+    output_summary = summarize_run_result(run_result)
     output_path = prompt_path.with_suffix('.out.md')
     output_path.write_text(output_text, encoding='utf-8')
 
@@ -608,7 +738,7 @@ def process_run_request(req, anon_key, executor_config, env, token=None, routes=
     post_event(anon_key, {
         'event_type': 'run_request_completed' if run_result['ok'] else 'run_request_failed',
         'title': f'Run request {status}: {role_label}',
-        'body': output_summary[:500],
+        'body': human_summary[:500],
         'severity': 'success' if run_result['ok'] else 'error',
         'related_run_id': related_run_id,
     })
@@ -625,13 +755,20 @@ def process_run_request(req, anon_key, executor_config, env, token=None, routes=
             msg = "\n".join([
                 f"{header}: `{role_label}`",
                 f"RunRequest: `{request_id}`" + (f" • Run: `{related_run_id}`" if related_run_id else ""),
-                output_summary[:900],
+                human_summary[:900],
                 f"View output: {view_url}",
             ])
             discord_send_message(command_channel_id, token, msg)
             if ops_log_channel_id:
                 discord_send_message(ops_log_channel_id, token, f"[AUDIT] {header}: `{role_label}` • RunRequest `{request_id}`")
     except Exception as exc:
+        post_event(anon_key, {
+            'event_type': 'run_request_notify_failed',
+            'title': f'Run request notify failed: {role_label}',
+            'body': str(exc)[:500],
+            'severity': 'warning',
+            'related_run_id': related_run_id,
+        })
         print(f'completion postback failed: {exc}', file=sys.stderr)
 
 

@@ -476,31 +476,64 @@ function inferTaskRepoContext(item = {}, roleLabel = null) {
   };
 }
 
+function buildExecutionContinuationContext(item) {
+  const latest = latestExecutionForItem(item);
+  if (!latest) return null;
+  const req = latest.req || null;
+  const run = latest.run || null;
+  const lifecycle = latest.lifecycle || runRequestLifecycle(req, run);
+  const artifacts = parseRunRequestArtifacts(req, run);
+  const summary = artifacts.summary || summarizeRunRequestResult(req, run);
+  const lastStatus = lifecycle.displayLabel || humanizeSnake(req?.status || run?.status || 'unknown');
+  const needsImplementationPush = lifecycle.analysisOnly || !lifecycle.implementationLikely || ['failed', 'completed_with_gaps', 'needs_review'].includes(lifecycle.displayStatus);
+  return {
+    lastStatus,
+    summary,
+    artifacts,
+    lifecycle,
+    needsImplementationPush,
+    lines: [
+      `Latest execution status: ${lastStatus}`,
+      summary ? `Latest visible result: ${summary}` : null,
+      artifacts.filesChanged ? `Reported files changed: ${artifacts.filesChanged}` : 'Reported files changed: none clearly shown',
+      artifacts.commit ? `Commit evidence: ${artifacts.commit}` : 'Commit evidence: none clearly shown',
+      artifacts.prUrl ? `PR evidence: ${artifacts.prUrl}` : (artifacts.prNumber ? `PR evidence: #${artifacts.prNumber}` : 'PR evidence: none clearly shown'),
+      lifecycle.outcomeHint ? `Why rerun carefully: ${lifecycle.outcomeHint}` : null
+    ].filter(Boolean)
+  };
+}
+
 function inferWorkBriefPlan(item = {}, roleLabel = null) {
   const repo = inferTaskRepoContext(item, roleLabel);
   const role = repo.role;
   const title = item?.title || 'Untitled task';
   const description = (item?.description || '').trim();
   const dueDate = item?.due_date || null;
+  const execution = buildExecutionContinuationContext(item);
 
   const focus = [];
   if (description) focus.push(description);
   focus.push('Improve the implementation directly instead of producing generic advice.');
+  focus.push('Inspect the real repo/files first, then make the smallest practical implementation that moves the task forward now.');
   focus.push('Preserve current working behavior unless changing it is required to complete the task.');
+  if (execution?.needsImplementationPush) focus.push('This is a continuation/retry case: do not stop at analysis or planning-only notes; implement concrete changes if the repo state allows it.');
   if (repo.secondaryRepos.length) focus.push(`Handle cross-repo implications between ${repo.primaryRepo} and ${repo.secondaryRepos.join(', ')} explicitly.`);
   focus.push('Keep the solution practical, local-first, and shippable now.');
 
   const constraints = [
     'This dashboard is control-plane only; live conversations and dispatch belong to orchestrator flows.',
     'Prefer existing metadata and lightweight heuristics over a hard dependency on a new backend.',
-    'Validate syntax/basic behavior before handing off.'
+    'Validate syntax/basic behavior before handing off.',
+    'Report implementation evidence clearly: exact files touched, whether code actually changed, and any commit/PR only if real.'
   ];
+  if (execution?.needsImplementationPush) constraints.push('If you cannot implement changes, say exactly why implementation was blocked; do not present analysis-only work as a completed fix.');
   if (item?.requires_security_review) constraints.push('Flag security-sensitive changes and leave reviewer-ready notes.');
   if (item?.external_facing) constraints.push('Assume output may be visible outside the operator team; keep UX copy clear.');
 
   const deliverables = [
     'What changed and why',
-    'Files touched',
+    'Exact files touched (or explicitly say no files changed)',
+    'Implementation evidence: whether code/config/docs actually changed',
     'Any blockers or follow-ups',
     'How to use the result from the dashboard UI'
   ];
@@ -508,11 +541,12 @@ function inferWorkBriefPlan(item = {}, roleLabel = null) {
   const acceptanceChecks = [
     'The brief should mention the most likely repo and file paths instead of only a generic dashboard template.',
     'If the task appears cross-repo, explain what likely lives in each repo.',
-    'If a future intelligent/agent-generated path exists, keep it additive rather than required for today.'
+    'If a future intelligent/agent-generated path exists, keep it additive rather than required for today.',
+    'Successful completion should reflect implemented work, not only analysis/progress commentary.'
   ];
   if (dueDate) acceptanceChecks.push(`Keep urgency in mind: target due date is ${dueDate}.`);
 
-  return { role, repo, title, description, focus, constraints, deliverables, acceptanceChecks };
+  return { role, repo, title, description, focus, constraints, deliverables, acceptanceChecks, execution };
 }
 
 function buildSmartLocalBrief(item, roleLabel = null) {
@@ -535,7 +569,11 @@ ${plan.repo.secondaryRepos.length ? `- Likely secondary repo(s): ${plan.repo.sec
 
 Likely paths / starting points:
 ${plan.repo.likelyPaths.map(p => `- ${p}`).join('\n')}
-
+${plan.execution ? `
+Continuation / rerun context:
+${plan.execution.lines.map(line => `- ${line}`).join('\n')}
+- On this rerun, prioritize implementation and explicit file-level evidence over another generic status recap.
+` : ''}
 Execution focus:
 ${plan.focus.map(line => `- ${line}`).join('\n')}
 
@@ -556,7 +594,7 @@ function buildAgentReadyBrief(item, roleLabel = null) {
 You are preparing an implementation pass for ${plan.role}.
 Use the local smart brief below as grounded context, but feel free to improve repo/path inference if stronger evidence appears during code inspection.
 Do not require an external planning backend before doing useful work.
-
+${plan.execution?.needsImplementationPush ? 'This handoff is for a continuation/retry. Push beyond analysis-only output and produce concrete implementation evidence where possible.\n' : ''}
 STRUCTURED INPUT
 - task_title: ${plan.title}
 - domain: ${item?.domain || 'exec'}
@@ -568,7 +606,12 @@ STRUCTURED INPUT
 - likely_secondary_repos: ${plan.repo.secondaryRepos.join(', ') || 'none'}
 - likely_paths: ${plan.repo.likelyPaths.join(' | ')}
 - repo_inference_basis: ${plan.repo.reasons.join('; ')}
-
+${plan.execution ? `- latest_execution_status: ${plan.execution.lastStatus}
+- latest_result_summary: ${plan.execution.summary || 'none recorded'}
+- latest_files_changed_signal: ${plan.execution.artifacts.filesChanged || 'none clearly shown'}
+- latest_commit_signal: ${plan.execution.artifacts.commit || 'none clearly shown'}
+- latest_pr_signal: ${plan.execution.artifacts.prUrl || (plan.execution.artifacts.prNumber ? `#${plan.execution.artifacts.prNumber}` : 'none clearly shown')}
+` : ''}
 OBJECTIVE
 ${plan.focus.map(line => `- ${line}`).join('\n')}
 
@@ -847,6 +890,8 @@ async function runPromptNow() {
           <div><strong>Run:</strong> ${escapeHtml(data?.related_run_id || run?.id || '—')}</div>
           <div><strong>Repo:</strong> ${escapeHtml(firstNonEmpty(data?.repo_path, run?.repo_path) || '—')}</div>
           <div><strong>Output:</strong> ${escapeHtml(firstNonEmpty(data?.output_path, run?.output_path) || '—')}</div>
+          <div><strong>Files changed:</strong> ${escapeHtml(artifacts.filesChanged || '—')}</div>
+          <div><strong>Implementation likely:</strong> ${escapeHtml(lifecycle.implementationLikely ? 'yes' : lifecycle.analysisOnly ? 'no (analysis only)' : 'unclear')}</div>
           <div><strong>Commit:</strong> ${escapeHtml(artifacts.commit || '—')}</div>
           <div><strong>PR:</strong> ${escapeHtml(artifacts.prUrl || (artifacts.prNumber ? `#${artifacts.prNumber}` : '—'))}</div>
           <div><strong>Summary:</strong> ${escapeHtml(summarizeRunRequestResult(data, run))}</div>
@@ -1454,20 +1499,123 @@ function collectRunRequestText(req, run = null) {
   ].filter(Boolean).join('\n'));
 }
 
+function normalizeEvidenceText(value) {
+  return stripAnsi(String(value || ''))
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function looksLikeUuidContext(text, index, token) {
+  const start = Math.max(0, index - 16);
+  const end = Math.min(text.length, index + token.length + 16);
+  const around = text.slice(start, end);
+  return /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i.test(around);
+}
+
+function extractCommitEvidence(text) {
+  const normalized = normalizeEvidenceText(text);
+  if (!normalized) return '';
+  const urlMatch = normalized.match(/https?:\/\/github\.com\/[^\s)]+\/commit\/([a-f0-9]{7,40})\b/i);
+  if (urlMatch) return urlMatch[1];
+  const regex = /\b([a-f0-9]{7,40})\b/ig;
+  let match;
+  while ((match = regex.exec(normalized))) {
+    const token = match[1];
+    const idx = match.index;
+    if (looksLikeUuidContext(normalized, idx, token)) continue;
+    const before = normalized.slice(Math.max(0, idx - 24), idx);
+    const after = normalized.slice(idx + token.length, Math.min(normalized.length, idx + token.length + 24));
+    if (/-$/.test(before) || /^-/.test(after)) continue;
+    const context = `${before}${token}${after}`;
+    if (/(?:\bcommit(?:ted)?\b|\bsha\b|\brevision\b|\bhash\b|\bhead\b)/i.test(context)) return token;
+  }
+  return '';
+}
+
+function extractPrEvidence(text) {
+  const normalized = normalizeEvidenceText(text);
+  if (!normalized) return { prUrl: '', prNumber: '' };
+  const prUrlMatch = normalized.match(/https?:\/\/github\.com\/[^\s)]+\/pull\/(\d+)\b/i);
+  if (prUrlMatch) return { prUrl: prUrlMatch[0], prNumber: prUrlMatch[1] };
+  const prNumberMatch = normalized.match(/(?:\bPR\s*#|\bpull request\s*#?)(\d+)\b/i);
+  return { prUrl: '', prNumber: prNumberMatch ? prNumberMatch[1] : '' };
+}
+
+function extractFilesChangedEvidence(text) {
+  const normalized = normalizeEvidenceText(text);
+  if (!normalized) return '';
+  const changedMatch = normalized.match(/(?:files? changed|changed files?)\s*[:\-]?\s*(\d{1,4})\b/i)
+    || normalized.match(/(\d{1,4})\s+files? changed\b/i)
+    || normalized.match(/\bmodified\s+(\d{1,4})\s+files?\b/i);
+  if (changedMatch) return changedMatch[1];
+  const fileLineCount = normalized.split('\n').filter(line => /(?:^|\s)(?:[\w.-]+\/)*[\w.-]+\.(?:js|ts|tsx|jsx|py|md|json|sql|css|html)\b/.test(line)).length;
+  return fileLineCount >= 2 ? String(fileLineCount) : '';
+}
+
+function extractHumanResultSummary(...values) {
+  for (const value of values) {
+    if (!value) continue;
+    const parsed = tryParseJsonBlob(value);
+    if (parsed) {
+      const summary = firstNonEmpty(
+        parsed?.result?.headline,
+        parsed?.result?.summary,
+        parsed?.summary,
+        parsed?.excerpt,
+        parsed?.stdout_excerpt,
+        parsed?.stderr_excerpt
+      );
+      if (summary) return compactText(stripAnsi(summary), 220);
+    }
+    const normalized = normalizeEvidenceText(value);
+    if (!normalized) continue;
+    const summaryMatch = normalized.match(/(?:^|\n)(?:summary|result|outcome|headline)\s*[:\-]\s*([^\n]{12,240})/i);
+    if (summaryMatch?.[1]) return compactText(summaryMatch[1].trim(), 220);
+    const meaningfulLine = normalized.split('\n').map(line => line.trim()).find(line => {
+      if (!line) return false;
+      if (/^[\[{]/.test(line)) return false;
+      if (/^(executor|returncode|aborted|partial|timed_out|prompt_chars|ok|command)\b/i.test(line)) return false;
+      return true;
+    });
+    if (meaningfulLine) return compactText(meaningfulLine, 220);
+  }
+  return '';
+}
+
+function hasImplementationSignals(text) {
+  const normalized = normalizeEvidenceText(text).toLowerCase();
+  if (!normalized) return false;
+  if (extractCommitEvidence(normalized)) return true;
+  const prEvidence = extractPrEvidence(normalized);
+  if (prEvidence.prUrl || prEvidence.prNumber) return true;
+  if (extractFilesChangedEvidence(normalized)) return true;
+  return [
+    /\bimplemented\b/, /\bfixed\b/, /\bpatched\b/, /\bupdated\b/, /\bchanged\b/, /\bmodified\b/,
+    /\bcreated\b/, /\badded\b/, /\brefactored\b/, /\bedited\b/, /\bwrote\b/,
+    /\b(?:app|index|styles|config|dispatcher|server)\.(?:js|py|css|html|md|sql)\b/
+  ].some(rx => rx.test(normalized));
+}
+
+function hasAnalysisOnlySignals(text) {
+  const normalized = normalizeEvidenceText(text).toLowerCase();
+  if (!normalized) return false;
+  return [
+    /\banalysis\b/, /\binvestigated\b/, /\brecommend(?:ation|ed)?\b/, /\bsuggest(?:ion|ed)?\b/,
+    /\bnext steps\b/, /\bplan\b/, /\bwould\b/, /\bcould\b/, /\bshould\b/,
+    /\bno changes made\b/, /\bnot implemented\b/, /\bno implementation\b/
+  ].some(rx => rx.test(normalized));
+}
+
 function parseRunRequestArtifacts(req, run = null) {
   const text = collectRunRequestText(req, run);
-  const commitMatch = text.match(/\b([a-f0-9]{7,40})\b/i);
-  const prUrlMatch = text.match(/https?:\/\/github\.com\/[^\s)]+\/pull\/\d+/i);
-  const prNumberMatch = text.match(/\bPR\s*#(\d+)\b/i) || text.match(/\bpull request\s*#?(\d+)\b/i);
-  const changedMatch = text.match(/(?:files? changed|changed files?)\s*[:\-]?\s*(\d{1,4})\b/i)
-    || text.match(/(\d{1,4})\s+files? changed\b/i);
-  const summaryMatch = text.match(/(?:summary|result|outcome)\s*[:\-]\s*([^\n]{12,220})/i);
+  const prEvidence = extractPrEvidence(text);
   return {
-    commit: commitMatch ? commitMatch[1] : firstNonEmpty(req?.commit_hash, run?.commit_hash),
-    prUrl: prUrlMatch ? prUrlMatch[0] : firstNonEmpty(req?.pr_url, run?.pr_url),
-    prNumber: prNumberMatch ? prNumberMatch[1] : firstNonEmpty(req?.pr_number, run?.pr_number),
-    filesChanged: changedMatch ? changedMatch[1] : firstNonEmpty(req?.files_changed, run?.files_changed),
-    summary: firstNonEmpty(req?.output_summary, run?.output_summary, summaryMatch ? summaryMatch[1] : '')
+    commit: firstNonEmpty(extractCommitEvidence(text), req?.commit_hash, run?.commit_hash),
+    prUrl: firstNonEmpty(prEvidence.prUrl, req?.pr_url, run?.pr_url),
+    prNumber: firstNonEmpty(prEvidence.prNumber, req?.pr_number, run?.pr_number),
+    filesChanged: firstNonEmpty(extractFilesChangedEvidence(text), req?.files_changed, run?.files_changed),
+    summary: extractHumanResultSummary(req?.output_summary, run?.output_summary, req?.error, req?.result_text, run?.task_summary)
   };
 }
 
@@ -1496,15 +1644,17 @@ function runRequestLifecycle(req, run = null) {
   const parsedOutput = tryParseJsonBlob(req?.output_summary);
   const aborted = !!parsedOutput?.result?.meta?.aborted;
   const outcomeText = collectRunRequestText(req, run).toLowerCase();
+  const artifacts = parseRunRequestArtifacts(req, run);
+  const implementationLikely = hasImplementationSignals(outcomeText) || !!artifacts.commit || !!artifacts.prUrl || !!artifacts.prNumber || !!artifacts.filesChanged;
+  const analysisOnly = hasAnalysisOnlySignals(outcomeText) && !implementationLikely;
   const badPatterns = [
     /i can't fulfil/, /i can't fulfill/, /cannot fulfill/, /can't comply/, /cannot comply/,
     /i can.t help with that/, /i can.t assist with that/, /refus/, /unable to complete/,
     /could not complete/, /blocked/, /need[s]? review/, /not enough context/,
     /waiting on/, /missing access/, /requires approval/, /incomplete/, /partial/
   ];
-  const successPatterns = [/completed successfully/, /done\b/, /finished\b/, /opened pr/, /commit(ed)?\b/, /files? changed\b/];
   const hasBadOutcome = badPatterns.some(rx => rx.test(outcomeText));
-  const hasPositiveEvidence = successPatterns.some(rx => rx.test(outcomeText));
+  const hasPositiveEvidence = implementationLikely || [/completed successfully/, /done\b/, /finished\b/].some(rx => rx.test(outcomeText));
 
   let displayStatus = rawStatus || 'queued';
   let displayLabel = humanizeSnake(displayStatus);
@@ -1524,12 +1674,18 @@ function runRequestLifecycle(req, run = null) {
     displayStatus = 'completed_with_gaps';
     displayLabel = 'Completed (low proof)';
     outcomeHint = 'The recorded output shows the worker was aborted before clean delivery.';
+  } else if (rawStatus === 'completed' && analysisOnly) {
+    displayStatus = 'completed_with_gaps';
+    displayLabel = 'Completed (analysis only)';
+    outcomeHint = 'The worker appears to have analyzed or planned work, but did not clearly report implemented changes.';
   } else if (rawStatus === 'completed' && !hasPositiveEvidence) {
     displayStatus = 'completed_with_gaps';
     displayLabel = 'Completed (low proof)';
-    outcomeHint = 'Completed with limited proof in the available fields. Check related run, output path, or summary.';
+    outcomeHint = 'Completed with limited implementation proof. Check files changed, output path, or related run details.';
   } else if (rawStatus === 'completed') {
-    outcomeHint = 'Completion evidence found in output summary or related run metadata.';
+    outcomeHint = implementationLikely
+      ? 'Implementation evidence found in the output summary or related run metadata.'
+      : 'Completion evidence found, but file-level implementation proof is still thin.';
   }
 
   const evidence = [
@@ -1537,13 +1693,19 @@ function runRequestLifecycle(req, run = null) {
     (req?.picked_up_at || run?.started_at) ? `Picked up ${fmtDate(req?.picked_up_at || run?.started_at)}` : null,
     req?.updated_at ? `Last update ${fmtDate(req.updated_at)}` : null,
     (req?.completed_at || run?.completed_at) ? `Finished ${fmtDate(req?.completed_at || run?.completed_at)}` : null,
+    artifacts.filesChanged ? `${artifacts.filesChanged} file(s) changed reported` : null,
+    artifacts.commit ? `Commit evidence: ${artifacts.commit}` : null,
+    artifacts.prUrl ? `PR evidence: ${artifacts.prUrl}` : (artifacts.prNumber ? `PR evidence: #${artifacts.prNumber}` : null),
+    analysisOnly ? 'Output reads like analysis/progress rather than a confirmed implementation' : null,
     aborted ? 'Output metadata says the worker was aborted' : null
   ].filter(Boolean);
 
-  return { rawStatus, hasBadOutcome, hasPositiveEvidence, displayStatus, displayLabel, outcomeHint, evidence };
+  return { rawStatus, hasBadOutcome, hasPositiveEvidence, implementationLikely, analysisOnly, displayStatus, displayLabel, outcomeHint, evidence };
 }
 
 function summarizeRunRequestResult(req, run = null) {
+  const summary = extractHumanResultSummary(req?.output_summary, req?.error, run?.output_summary, run?.task_summary);
+  if (summary) return summary;
   const text = firstNonEmpty(req?.output_summary, req?.error, run?.output_summary, run?.task_summary);
   if (!text) {
     return req?.status === 'queued' ? 'Waiting for dispatcher / worker pickup' : '—';
@@ -1635,6 +1797,7 @@ function renderRunRequests() {
           <td>
             <div class="small rr-result">${escapeHtml(summarizeRunRequestResult(req, run))}</div>
             <div class="small rr-proof-list" style="margin-top:8px;">
+              <div><strong>Implementation likely:</strong> ${escapeHtml(lifecycle.implementationLikely ? 'yes' : lifecycle.analysisOnly ? 'no (analysis only)' : 'unclear')}</div>
               <div><strong>Files changed:</strong> ${escapeHtml(String(artifacts.filesChanged || '—'))}</div>
               <div><strong>Commit:</strong> ${escapeHtml(artifacts.commit || '—')}</div>
               <div><strong>PR:</strong> ${escapeHtml(artifacts.prUrl || (artifacts.prNumber ? `#${artifacts.prNumber}` : '—'))}</div>

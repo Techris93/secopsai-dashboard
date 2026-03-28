@@ -308,6 +308,8 @@ Typical required values:
 - optional helper endpoint config
 - optional Discord webhook/helper settings
 - `DISCORD_DISPATCHER_EXECUTOR` for queued task execution (`openclaw` recommended)
+- `DISCORD_DISPATCHER_OPENCLAW_TIMEOUT_SECONDS` / `DISCORD_DISPATCHER_OPENCLAW_PROCESS_TIMEOUT_SECONDS` for longer real tasks
+- `DISCORD_DISPATCHER_TASK_MAX_CHARS`, `DISCORD_DISPATCHER_CONTEXT_MAX_CHARS`, `DISCORD_DISPATCHER_MEMORY_MAX_CHARS`, `DISCORD_DISPATCHER_PROMPT_MAX_CHARS` to keep rendered prompts within a safe budget
 
 Important:
 - `config.js` is used directly by the browser app
