@@ -1068,7 +1068,7 @@ function assignSuggestedReviewerFromModal() {
   const item = currentTaskForAssignment();
   const reviewer = deriveSuggestedReviewer(item, el('task-reviewer-role')?.value?.trim());
   if (el('task-reviewer-role')) el('task-reviewer-role').value = reviewer || '';
-  setStatus(`<span class="dot"></span> Suggested reviewer set to ${escapeHtml(reviewer || 'none')}`);
+  setStatus(`<span class="dot"></span> Suggested reviewer set to ${escapeHtml(reviewer ? shortRoleLabel(reviewer) : 'none')}`);
 }
 
 async function assignSuggestedOwnerForTask(item) {
@@ -1080,7 +1080,7 @@ async function assignSuggestedOwnerForTask(item) {
 async function assignSuggestedReviewerForTask(item) {
   const reviewer = deriveSuggestedReviewer(item);
   await applySuggestedTaskAssignment(item, { reviewer_role: reviewer || null });
-  setStatus(`<span class="dot"></span> Suggested reviewer set to ${escapeHtml(reviewer || 'none')}`);
+  setStatus(`<span class="dot"></span> Suggested reviewer set to ${escapeHtml(reviewer ? shortRoleLabel(reviewer) : 'none')}`);
 }
 
 function renderMissionControl() {
@@ -1356,7 +1356,7 @@ function renderTasks() {
           <div class="badges">
             <span class="badge domain-${escapeHtml(item.domain)}">${escapeHtml(item.domain)}</span>
             <span class="badge priority-${escapeHtml(item.priority)}">${escapeHtml(item.priority)}</span>
-            ${item.owner_role ? `<span class="badge">${escapeHtml(item.owner_role)}</span>` : ''}
+            ${item.owner_role ? `<span class="badge">${escapeHtml(shortRoleLabel(item.owner_role))}</span>` : ''}
             ${item.external_facing ? `<span class="badge external">external-facing</span>` : ''}
             ${item.requires_security_review ? `<span class="badge review">security review</span>` : ''}
           </div>
