@@ -1340,6 +1340,12 @@ function summarizePromptText(prompt) {
   return compactText(text, 100);
 }
 
+function tryParseJsonBlob(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 function stripAnsi(value) {
   return String(value || '').replace(/\[[0-9;]*m/g, ' ');
 }
@@ -1401,6 +1407,8 @@ function runRequestWorkerIdentity(req, run = null) {
 
 function runRequestLifecycle(req, run = null) {
   const rawStatus = String(req?.status || '').toLowerCase();
+  const parsedOutput = tryParseJsonBlob(req?.output_summary);
+  const aborted = !!parsedOutput?.result?.meta?.aborted;
   const outcomeText = collectRunRequestText(req, run).toLowerCase();
   const badPatterns = [
     /i can't fulfil/, /i can't fulfill/, /cannot fulfill/, /can't comply/, /cannot comply/,
@@ -1426,6 +1434,10 @@ function runRequestLifecycle(req, run = null) {
     displayStatus = 'needs_review';
     displayLabel = 'Needs Review';
     outcomeHint = 'Marked completed, but the output reads like a refusal, blocker, missing access, or incomplete delivery.';
+  } else if (rawStatus === 'completed' && aborted) {
+    displayStatus = 'completed_with_gaps';
+    displayLabel = 'Completed (low proof)';
+    outcomeHint = 'The recorded output shows the worker was aborted before clean delivery.';
   } else if (rawStatus === 'completed' && !hasPositiveEvidence) {
     displayStatus = 'completed_with_gaps';
     displayLabel = 'Completed (low proof)';
@@ -1438,7 +1450,8 @@ function runRequestLifecycle(req, run = null) {
     req?.created_at ? `Requested ${fmtDate(req.created_at)}` : null,
     (req?.picked_up_at || run?.started_at) ? `Picked up ${fmtDate(req?.picked_up_at || run?.started_at)}` : null,
     req?.updated_at ? `Last update ${fmtDate(req.updated_at)}` : null,
-    (req?.completed_at || run?.completed_at) ? `Finished ${fmtDate(req?.completed_at || run?.completed_at)}` : null
+    (req?.completed_at || run?.completed_at) ? `Finished ${fmtDate(req?.completed_at || run?.completed_at)}` : null,
+    aborted ? 'Output metadata says the worker was aborted' : null
   ].filter(Boolean);
 
   return { rawStatus, hasBadOutcome, hasPositiveEvidence, displayStatus, displayLabel, outcomeHint, evidence };
