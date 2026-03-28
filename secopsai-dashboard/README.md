@@ -153,12 +153,13 @@ Capabilities:
 - mark external-facing items
 - mark security-review items
 - assign suggested owner
-- generate a work brief
+- generate an intelligent work brief (smart local or agent-ready mode)
 - queue “Run now” requests
 
 Best use:
 - triage work
 - assign ownership
+- generate a context-aware execution brief with likely repo/path hints
 - track what needs execution or review
 
 ---
@@ -252,6 +253,23 @@ Useful for:
 cd secopsai-dashboard
 ./serve-dashboard.sh
 ```
+
+## Option A2 — start the full local dashboard stack
+
+This starts both the local dashboard server and the Discord dispatcher together:
+
+```bash
+cd secopsai-dashboard
+./start-local-dashboard-stack.sh
+```
+
+Optional custom port:
+
+```bash
+./start-local-dashboard-stack.sh 45680
+```
+
+This keeps access local-only on `127.0.0.1` and shuts both processes down together when you press `Ctrl+C`.
 
 Default local URL is typically:
 
