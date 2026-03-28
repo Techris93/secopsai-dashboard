@@ -1090,6 +1090,21 @@ function renderTasks() {
   });
 }
 
+async function removeFinding(findingId) {
+  const finding = state.findings.find(f => String(f.id) === String(findingId));
+  if (!findingId || !finding) return;
+  if (!confirm(`Remove this finding: ${findingTitle(finding)}?`)) return;
+  const { error } = await supabaseClient.from('findings').delete().eq('id', findingId);
+  if (error) return alert(`Failed to remove finding: ${error.message}`);
+  state.findings = state.findings.filter(f => String(f.id) !== String(findingId));
+  if (String(state.selectedFindingId || '') === String(findingId)) {
+    state.selectedFindingId = state.findings[0]?.id || null;
+  }
+  renderFindings();
+  setStatus(`<span class="dot"></span> Finding removed`);
+  Promise.resolve().then(() => createDashboardEvent('finding_removed', `Finding removed`, findingTitle(finding), 'warning', { related_run_id: finding.run_id || finding.related_run_id || null, related_work_item_id: finding.related_work_item_id || finding.work_item_id || null })).catch(e => console.warn('finding_removed event failed', e));
+}
+
 function renderFindings() {
   const findingsAvailable = state.optionalTables.findings !== false;
   if (findingsAvailable && state.findings.length && !state.selectedFindingId) selectFinding();
@@ -1129,10 +1144,10 @@ function renderFindings() {
             return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(f.id || '')}">
               <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(findingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(findingBody(f).slice(0, 120) || '—')}</div></td>
               <td><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
-              <td>${renderStatusPill(String(findingStatus(f)).toLowerCase(), findingStatus(f))}</td>
+              <td>${renderStatusPill(String(findingStatus(f)).toLowerCase(), humanizeSnake(findingStatus(f)))}</td>
               <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
               <td>${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
-              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(f.id || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(f.id || '')}">Create task</button></div></td>
+              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(f.id || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(f.id || '')}">Create task</button><button class="mini-btn finding-remove-btn" data-finding-id="${escapeHtml(f.id || '')}">Remove</button></div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
@@ -1140,6 +1155,10 @@ function renderFindings() {
         event.stopPropagation();
         const finding = state.findings.find(f => String(f.id) === String(btn.dataset.findingId));
         if (finding) openFindingTaskModal(finding);
+      }));
+      table.querySelectorAll('.finding-remove-btn').forEach(btn => btn.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await removeFinding(btn.dataset.findingId);
       }));
       table.querySelectorAll('.finding-select-btn, .finding-row').forEach(row => row.addEventListener('click', (event) => {
         const target = event.target.closest('[data-finding-id]');
@@ -1169,7 +1188,7 @@ function renderFindings() {
           <h4>${escapeHtml(findingTitle(selected))}</h4>
           <div class="small">${escapeHtml(findingSource(selected))} • ${escapeHtml(fmtDate(findingDetectedAt(selected)))}${findingFingerprint(selected) ? ` • ${escapeHtml(findingFingerprint(selected))}` : ''}</div>
         </div>
-        <div>${renderStatusPill(String(findingStatus(selected)).toLowerCase(), findingStatus(selected))}</div>
+        <div>${renderStatusPill(String(findingStatus(selected)).toLowerCase(), humanizeSnake(findingStatus(selected)))}</div>
       </div>
       <div class="finding-detail-grid">
         <div class="card finding-detail-card">
@@ -1189,7 +1208,7 @@ function renderFindings() {
       <div class="card finding-detail-card" style="margin-top:14px;">
         <h4>Run-request correlation</h4>
         ${requests.length ? requests.map(match => `<div class="feed-item"><div><strong>${escapeHtml(match.request.role_label)}</strong></div><div class="small">${escapeHtml(match.request.status || 'queued')} • score ${match.score}</div><div class="small">${escapeHtml((match.request.prompt_text || '').slice(0, 180) || '—')}</div></div>`).join('') : '<div class="empty">No strong run-request overlap yet. This gracefully stays empty when the queue or text hints are absent.</div>'}
-        <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}</div>
+        <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}<button class="mini-btn" id="selected-finding-remove-btn">Remove finding</button></div>
       </div>
     `;
     el('selected-finding-task-btn')?.addEventListener('click', () => openFindingTaskModal(selected));
@@ -1197,6 +1216,7 @@ function renderFindings() {
       const top = related[0]?.item;
       if (top) openPromptModal(top);
     });
+    el('selected-finding-remove-btn')?.addEventListener('click', () => removeFinding(selected.id));
   }
 }
 
