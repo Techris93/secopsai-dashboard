@@ -67,6 +67,8 @@ const state = {
   integrationStatus: null,
   lastDiscordTest: null,
   selectedFindingId: null,
+  outputEvidenceCache: new Map(),
+  liveRefreshTimer: null,
   optionalTables: {
     findings: true,
     run_requests: true
@@ -957,13 +959,11 @@ async function runPromptNow() {
       const st = String(data?.status || 'unknown').toLowerCase();
       const run = relatedRunForRequest(data) || (promptModalState.relatedRunId ? state.runs.find(r => String(r.id) === String(promptModalState.relatedRunId)) : null);
       if (!data.fetched_output_text) {
-        const outputPath = firstNonEmpty(data?.output_path, run?.output_path);
-        const rel = outputPath ? String(outputPath).replace('/Users/chrixchange/.openclaw/workspace/', '') : '';
+        const rel = getRunRequestOutputRelativePath(data, run);
         if (rel) {
           try {
-            const resp = await fetch(`/api/run-output?path=${encodeURIComponent(rel)}`);
-            const payload = await resp.json();
-            if (payload?.ok && payload?.text) data.fetched_output_text = payload.text;
+            const text = await fetchRunOutputEvidence(rel);
+            if (text) data.fetched_output_text = text;
           } catch {}
         }
       }
@@ -1017,9 +1017,8 @@ async function runPromptNow() {
   await boot();
 }
 
-function assignTaskToSuggestedAgent() {
-  const currentId = taskModalState.editingId;
-  const item = state.workItems.find(w => w.id === currentId) || {
+function taskDraftFromModal() {
+  return {
     title: el('task-title')?.value?.trim() || '',
     domain: el('task-domain')?.value || 'exec',
     priority: el('task-priority')?.value || 'normal',
@@ -1027,15 +1026,61 @@ function assignTaskToSuggestedAgent() {
     description: el('task-description')?.value?.trim() || '',
     requires_security_review: !!el('task-security-review')?.checked,
     external_facing: !!el('task-external-facing')?.checked,
+    owner_role: el('task-owner-role')?.value?.trim() || '',
     reviewer_role: el('task-reviewer-role')?.value?.trim() || ''
   };
-  item.requires_security_review = !!(item?.requires_security_review ?? el('task-security-review')?.checked);
-  item.external_facing = !!(item?.external_facing ?? el('task-external-facing')?.checked);
+}
+
+function currentTaskForAssignment() {
+  const currentId = taskModalState.editingId;
+  const existing = state.workItems.find(w => w.id === currentId);
+  const draft = taskDraftFromModal();
+  return {
+    ...(existing || {}),
+    ...draft,
+    requires_security_review: !!draft.requires_security_review,
+    external_facing: !!draft.external_facing
+  };
+}
+
+async function applySuggestedTaskAssignment(item, fields = {}) {
+  const updates = { ...fields, updated_at: new Date().toISOString() };
+  const { data, error } = await supabaseClient
+    .from('work_items')
+    .update(updates)
+    .eq('id', item.id)
+    .select()
+    .single();
+  if (error) throw error;
+  upsertWorkItemInState(data);
+  refreshTaskViewsOnly();
+  return data;
+}
+
+function assignSuggestedOwnerFromModal() {
+  const item = currentTaskForAssignment();
   const role = suggestRoleForTask(item);
-  const reviewer = deriveSuggestedReviewer(item, el('task-reviewer-role')?.value?.trim());
   el('task-owner-role').value = role;
-  if (el('task-reviewer-role')) el('task-reviewer-role').value = reviewer;
-  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}${reviewer ? ` • reviewer ${escapeHtml(reviewer)}` : ''}`);
+  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`);
+}
+
+function assignSuggestedReviewerFromModal() {
+  const item = currentTaskForAssignment();
+  const reviewer = deriveSuggestedReviewer(item, el('task-reviewer-role')?.value?.trim());
+  if (el('task-reviewer-role')) el('task-reviewer-role').value = reviewer || '';
+  setStatus(`<span class="dot"></span> Suggested reviewer set to ${escapeHtml(reviewer || 'none')}`);
+}
+
+async function assignSuggestedOwnerForTask(item) {
+  const role = suggestRoleForTask(item);
+  await applySuggestedTaskAssignment(item, { owner_role: role });
+  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`);
+}
+
+async function assignSuggestedReviewerForTask(item) {
+  const reviewer = deriveSuggestedReviewer(item);
+  await applySuggestedTaskAssignment(item, { reviewer_role: reviewer || null });
+  setStatus(`<span class="dot"></span> Suggested reviewer set to ${escapeHtml(reviewer || 'none')}`);
 }
 
 function renderMissionControl() {
@@ -1317,7 +1362,8 @@ function renderTasks() {
           </div>
           <div class="small" style="margin-top:10px;">Updated ${escapeHtml(fmtDate(item.updated_at || item.created_at))}</div>
           <div class="task-card-actions">
-            <button class="mini-btn" data-action="assign">Assign</button>
+            <button class="mini-btn" data-action="assign-owner">Suggest owner</button>
+            <button class="mini-btn" data-action="assign-reviewer">Suggest reviewer</button>
             <button class="mini-btn" data-action="prompt">Execute</button>
           </div>
         `;
@@ -1335,7 +1381,26 @@ function renderTasks() {
         div.addEventListener('click', (event) => {
           if (dragState.taskId) return;
           const action = event.target?.dataset?.action;
-          if (action === 'assign') { event.stopPropagation(); const role = suggestRoleForTask(item); const reviewer = deriveSuggestedReviewer(item); const payload = { ...item, owner_role: role, reviewer_role: reviewer || null, updated_at: new Date().toISOString() }; Promise.resolve().then(async () => { const { data, error } = await supabaseClient.from('work_items').update({ owner_role: payload.owner_role, reviewer_role: payload.reviewer_role, updated_at: payload.updated_at }).eq('id', item.id).select().single(); if (error) throw error; upsertWorkItemInState(data); refreshTaskViewsOnly(); setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}${reviewer ? ` • reviewer ${escapeHtml(reviewer)}` : ''}`); }).catch(err => { console.error('assign suggested owner failed', err); alert(`Failed to assign suggested owner: ${err.message || err}`); }); return; }
+          if (action === 'assign-owner') {
+            event.stopPropagation();
+            Promise.resolve()
+              .then(() => assignSuggestedOwnerForTask(item))
+              .catch(err => {
+                console.error('assign suggested owner failed', err);
+                alert(`Failed to assign suggested owner: ${err.message || err}`);
+              });
+            return;
+          }
+          if (action === 'assign-reviewer') {
+            event.stopPropagation();
+            Promise.resolve()
+              .then(() => assignSuggestedReviewerForTask(item))
+              .catch(err => {
+                console.error('assign suggested reviewer failed', err);
+                alert(`Failed to assign suggested reviewer: ${err.message || err}`);
+              });
+            return;
+          }
           if (action === 'prompt') { event.stopPropagation(); openPromptModal(item); return; }
           openTaskModal(item);
         });
@@ -2146,31 +2211,75 @@ async function synchronizeSuccessfulTaskTransitions() {
   return changed;
 }
 
+function getRunRequestOutputRelativePath(req, run = relatedRunForRequest(req)) {
+  const outputPath = firstNonEmpty(req?.output_path, run?.output_path);
+  return outputPath ? String(outputPath).replace('/Users/chrixchange/.openclaw/workspace/', '') : '';
+}
+
+function isRecentRunRequest(req, maxAgeMs = 6 * 60 * 60 * 1000) {
+  const stamp = req?.updated_at || req?.completed_at || req?.created_at;
+  if (!stamp) return false;
+  const ts = new Date(stamp).getTime();
+  return Number.isFinite(ts) && (Date.now() - ts) <= maxAgeMs;
+}
+
+function shouldHydrateRunRequestOutput(req, run) {
+  const lifecycle = runRequestLifecycle(req, run);
+  if (!['completed', 'completed_with_gaps', 'needs_review', 'queued', 'running'].includes(lifecycle.displayStatus)) return false;
+  const artifacts = parseRunRequestArtifacts(req, run);
+  if (artifacts.commit || artifacts.prUrl || artifacts.prNumber || req?.fetched_output_text) return false;
+  const rel = getRunRequestOutputRelativePath(req, run);
+  if (!rel) return false;
+  if (['queued', 'running'].includes(lifecycle.displayStatus)) return true;
+  if (String(req?.status || '').toLowerCase() !== 'completed') return true;
+  return isRecentRunRequest(req);
+}
+
+async function fetchRunOutputEvidence(rel, { force = false } = {}) {
+  if (!rel) return null;
+  const existing = state.outputEvidenceCache.get(rel);
+  const now = Date.now();
+  const freshForMs = force ? 0 : 10 * 60 * 1000;
+  const failureBackoffMs = force ? 0 : 60 * 60 * 1000;
+  if (existing?.text && (now - existing.fetchedAt) < freshForMs) return existing.text;
+  if (existing?.pending) return existing.pending;
+  if (!force && existing && !existing.text && (now - existing.fetchedAt) < failureBackoffMs) return null;
+
+  const pending = fetch(`/api/run-output?path=${encodeURIComponent(rel)}`)
+    .then(resp => resp.json())
+    .then(payload => {
+      const text = payload?.ok && payload?.text ? payload.text : null;
+      state.outputEvidenceCache.set(rel, { text, fetchedAt: Date.now(), pending: null });
+      return text;
+    })
+    .catch(err => {
+      state.outputEvidenceCache.set(rel, { text: null, fetchedAt: Date.now(), pending: null });
+      throw err;
+    });
+
+  state.outputEvidenceCache.set(rel, { text: existing?.text || null, fetchedAt: existing?.fetchedAt || 0, pending });
+  return pending;
+}
+
 async function hydrateRunRequestOutputEvidence() {
-  const candidates = state.runRequests.filter(req => {
-    const run = relatedRunForRequest(req);
-    const lifecycle = runRequestLifecycle(req, run);
-    if (!['completed', 'completed_with_gaps', 'needs_review'].includes(lifecycle.displayStatus)) return false;
-    const hasCommit = !!parseRunRequestArtifacts(req, run).commit;
-    const outputPath = firstNonEmpty(req?.output_path, run?.output_path);
-    const rel = outputPath ? String(outputPath).replace('/Users/chrixchange/.openclaw/workspace/', '') : '';
-    return !hasCommit && rel && !req?.fetched_output_text;
-  }).slice(0, 6);
+  const candidates = state.runRequests
+    .map(req => ({ req, run: relatedRunForRequest(req) }))
+    .filter(({ req, run }) => shouldHydrateRunRequestOutput(req, run))
+    .sort((a, b) => new Date(b.req?.updated_at || b.req?.created_at || 0).getTime() - new Date(a.req?.updated_at || a.req?.created_at || 0).getTime())
+    .slice(0, 4);
   if (!candidates.length) return false;
+
   let changed = false;
-  await Promise.all(candidates.map(async (req) => {
-    const run = relatedRunForRequest(req);
-    const outputPath = firstNonEmpty(req?.output_path, run?.output_path);
-    const rel = outputPath ? String(outputPath).replace('/Users/chrixchange/.openclaw/workspace/', '') : '';
+  await Promise.all(candidates.map(async ({ req, run }) => {
+    const rel = getRunRequestOutputRelativePath(req, run);
     if (!rel) return;
     try {
-      const resp = await fetch(`/api/run-output?path=${encodeURIComponent(rel)}`);
-      const payload = await resp.json();
-      if (!payload?.ok || !payload?.text) return;
-      req.fetched_output_text = payload.text;
+      const text = await fetchRunOutputEvidence(rel);
+      if (!text || req.fetched_output_text === text) return;
+      req.fetched_output_text = text;
       changed = true;
     } catch (e) {
-      console.warn('hydrateRunRequestOutputEvidence failed', rel, e);
+      // Intentionally quiet for background hydration.
     }
   }));
   return changed;
@@ -2642,7 +2751,8 @@ function bindEvents() {
       }
     });
   }
-  el('task-assign-btn')?.addEventListener('click', assignTaskToSuggestedAgent);
+  el('task-assign-owner-btn')?.addEventListener('click', assignSuggestedOwnerFromModal);
+  el('task-assign-reviewer-btn')?.addEventListener('click', assignSuggestedReviewerFromModal);
   el('task-generate-prompt-btn')?.addEventListener('click', () => {
     const item = state.workItems.find(w => w.id === taskModalState.editingId) || {
       title: el('task-title')?.value?.trim() || '',
