@@ -1083,7 +1083,7 @@ function renderTasks() {
           <div class="small" style="margin-top:10px;">Updated ${escapeHtml(fmtDate(item.updated_at || item.created_at))}</div>
           <div class="task-card-actions">
             <button class="mini-btn" data-action="assign">Assign</button>
-            <button class="mini-btn" data-action="prompt">Prompt</button>
+            <button class="mini-btn" data-action="prompt">Brief</button>
           </div>
         `;
         div.addEventListener('dragstart', (e) => {
@@ -1208,8 +1208,8 @@ function renderFindings() {
         <div>
           <h4>${escapeHtml(findingTitle(selected))}</h4>
           <div class="small">${escapeHtml(findingSource(selected))} • ${escapeHtml(fmtDate(findingDetectedAt(selected)))}${findingFingerprint(selected) ? ` • ${escapeHtml(findingFingerprint(selected))}` : ''}</div>
+          <div class="small" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span class="muted-inline">Selected finding status:</span>${renderStatusPill(String(findingStatus(selected)).toLowerCase(), humanizeSnake(findingStatus(selected)))}</div>
         </div>
-        <div>${renderStatusPill(String(findingStatus(selected)).toLowerCase(), humanizeSnake(findingStatus(selected)))}</div>
       </div>
       <div class="finding-detail-grid">
         <div class="card finding-detail-card">
