@@ -1669,6 +1669,7 @@ function resetTaskForm() {
   el('task-security-review').checked = false;
   el('task-description').value = '';
   el('task-delete-btn').classList.add('hidden');
+  syncTaskStatusFieldMode(false);
 }
 
 function openTaskModal(item = null) {
@@ -1689,6 +1690,7 @@ function openTaskModal(item = null) {
     el('task-security-review').checked = !!item.requires_security_review;
     el('task-description').value = item.description || '';
     el('task-delete-btn').classList.remove('hidden');
+    syncTaskStatusFieldMode(true);
   }
   el('task-modal').classList.remove('hidden');
 }
@@ -1697,6 +1699,14 @@ function closeTaskModal() { el('task-modal').classList.add('hidden'); }
 
 function currentTaskModalItem() {
   return state.workItems.find(w => w.id === taskModalState.editingId) || null;
+}
+function syncTaskStatusFieldMode(isEditing) {
+  const wrap = el('task-status-wrap');
+  const help = el('task-status-help');
+  if (wrap) wrap.classList.toggle('task-status-subtle', !isEditing);
+  if (help) help.textContent = isEditing
+    ? 'Update status here when the task has truly moved to a different workflow stage.'
+    : 'New tasks default to Inbox. Change this only if you already know the task belongs elsewhere.';
 }
 function upsertWorkItemInState(item) {
   if (!item) return;

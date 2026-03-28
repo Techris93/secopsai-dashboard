@@ -210,7 +210,7 @@
             <option value="urgent">urgent</option>
           </select>
         </label>
-        <label><span>Status</span>
+        <label id="task-status-wrap"><span>Status</span>
           <select id="task-status">
             <option value="inbox">Inbox</option>
             <option value="planned">Planned</option>
@@ -219,6 +219,7 @@
             <option value="blocked">Blocked</option>
             <option value="done">Done</option>
           </select>
+          <div class="small" id="task-status-help">New tasks default to Inbox. Change this only if you already know the task belongs elsewhere.</div>
         </label>
         <label><span>Owner role</span><select id="task-owner-role"></select></label>
         <label><span>Reviewer role</span><select id="task-reviewer-role"></select></label>
