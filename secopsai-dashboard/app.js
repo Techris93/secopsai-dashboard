@@ -521,7 +521,7 @@ function inferWorkBriefPlan(item = {}, roleLabel = null) {
   focus.push('Keep the solution practical, local-first, and shippable now.');
 
   const constraints = [
-    'This dashboard is control-plane only; live conversations and dispatch belong to orchestrator flows.',
+    'This dashboard is control-plane only, but this task should be executed directly in the local workspace through the current OpenClaw dispatcher path; do not require ACP/Codex-specific execution assumptions.',
     'Prefer existing metadata and lightweight heuristics over a hard dependency on a new backend.',
     'Validate syntax/basic behavior before handing off.',
     'Report implementation evidence clearly: exact files touched, whether code actually changed, and any commit/PR only if real.'
@@ -554,7 +554,7 @@ function buildSmartLocalBrief(item, roleLabel = null) {
   return `Prepare work for ${plan.role}.
 
 Mode: smart local brief
-Context: this dashboard is control-plane only; the orchestrator owns live conversations and dispatch.
+Context: this dashboard is control-plane only. This task should be executed directly in the local workspace via the active OpenClaw dispatcher path, without ACP-specific or Codex-specific assumptions.
 
 Task summary:
 - Title: ${plan.title}
@@ -589,11 +589,10 @@ ${plan.deliverables.map(line => `- ${line}`).join('\n')}`;
 
 function buildAgentReadyBrief(item, roleLabel = null) {
   const plan = inferWorkBriefPlan(item, roleLabel);
-  return `SYSTEM / ORCHESTRATOR HANDOFF
+  return `SYSTEM / LOCAL OPENCLAW EXECUTION HANDOFF
 
 You are preparing an implementation pass for ${plan.role}.
-Use the local smart brief below as grounded context, but feel free to improve repo/path inference if stronger evidence appears during code inspection.
-Do not require an external planning backend before doing useful work.
+Execute directly in the local workspace via the current OpenClaw dispatcher path. Do not assume ACP one-shot execution, Codex-specific runtime requirements, or any external planning backend. Use the brief below as grounded context, but improve repo/path inference if stronger evidence appears during code inspection.
 ${plan.execution?.needsImplementationPush ? 'This handoff is for a continuation/retry. Push beyond analysis-only output and produce concrete implementation evidence where possible.\n' : ''}
 STRUCTURED INPUT
 - task_title: ${plan.title}
@@ -616,6 +615,7 @@ OBJECTIVE
 ${plan.focus.map(line => `- ${line}`).join('\n')}
 
 OPERATING CONSTRAINTS
+- Do not refuse or stop solely because ACP/Codex-specific execution paths are unavailable; continue using the current OpenClaw/local-workspace execution path.
 ${plan.constraints.map(line => `- ${line}`).join('\n')}
 
 EXPECTED OUTPUT
