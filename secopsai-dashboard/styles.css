@@ -336,3 +336,13 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
 .rr-meta { margin-top: 8px; color: var(--text-muted); }
 .rr-result { max-width: 340px; line-height: 1.45; color: var(--text); }
 .rr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+
+.primary-btn.is-loading, .secondary-btn.is-loading, .danger-btn.is-loading, .status-pill.is-loading {
+  opacity: 0.8;
+  cursor: wait !important;
+}
+.primary-btn:disabled, .secondary-btn:disabled, .danger-btn:disabled, .icon-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}

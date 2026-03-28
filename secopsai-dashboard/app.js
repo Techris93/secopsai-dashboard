@@ -96,6 +96,21 @@ function escapeHtml(str = "") {
     .replaceAll("'", "&#039;");
 }
 
+function setButtonBusy(buttonOrId, busy, busyLabel = 'Working…') {
+  const btn = typeof buttonOrId === 'string' ? el(buttonOrId) : buttonOrId;
+  if (!btn) return;
+  if (busy) {
+    if (!btn.dataset.originalLabel) btn.dataset.originalLabel = btn.innerHTML;
+    btn.disabled = true;
+    btn.classList.add('is-loading');
+    btn.innerHTML = busyLabel;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    if (btn.dataset.originalLabel) btn.innerHTML = btn.dataset.originalLabel;
+  }
+}
+
 function setStatus(message, isError = false) {
   const target = el('global-status');
   if (!target) return;
@@ -662,10 +677,16 @@ async function copyPromptToClipboard() {
 }
 
 async function runPromptNow() {
+  const runBtn = el('prompt-run-btn');
+  setButtonBusy(runBtn, true, 'Queueing…');
+  setRunStatusUI({ status: 'queued', line: 'Queueing', detail: 'Preparing run request…' });
   const role = promptModalState.role;
   const item = promptModalState.item;
   const prompt = el('prompt-output')?.value || promptModalState.brief || '';
-  if (!role || !prompt) return;
+  if (!role || !prompt) {
+    setButtonBusy(runBtn, false);
+    return;
+  }
 
   const route = findRouteForRole(role);
 
@@ -768,6 +789,7 @@ async function runPromptNow() {
     // Non-fatal: the run request is already queued in Supabase. Treat Discord notify as best-effort.
     await createDashboardEvent('run_now_notify_failed', `Run notify failed: ${role}`, result.reason || 'Unknown notify failure', 'warning', { related_work_item_id: item?.id || null, related_run_id: run?.id || null });
     setStatus(`Run queued, but notify failed: ${escapeHtml(result.reason || 'unknown error')}`, true);
+    setButtonBusy(runBtn, false);
     return;
   }
 
@@ -1948,12 +1970,19 @@ async function boot() {
 
 function bindEvents() {
   document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
-  el('refresh-btn')?.addEventListener('click', () => {
+  el('refresh-btn')?.addEventListener('click', async () => {
     if (bootError) {
       setStatus(bootError, true);
       return;
     }
-    boot();
+    const btn = el('refresh-btn');
+    setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
+    setStatus('<span class="dot"></span> Refreshing dashboard data…');
+    try {
+      await boot();
+    } finally {
+      setButtonBusy(btn, false);
+    }
   });
   el('new-task-btn')?.addEventListener('click', () => {
     if (bootError) {
