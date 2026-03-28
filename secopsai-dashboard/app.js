@@ -831,7 +831,7 @@ async function queueTaskExecutionDirect(item, promptOverride = null) {
   state.runRequests.unshift(runReq);
   renderTasks();
   renderIntegrations();
-  setStatus(`<span class="dot"></span> Task saved and queued for ${escapeHtml(role)}`);
+  setStatus(`<span class="dot"></span> Task saved and queued for ${escapeHtml(shortRoleLabel(role))}`);
 
   const content = compactMultiline([
     `SecOpsAI run now (queued)`,
@@ -1011,7 +1011,7 @@ async function runPromptNow() {
     return;
   }
 
-  setStatus(`<span class="dot"></span> Run request queued for ${escapeHtml(role)} (notified #${notifyChannel})`);
+  setStatus(`<span class="dot"></span> Run request queued for ${escapeHtml(shortRoleLabel(role))} (notified #${notifyChannel})`);
   setButtonBusy(runBtn, false);
   setTimeout(() => closePromptModal(), 1400);
   await boot();
@@ -1061,7 +1061,7 @@ function assignSuggestedOwnerFromModal() {
   const item = currentTaskForAssignment();
   const role = suggestRoleForTask(item);
   el('task-owner-role').value = role;
-  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`);
+  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(shortRoleLabel(role))}`);
 }
 
 function assignSuggestedReviewerFromModal() {
@@ -1074,7 +1074,7 @@ function assignSuggestedReviewerFromModal() {
 async function assignSuggestedOwnerForTask(item) {
   const role = suggestRoleForTask(item);
   await applySuggestedTaskAssignment(item, { owner_role: role });
-  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`);
+  setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(shortRoleLabel(role))}`);
 }
 
 async function assignSuggestedReviewerForTask(item) {
@@ -1598,6 +1598,13 @@ function humanizeSnake(value) {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\w/g, c => c.toUpperCase());
+}
+
+function shortRoleLabel(role) {
+  const text = String(role || '').trim();
+  if (!text) return '';
+  const parts = text.split('/');
+  return parts[parts.length - 1] || text;
 }
 
 function compactText(value, max = 120) {
