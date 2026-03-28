@@ -211,6 +211,10 @@ function optionalLoadTable(table, options = {}) {
     });
 }
 
+function findingId(finding) {
+  return finding?.id || finding?.finding_id || finding?.uuid || finding?.event_id || null;
+}
+
 function findingSeverity(finding) {
   return finding?.severity || finding?.priority || finding?.risk_level || 'unknown';
 }
@@ -350,24 +354,27 @@ function correlatedRunRequestsForFinding(finding) {
   }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, 4);
 }
 
-function selectFinding(findingId = null) {
-  const nextId = findingId || state.findings?.[0]?.id || null;
+function selectFinding(nextFindingId = null) {
+  const nextId = nextFindingId || findingId(state.findings?.[0]) || null;
   state.selectedFindingId = nextId;
 }
 
 function currentSelectedFinding() {
   if (!state.findings.length) return null;
-  return state.findings.find(f => String(f.id) === String(state.selectedFindingId)) || state.findings[0] || null;
+  return state.findings.find(f => String(findingId(f)) === String(state.selectedFindingId)) || state.findings[0] || null;
 }
 
 async function bestEffortLinkFindingToTask(finding, task) {
-  if (!finding?.id || !task?.id || state.optionalTables.findings === false) return false;
+  const normalizedId = findingId(finding);
+  if (!normalizedId || !task?.id || state.optionalTables.findings === false) return false;
   const candidates = ['related_work_item_id', 'work_item_id', 'linked_work_item_id', 'task_id', 'linked_task_id'];
   for (const column of candidates) {
-    try {
-      const { error } = await supabaseClient.from('findings').update({ [column]: task.id }).eq('id', finding.id);
-      if (!error) return true;
-    } catch {}
+    for (const key of ['id', 'finding_id']) {
+      try {
+        const { error } = await supabaseClient.from('findings').update({ [column]: task.id }).eq(key, normalizedId);
+        if (!error) return true;
+      } catch {}
+    }
   }
   return false;
 }
@@ -1411,15 +1418,25 @@ function renderTasks() {
   });
 }
 
-async function removeFinding(findingId) {
-  const finding = state.findings.find(f => String(f.id) === String(findingId));
-  if (!findingId || !finding) return;
+async function removeFinding(targetFindingId) {
+  const finding = state.findings.find(f => String(findingId(f)) === String(targetFindingId));
+  if (!targetFindingId || !finding) return;
   if (!confirm(`Remove this finding: ${findingTitle(finding)}?`)) return;
-  const { error } = await supabaseClient.from('findings').delete().eq('id', findingId);
-  if (error) return alert(`Failed to remove finding: ${error.message}`);
-  state.findings = state.findings.filter(f => String(f.id) !== String(findingId));
-  if (String(state.selectedFindingId || '') === String(findingId)) {
-    state.selectedFindingId = state.findings[0]?.id || null;
+
+  let deleteError = null;
+  for (const key of ['id', 'finding_id']) {
+    const { error } = await supabaseClient.from('findings').delete().eq(key, targetFindingId);
+    if (!error) {
+      deleteError = null;
+      break;
+    }
+    deleteError = error;
+  }
+  if (deleteError) return alert(`Failed to remove finding: ${deleteError.message}`);
+
+  state.findings = state.findings.filter(f => String(findingId(f)) !== String(targetFindingId));
+  if (String(state.selectedFindingId || '') === String(targetFindingId)) {
+    state.selectedFindingId = findingId(state.findings[0]) || null;
   }
   renderFindings();
   setStatus(`<span class="dot"></span> Finding removed`);
@@ -1461,20 +1478,21 @@ function renderFindings() {
           <tbody>${state.findings.map(f => {
             const related = relatedTasksForFinding(f);
             const best = related[0] || null;
-            const selected = String(state.selectedFindingId) === String(f.id);
-            return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(f.id || '')}">
+            const normalizedFindingId = findingId(f);
+            const selected = String(state.selectedFindingId) === String(normalizedFindingId);
+            return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(normalizedFindingId || '')}">
               <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(findingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(findingBody(f).slice(0, 120) || '—')}</div></td>
               <td><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
               <td>${renderStatusPill(String(findingStatus(f)).toLowerCase(), humanizeSnake(findingStatus(f)))}</td>
               <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
               <td>${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
-              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(f.id || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(f.id || '')}">Create task</button><button class="mini-btn finding-remove-btn" data-finding-id="${escapeHtml(f.id || '')}">Remove</button></div></td>
+              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-remove-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Remove</button></div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
       table.querySelectorAll('.finding-task-btn').forEach(btn => btn.addEventListener('click', (event) => {
         event.stopPropagation();
-        const finding = state.findings.find(f => String(f.id) === String(btn.dataset.findingId));
+        const finding = state.findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
         if (finding) openFindingTaskModal(finding);
       }));
       table.querySelectorAll('.finding-remove-btn').forEach(btn => btn.addEventListener('click', async (event) => {
@@ -1537,7 +1555,7 @@ function renderFindings() {
       const top = related[0]?.item;
       if (top) openPromptModal(top);
     });
-    el('selected-finding-remove-btn')?.addEventListener('click', () => removeFinding(selected.id));
+    el('selected-finding-remove-btn')?.addEventListener('click', () => removeFinding(findingId(selected)));
   }
 }
 
@@ -2686,22 +2704,54 @@ function startLiveExecutionRefreshLoop() {
 }
 
 async function boot() {
+  const errors = [];
+  const requiredLoads = [
+    ['channelRoutes', 'channel_routes', { orderBy: { column: 'channel_name', ascending: true } }],
+    ['runs', 'agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }],
+    ['workItems', 'work_items', { orderBy: { column: 'updated_at', ascending: false }, limit: 200 }],
+    ['artifacts', 'artifacts', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }],
+    ['events', 'dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 }]
+  ];
+
+  for (const [stateKey, table, options] of requiredLoads) {
+    try {
+      state[stateKey] = await loadTable(table, options);
+    } catch (err) {
+      console.error(`failed loading ${table}`, err);
+      state[stateKey] = [];
+      errors.push(`${table}: ${err.message || String(err)}`);
+    }
+  }
+
+  state.runRequests = await optionalLoadTable('run_requests', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
+  state.findings = await optionalLoadTable('findings', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
+
   try {
-    state.channelRoutes = await loadTable('channel_routes', { orderBy: { column: 'channel_name', ascending: true } });
-    state.runs = await loadTable('agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 });
-    state.runRequests = await optionalLoadTable('run_requests', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
-    state.findings = await optionalLoadTable('findings', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
-    state.workItems = await loadTable('work_items', { orderBy: { column: 'updated_at', ascending: false }, limit: 200 });
-    state.artifacts = await loadTable('artifacts', { orderBy: { column: 'created_at', ascending: false }, limit: 200 });
-    state.events = await loadTable('dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
     await hydrateRunRequestOutputEvidence();
-    await synchronizeSuccessfulTaskTransitions();
-    await loadIntegrationStatus();
-    renderAll();
-    startLiveExecutionRefreshLoop();
   } catch (err) {
-    console.error(err);
-    setStatus(`Error loading Supabase data: ${err.message || String(err)}`, true);
+    console.warn('hydrateRunRequestOutputEvidence failed', err);
+    errors.push(`run output evidence: ${err.message || String(err)}`);
+  }
+
+  try {
+    await synchronizeSuccessfulTaskTransitions();
+  } catch (err) {
+    console.warn('synchronizeSuccessfulTaskTransitions failed during boot', err);
+    errors.push(`task sync: ${err.message || String(err)}`);
+  }
+
+  try {
+    await loadIntegrationStatus();
+  } catch (err) {
+    console.warn('loadIntegrationStatus failed during boot', err);
+    errors.push(`integration status: ${err.message || String(err)}`);
+  }
+
+  renderAll();
+  startLiveExecutionRefreshLoop();
+
+  if (errors.length) {
+    setStatus(`Dashboard loaded with partial data • ${escapeHtml(errors[0])}`, true);
   }
 }
 
