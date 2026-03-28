@@ -1521,14 +1521,18 @@ function extractCommitEvidence(text) {
   if (!normalized) return '';
   const urlMatch = normalized.match(/https?:\/\/github\.com\/[^\s)]+\/commit\/([a-f0-9]{7,40})\b/i);
   if (urlMatch) return urlMatch[1];
+
+  const labeledLine = normalized.match(/(?:^|\n)(?:[-*]\s*)?(?:commit(?:\s+exists)?|commit\s+hash|sha|revision)\s*[:\-]\s*`?([a-f0-9]{7,40})`?/i);
+  if (labeledLine && labeledLine[1]) return labeledLine[1];
+
   const regex = /\b([a-f0-9]{7,40})\b/ig;
   let match;
   while ((match = regex.exec(normalized))) {
     const token = match[1];
     const idx = match.index;
     if (looksLikeUuidContext(normalized, idx, token)) continue;
-    const before = normalized.slice(Math.max(0, idx - 24), idx);
-    const after = normalized.slice(idx + token.length, Math.min(normalized.length, idx + token.length + 24));
+    const before = normalized.slice(Math.max(0, idx - 48), idx);
+    const after = normalized.slice(idx + token.length, Math.min(normalized.length, idx + token.length + 48));
     if (/-$/.test(before) || /^-/.test(after)) continue;
     const context = `${before}${token}${after}`;
     if (/(?:\bcommit(?:ted)?\b|\bsha\b|\brevision\b|\bhash\b|\bhead\b)/i.test(context)) return token;
