@@ -1061,9 +1061,17 @@ function renderTasks() {
   statuses.forEach(([status, label]) => {
     const items = visibleItems.filter(w => w.status === status).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
     const col = document.createElement("div");
-    col.className = "column";
+    col.className = `column column-${status}`;
     col.dataset.status = status;
-    col.innerHTML = `<h3>${label} (${items.length})</h3><div class="task-list"></div>`;
+    col.innerHTML = `
+      <div class="column-head">
+        <div>
+          <h3>${label}</h3>
+          <div class="column-subtitle">${status === 'inbox' ? 'New or unsorted work' : status === 'planned' ? 'Ready for execution' : status === 'in_progress' ? 'Actively being worked' : status === 'review' ? 'Needs verification or approval' : status === 'blocked' ? 'Waiting on blocker' : 'Finished work'}<\/div>
+        <\/div>
+        <div class="column-count">${items.length}<\/div>
+      <\/div>
+      <div class="task-list"><\/div>`;
     const list = col.querySelector(".task-list");
 
     col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drag-over'); });
@@ -1085,8 +1093,11 @@ function renderTasks() {
         div.draggable = true;
         div.dataset.taskId = item.id;
         div.innerHTML = `
-          <div class="title">${escapeHtml(item.title)}</div>
-          <div class="small">${escapeHtml(item.description || '')}</div>
+          <div class="task-card-top">
+            <div class="title">${escapeHtml(item.title)}</div>
+            <div class="task-card-status">${escapeHtml(label)}</div>
+          </div>
+          <div class="small task-card-desc">${escapeHtml(item.description || 'No description yet.')}</div>
           <div class="badges">
             <span class="badge domain-${escapeHtml(item.domain)}">${escapeHtml(item.domain)}</span>
             <span class="badge priority-${escapeHtml(item.priority)}">${escapeHtml(item.priority)}</span>
