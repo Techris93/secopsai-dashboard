@@ -2375,6 +2375,29 @@ async function deleteArtifact() {
   await boot();
 }
 
+async function backgroundRefreshLiveExecutionState() {
+  try {
+    const [runs, runRequests] = await Promise.all([
+      loadTable('agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }),
+      optionalLoadTable('run_requests', { orderBy: { column: 'created_at', ascending: false }, limit: 100 })
+    ]);
+    state.runs = runs;
+    state.runRequests = runRequests;
+    renderTasks();
+    renderMissionControl();
+    renderIntegrations();
+  } catch (e) {
+    console.warn('background live execution refresh failed', e);
+  }
+}
+
+function startLiveExecutionRefreshLoop() {
+  if (state.liveRefreshTimer) clearInterval(state.liveRefreshTimer);
+  state.liveRefreshTimer = setInterval(() => {
+    backgroundRefreshLiveExecutionState();
+  }, 5000);
+}
+
 async function boot() {
   try {
     state.channelRoutes = await loadTable('channel_routes', { orderBy: { column: 'channel_name', ascending: true } });
@@ -2386,6 +2409,7 @@ async function boot() {
     state.events = await loadTable('dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
     await loadIntegrationStatus();
     renderAll();
+    startLiveExecutionRefreshLoop();
   } catch (err) {
     console.error(err);
     setStatus(`Error loading Supabase data: ${err.message || String(err)}`, true);
