@@ -819,7 +819,6 @@ function assignTaskToSuggestedAgent() {
   }
 
   setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`);
-  openPromptModal({ ...item, owner_role: role, reviewer_role: el('task-reviewer-role')?.value || null }, role);
 }
 
 function renderMissionControl() {
@@ -1101,7 +1100,7 @@ function renderTasks() {
         div.addEventListener('click', (event) => {
           if (dragState.taskId) return;
           const action = event.target?.dataset?.action;
-          if (action === 'assign') { event.stopPropagation(); openTaskModal(item); setTimeout(() => assignTaskToSuggestedAgent(), 0); return; }
+          if (action === 'assign') { event.stopPropagation(); const role = suggestRoleForTask(item); const reviewer = item?.reviewer_role || ((item?.requires_security_review) ? 'security/security-engineer' : (item?.external_facing ? 'product/product-manager' : null)); const payload = { ...item, owner_role: role, reviewer_role: reviewer || null, updated_at: new Date().toISOString() }; Promise.resolve().then(async () => { const { data, error } = await supabaseClient.from('work_items').update({ owner_role: payload.owner_role, reviewer_role: payload.reviewer_role, updated_at: payload.updated_at }).eq('id', item.id).select().single(); if (error) throw error; upsertWorkItemInState(data); refreshTaskViewsOnly(); setStatus(`<span class="dot"></span> Suggested owner set to ${escapeHtml(role)}`); }).catch(err => { console.error('assign suggested owner failed', err); alert(`Failed to assign suggested owner: ${err.message || err}`); }); return; }
           if (action === 'prompt') { event.stopPropagation(); openPromptModal(item); return; }
           openTaskModal(item);
         });
