@@ -357,3 +357,49 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
   opacity: 0.65;
   cursor: not-allowed;
 }
+
+
+html, body { width: 100%; overflow-x: hidden; }
+.main { min-width: 0; overflow-x: hidden; }
+.page-header { flex-wrap: wrap; }
+.page-header > div { min-width: 0; }
+.grid { min-width: 0; }
+.card { min-width: 0; }
+input, select, textarea { width: 100%; max-width: 100%; }
+
+#page-tasks .page-header {
+  align-items: center;
+}
+
+#page-tasks .grid.cols-4 {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+@media (max-width: 1280px) {
+  .app-shell { grid-template-columns: 240px minmax(0, 1fr); }
+  .main { padding: 22px; }
+}
+
+@media (max-width: 1024px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .grid.cols-5, .grid.cols-4, .grid.cols-3, .grid.cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .main { padding: 16px; }
+  .page-header h2 { font-size: 1.45rem; }
+  .grid.cols-5, .grid.cols-4, .grid.cols-3, .grid.cols-2,
+  #page-tasks .grid.cols-4,
+  .finding-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .status-pill { max-width: 100%; }
+}
