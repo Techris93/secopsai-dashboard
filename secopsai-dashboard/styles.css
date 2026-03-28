@@ -513,3 +513,28 @@ input, select, textarea { width: 100%; max-width: 100%; }
   padding: 16px;
   font-size: 0.84rem;
 }
+
+
+#page-tasks .kanban {
+  scroll-snap-type: x proximity;
+}
+
+#page-tasks .column {
+  scroll-snap-align: start;
+}
+
+#page-tasks .column-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(8px);
+}
+
+.task-card.priority-urgent {
+  border-color: rgba(239,68,68,0.28);
+  box-shadow: 0 10px 24px rgba(239,68,68,0.08);
+}
+.task-card.priority-high {
+  border-color: rgba(245,158,11,0.24);
+}

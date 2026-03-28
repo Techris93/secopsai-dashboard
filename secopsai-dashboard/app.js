@@ -1059,7 +1059,8 @@ function renderTasks() {
   const visibleItems = filteredWorkItems();
 
   statuses.forEach(([status, label]) => {
-    const items = visibleItems.filter(w => w.status === status).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+    const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 };
+    const items = visibleItems.filter(w => w.status === status).sort((a, b) => { const pa = priorityOrder[String(a.priority || 'normal').toLowerCase()] || 0; const pb = priorityOrder[String(b.priority || 'normal').toLowerCase()] || 0; if (pb !== pa) return pb - pa; return new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at); });
     const col = document.createElement("div");
     col.className = `column column-${status}`;
     col.dataset.status = status;
@@ -1089,7 +1090,7 @@ function renderTasks() {
     } else {
       items.forEach(item => {
         const div = document.createElement("div");
-        div.className = "task-card";
+        div.className = `task-card priority-${String(item.priority || 'normal').toLowerCase()}`;
         div.draggable = true;
         div.dataset.taskId = item.id;
         div.innerHTML = `
