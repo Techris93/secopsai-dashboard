@@ -403,3 +403,50 @@ input, select, textarea { width: 100%; max-width: 100%; }
   }
   .status-pill { max-width: 100%; }
 }
+
+
+#page-tasks .kanban {
+  align-items: start;
+  scroll-padding-left: 8px;
+}
+
+#page-tasks .column {
+  min-width: 260px;
+}
+
+#page-tasks .task-card {
+  min-width: 0;
+}
+
+#page-tasks .task-card .title,
+#page-tasks .task-card .small,
+#page-tasks .task-card .meta,
+#page-tasks .task-card .muted-inline {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 1440px) {
+  #page-tasks .kanban {
+    grid-template-columns: repeat(6, minmax(260px, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  #page-tasks .kanban {
+    grid-template-columns: repeat(6, minmax(240px, 1fr));
+  }
+  #page-tasks .column {
+    min-width: 240px;
+  }
+}
+
+@media (max-width: 720px) {
+  #page-tasks .kanban {
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+  }
+  #page-tasks .column {
+    min-width: 0;
+  }
+}
