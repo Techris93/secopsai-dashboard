@@ -52,7 +52,11 @@ const ROLE_LABELS = (() => {
 })();
 
 const ROLE_OPTIONS_HTML = (() => {
-  const opts = ROLE_LABELS.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  const opts = ROLE_LABELS.map(r => {
+    const parts = r.split('/');
+    const short = parts[parts.length - 1] || r;
+    return `<option value="${escapeHtml(r)}">${escapeHtml(short)}</option>`;
+  }).join('');
   return `<option value="">Unassigned</option>${opts}`;
 })();
 
@@ -1669,13 +1673,14 @@ function deriveSuggestedReviewer(item = {}, fallbackReviewer = '') {
   if (item?.requires_security_review) return 'security/security-engineer';
   if (item?.external_facing) return 'product/product-manager';
   const domain = String(item?.domain || '').toLowerCase();
-  if (domain === 'security') return 'security/security-engineer';
-  if (domain === 'product') return 'product/product-manager';
-  if (domain === 'platform') return 'platform/software-architect';
-  if (domain === 'support') return 'support/support-responder';
-  if (domain === 'revenue') return 'product/product-manager';
-  if (domain === 'exec') return 'exec/agents-orchestrator';
-  return '';
+  // Cross-functional review: suggest a reviewer from a DIFFERENT domain
+  if (domain === 'security') return 'exec/agents-orchestrator';      // Security work reviewed by exec
+  if (domain === 'product') return 'security/security-engineer';    // Product work reviewed by security
+  if (domain === 'platform') return 'security/security-engineer';   // Platform work reviewed by security
+  if (domain === 'support') return 'product/product-manager';       // Support work reviewed by product
+  if (domain === 'revenue') return 'security/security-engineer';    // Revenue work reviewed by security
+  if (domain === 'exec') return 'security/security-engineer';       // Exec work reviewed by security
+  return 'security/security-engineer'; // Default reviewer
 }
 
 function collectRunRequestText(req, run = null) {
