@@ -1196,70 +1196,255 @@ function renderMissionControl() {
 
 function renderOrgMap() {
   const latest = latestRunByRole(state.runs);
-  const groups = cfg.roleGroups || {};
   const host = el("org-map-groups");
   if (!host) return;
-  host.innerHTML = "";
-
-  Object.entries(groups).forEach(([dept, roles]) => {
-    const wrap = document.createElement("section");
-    wrap.className = "role-group";
-    wrap.innerHTML = `<h3>${escapeHtml(dept)}</h3><div class="grid cols-3" id="org-${dept}"></div>`;
-    host.appendChild(wrap);
-    const grid = wrap.querySelector(`#org-${dept}`);
-
-    roles.forEach(role => {
+  
+  // Paperclip-style hierarchical org structure
+  const orgHierarchy = {
+    'Executive': {
+      icon: '👑',
+      color: '#7c3aed',
+      roles: ['exec/agents-orchestrator']
+    },
+    'Platform': {
+      icon: '⚙️',
+      color: '#2563eb',
+      roles: ['platform/software-architect', 'platform/backend-architect', 'platform/ai-engineer', 'platform/devops-automator']
+    },
+    'Security': {
+      icon: '🛡️',
+      color: '#ef4444',
+      roles: ['security/security-engineer', 'security/threat-detection-engineer']
+    },
+    'Product': {
+      icon: '💡',
+      color: '#06b6d4',
+      roles: ['product/product-manager', 'product/ui-designer']
+    },
+    'Revenue': {
+      icon: '📈',
+      color: '#f59e0b',
+      roles: ['revenue/content-creator', 'revenue/outbound-strategist', 'revenue/sales-engineer']
+    },
+    'Support': {
+      icon: '🎧',
+      color: '#10b981',
+      roles: ['support/support-responder']
+    }
+  };
+  
+  // Clear and build new structure
+  host.innerHTML = `
+    <div class="org-tree">
+      <div class="org-executive" id="org-executive-section"></div>
+      <div class="org-departments" id="org-departments-section"></div>
+      <div id="org-role-detail-panel"></div>
+    </div>
+  `;
+  
+  // Render Executive at top
+  const execSection = el('org-executive-section');
+  const execRole = 'exec/agents-orchestrator';
+  const execRun = latest.get(execRole);
+  execSection.innerHTML = `
+    <div class="org-executive-card" data-role="${escapeHtml(execRole)}" onclick="selectOrgRole('${escapeHtml(execRole)}')">
+      <div class="role-title">👑 Agents Orchestrator</div>
+      <div class="role-dept">Executive</div>
+      <div style="margin-top:12px; display:flex; gap:16px; justify-content:center; font-size:0.85rem;">
+        <span style="display:flex; align-items:center; gap:6px;">
+          <span class="org-role-status-dot ${execRun ? 'online' : 'offline'}"></span>
+          ${execRun ? 'Active' : 'Standby'}
+        </span>
+        <span style="color:var(--muted);">
+          ${execRun ? fmtDate(execRun.created_at) : 'No recent runs'}
+        </span>
+      </div>
+    </div>
+  `;
+  
+  // Render Departments
+  const deptSection = el('org-departments-section');
+  Object.entries(orgHierarchy).forEach(([deptName, deptData]) => {
+    if (deptName === 'Executive') return; // Skip exec, already rendered
+    
+    const deptDiv = document.createElement('div');
+    deptDiv.className = 'org-dept-column';
+    deptDiv.style.setProperty('--dept-color', deptData.color);
+    
+    // Header
+    const activeRoles = deptData.roles.filter(r => latest.has(r)).length;
+    const totalRoles = deptData.roles.length;
+    
+    deptDiv.innerHTML = `
+      <div class="org-dept-header">
+        <div class="org-dept-icon" style="background:${deptData.color}20; color:${deptData.color};">
+          ${deptData.icon}
+        </div>
+        <div>
+          <div class="org-dept-title" style="color:${deptData.color};">${escapeHtml(deptName)}</div>
+          <div class="org-dept-subtitle">${activeRoles}/${totalRoles} active</div>
+        </div>
+      </div>
+      <div class="org-role-list" id="org-dept-${deptName.toLowerCase()}"></div>
+    `;
+    
+    // Add roles
+    const roleList = deptDiv.querySelector(`#org-dept-${deptName.toLowerCase()}`);
+    deptData.roles.forEach(role => {
       const run = latest.get(role);
-      const card = document.createElement("div");
-      card.className = "card role-card";
-      card.style.borderColor = `${cfg.departments?.[dept] || '#06b6d4'}33`;
-      const hasRun = !!run;
-      card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
-          <div>
-            <div class="role">${escapeHtml(role)}</div>
-            <div class="dept">${escapeHtml(dept)}</div>
+      const roleShort = shortRoleLabel(role);
+      const initials = roleShort.split('-').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+      
+      const roleItem = document.createElement('div');
+      roleItem.className = 'org-role-item';
+      roleItem.dataset.role = role;
+      roleItem.onclick = () => selectOrgRole(role);
+      
+      // Determine status
+      let statusClass = 'offline';
+      let statusText = 'Standby';
+      if (run) {
+        if (run.status === 'running') {
+          statusClass = 'busy';
+          statusText = 'Working';
+        } else if (run.status === 'completed') {
+          statusClass = 'online';
+          statusText = 'Available';
+        }
+      }
+      
+      roleItem.innerHTML = `
+        <div class="org-role-avatar" style="background:linear-gradient(135deg, ${deptData.color}dd, ${deptData.color}88);">
+          ${initials}
+        </div>
+        <div class="org-role-info">
+          <div class="org-role-name">${escapeHtml(roleShort)}</div>
+          <div class="org-role-meta">
+            <span class="org-role-status">
+              <span class="org-role-status-dot ${statusClass}"></span>
+              ${statusText}
+            </span>
+            <span>${run ? fmtDate(run.created_at).split(',')[0] : 'Never'}</span>
           </div>
-          <div class="status-pill" style="padding:6px 10px; font-size:0.78rem;">${escapeHtml(hasRun ? (run?.status || '—') : 'Not run yet')}</div>
         </div>
-        <div class="mini">
-          <div><span>Last task:</span> ${escapeHtml(hasRun ? (run?.task_summary || '—') : 'Not run yet')}</div>
-          <div><span>Last active:</span> ${escapeHtml(hasRun ? (run?.created_at ? fmtDate(run.created_at) : '—') : 'Never')}</div>
-        </div>
-        <div class="task-card-actions">
-          <button class="mini-btn" data-action="brief" data-role="${escapeHtml(role)}" data-dept="${escapeHtml(dept)}">Brief</button>
-          <button class="mini-btn" data-action="copy-brief" data-role="${escapeHtml(role)}" data-dept="${escapeHtml(dept)}">Copy brief</button>
+        <div class="org-role-actions">
+          <button class="mini-btn" onclick="event.stopPropagation(); briefOrgRole('${escapeHtml(role)}')">Brief</button>
         </div>
       `;
-
-      card.addEventListener('click', async (event) => {
-        const action = event.target?.dataset?.action;
-        if (!action) return;
-        event.stopPropagation();
-        const roleLabel = event.target.dataset.role;
-        const deptName = event.target.dataset.dept;
-        // Build a lightweight work item stub so we can reuse the existing prompt modal.
-        const stub = {
-          id: null,
-          title: `Quick task for ${roleLabel}`,
-          domain: deptName,
-          priority: 'normal',
-          status: 'inbox',
-          owner_role: roleLabel,
-          reviewer_role: null,
-          description: ''
-        };
-        openPromptModal(stub, roleLabel);
-        if (action === 'copy-brief') {
-          // allow DOM update
-          setTimeout(() => copyPromptToClipboard(), 0);
-        }
-      });
-
-      grid.appendChild(card);
+      
+      roleList.appendChild(roleItem);
     });
+    
+    deptSection.appendChild(deptDiv);
   });
+  
+  // Render initial role detail if there's a selected role or the first active role
+  const firstActiveRole = Array.from(latest.keys())[0];
+  if (firstActiveRole) {
+    selectOrgRole(firstActiveRole);
+  }
 }
+
+// Paperclip-style role selection
+window.selectOrgRole = function(role) {
+  const panel = el('org-role-detail-panel');
+  if (!panel) return;
+  
+  const latest = latestRunByRole(state.runs);
+  const run = latest.get(role);
+  const roleShort = shortRoleLabel(role);
+  const dept = role.split('/')[0];
+  
+  // Get role stats
+  const roleRuns = state.runs.filter(r => r.role_label === role);
+  const completed = roleRuns.filter(r => r.status === 'completed').length;
+  const failed = roleRuns.filter(r => r.status === 'failed').length;
+  const recentRuns = roleRuns.slice(0, 5);
+  
+  // Department colors
+  const deptColors = {
+    'exec': '#7c3aed',
+    'platform': '#2563eb',
+    'security': '#ef4444',
+    'product': '#06b6d4',
+    'revenue': '#f59e0b',
+    'support': '#10b981'
+  };
+  const color = deptColors[dept] || '#64748b';
+  
+  panel.innerHTML = `
+    <div class="org-role-detail">
+      <div class="org-role-detail-header">
+        <div class="org-role-detail-avatar" style="background:linear-gradient(135deg, ${color}dd, ${color}88);">
+          ${roleShort.slice(0, 2).toUpperCase()}
+        </div>
+        <div class="org-role-detail-info">
+          <h3>${escapeHtml(roleShort)}</h3>
+          <p>${escapeHtml(dept)} department • ${roleRuns.length} total runs</p>
+        </div>
+        <div style="margin-left:auto;">
+          <button class="btn primary" onclick="briefOrgRole('${escapeHtml(role)}')">Create Task</button>
+        </div>
+      </div>
+      
+      <div class="org-stats-grid">
+        <div class="org-stat-card">
+          <div class="org-stat-value">${roleRuns.length}</div>
+          <div class="org-stat-label">Total Runs</div>
+        </div>
+        <div class="org-stat-card">
+          <div class="org-stat-value" style="color:var(--green);">${completed}</div>
+          <div class="org-stat-label">Completed</div>
+        </div>
+        <div class="org-stat-card">
+          <div class="org-stat-value" style="color:var(--red);">${failed}</div>
+          <div class="org-stat-label">Failed</div>
+        </div>
+        <div class="org-stat-card">
+          <div class="org-stat-value">${roleRuns.filter(r => r.status === 'running').length}</div>
+          <div class="org-stat-label">Active</div>
+        </div>
+      </div>
+      
+      <h4 style="margin-bottom:12px;">Recent Activity</h4>
+      ${recentRuns.length ? `
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${recentRuns.map(r => `
+            <div style="padding:12px; background:rgba(148,163,184,0.06); border-radius:8px; border:1px solid var(--border);">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:500;">${escapeHtml(r.task_summary || 'No task summary')}</span>
+                <span class="status-pill status-${r.status}">${escapeHtml(r.status)}</span>
+              </div>
+              <div style="font-size:0.8rem; color:var(--muted); margin-top:4px;">
+                ${fmtDate(r.created_at)} • ${r.model || 'unknown model'}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : '<p style="color:var(--muted);">No recent activity</p>'}
+    </div>
+  `;
+  
+  // Highlight selected role
+  document.querySelectorAll('.org-role-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.role === role);
+  });
+};
+
+// Create brief/task for org role
+window.briefOrgRole = function(role) {
+  const stub = {
+    id: null,
+    title: `Task for ${shortRoleLabel(role)}`,
+    domain: role.split('/')[0],
+    priority: 'normal',
+    status: 'inbox',
+    owner_role: role,
+    reviewer_role: null,
+    description: ''
+  };
+  openPromptModal(stub, role);
+};
 
 function renderAgents() {
   const latest = latestRunByRole(state.runs);

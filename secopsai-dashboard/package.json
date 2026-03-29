@@ -1,0 +1,29 @@
+{
+  "name": "secopsai-dashboard",
+  "version": "1.0.0",
+  "description": "Mission Control dashboard for SecOpsAI with Paperclip integration",
+  "main": "dashboard_server.py",
+  "scripts": {
+    "start": "python3 dashboard_server.py",
+    "dev": "python3 dashboard_server.py",
+    "paperclip:onboard": "npx paperclipai onboard --yes",
+    "paperclip:dev": "cd node_modules/paperclip && pnpm dev"
+  },
+  "dependencies": {
+    "paperclip": "github:paperclipai/paperclip"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "secops",
+    "dashboard",
+    "security",
+    "ai-agents",
+    "paperclip"
+  ],
+  "author": "Techris93",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Techris93/secopsai-dashboard.git"
+  }
+}

@@ -597,3 +597,263 @@ input, select, textarea { width: 100%; max-width: 100%; }
   border-color: rgba(16,185,129,0.20);
   color: #047857;
 }
+
+/* Paperclip-style Org Map */
+.org-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 0;
+}
+
+.org-executive {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.org-executive-card {
+  background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(79,70,229,0.1));
+  border: 2px solid rgba(124,58,237,0.3);
+  border-radius: 16px;
+  padding: 20px 32px;
+  text-align: center;
+  min-width: 280px;
+  box-shadow: 0 8px 32px rgba(124,58,237,0.15);
+}
+
+.org-executive-card .role-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--purple);
+  margin-bottom: 4px;
+}
+
+.org-executive-card .role-dept {
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.org-departments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  position: relative;
+}
+
+.org-dept-column {
+  background: rgba(255,255,255,0.6);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  position: relative;
+}
+
+.org-dept-column::before {
+  content: '';
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  width: 2px;
+  height: 32px;
+  background: linear-gradient(to bottom, var(--purple), transparent);
+  transform: translateX(-50%);
+}
+
+.org-dept-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.org-dept-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+}
+
+.org-dept-title {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.org-dept-subtitle {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.org-role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.org-role-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.org-role-item:hover {
+  border-color: rgba(37,99,235,0.3);
+  box-shadow: 0 4px 16px rgba(37,99,235,0.08);
+  transform: translateY(-1px);
+}
+
+.org-role-item.active {
+  border-color: var(--blue);
+  background: rgba(37,99,235,0.05);
+}
+
+.org-role-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: white;
+  flex-shrink: 0;
+}
+
+.org-role-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.org-role-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.org-role-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  display: flex;
+  gap: 12px;
+}
+
+.org-role-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.org-role-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.org-role-status-dot.online {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.org-role-status-dot.busy {
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+}
+
+.org-role-status-dot.offline {
+  background: var(--muted);
+}
+
+.org-role-actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.org-role-item:hover .org-role-actions {
+  opacity: 1;
+}
+
+/* Role Detail Panel */
+.org-role-detail {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-top: 24px;
+}
+
+.org-role-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.org-role-detail-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white;
+}
+
+.org-role-detail-info h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.3rem;
+}
+
+.org-role-detail-info p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.org-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.org-stat-card {
+  background: rgba(148,163,184,0.06);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.org-stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.org-stat-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
