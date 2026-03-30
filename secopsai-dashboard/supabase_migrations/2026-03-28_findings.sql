@@ -43,6 +43,10 @@ create table if not exists public.findings (
     -- Detection context
     rule_id text not null,
     rule_name text not null,
+    source_name text null,  -- Human-readable source name (filename, etc.)
+    detector text null,  -- Detector/rule name for display
+    fingerprint text null,  -- Unique fingerprint for deduplication
+    dedupe_key text null,  -- Key used for deduplication
     mitre text null,  -- Primary MITRE ATT&CK technique
     mitre_ids text[] null,  -- All applicable MITRE techniques
     
