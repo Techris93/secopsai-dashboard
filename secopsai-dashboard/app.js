@@ -65,7 +65,6 @@ const state = {
   runRequests: [],
   findings: [],
   workItems: [],
-  artifacts: [],
   channelRoutes: [],
   events: [],
   integrationStatus: null,
@@ -79,7 +78,6 @@ const state = {
 };
 
 const taskModalState = { editingId: null, sourceFinding: null };
-const artifactModalState = { editingId: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
 const pages = ["mission-control", "tasks", "findings", "integrations"];
@@ -179,20 +177,6 @@ function filteredWorkItems() {
     }
     return true;
   });
-}
-
-function artifactRunOptions() {
-  return state.runs.slice(0, 200).map(run => ({
-    id: run.id,
-    label: `${run.role_label} • ${run.task_summary}`
-  }));
-}
-
-function artifactWorkItemOptions() {
-  return state.workItems.slice().sort((a, b) => a.title.localeCompare(b.title)).map(item => ({
-    id: item.id,
-    label: item.title
-  }));
 }
 
 function renderStatusPill(status, label = null) {
@@ -386,20 +370,24 @@ function buildFindingTaskDraft(finding = null) {
   const related = finding ? relatedTasksForFinding(finding) : [];
   const correlatedRequests = finding ? correlatedRunRequestsForFinding(finding) : [];
   const title = finding ? `Investigate: ${findingTitle(finding)}` : 'Investigate finding';
+  const sourceLabel = finding ? (() => {
+    const source = String(findingSource(finding) || '').trim();
+    if (!source) return '';
+    return source.includes('/') ? source.split('/').slice(-2).join('/') : source;
+  })() : '';
   const desc = finding ? `${findingBody(finding) || 'Review finding context and determine next action.'}
 
-Finding status: ${findingStatus(finding)}
-Severity: ${findingSeverity(finding)}
-Source: ${findingSource(finding)}${findingConfidence(finding) !== null ? `
-Confidence: ${findingConfidence(finding)}` : ''}${findingFingerprint(finding) ? `
-Fingerprint: ${findingFingerprint(finding)}` : ''}${findingDetectedAt(finding) ? `
+Status: ${findingStatus(finding)}
+Severity: ${findingSeverity(finding)}${findingConfidence(finding) !== null ? `
+Confidence: ${findingConfidence(finding)}` : ''}${sourceLabel ? `
+Source: ${sourceLabel}` : ''}${findingDetectedAt(finding) ? `
 Detected at: ${findingDetectedAt(finding)}` : ''}${related.length ? `
 
-Existing related work:
-${related.map(match => `- ${match.item.title} (score ${match.score})`).join('\n')}` : ''}${correlatedRequests.length ? `
+Related work:
+${related.slice(0, 3).map(match => `- ${match.item.title} (${match.item.status || 'unknown'})`).join('\n')}` : ''}${correlatedRequests.length ? `
 
 Related run requests:
-${correlatedRequests.map(match => `- ${match.request.role_label} (${match.request.status || 'queued'})`).join('\n')}` : ''}` : 'Review finding context and determine next action.';
+${correlatedRequests.slice(0, 3).map(match => `- ${match.request.role_label} (${match.request.status || 'queued'})`).join('\n')}` : ''}` : 'Review finding context and determine next action.';
   return {
     title,
     description: desc.trim(),
@@ -407,7 +395,7 @@ ${correlatedRequests.map(match => `- ${match.request.role_label} (${match.reques
     priority: String(findingSeverity(finding)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(finding)).toLowerCase() === 'high' ? 'high' : 'normal',
     status: 'inbox',
     owner_role: finding && findingDomainHint(finding) === 'platform' ? 'platform/backend-architect' : 'security/security-engineer',
-    reviewer_role: 'product/product-manager',
+    reviewer_role: null,
     external_facing: false,
     requires_security_review: true
   };
@@ -829,7 +817,7 @@ async function queueTaskExecutionDirect(item, promptOverride = null) {
       related_work_item_id: movedItem?.id || item?.id || null,
       related_run_id: run?.id || null,
       suggested_channel_name: route?.channel_name || null,
-      worker_name: 'dashboard-orchestrator',
+      worker_name: 'dashboard-queue',
       worker_identity: 'dashboard'
     })
     .select()
@@ -1163,306 +1151,6 @@ function renderMissionControl() {
   }
 }
 
-function renderOrgMap() {
-  const latest = latestRunByRole(state.runs);
-  const host = el("org-map-groups");
-  if (!host) return;
-  
-  // Paperclip-style hierarchical org structure
-  const orgHierarchy = {
-    'Executive': {
-      icon: '👑',
-      color: '#7c3aed',
-      roles: ['exec/agents-orchestrator']
-    },
-    'Platform': {
-      icon: '⚙️',
-      color: '#2563eb',
-      roles: ['platform/software-architect', 'platform/backend-architect', 'platform/ai-engineer', 'platform/devops-automator']
-    },
-    'Security': {
-      icon: '🛡️',
-      color: '#ef4444',
-      roles: ['security/security-engineer', 'security/threat-detection-engineer']
-    },
-    'Product': {
-      icon: '💡',
-      color: '#06b6d4',
-      roles: ['product/product-manager', 'product/ui-designer']
-    },
-    'Revenue': {
-      icon: '📈',
-      color: '#f59e0b',
-      roles: ['revenue/content-creator', 'revenue/outbound-strategist', 'revenue/sales-engineer']
-    },
-    'Support': {
-      icon: '🎧',
-      color: '#10b981',
-      roles: ['support/support-responder']
-    }
-  };
-  
-  // Clear and build new structure
-  host.innerHTML = `
-    <div class="org-tree">
-      <div class="org-executive" id="org-executive-section"></div>
-      <div class="org-departments" id="org-departments-section"></div>
-      <div id="org-role-detail-panel"></div>
-    </div>
-  `;
-  
-  // Render Executive at top
-  const execSection = el('org-executive-section');
-  const execRole = 'exec/agents-orchestrator';
-  const execRun = latest.get(execRole);
-  execSection.innerHTML = `
-    <div class="org-executive-card" data-role="${escapeHtml(execRole)}" onclick="selectOrgRole('${escapeHtml(execRole)}')">
-      <div class="role-title">👑 Agents Orchestrator</div>
-      <div class="role-dept">Executive</div>
-      <div style="margin-top:12px; display:flex; gap:16px; justify-content:center; font-size:0.85rem;">
-        <span style="display:flex; align-items:center; gap:6px;">
-          <span class="org-role-status-dot ${execRun ? 'online' : 'offline'}"></span>
-          ${execRun ? 'Active' : 'Standby'}
-        </span>
-        <span style="color:var(--muted);">
-          ${execRun ? fmtDate(execRun.created_at) : 'No recent runs'}
-        </span>
-      </div>
-    </div>
-  `;
-  
-  // Render Departments
-  const deptSection = el('org-departments-section');
-  Object.entries(orgHierarchy).forEach(([deptName, deptData]) => {
-    if (deptName === 'Executive') return; // Skip exec, already rendered
-    
-    const deptDiv = document.createElement('div');
-    deptDiv.className = 'org-dept-column';
-    deptDiv.style.setProperty('--dept-color', deptData.color);
-    
-    // Header
-    const activeRoles = deptData.roles.filter(r => latest.has(r)).length;
-    const totalRoles = deptData.roles.length;
-    
-    deptDiv.innerHTML = `
-      <div class="org-dept-header">
-        <div class="org-dept-icon" style="background:${deptData.color}20; color:${deptData.color};">
-          ${deptData.icon}
-        </div>
-        <div>
-          <div class="org-dept-title" style="color:${deptData.color};">${escapeHtml(deptName)}</div>
-          <div class="org-dept-subtitle">${activeRoles}/${totalRoles} active</div>
-        </div>
-      </div>
-      <div class="org-role-list" id="org-dept-${deptName.toLowerCase()}"></div>
-    `;
-    
-    // Add roles
-    const roleList = deptDiv.querySelector(`#org-dept-${deptName.toLowerCase()}`);
-    deptData.roles.forEach(role => {
-      const run = latest.get(role);
-      const roleShort = shortRoleLabel(role);
-      const initials = roleShort.split('-').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-      
-      const roleItem = document.createElement('div');
-      roleItem.className = 'org-role-item';
-      roleItem.dataset.role = role;
-      roleItem.onclick = () => selectOrgRole(role);
-      
-      // Determine status
-      let statusClass = 'offline';
-      let statusText = 'Standby';
-      if (run) {
-        if (run.status === 'running') {
-          statusClass = 'busy';
-          statusText = 'Working';
-        } else if (run.status === 'completed') {
-          statusClass = 'online';
-          statusText = 'Available';
-        }
-      }
-      
-      roleItem.innerHTML = `
-        <div class="org-role-avatar" style="background:linear-gradient(135deg, ${deptData.color}dd, ${deptData.color}88);">
-          ${initials}
-        </div>
-        <div class="org-role-info">
-          <div class="org-role-name">${escapeHtml(roleShort)}</div>
-          <div class="org-role-meta">
-            <span class="org-role-status">
-              <span class="org-role-status-dot ${statusClass}"></span>
-              ${statusText}
-            </span>
-            <span>${run ? fmtDate(run.created_at).split(',')[0] : 'Never'}</span>
-          </div>
-        </div>
-        <div class="org-role-actions">
-          <button class="mini-btn" onclick="event.stopPropagation(); briefOrgRole('${escapeHtml(role)}')">Brief</button>
-        </div>
-      `;
-      
-      roleList.appendChild(roleItem);
-    });
-    
-    deptSection.appendChild(deptDiv);
-  });
-  
-  // Render initial role detail if there's a selected role or the first active role
-  const firstActiveRole = Array.from(latest.keys())[0];
-  if (firstActiveRole) {
-    selectOrgRole(firstActiveRole);
-  }
-}
-
-// Paperclip-style role selection
-window.selectOrgRole = function(role) {
-  const panel = el('org-role-detail-panel');
-  if (!panel) return;
-  
-  const latest = latestRunByRole(state.runs);
-  const run = latest.get(role);
-  const roleShort = shortRoleLabel(role);
-  const dept = role.split('/')[0];
-  
-  // Get role stats
-  const roleRuns = state.runs.filter(r => r.role_label === role);
-  const completed = roleRuns.filter(r => r.status === 'completed').length;
-  const failed = roleRuns.filter(r => r.status === 'failed').length;
-  const recentRuns = roleRuns.slice(0, 5);
-  
-  // Department colors
-  const deptColors = {
-    'exec': '#7c3aed',
-    'platform': '#2563eb',
-    'security': '#ef4444',
-    'product': '#06b6d4',
-    'revenue': '#f59e0b',
-    'support': '#10b981'
-  };
-  const color = deptColors[dept] || '#64748b';
-  
-  panel.innerHTML = `
-    <div class="org-role-detail">
-      <div class="org-role-detail-header">
-        <div class="org-role-detail-avatar" style="background:linear-gradient(135deg, ${color}dd, ${color}88);">
-          ${roleShort.slice(0, 2).toUpperCase()}
-        </div>
-        <div class="org-role-detail-info">
-          <h3>${escapeHtml(roleShort)}</h3>
-          <p>${escapeHtml(dept)} department • ${roleRuns.length} total runs</p>
-        </div>
-        <div style="margin-left:auto;">
-          <button class="btn primary" onclick="briefOrgRole('${escapeHtml(role)}')">Create Task</button>
-        </div>
-      </div>
-      
-      <div class="org-stats-grid">
-        <div class="org-stat-card">
-          <div class="org-stat-value">${roleRuns.length}</div>
-          <div class="org-stat-label">Total Runs</div>
-        </div>
-        <div class="org-stat-card">
-          <div class="org-stat-value" style="color:var(--green);">${completed}</div>
-          <div class="org-stat-label">Completed</div>
-        </div>
-        <div class="org-stat-card">
-          <div class="org-stat-value" style="color:var(--red);">${failed}</div>
-          <div class="org-stat-label">Failed</div>
-        </div>
-        <div class="org-stat-card">
-          <div class="org-stat-value">${roleRuns.filter(r => r.status === 'running').length}</div>
-          <div class="org-stat-label">Active</div>
-        </div>
-      </div>
-      
-      <h4 style="margin-bottom:12px;">Recent Activity</h4>
-      ${recentRuns.length ? `
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          ${recentRuns.map(r => `
-            <div style="padding:12px; background:rgba(148,163,184,0.06); border-radius:8px; border:1px solid var(--border);">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:500;">${escapeHtml(r.task_summary || 'No task summary')}</span>
-                <span class="status-pill status-${r.status}">${escapeHtml(r.status)}</span>
-              </div>
-              <div style="font-size:0.8rem; color:var(--muted); margin-top:4px;">
-                ${fmtDate(r.created_at)} • ${r.model || 'unknown model'}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      ` : '<p style="color:var(--muted);">No recent activity</p>'}
-    </div>
-  `;
-  
-  // Highlight selected role
-  document.querySelectorAll('.org-role-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.role === role);
-  });
-};
-
-// Create brief/task for org role
-window.briefOrgRole = function(role) {
-  const stub = {
-    id: null,
-    title: `Task for ${shortRoleLabel(role)}`,
-    domain: role.split('/')[0],
-    priority: 'normal',
-    status: 'inbox',
-    owner_role: role,
-    reviewer_role: null,
-    description: ''
-  };
-  openPromptModal(stub, role);
-};
-
-function renderAgents() {
-  const latest = latestRunByRole(state.runs);
-  const groups = cfg.roleGroups || {};
-  const host = el("agents-groups");
-  if (!host) return;
-  host.innerHTML = "";
-
-  const completedRuns = state.runs.filter(r => r.status === 'completed').length;
-  const failedRuns = state.runs.filter(r => r.status === 'failed').length;
-  const uniqueRoles = new Set(state.runs.map(r => r.role_label)).size;
-  const agentSummary = el("agent-summary");
-  if (agentSummary) {
-    agentSummary.innerHTML = `
-      <div class="card"><div class="metric">${state.runs.length}</div><div class="metric-label">Tracked runs</div></div>
-      <div class="card"><div class="metric">${uniqueRoles}</div><div class="metric-label">Roles with activity</div></div>
-      <div class="card"><div class="metric">${completedRuns}</div><div class="metric-label">Completed runs</div></div>
-      <div class="card"><div class="metric">${failedRuns}</div><div class="metric-label">Failed runs</div></div>
-    `;
-  }
-
-  Object.entries(groups).forEach(([dept, roles]) => {
-    const wrap = document.createElement("section");
-    wrap.className = "role-group";
-    wrap.innerHTML = `<h3>${dept}</h3><div class="grid cols-3" id="group-${dept}"></div>`;
-    host.appendChild(wrap);
-    const grid = wrap.querySelector(`#group-${dept}`);
-
-    roles.forEach(role => {
-      const run = latest.get(role);
-      const card = document.createElement("div");
-      card.className = "card role-card";
-      card.style.borderColor = `${cfg.departments?.[dept] || '#06b6d4'}33`;
-      const hasRun = !!run;
-      card.innerHTML = `
-        <div class="role">${escapeHtml(role)}</div>
-        <div class="dept">${escapeHtml(dept)}</div>
-        <div class="mini">
-          <div><span>Last task:</span> ${escapeHtml(hasRun ? (run?.task_summary || '—') : 'Not run yet')}</div>
-          <div><span>Status:</span> ${escapeHtml(hasRun ? (run?.status || '—') : 'Not run yet')}</div>
-          <div><span>Runtime:</span> ${escapeHtml(hasRun ? (run?.runtime || '—') : '—')}</div>
-          <div><span>Model:</span> ${escapeHtml(hasRun ? (run?.model_used || '—') : '—')}</div>
-          <div><span>Last active:</span> ${escapeHtml(hasRun ? (run?.created_at ? fmtDate(run.created_at) : '—') : 'Never')}</div>
-        </div>
-      `;
-      grid.appendChild(card);
-    });
-  });
-}
 
 function renderTasks() {
   const statuses = [["inbox", "Inbox"],["planned", "Planned"],["in_progress", "In Progress"],["review", "Review"],["blocked", "Blocked"],["done", "Done"]];
@@ -1717,56 +1405,6 @@ function renderFindings() {
   }
 }
 
-function renderArtifacts() {
-  const host = el("artifacts-table");
-  if (!host) return;
-  host.innerHTML = `
-    <div class="page-header compact-header">
-      <div>
-        <h3 style="margin:0;">Artifact registry</h3>
-        <p class="small" style="margin:6px 0 0;">Create and edit reusable specs, reports, copy, and linked outputs.</p>
-      </div>
-      <div class="status-pill" id="new-artifact-btn" style="cursor:pointer;"><span class="dot"></span> New artifact</div>
-    </div>
-  `;
-
-  if (!state.artifacts.length) {
-    host.innerHTML += `<div class="empty">No artifacts yet.</div>`;
-    return;
-  }
-
-  host.innerHTML += `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Title</th><th>Type / output</th><th>Approval</th><th>Audience</th><th>Work item</th><th>Run</th><th>Path / URL</th><th>Created</th></tr></thead>
-        <tbody>${state.artifacts.map(a => {
-          const workItem = state.workItems.find(w => w.id === a.work_item_id);
-          const run = state.runs.find(r => r.id === a.run_id);
-          const summary = `${a.summary || ''}`.toLowerCase();
-          const audience = summary.includes('customer') || a.artifact_type === 'copy' ? 'customer/promoted' : run?.role_label?.startsWith('support/') || run?.role_label?.startsWith('security/') ? 'operator' : 'internal';
-          return `
-          <tr class="artifact-row" data-artifact-id="${a.id}">
-            <td><strong>${escapeHtml(a.title)}</strong><div class="small">${escapeHtml(a.summary || '—')}</div></td>
-            <td>${escapeHtml(a.artifact_type)}</td>
-            <td>${renderStatusPill(String(a.approval_status || 'draft').toLowerCase(), a.approval_status || 'draft')}</td>
-            <td>${escapeHtml(audience)}</td>
-            <td>${escapeHtml(workItem?.title || '—')}</td>
-            <td>${escapeHtml(run?.role_label || '—')}</td>
-            <td>${escapeHtml(a.path_or_url)}</td>
-            <td>${escapeHtml(fmtDate(a.created_at))}</td>
-          </tr>`;
-        }).join("")}
-        </tbody>
-      </table>
-    </div>`;
-
-  document.querySelectorAll('.artifact-row').forEach(row => {
-    row.addEventListener('click', () => {
-      const artifact = state.artifacts.find(a => a.id === row.dataset.artifactId);
-      if (artifact) openArtifactModal(artifact);
-    });
-  });
-}
 
 function humanizeSnake(value) {
   return String(value || '')
@@ -1825,13 +1463,13 @@ function deriveSuggestedReviewer(item = {}, fallbackReviewer = '') {
   const existing = String(fallbackReviewer || item?.reviewer_role || '').trim();
   if (existing) return existing;
   if (item?.requires_security_review) return 'security/security-engineer';
-  if (item?.external_facing) return 'product/product-manager';
+  if (item?.external_facing) return 'exec/agents-orchestrator';
   const domain = String(item?.domain || '').toLowerCase();
   // Cross-functional review: suggest a reviewer from a DIFFERENT domain
   if (domain === 'security') return 'exec/agents-orchestrator';      // Security work reviewed by exec
   if (domain === 'product') return 'security/security-engineer';    // Product work reviewed by security
   if (domain === 'platform') return 'security/security-engineer';   // Platform work reviewed by security
-  if (domain === 'support') return 'product/product-manager';       // Support work reviewed by product
+  if (domain === 'support') return 'exec/agents-orchestrator';      // Support work reviewed by exec
   if (domain === 'revenue') return 'security/security-engineer';    // Revenue work reviewed by security
   if (domain === 'exec') return 'security/security-engineer';       // Exec work reviewed by security
   return 'security/security-engineer'; // Default reviewer
@@ -2474,41 +2112,6 @@ async function backgroundRefreshOpsData() {
   }
 }
 
-function resetArtifactForm() {
-  artifactModalState.editingId = null;
-  el('artifact-modal-title').textContent = 'New artifact';
-  el('artifact-title').value = '';
-  el('artifact-type').value = 'spec';
-  el('artifact-path').value = '';
-  el('artifact-summary').value = '';
-  el('artifact-approval-status').value = 'draft';
-  if (el('artifact-approved-by-role')) el('artifact-approved-by-role').innerHTML = ROLE_OPTIONS_HTML;
-  el('artifact-approved-by-role').value = '';
-  el('artifact-work-item-id').innerHTML = `<option value="">None</option>${artifactWorkItemOptions().map(o => `<option value="${o.id}">${escapeHtml(o.label)}</option>`).join('')}`;
-  el('artifact-run-id').innerHTML = `<option value="">None</option>${artifactRunOptions().map(o => `<option value="${o.id}">${escapeHtml(o.label)}</option>`).join('')}`;
-  el('artifact-delete-btn').classList.add('hidden');
-}
-
-function openArtifactModal(item = null) {
-  resetArtifactForm();
-  if (item) {
-    artifactModalState.editingId = item.id;
-    el('artifact-modal-title').textContent = 'Edit artifact';
-    el('artifact-title').value = item.title || '';
-    el('artifact-type').value = item.artifact_type || 'spec';
-    el('artifact-path').value = item.path_or_url || '';
-    el('artifact-summary').value = item.summary || '';
-    el('artifact-approval-status').value = item.approval_status || 'draft';
-    el('artifact-approved-by-role').value = item.approved_by_role || '';
-    el('artifact-work-item-id').value = item.work_item_id || '';
-    el('artifact-run-id').value = item.run_id || '';
-    el('artifact-delete-btn').classList.remove('hidden');
-  }
-  el('artifact-modal').classList.remove('hidden');
-}
-
-function closeArtifactModal() { el('artifact-modal').classList.add('hidden'); }
-
 async function loadIntegrationStatus() {
   try {
     const res = await fetch(cfg.integrationStatusEndpoint || '/api/integration-status');
@@ -2536,7 +2139,7 @@ async function createOrchestratorRun({ taskSummary, taskDetail = null, status = 
   const payload = {
     role_label: 'exec/agents-orchestrator',
     runtime: 'dashboard-auto',
-    model_used: 'dashboard-orchestrator',
+    model_used: 'dashboard-queue',
     task_summary: taskSummary,
     task_detail: taskDetail,
     status,
@@ -2568,18 +2171,6 @@ async function announceTaskChange(kind, item, details, severity = 'info') {
     relatedWorkItemId: item?.id || null
   });
   return { event, run };
-}
-
-async function announceArtifactChange(kind, artifact, details, severity = 'info') {
-  await createDashboardEvent(kind, details.title, details.body, severity, { related_run_id: artifact?.run_id || null, related_work_item_id: artifact?.work_item_id || null });
-  const run = await createOrchestratorRun({
-    taskSummary: details.runSummary,
-    taskDetail: details.runDetail,
-    outputSummary: details.outputSummary,
-    relatedWorkItemId: artifact?.work_item_id || null,
-    outputPath: artifact?.path_or_url || null
-  });
-  return run;
 }
 
 async function saveTask(options = {}) {
@@ -2704,64 +2295,6 @@ async function moveTaskToStatus(taskId, nextStatus) {
 }
 
 
-async function saveArtifact() {
-  const payload = {
-    title: el('artifact-title').value.trim(),
-    artifact_type: el('artifact-type').value,
-    path_or_url: el('artifact-path').value.trim(),
-    summary: el('artifact-summary').value.trim() || null,
-    approval_status: el('artifact-approval-status').value,
-    approved_by_role: el('artifact-approved-by-role').value.trim() || null,
-    work_item_id: el('artifact-work-item-id').value || null,
-    run_id: el('artifact-run-id').value || null
-  };
-  if (!payload.title || !payload.path_or_url) return alert('Artifact title and path/URL are required.');
-
-  let artifact = null;
-  if (artifactModalState.editingId) {
-    const { data, error } = await supabaseClient.from('artifacts').update(payload).eq('id', artifactModalState.editingId).select().single();
-    if (error) return alert(`Failed to update artifact: ${error.message}`);
-    artifact = data;
-    await announceArtifactChange('artifact_updated', artifact, {
-      title: `Artifact updated: ${payload.title}`,
-      body: `${payload.artifact_type} • ${payload.approval_status}`,
-      runSummary: `Updated artifact: ${payload.title}`,
-      runDetail: payload.summary || 'Artifact updated from dashboard modal.',
-      outputSummary: `${payload.artifact_type} marked ${payload.approval_status}`
-    }, 'info');
-  } else {
-    const { data, error } = await supabaseClient.from('artifacts').insert(payload).select().single();
-    if (error) return alert(`Failed to create artifact: ${error.message}`);
-    artifact = data;
-    await announceArtifactChange('artifact_created', artifact, {
-      title: `Artifact created: ${payload.title}`,
-      body: `${payload.artifact_type} • ${payload.approval_status}`,
-      runSummary: `Created artifact: ${payload.title}`,
-      runDetail: payload.summary || 'Artifact created from dashboard modal.',
-      outputSummary: payload.path_or_url
-    }, 'success');
-  }
-  closeArtifactModal();
-  await boot();
-}
-
-async function deleteArtifact() {
-  if (!artifactModalState.editingId) return;
-  const artifact = state.artifacts.find(a => a.id === artifactModalState.editingId);
-  if (!confirm('Delete this artifact?')) return;
-  const { error } = await supabaseClient.from('artifacts').delete().eq('id', artifactModalState.editingId);
-  if (error) return alert(`Failed to delete artifact: ${error.message}`);
-  await announceArtifactChange('artifact_deleted', artifact, {
-    title: `Artifact deleted: ${artifact?.title || 'Untitled artifact'}`,
-    body: 'Artifact removed from registry.',
-    runSummary: `Deleted artifact: ${artifact?.title || 'Untitled artifact'}`,
-    runDetail: artifact?.summary || 'Artifact deleted from dashboard modal.',
-    outputSummary: 'Artifact removed from artifacts table.'
-  }, 'warning');
-  closeArtifactModal();
-  await boot();
-}
-
 async function backgroundRefreshLiveExecutionState() {
   try {
     const [runs, runRequests] = await Promise.all([
@@ -2868,9 +2401,6 @@ function bindEvents() {
     }
     openFindingTaskModal();
   });
-  document.addEventListener('click', (event) => {
-    if (event.target?.id === 'new-artifact-btn') openArtifactModal();
-  });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);
   el('task-save-btn')?.addEventListener('click', () => saveTask());
@@ -2911,10 +2441,6 @@ function bindEvents() {
     promptModalState.mode = event?.target?.value || 'smart-local';
     refreshPromptBrief();
   });
-  el('artifact-modal-close')?.addEventListener('click', closeArtifactModal);
-  el('artifact-cancel-btn')?.addEventListener('click', closeArtifactModal);
-  el('artifact-save-btn')?.addEventListener('click', saveArtifact);
-  el('artifact-delete-btn')?.addEventListener('click', deleteArtifact);
   ['task-search', 'task-filter-domain', 'task-filter-priority', 'task-filter-status', 'task-filter-owner', 'task-filter-reviewer'].forEach(id => {
     el(id)?.addEventListener('input', renderTasks);
     el(id)?.addEventListener('change', renderTasks);

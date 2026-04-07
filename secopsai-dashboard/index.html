@@ -191,54 +191,9 @@
         <div class="modal-actions-right">
           <button id="task-assign-owner-btn" type="button" class="secondary-btn">Assign suggested owner</button>
           <button id="task-assign-reviewer-btn" type="button" class="secondary-btn">Assign suggested reviewer</button>
-          <button id="task-generate-prompt-btn" class="secondary-btn">Open intelligent brief</button>
+          <button id="task-generate-prompt-btn" class="secondary-btn">Open work brief</button>
           <button id="task-cancel-btn" class="secondary-btn">Cancel</button>
-          <button id="task-save-run-btn" class="primary-btn">Save and run</button><button id="task-save-btn" class="primary-btn">Save task</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="artifact-modal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h3 id="artifact-modal-title">New artifact</h3>
-        <button id="artifact-modal-close" class="icon-btn">✕</button>
-      </div>
-      <div class="form-grid">
-        <label><span>Title</span><input id="artifact-title" type="text" /></label>
-        <label><span>Artifact type</span>
-          <select id="artifact-type">
-            <option value="spec">spec</option>
-            <option value="report">report</option>
-            <option value="copy">copy</option>
-            <option value="schema">schema</option>
-            <option value="runbook">runbook</option>
-            <option value="promoted_output">promoted_output</option>
-            <option value="customer_output">customer_output</option>
-            <option value="operator_output">operator_output</option>
-            <option value="other">other</option>
-          </select>
-        </label>
-        <label><span>Approval status</span>
-          <select id="artifact-approval-status">
-            <option value="draft">draft</option>
-            <option value="review">Review</option>
-            <option value="approved">approved</option>
-            <option value="rejected">rejected</option>
-          </select>
-        </label>
-        <label><span>Approved by role</span><select id="artifact-approved-by-role"></select></label>
-        <label><span>Work item</span><select id="artifact-work-item-id"></select></label>
-        <label><span>Run</span><select id="artifact-run-id"></select></label>
-        <label class="full"><span>Path or URL</span><input id="artifact-path" type="text" placeholder="https://... or /path/to/file" /></label>
-        <label class="full"><span>Summary</span><textarea id="artifact-summary" rows="4"></textarea></label>
-      </div>
-      <div class="modal-actions">
-        <button id="artifact-delete-btn" class="danger-btn hidden">Delete</button>
-        <div class="modal-actions-right">
-          <button id="artifact-cancel-btn" class="secondary-btn">Cancel</button>
-          <button id="artifact-save-btn" class="primary-btn">Save artifact</button>
+          <button id="task-save-run-btn" class="primary-btn">Save and queue</button><button id="task-save-btn" class="primary-btn">Save task</button>
         </div>
       </div>
     </div>
