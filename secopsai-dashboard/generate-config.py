@@ -36,8 +36,7 @@ def main():
     values = {
         '__SUPABASE_URL__': js_escape(merged.get('SUPABASE_URL', '')),
         '__SUPABASE_ANON_KEY__': js_escape(merged.get('SUPABASE_ANON_KEY', '')),
-        '__APP_NAME__': js_escape(merged.get('APP_NAME', 'SecOpsAI Mission Control')),
-        '__DISCORD_SERVER_ID__': js_escape(merged.get('DISCORD_SERVER_ID', '1484917962245668874')),
+        '__APP_NAME__': js_escape(merged.get('APP_NAME', 'SecOpsAI Triage Dashboard')),
     }
 
     text = TEMPLATE_PATH.read_text(encoding='utf-8')

@@ -1,31 +1,25 @@
-# SecOpsAI Dashboard: Control-Panel-Only Mode
+# SecOpsAI Dashboard: Triage Control Mode
 
-The dashboard is now a control panel, not a conversation runtime.
+The dashboard is a SecOpsAI control surface, not a messaging runtime.
 
-## What the dashboard does
-- read/write Supabase state
-- manage tasks, artifacts, and audit events
-- show channel-route metadata
-- send optional audit notifications through configured webhooks
-- generate copyable work briefs
+## What it does
+- reads and writes Supabase state
+- manages task workflow
+- shows findings and correlation context
+- shows run-request lifecycle state
+- exposes a local run-output helper for evidence reads
 
-## What the dashboard no longer does
-- poll Discord for inbound conversations
-- send direct bot messages to agent channels
-- act as the execution/runtime authority for role dispatch
+## What it no longer does
+- poll Discord for inbound commands
+- dispatch agent work directly over Discord
+- act as a generic multi-agent org control plane
+- maintain artifact-registry workflow as a primary surface
 
 ## Runtime split
-- **OpenClaw-native orchestrator** handles inbound conversations, routing, session spawning, and replies
-- **Dashboard** handles observability, human control, and structured state updates
+- `secopsai` handles findings generation, triage, orchestrator decisions, policy tuning, and action queue logic
+- dashboard handles observability, task state, findings visibility, and queue inspection
 
 ## Current implication
-- `discord_dispatcher.py` is retired from the intended path
-- `start-discord-dispatcher.sh` intentionally exits with a retirement message
-- `/api/discord-send-message` returns HTTP 410 Gone
-
-## Recommended usage
-1. Use the dashboard to create or update a work item
-2. Assign an owner role and reviewer if needed
-3. Copy the generated work brief
-4. Hand it to the OpenClaw-native orchestrator or an ACP run
-5. Let OpenClaw own the actual conversation and delivery
+- direct dashboard-side Discord flows are removed
+- local helper endpoints are limited to status and run-output access
+- the remaining dashboard pages are `Overview`, `Tasks`, `Findings`, and `Integrations`

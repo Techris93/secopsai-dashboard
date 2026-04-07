@@ -1,9 +1,7 @@
 window.SECOPSAI_CONFIG = {
   supabaseUrl: "https://wjxvdjsatfepfcbxunfs.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqeHZkanNhdGZlcGZjYnh1bmZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMjExNDUsImV4cCI6MjA4OTY5NzE0NX0.R9XQpSO3YBmlvXZyaD5DUV-L847nXrDWWYadm27LDFU",
-  appName: "SecOpsAI Mission Control",
-  serverId: "1484917962245668874",
-  discordNotifyEndpoint: "/api/discord-notify",
+  appName: "SecOpsAI Triage Dashboard",
   integrationStatusEndpoint: "/api/integration-status",
   departments: {
     exec: "#06B6D4",

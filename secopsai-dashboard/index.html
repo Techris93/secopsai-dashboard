@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SecOpsAI Mission Control</title>
+  <title>SecOpsAI Triage Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,39 +17,27 @@
       <div class="brand">
         <div class="brand-badge">S</div>
         <div>
-          <h1>SecOpsAI Mission Control</h1>
-          <p>Role-based security ops orchestration</p>
+          <h1>SecOpsAI Triage Dashboard</h1>
+          <p>Findings, triage, and execution visibility</p>
         </div>
       </div>
 
       <nav class="nav-list">
         <button class="nav-btn active" data-page="mission-control">
-          <span class="title">Mission Control</span>
+          <span class="title">Overview</span>
           <span class="desc">Runs, blockers, review queue</span>
-        </button>
-        <button class="nav-btn" data-page="org-map">
-          <span class="title">Org Map</span>
-          <span class="desc">Role topology + last run status</span>
-        </button>
-        <button class="nav-btn" data-page="agents">
-          <span class="title">Agents</span>
-          <span class="desc">Role activity feed (runs, models, last outputs)</span>
         </button>
         <button class="nav-btn" data-page="tasks">
           <span class="title">Tasks</span>
-          <span class="desc">Work queue → owner → reviewer → artifact</span>
+          <span class="desc">Work queue, ownership, run visibility</span>
         </button>
         <button class="nav-btn" data-page="findings">
           <span class="title">Findings</span>
-          <span class="desc">Detection backlog, richer correlation, task linkage</span>
-        </button>
-        <button class="nav-btn" data-page="artifacts">
-          <span class="title">Artifacts</span>
-          <span class="desc">Promoted outputs, customer deliverables, operator notes</span>
+          <span class="desc">Detection backlog, triage, task linkage</span>
         </button>
         <button class="nav-btn" data-page="integrations">
           <span class="title">Integrations</span>
-          <span class="desc">Channel metadata + Supabase status</span>
+          <span class="desc">Supabase, routes, run request visibility</span>
         </button>
       </nav>
 
@@ -62,8 +50,8 @@
       <section class="page active" id="page-mission-control">
         <div class="page-header">
           <div>
-            <h2>Mission Control</h2>
-            <p>High-level operational view of runs, blockers, review queue, and recent activity across the SecOpsAI organization. OpenClaw-native orchestrators own live conversations.</p>
+            <h2>Overview</h2>
+            <p>High-level operational view of findings, tasks, run requests, and recent SecOpsAI activity.</p>
           </div>
           <div class="status-pill" id="refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh data</div>
         </div>
@@ -81,36 +69,15 @@
         </div>
       </section>
 
-      <section class="page" id="page-org-map">
-        <div class="page-header">
-          <div>
-            <h2>Org Map</h2>
-            <p>Role map of the SecOpsAI org. This is the fastest way to see which roles are active, idle, or have never been run yet.</p>
-          </div>
-        </div>
-        <div id="org-map-groups"></div>
-      </section>
-
-      <section class="page" id="page-agents">
-        <div class="page-header">
-          <div>
-            <h2>Agents</h2>
-            <p>Role-based monitor for the exec, platform, security, product, revenue, and support teams using live data from <code>agent_runs</code>.</p>
-          </div>
-        </div>
-        <div class="grid cols-4" id="agent-summary"></div>
-        <div id="agents-groups"></div>
-      </section>
-
       <section class="page" id="page-tasks">
         <div class="page-header">
           <div>
             <h2>Tasks</h2>
-            <p>Kanban view over work items. Supports filtering, modal CRUD, drag-drop status updates, and orchestrator audit logging.</p>
+            <p>Kanban view over work items with filtering, modal CRUD, drag-drop status updates, and orchestrator audit logging.</p>
           </div>
           <div class="status-pill" id="new-task-btn" style="cursor:pointer;"><span class="dot"></span> New task</div>
         </div>
-        <div class="small" style="margin-bottom:12px;">Task changes create dashboard events and orchestrator audit runs. This dashboard is a control panel, not the conversation runtime.</div>
+        <div class="small" style="margin-bottom:12px;">Task changes create dashboard events and orchestrator audit runs. The dashboard manages state and visibility; SecOpsAI/OpenClaw runtimes handle actual execution.</div>
         <div class="grid cols-4" style="margin-bottom:18px;">
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
           <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option><option value="product">product</option><option value="revenue">revenue</option><option value="support">support</option></select></label></div>
@@ -131,7 +98,7 @@
         <div class="page-header">
           <div>
             <h2>Findings</h2>
-            <p>Findings triage view with stronger task/run correlation, richer context, and graceful fallback when optional finding fields or tables are missing.</p>
+            <p>Findings triage view with task/run correlation, richer context, and graceful fallback when optional finding fields or tables are missing.</p>
           </div>
           <div class="status-pill" id="new-finding-task-btn" style="cursor:pointer;"><span class="dot"></span> New task from finding</div>
         </div>
@@ -148,21 +115,11 @@
         </div>
       </section>
 
-      <section class="page" id="page-artifacts">
-        <div class="page-header">
-          <div>
-            <h2>Artifacts</h2>
-            <p>Outputs generated by the org: specs, schema drafts, PRDs, copy, reports, and other reusable deliverables. Artifacts are now editable from the dashboard.</p>
-          </div>
-        </div>
-        <div id="artifacts-table"></div>
-      </section>
-
       <section class="page" id="page-integrations">
         <div class="page-header">
           <div>
             <h2>Integrations</h2>
-            <p>Source-of-truth view for channel metadata and Supabase configuration, backed by <code>channel_routes</code>. Dashboard-side direct dispatch is retired; OpenClaw-native orchestrators handle live conversations.</p>
+            <p>Source-of-truth view for Supabase configuration, channel metadata, and run-request visibility. Live execution stays in SecOpsAI and OpenClaw runtimes.</p>
           </div>
         </div>
         <div class="grid cols-4" id="integration-summary"></div>

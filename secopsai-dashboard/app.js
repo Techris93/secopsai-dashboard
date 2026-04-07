@@ -69,7 +69,6 @@ const state = {
   channelRoutes: [],
   events: [],
   integrationStatus: null,
-  lastDiscordTest: null,
   selectedFindingId: null,
   outputEvidenceCache: new Map(),
   liveRefreshTimer: null,
@@ -83,7 +82,7 @@ const taskModalState = { editingId: null, sourceFinding: null };
 const artifactModalState = { editingId: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
-const pages = ["mission-control", "org-map", "agents", "tasks", "findings", "artifacts", "integrations"];
+const pages = ["mission-control", "tasks", "findings", "integrations"];
 
 function el(id) { return document.getElementById(id); }
 
@@ -465,8 +464,8 @@ function inferTaskRepoContext(item = {}, roleLabel = null) {
     {
       repo: 'secopsai',
       confidence: 'medium',
-      when: /dispatcher|orchestrator|discord|telemetry|agent run|finding|detection|intel|pipeline|backend|api|worker/.test(haystack),
-      paths: ['secopsai/discord_dispatcher.py', 'secopsai/orchestrator/', 'secopsai/backend/', 'secopsai/README.md'],
+      when: /orchestrator|telemetry|agent run|finding|detection|intel|pipeline|backend|api|worker|triage/.test(haystack),
+      paths: ['secopsai/triage/', 'secopsai/pipeline.py', 'secopsai/alerts.py', 'secopsai/README.md'],
       reasons: ['task language points at backend/orchestration/detection work']
     }
   ];
@@ -790,7 +789,6 @@ async function queueTaskExecutionDirect(item, promptOverride = null) {
   const role = item?.owner_role || suggestRoleForTask(item);
   const prompt = promptOverride || buildWorkBrief(item, role, 'smart-local');
   const route = findRouteForRole(role);
-  const notifyChannel = 'ops-log';
 
   const run = await createOrchestratorRun({
     taskSummary: `Run now requested for ${role}`,
@@ -799,8 +797,7 @@ async function queueTaskExecutionDirect(item, promptOverride = null) {
     outputSummary: route
       ? `Dashboard requested immediate execution. Suggested route: #${route.channel_name}.`
       : 'Dashboard requested immediate execution (no active route found).',
-    relatedWorkItemId: item?.id || null,
-    sourceChannelName: notifyChannel
+    relatedWorkItemId: item?.id || null
   });
 
   let movedItem = item;
@@ -843,19 +840,6 @@ async function queueTaskExecutionDirect(item, promptOverride = null) {
   renderTasks();
   renderIntegrations();
   setStatus(`<span class="dot"></span> Task saved and queued for ${escapeHtml(shortRoleLabel(role))}`);
-
-  const content = compactMultiline([
-    `SecOpsAI run now (queued)`,
-    `Role: ${role}`,
-    run?.id ? `Run ID: ${run.id}` : null,
-    route ? `Suggested route: #${route.channel_name}` : 'Suggested route: (none found)',
-    '---',
-    prompt
-  ]);
-  const result = await postDiscordUpdate(notifyChannel, content);
-  if (!result.ok && !result.skipped) {
-    await createDashboardEvent('run_now_notify_failed', `Run notify failed: ${role}`, result.reason || 'Unknown notify failure', 'warning', { related_work_item_id: movedItem?.id || item?.id || null, related_run_id: run?.id || null });
-  }
   backgroundRefreshOpsData();
   return { run, runReq };
 }
@@ -874,10 +858,6 @@ async function runPromptNow() {
 
   const route = findRouteForRole(role);
 
-  // The local helper endpoint intentionally supports ONLY ops-log / kanban-updates.
-  // Direct dashboard-side dispatch to arbitrary channels is retired by design.
-  const notifyChannel = 'ops-log';
-
   // Create an audit run row (queued) in agent_runs.
   const run = await createOrchestratorRun({
     taskSummary: `Run now requested for ${role}`,
@@ -886,8 +866,7 @@ async function runPromptNow() {
     outputSummary: route
       ? `Dashboard requested immediate execution. Suggested route: #${route.channel_name}.`
       : 'Dashboard requested immediate execution (no active route found).',
-    relatedWorkItemId: item?.id || null,
-    sourceChannelName: notifyChannel
+    relatedWorkItemId: item?.id || null
   });
 
   // Move the task out of Inbox once execution is explicitly queued.
@@ -908,7 +887,7 @@ async function runPromptNow() {
     }
   }
 
-  // Insert a run_requests queue item (picked up by discord_dispatcher.py).
+  // Insert a run_requests queue item for the active runtime to pick up.
   let runReq = null;
   try {
     const { data, error } = await supabaseClient
@@ -941,17 +920,6 @@ async function runPromptNow() {
     route ? 'info' : 'warning',
     { related_work_item_id: item?.id || null, related_run_id: run?.id || null }
   );
-
-  // Best-effort notify: post to ops-log. A separate orchestrator/dispatcher should pick it up.
-  const content = buildDiscordMessage('SecOpsAI run now (queued)', [
-    `Role: ${role}`,
-    run?.id ? `Run ID: ${run.id}` : null,
-    route ? `Suggested route: #${route.channel_name}` : 'Suggested route: (none found)',
-    '---',
-    prompt
-  ]);
-
-  const result = await postDiscordUpdate(notifyChannel, content);
 
   // Start polling status in the modal (even if notify fails).
   setRunStatusUI({ status: 'queued', line: 'Queued', detail: runReq?.id ? `Request: ${runReq.id}` : (run?.id ? `Run: ${run.id}` : '') });
@@ -1140,7 +1108,7 @@ function renderMissionControl() {
   }, {});
   const topDomains = Object.entries(byDomain).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const extFacing = state.workItems.filter(w => w.external_facing).length;
-  const approvedArtifacts = state.artifacts.filter(a => a.approval_status === 'approved').length;
+  const openFindings = state.findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
   const missionOverview = el("mission-overview");
   if (missionOverview) {
     missionOverview.innerHTML = `
@@ -1155,10 +1123,10 @@ function renderMissionControl() {
         <div class="metric">${extFacing}</div>
         <div class="metric-label">Items that need careful product/security review</div>
       </div>
-      <div class="card">
-        <h3>Approved artifacts</h3>
-        <div class="metric">${approvedArtifacts}</div>
-        <div class="metric-label">Reusable outputs already marked approved</div>
+      <div class="card metric-card" id="mc-open-findings" style="cursor:pointer;">
+        <h3>Open findings</h3>
+        <div class="metric">${openFindings}</div>
+        <div class="metric-label">Findings that still need triage or closure</div>
       </div>
     `;
 
@@ -1168,6 +1136,7 @@ function renderMissionControl() {
       if (el('task-filter-status')) el('task-filter-status').value = '';
       renderTasks();
     });
+    el('mc-open-findings')?.addEventListener('click', () => setPage('findings'));
   }
 
   const recentFeed = [...state.events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 6);
@@ -2227,8 +2196,6 @@ function renderRunRequests() {
 
 function renderIntegrations() {
   const summary = el('integration-summary');
-  const discordStatus = state.integrationStatus?.discord || {};
-  const discordWebhookCount = ['ops-log', 'kanban-updates'].filter(name => discordStatus[name]).length;
   const queuedRequests = state.runRequests.filter(r => r.status === 'queued').length;
   const runningRequests = state.runRequests.filter(r => r.status === 'running').length;
   if (summary) {
@@ -2251,19 +2218,14 @@ function renderIntegrations() {
         </div>
       </div>
       <div class="card">
-        <h3>Audit notifications</h3>
+        <h3>Local helper</h3>
         <div class="kv-list">
-          <div class="kv-row"><div class="kv-key">Server ID</div><div class="kv-val">${escapeHtml(cfg.serverId || '—')}</div></div>
-          <div class="kv-row"><div class="kv-key">Notification mode</div><div class="kv-val">${escapeHtml(discordStatus.mode || 'local-helper')}</div></div>
-          <div class="kv-row"><div class="kv-key">ops-log webhook</div><div class="kv-val">${discordStatus['ops-log'] ? 'Configured' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">kanban-updates webhook</div><div class="kv-val">${discordStatus['kanban-updates'] ? 'Configured' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">Last test</div><div class="kv-val">${escapeHtml(state.lastDiscordTest?.summary || 'Not run yet')}</div></div>
+          <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">${escapeHtml(state.integrationStatus?.helper?.mode || 'local-control-panel')}</div></div>
+          <div class="kv-row"><div class="kv-key">Run output API</div><div class="kv-val">${state.integrationStatus?.helper?.run_output_api ? 'Ready' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Queue model</div><div class="kv-val">run_requests + findings</div></div>
+          <div class="kv-row"><div class="kv-key">Runtime authority</div><div class="kv-val">SecOpsAI / OpenClaw</div></div>
         </div>
-        <div class="integration-actions">
-          <button id="test-ops-log-btn" class="secondary-btn">Send ops-log test</button>
-          <button id="test-kanban-btn" class="secondary-btn">Send kanban-updates test</button>
-        </div>
-        <div id="discord-test-status" class="small" style="margin-top:12px;">${escapeHtml(state.lastDiscordTest?.detail || 'Use the buttons to verify audit-notification delivery. Live conversations should stay in OpenClaw.')}</div>
+        <div class="small" style="margin-top:12px;">The dashboard keeps observability and queue state. It no longer owns Discord dispatch or direct agent messaging.</div>
       </div>`;
   }
 
@@ -2275,7 +2237,7 @@ function renderIntegrations() {
   }
   table.innerHTML = `
     <div class="table-wrap"><table>
-      <thead><tr><th>Channel</th><th>Channel ID</th><th>Default role</th><th>Override</th><th>Summaries</th><th>Run logs</th><th>Local helper route</th><th>Active</th></tr></thead>
+      <thead><tr><th>Channel</th><th>Channel ID</th><th>Default role</th><th>Override</th><th>Summaries</th><th>Run logs</th><th>Active</th></tr></thead>
       <tbody>${state.channelRoutes.map(r => `
         <tr>
           <td>${escapeHtml(r.channel_name)}</td>
@@ -2284,7 +2246,6 @@ function renderIntegrations() {
           <td>${r.allow_orchestrator_override ? 'Yes' : 'No'}</td>
           <td>${r.post_summaries ? 'Yes' : 'No'}</td>
           <td>${r.post_run_logs ? 'Yes' : 'No'}</td>
-          <td>${discordStatus[r.channel_name] ? 'Yes' : 'No'}</td>
           <td>${r.active ? 'Yes' : 'No'}</td>
         </tr>`).join("")}</tbody>
     </table></div>`;
@@ -2292,11 +2253,8 @@ function renderIntegrations() {
 
 function renderAll() {
   renderMissionControl();
-  renderOrgMap();
-  renderAgents();
   renderTasks();
   renderFindings();
-  renderArtifacts();
   renderRunRequests();
   renderIntegrations();
   setStatus(`<span class="dot"></span> Supabase connected • ${state.channelRoutes.length} routes loaded`);
@@ -2509,9 +2467,7 @@ async function backgroundRefreshOpsData() {
     state.runs = runs;
     state.events = events;
     renderMissionControl();
-    renderAgents();
     renderIntegrations();
-    renderArtifacts();
     renderFindings();
   } catch (e) {
     console.warn('background ops refresh failed', e);
@@ -2553,39 +2509,6 @@ function openArtifactModal(item = null) {
 
 function closeArtifactModal() { el('artifact-modal').classList.add('hidden'); }
 
-function buildDiscordMessage(title, lines = []) {
-  return [`**${title}**`, ...lines.filter(Boolean)].join('\n');
-}
-
-function formatDiscordError(data, fallbackStatus) {
-  if (data?.errorDetail?.discord_code === 1010) {
-    return 'Discord/Cloudflare blocked the webhook request from this machine (code 1010).';
-  }
-  if (data?.errorDetail?.http_status) {
-    return `Discord webhook HTTP ${data.errorDetail.http_status}${data.errorDetail.discord_code ? ` (code ${data.errorDetail.discord_code})` : ''}`;
-  }
-  return data?.error || `Discord notify HTTP ${fallbackStatus}`;
-}
-
-async function postDiscordUpdate(channelName, content) {
-  try {
-    const res = await fetch(cfg.discordNotifyEndpoint || '/api/discord-notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel: channelName, content })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) {
-      const message = formatDiscordError(data, res.status);
-      return { ok: false, reason: message, skipped: data.skipped || false };
-    }
-    return data;
-  } catch (error) {
-    console.error(`Discord post failed for ${channelName}`, error);
-    return { ok: false, reason: error.message || String(error) };
-  }
-}
-
 async function loadIntegrationStatus() {
   try {
     const res = await fetch(cfg.integrationStatusEndpoint || '/api/integration-status');
@@ -2593,7 +2516,7 @@ async function loadIntegrationStatus() {
     state.integrationStatus = await res.json();
   } catch (error) {
     console.error('integration status load failed', error);
-    state.integrationStatus = { ok: false, discord: { mode: 'local-helper', 'ops-log': false, 'kanban-updates': false } };
+    state.integrationStatus = { ok: false, helper: { mode: 'local-control-panel', run_output_api: false } };
   }
 }
 
@@ -2642,16 +2565,8 @@ async function announceTaskChange(kind, item, details, severity = 'info') {
     taskSummary: details.runSummary,
     taskDetail: details.runDetail,
     outputSummary: details.outputSummary,
-    relatedWorkItemId: item?.id || null,
-    sourceChannelName: 'ops-log'
+    relatedWorkItemId: item?.id || null
   });
-
-  const opsResult = await postDiscordUpdate('ops-log', buildDiscordMessage(details.title, [details.body, `Role: exec/agents-orchestrator`, run?.id ? `Run ID: ${run.id}` : null]));
-  if (!opsResult.ok && !opsResult.skipped) console.warn('ops-log notification failed:', opsResult.reason);
-  if (kind === 'task_moved' || kind === 'task_created' || kind === 'task_deleted' || kind === 'task_updated') {
-    const kanbanResult = await postDiscordUpdate('kanban-updates', buildDiscordMessage(details.kanbanTitle || details.title, [details.kanbanBody || details.body]));
-    if (!kanbanResult.ok && !kanbanResult.skipped) console.warn('kanban notification failed:', kanbanResult.reason);
-  }
   return { event, run };
 }
 
@@ -2662,30 +2577,9 @@ async function announceArtifactChange(kind, artifact, details, severity = 'info'
     taskDetail: details.runDetail,
     outputSummary: details.outputSummary,
     relatedWorkItemId: artifact?.work_item_id || null,
-    outputPath: artifact?.path_or_url || null,
-    sourceChannelName: 'ops-log'
+    outputPath: artifact?.path_or_url || null
   });
-  const opsResult = await postDiscordUpdate('ops-log', buildDiscordMessage(details.title, [details.body, artifact?.path_or_url ? `Artifact: ${artifact.path_or_url}` : null, run?.id ? `Run ID: ${run.id}` : null]));
-  if (!opsResult.ok && !opsResult.skipped) console.warn('artifact ops-log notification failed:', opsResult.reason);
   return run;
-}
-
-async function runDiscordTest(channelName) {
-  const result = await postDiscordUpdate(channelName, buildDiscordMessage('SecOpsAI dashboard test', [`Channel: ${channelName}`, `Sent at: ${new Date().toLocaleString()}`]));
-  if (result.ok) {
-    state.lastDiscordTest = {
-      summary: `${channelName} test ok`,
-      detail: `Delivered through local helper at ${new Date().toLocaleTimeString()}.`
-    };
-    await createDashboardEvent('discord_test_ok', `Discord test ok: ${channelName}`, 'Local helper accepted the test notification.', 'success');
-  } else {
-    state.lastDiscordTest = {
-      summary: `${channelName} test failed`,
-      detail: result.reason || 'Unknown Discord delivery failure.'
-    };
-    await createDashboardEvent('discord_test_failed', `Discord test failed: ${channelName}`, result.reason || 'Unknown Discord delivery failure.', 'error');
-  }
-  renderIntegrations();
 }
 
 async function saveTask(options = {}) {
@@ -2899,7 +2793,6 @@ async function boot() {
     ['channelRoutes', 'channel_routes', { orderBy: { column: 'channel_name', ascending: true } }],
     ['runs', 'agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }],
     ['workItems', 'work_items', { orderBy: { column: 'updated_at', ascending: false }, limit: 200 }],
-    ['artifacts', 'artifacts', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }],
     ['events', 'dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 }]
   ];
 
@@ -2977,8 +2870,6 @@ function bindEvents() {
   });
   document.addEventListener('click', (event) => {
     if (event.target?.id === 'new-artifact-btn') openArtifactModal();
-    if (event.target?.id === 'test-ops-log-btn') runDiscordTest('ops-log');
-    if (event.target?.id === 'test-kanban-btn') runDiscordTest('kanban-updates');
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);

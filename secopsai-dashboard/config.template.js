@@ -2,8 +2,6 @@ window.SECOPSAI_CONFIG = {
   supabaseUrl: "__SUPABASE_URL__",
   supabaseAnonKey: "__SUPABASE_ANON_KEY__",
   appName: "__APP_NAME__",
-  serverId: "__DISCORD_SERVER_ID__",
-  discordNotifyEndpoint: "/api/discord-notify",
   integrationStatusEndpoint: "/api/integration-status",
   departments: {
     exec: "#06B6D4",
