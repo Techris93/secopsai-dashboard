@@ -10,9 +10,11 @@ from urllib.parse import urlparse
 
 DIR = Path(__file__).resolve().parent
 SECOPSAI_ROOT = Path(os.environ.get('SECOPSAI_ROOT', '/Users/chrixchange/secopsai')).expanduser().resolve()
+SECOPSAI_DB_PATH = os.environ.get('SECOPSAI_DB_PATH', '').strip()
 OPENCLAW_WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace').resolve()
 FINDING_ID_RE = re.compile(r'^[A-Z]{3}-[A-Z0-9]+$')
 ACTION_ID_RE = re.compile(r'^ACT-\d+$')
+ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive'}
 
 
 def read_json_file(path: Path, default=None):
@@ -35,8 +37,11 @@ def run_secopsai_triage_summary():
     if not python_bin.exists():
         return None
     try:
+        args = [str(python_bin), '-m', 'secopsai.cli', 'triage', 'summary', '--json']
+        if SECOPSAI_DB_PATH:
+            args.extend(['--db-path', SECOPSAI_DB_PATH])
         result = subprocess.run(
-            [str(python_bin), '-m', 'secopsai.cli', 'triage', 'summary', '--json'],
+            args,
             cwd=str(SECOPSAI_ROOT),
             capture_output=True,
             text=True,
@@ -159,6 +164,10 @@ def secopsai_python_bin():
     return python_bin if python_bin.exists() else None
 
 
+def secopsai_db_args():
+    return ['--db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else []
+
+
 def run_secopsai_cli(args, timeout=120):
     python_bin = secopsai_python_bin()
     if not python_bin:
@@ -236,7 +245,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return json_response(self, 400, {'ok': False, 'error': 'Invalid finding_id'})
             try:
                 result = run_secopsai_cli(
-                    ['triage', 'investigate', finding_id, '--search-root', str(SECOPSAI_ROOT), '--json'],
+                    ['triage', 'investigate', finding_id, '--search-root', str(SECOPSAI_ROOT), '--json', *secopsai_db_args()],
                     timeout=180,
                 )
                 parsed_stdout = None
@@ -264,13 +273,54 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if not ACTION_ID_RE.match(action_id):
                 return json_response(self, 400, {'ok': False, 'error': 'Invalid action_id'})
             try:
-                result = run_secopsai_cli(['triage', 'apply-action', action_id, '--yes'], timeout=180)
+                result = run_secopsai_cli(['triage', 'apply-action', action_id, '--yes', *secopsai_db_args()], timeout=180)
                 return json_response(
                     self,
                     200 if result['ok'] else 500,
                     {
                         'ok': result['ok'],
                         'action_id': action_id,
+                        'stdout': result['stdout'],
+                        'stderr': result['stderr'],
+                        'returncode': result['returncode'],
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/close-finding':
+            finding_id = str(payload.get('finding_id') or '').strip()
+            disposition = str(payload.get('disposition') or '').strip()
+            note = ' '.join(str(payload.get('note') or '').split())
+            status = str(payload.get('status') or 'closed').strip() or 'closed'
+            if not FINDING_ID_RE.match(finding_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid finding_id'})
+            if disposition not in ALLOWED_CLOSE_DISPOSITIONS:
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid or unsupported disposition'})
+            if status not in {'closed', 'triaged'}:
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid status'})
+            if len(note) < 12:
+                return json_response(self, 400, {'ok': False, 'error': 'Analyst note is required'})
+            try:
+                result = run_secopsai_cli(
+                    [
+                        'triage', 'close', finding_id,
+                        '--disposition', disposition,
+                        '--note', note,
+                        '--status', status,
+                        *secopsai_db_args(),
+                    ],
+                    timeout=180,
+                )
+                return json_response(
+                    self,
+                    200 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'finding_id': finding_id,
+                        'disposition': disposition,
+                        'status': status,
+                        'note': note,
                         'stdout': result['stdout'],
                         'stderr': result['stderr'],
                         'returncode': result['returncode'],

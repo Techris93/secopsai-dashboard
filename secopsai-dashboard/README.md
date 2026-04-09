@@ -19,6 +19,7 @@ It now also reads native local SecOpsAI state through the helper server:
 - latest local findings artifact metadata
 - direct native `triage investigate`
 - direct native `triage apply-action`
+- guarded native `triage close`
 
 ## Pages
 
@@ -49,7 +50,7 @@ It now also reads native local SecOpsAI state through the helper server:
 - pending action queue
 - recent orchestrator summaries
 - findings/orchestrator freshness
-- direct native investigate and apply-action controls
+- direct native investigate, apply-action, and guarded close controls
 
 ## Runtime split
 
@@ -86,3 +87,5 @@ python3 generate-config.py
 Optional `.env` values:
 - `SECOPSAI_ROOT`
   - local repo root used by the helper server for native triage/orchestrator state and helper-backed native actions
+- `SECOPSAI_DB_PATH`
+  - optional SQLite override for testing helper-backed native actions against a copied SecOpsAI database

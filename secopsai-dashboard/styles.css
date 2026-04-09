@@ -218,6 +218,14 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
 .finding-row:hover { background: rgba(37,99,235,0.05); }
 .finding-detail-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px; }
 .finding-detail-header h4 { margin:0 0 6px; }
+.native-close-panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(15,23,42,0.08);
+}
+.native-close-grid {
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+}
 .finding-detail-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:14px; }
 .finding-detail-card { padding:16px; }
 .muted-inline { color: var(--muted); }

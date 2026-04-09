@@ -6,7 +6,7 @@ It is focused on:
 - findings visibility
 - triage task management
 - native triage queue visibility
-- helper-backed native investigate/apply-action controls
+- helper-backed native investigate/apply-action/guarded close controls
 - Supabase-backed operational state
 
 It is not the core execution runtime. Native SecOpsAI and OpenClaw still own investigation, orchestration, and outbound operator messaging, but the local helper can now invoke selected native SecOpsAI triage actions directly.
@@ -88,3 +88,4 @@ The local helper now exposes native SecOpsAI triage state so the dashboard can s
 - latest local findings artifact metadata
 - direct helper-backed `triage investigate`
 - direct helper-backed `triage apply-action`
+- direct helper-backed guarded `triage close`

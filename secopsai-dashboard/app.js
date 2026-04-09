@@ -64,6 +64,7 @@ const state = {
   integrationStatus: null,
   localTriage: null,
   selectedFindingId: null,
+  nativeFindingOverrides: new Map(),
   outputEvidenceCache: new Map(),
   liveRefreshTimer: null,
   optionalTables: {
@@ -109,6 +110,20 @@ function localOrchestratorFindings() {
   return Array.isArray(localTriageLatestRun()?.findings) ? localTriageLatestRun().findings : [];
 }
 
+function nativeFindingOverride(findingOrId) {
+  const id = typeof findingOrId === 'string' ? findingOrId : findingId(findingOrId);
+  if (!id) return null;
+  return state.nativeFindingOverrides.get(String(id)) || null;
+}
+
+function effectiveFindingStatus(finding) {
+  return nativeFindingOverride(finding)?.status || findingStatus(finding);
+}
+
+function effectiveFindingDisposition(finding) {
+  return nativeFindingOverride(finding)?.disposition || finding?.disposition || 'unreviewed';
+}
+
 function localFindingInsight(findingIdValue) {
   const normalized = String(findingIdValue || '');
   if (!normalized) return null;
@@ -130,6 +145,13 @@ function investigateFindingCommand(finding) {
   if (!id) return '';
   const root = state.localTriage?.secopsai_root || '/Users/chrixchange/secopsai';
   return `secopsai triage investigate ${id} --search-root ${root} --json`;
+}
+
+function closeFindingCommand(finding, disposition = 'needs_review', note = 'Analyst review note required.') {
+  const id = String(findingId(finding) || '').trim();
+  if (!id) return '';
+  const normalizedNote = String(note || '').trim().replace(/"/g, '\\"');
+  return `secopsai triage close ${id} --disposition ${disposition} --status closed --note "${normalizedNote}"`;
 }
 
 async function copyTextWithStatus(text, successMessage) {
@@ -178,6 +200,33 @@ async function runNativeApplyAction(action) {
   renderFindings();
   renderIntegrations();
   renderRunRequests();
+}
+
+async function runNativeCloseFinding(finding, disposition, note, status = 'closed') {
+  const id = String(findingId(finding) || '').trim();
+  const normalizedDisposition = String(disposition || '').trim();
+  const normalizedNote = String(note || '').trim();
+  if (!id) return;
+  if (normalizedNote.length < 12) {
+    throw new Error('Add an analyst note before closing this finding.');
+  }
+  setStatus(`<span class="dot"></span> Closing ${escapeHtml(id)} in native SecOpsAI…`);
+  const result = await postNativeHelper('/api/secopsai/close-finding', {
+    finding_id: id,
+    disposition: normalizedDisposition,
+    note: normalizedNote,
+    status
+  });
+  state.nativeFindingOverrides.set(id, {
+    status: result?.status || status,
+    disposition: result?.disposition || normalizedDisposition,
+    note: result?.note || normalizedNote
+  });
+  const line = String(result?.stdout || '').trim().split('\n').filter(Boolean).pop() || `Closed ${id}`;
+  setStatus(`<span class="dot"></span> ${escapeHtml(line)}`);
+  await loadLocalTriageState();
+  renderFindings();
+  renderIntegrations();
 }
 
 function escapeHtml(str = "") {
@@ -1417,7 +1466,7 @@ function renderFindings() {
             return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(normalizedFindingId || '')}">
               <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(findingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(findingBody(f).slice(0, 120) || '—')}</div></td>
               <td><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
-              <td>${renderStatusPill(String(findingStatus(f)).toLowerCase(), humanizeSnake(findingStatus(f)))}</td>
+              <td>${renderStatusPill(String(effectiveFindingStatus(f)).toLowerCase(), humanizeSnake(effectiveFindingStatus(f)))}</td>
               <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
               <td>${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
               <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-run-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Investigate now</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate</button></div></td>
@@ -1496,7 +1545,7 @@ function renderFindings() {
         <div>
           <h4>${escapeHtml(findingTitle(selected))}</h4>
           <div class="small">${escapeHtml(findingSource(selected))} • ${escapeHtml(fmtDate(findingDetectedAt(selected)))}${findingFingerprint(selected) ? ` • ${escapeHtml(findingFingerprint(selected))}` : ''}</div>
-          <div class="small" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span class="muted-inline">Selected finding status:</span>${renderStatusPill(String(findingStatus(selected)).toLowerCase(), humanizeSnake(findingStatus(selected)))}</div>
+          <div class="small" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span class="muted-inline">Selected finding status:</span>${renderStatusPill(String(effectiveFindingStatus(selected)).toLowerCase(), humanizeSnake(effectiveFindingStatus(selected)))}</div>
         </div>
       </div>
       <div class="finding-detail-grid">
@@ -1505,6 +1554,7 @@ function renderFindings() {
           <div class="kv-list">
             <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val">${escapeHtml(findingSeverity(selected))}</div></div>
             <div class="kv-row"><div class="kv-key">Confidence</div><div class="kv-val">${escapeHtml(findingConfidence(selected) ?? '—')}</div></div>
+            <div class="kv-row"><div class="kv-key">Disposition</div><div class="kv-val">${escapeHtml(humanizeSnake(effectiveFindingDisposition(selected)))}</div></div>
             <div class="kv-row"><div class="kv-key">Suggested domain</div><div class="kv-val">${escapeHtml(findingDomainHint(selected))}</div></div>
           </div>
           <div class="small" style="margin-top:12px;">${escapeHtml(findingBody(selected) || 'No additional finding narrative available.')}</div>
@@ -1527,6 +1577,32 @@ function renderFindings() {
         ` : `
           <div class="small">No native queue or latest orchestrator insight was found for this specific finding ID.</div>
           ${triageLatest ? `<div class="small" style="margin-top:10px;">Latest orchestrator run: ${escapeHtml(fmtDate(triageLatest.generated_at))} • processed ${escapeHtml(triageLatest.processed ?? '—')} findings</div>` : ''}
+        `}
+        ${String(effectiveFindingStatus(selected)).toLowerCase() !== 'closed' ? `
+          <div class="native-close-panel">
+            <div class="form-grid native-close-grid">
+              <label>
+                <span>Guarded close disposition</span>
+                <select id="selected-finding-close-disposition">
+                  <option value="needs_review">needs_review</option>
+                  <option value="tune_policy">tune_policy</option>
+                  <option value="expected_behavior">expected_behavior</option>
+                  <option value="false_positive">false_positive</option>
+                </select>
+              </label>
+              <label class="full">
+                <span>Analyst note</span>
+                <textarea id="selected-finding-close-note" rows="3" placeholder="Explain why this finding should be closed in native SecOpsAI."></textarea>
+              </label>
+            </div>
+            <div class="task-card-actions" style="margin-top:14px;">
+              <button class="mini-btn" id="selected-finding-run-close-btn">Close in SecOpsAI</button>
+              <button class="mini-btn" id="selected-finding-copy-close-btn">Copy close command</button>
+            </div>
+            <div class="small" style="margin-top:10px;">Only guarded dispositions are available here. Use the CLI directly for any more sensitive disposition.</div>
+          </div>
+        ` : `
+          <div class="small" style="margin-top:12px;">This finding is already marked closed locally in the current dashboard session.</div>
         `}
       </div>
       <div class="card finding-detail-card" style="margin-top:14px;">
@@ -1558,6 +1634,21 @@ function renderFindings() {
       }
     });
     el('selected-finding-copy-apply-btn')?.addEventListener('click', () => copyTextWithStatus(nativeActionCommand(nativeInsight?.pendingAction), `Apply-action command copied for ${findingTitle(selected)}`));
+    el('selected-finding-run-close-btn')?.addEventListener('click', async () => {
+      const disposition = el('selected-finding-close-disposition')?.value || 'needs_review';
+      const note = el('selected-finding-close-note')?.value || '';
+      try {
+        await runNativeCloseFinding(selected, disposition, note, 'closed');
+      } catch (err) {
+        console.error('native close failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    });
+    el('selected-finding-copy-close-btn')?.addEventListener('click', () => {
+      const disposition = el('selected-finding-close-disposition')?.value || 'needs_review';
+      const note = el('selected-finding-close-note')?.value || 'Analyst review note required.';
+      copyTextWithStatus(closeFindingCommand(selected, disposition, note), `Close command copied for ${findingTitle(selected)}`);
+    });
   }
 }
 
