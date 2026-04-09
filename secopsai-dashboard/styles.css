@@ -218,6 +218,18 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
 .finding-row:hover { background: rgba(37,99,235,0.05); }
 .finding-detail-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px; }
 .finding-detail-header h4 { margin:0 0 6px; }
+.finding-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.finding-meta-line span:not(:last-child)::after {
+  content: "•";
+  margin-left: 8px;
+  color: rgba(15,23,42,0.28);
+}
 .native-close-panel {
   margin-top: 14px;
   padding-top: 14px;
@@ -228,6 +240,18 @@ tr.artifact-row:hover { background: rgba(255,255,255,0.03); }
 }
 .finding-detail-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:14px; }
 .finding-detail-card { padding:16px; }
+.detail-summary {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15,23,42,0.03);
+  border: 1px solid rgba(15,23,42,0.06);
+  color: var(--text);
+  line-height: 1.45;
+}
+.compact-feed-item {
+  padding: 12px 13px;
+}
 .muted-inline { color: var(--muted); }
 
 .empty {

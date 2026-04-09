@@ -361,6 +361,22 @@ function findingSource(finding) {
   return finding?.source || finding?.source_name || finding?.vendor || finding?.provider || finding?.detector || finding?.tool || 'Unknown source';
 }
 
+function compactPathLabel(value) {
+  const text = String(value || '').trim();
+  if (!text) return 'Unknown source';
+  if (!text.includes('/')) return text;
+  const parts = text.split('/').filter(Boolean);
+  if (parts.length <= 3) return text;
+  return `…/${parts.slice(-3).join('/')}`;
+}
+
+function displayFindingSource(finding) {
+  const source = String(findingSource(finding) || '').trim();
+  if (!source) return 'Unknown source';
+  if (source.startsWith('/')) return compactPathLabel(source);
+  return source;
+}
+
 function findingConfidence(finding) {
   return finding?.confidence ?? finding?.score ?? finding?.confidence_score ?? null;
 }
@@ -458,12 +474,20 @@ function findingTaskMatches(finding) {
 }
 
 function relatedTasksForFinding(finding) {
-  return findingTaskMatches(finding).slice(0, 4);
+  const seen = new Set();
+  return findingTaskMatches(finding)
+    .filter(match => {
+      const key = `${String(match.item?.title || '').toLowerCase()}|${String(match.item?.status || '').toLowerCase()}`;
+      if (!key.trim() || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 4);
 }
 
 function correlatedRunRequestsForFinding(finding) {
-  const text = `${findingTitle(finding)} ${findingBody(finding)} ${findingSource(finding)}`.toLowerCase();
   const desiredDomain = findingDomainHint(finding);
+  const seen = new Set();
   return state.runRequests.map(req => {
     let score = 0;
     const prompt = `${req.prompt_text || ''} ${req.output_summary || ''} ${req.role_label || ''}`.toLowerCase();
@@ -476,8 +500,13 @@ function correlatedRunRequestsForFinding(finding) {
     if (prompt.includes(String(findingFingerprint(finding) || '').toLowerCase()) && findingFingerprint(finding)) score += 20;
     if ((req.related_work_item_id || '') && relatedTasksForFinding(finding).some(match => String(match.item.id) === String(req.related_work_item_id))) score += 20;
     if (score < 10) return null;
-    return { request: req, score, reasons: hits.slice(0, 3) };
-  }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, 4);
+    return { request: req, score, reasons: [...new Set(hits)].slice(0, 3) };
+  }).filter(Boolean).sort((a, b) => b.score - a.score).filter(match => {
+    const key = `${String(match.request?.role_label || '').toLowerCase()}|${summarizePromptText(match.request?.prompt_text || '')}`;
+    if (!key.trim() || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 4);
 }
 
 function selectFinding(nextFindingId = null) {
@@ -1464,7 +1493,7 @@ function renderFindings() {
             const normalizedFindingId = findingId(f);
             const selected = String(state.selectedFindingId) === String(normalizedFindingId);
             return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(normalizedFindingId || '')}">
-              <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(findingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(findingBody(f).slice(0, 120) || '—')}</div></td>
+              <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(displayFindingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(compactText(findingBody(f), 120))}</div></td>
               <td><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
               <td>${renderStatusPill(String(effectiveFindingStatus(f)).toLowerCase(), humanizeSnake(effectiveFindingStatus(f)))}</td>
               <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
@@ -1544,7 +1573,11 @@ function renderFindings() {
       <div class="finding-detail-header">
         <div>
           <h4>${escapeHtml(findingTitle(selected))}</h4>
-          <div class="small">${escapeHtml(findingSource(selected))} • ${escapeHtml(fmtDate(findingDetectedAt(selected)))}${findingFingerprint(selected) ? ` • ${escapeHtml(findingFingerprint(selected))}` : ''}</div>
+          <div class="finding-meta-line">
+            <span>${escapeHtml(displayFindingSource(selected))}</span>
+            <span>${escapeHtml(fmtDate(findingDetectedAt(selected)))}</span>
+            ${findingFingerprint(selected) ? `<span>${escapeHtml(findingFingerprint(selected))}</span>` : ''}
+          </div>
           <div class="small" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span class="muted-inline">Selected finding status:</span>${renderStatusPill(String(effectiveFindingStatus(selected)).toLowerCase(), humanizeSnake(effectiveFindingStatus(selected)))}</div>
         </div>
       </div>
@@ -1557,23 +1590,23 @@ function renderFindings() {
             <div class="kv-row"><div class="kv-key">Disposition</div><div class="kv-val">${escapeHtml(humanizeSnake(effectiveFindingDisposition(selected)))}</div></div>
             <div class="kv-row"><div class="kv-key">Suggested domain</div><div class="kv-val">${escapeHtml(findingDomainHint(selected))}</div></div>
           </div>
-          <div class="small" style="margin-top:12px;">${escapeHtml(findingBody(selected) || 'No additional finding narrative available.')}</div>
+          <div class="detail-summary">${escapeHtml(findingBody(selected) || 'No additional finding narrative available.')}</div>
         </div>
         <div class="card finding-detail-card">
           <h4>Task linkage</h4>
-          ${related.length ? related.map(match => `<div class="feed-item"><div><strong>${escapeHtml(match.item.title)}</strong></div><div class="small">${escapeHtml(match.item.status || 'unknown')} • score ${match.score}</div><div class="small">${escapeHtml(match.reasons.join(' • '))}</div></div>`).join('') : '<div class="empty">No convincing task match yet. Create a dedicated investigation task.</div>'}
+          ${related.length ? related.map(match => `<div class="feed-item compact-feed-item"><div><strong>${escapeHtml(match.item.title)}</strong></div><div class="small">${escapeHtml(humanizeSnake(match.item.status || 'unknown'))} • score ${match.score}</div><div class="small">${escapeHtml(compactText(match.reasons.join(' • '), 140))}</div></div>`).join('') : '<div class="empty">No convincing task match yet. Create a dedicated investigation task.</div>'}
         </div>
       </div>
       <div class="card finding-detail-card" style="margin-top:14px;">
         <h4>Native SecOpsAI triage</h4>
         ${nativeInsight ? `
           <div class="kv-list">
-            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Recommended disposition</div><div class="kv-val">${escapeHtml(nativeInsight.orchestratorFinding.recommended_disposition || '—')}</div></div>` : ''}
-            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Latest outcome</div><div class="kv-val">${escapeHtml(nativeInsight.orchestratorFinding.outcome || '—')}</div></div>` : ''}
-            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Confidence</div><div class="kv-val">${escapeHtml(nativeInsight.orchestratorFinding.confidence ?? '—')}</div></div>` : ''}
-            ${nativeInsight.pendingAction ? `<div class="kv-row"><div class="kv-key">Pending action</div><div class="kv-val">${escapeHtml(nativeInsight.pendingAction.action_id || nativeInsight.pendingAction.action_type || '—')}</div></div>` : ''}
+            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Recommended disposition</div><div class="kv-val">${escapeHtml(humanizeSnake(nativeInsight.orchestratorFinding.recommended_disposition || '—'))}</div></div>` : ''}
+            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Latest outcome</div><div class="kv-val">${escapeHtml(humanizeSnake(nativeInsight.orchestratorFinding.outcome || '—'))}</div></div>` : ''}
+            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Confidence</div><div class="kv-val">${escapeHtml(humanizeSnake(nativeInsight.orchestratorFinding.confidence ?? '—'))}</div></div>` : ''}
+            ${nativeInsight.pendingAction ? `<div class="kv-row"><div class="kv-key">Pending action</div><div class="kv-val">${escapeHtml(nativeInsight.pendingAction.action_id || humanizeSnake(nativeInsight.pendingAction.action_type || '—'))}</div></div>` : ''}
           </div>
-          <div class="small" style="margin-top:12px;">${escapeHtml(nativeInsight.pendingAction?.summary || nativeInsight.orchestratorFinding?.summary || 'Native triage context available.')}</div>
+          <div class="detail-summary">${escapeHtml(nativeInsight.pendingAction?.summary || nativeInsight.orchestratorFinding?.summary || 'Native triage context available.')}</div>
         ` : `
           <div class="small">No native queue or latest orchestrator insight was found for this specific finding ID.</div>
           ${triageLatest ? `<div class="small" style="margin-top:10px;">Latest orchestrator run: ${escapeHtml(fmtDate(triageLatest.generated_at))} • processed ${escapeHtml(triageLatest.processed ?? '—')} findings</div>` : ''}
@@ -1584,10 +1617,10 @@ function renderFindings() {
               <label>
                 <span>Guarded close disposition</span>
                 <select id="selected-finding-close-disposition">
-                  <option value="needs_review">needs_review</option>
-                  <option value="tune_policy">tune_policy</option>
-                  <option value="expected_behavior">expected_behavior</option>
-                  <option value="false_positive">false_positive</option>
+                  <option value="needs_review">Needs Review</option>
+                  <option value="tune_policy">Tune Policy</option>
+                  <option value="expected_behavior">Expected Behavior</option>
+                  <option value="false_positive">False Positive</option>
                 </select>
               </label>
               <label class="full">
@@ -1607,7 +1640,7 @@ function renderFindings() {
       </div>
       <div class="card finding-detail-card" style="margin-top:14px;">
         <h4>Run-request correlation</h4>
-        ${requests.length ? requests.map(match => `<div class="feed-item"><div><strong>${escapeHtml(match.request.role_label)}</strong></div><div class="small">${escapeHtml(match.request.status || 'queued')} • score ${match.score}</div><div class="small">${escapeHtml((match.request.prompt_text || '').slice(0, 180) || '—')}</div></div>`).join('') : '<div class="empty">No strong run-request overlap yet. This gracefully stays empty when the queue or text hints are absent.</div>'}
+        ${requests.length ? requests.map(match => `<div class="feed-item compact-feed-item"><div><strong>${escapeHtml(shortRoleLabel(match.request.role_label || 'unknown'))}</strong></div><div class="small">${escapeHtml(humanizeSnake(match.request.status || 'queued'))} • score ${match.score}</div><div class="small">${escapeHtml(summarizePromptText(match.request.prompt_text || '—'))}</div></div>`).join('') : '<div class="empty">No strong run-request overlap yet. This gracefully stays empty when the queue or text hints are absent.</div>'}
         <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}<button class="mini-btn" id="selected-finding-run-investigate-btn">Investigate now</button><button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button>${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply now</button><button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}</div>
       </div>
     `;
@@ -1658,7 +1691,7 @@ function humanizeSnake(value) {
     .replace(/_/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/\w/g, c => c.toUpperCase());
+    .replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function shortRoleLabel(role) {
