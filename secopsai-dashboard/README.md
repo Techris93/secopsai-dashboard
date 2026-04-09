@@ -11,6 +11,12 @@ The dashboard is now intentionally narrow:
 
 It is not a Discord control plane and not a generic multi-agent org shell.
 
+It now also reads native local SecOpsAI state through the helper server:
+- triage summary
+- pending/applyable triage actions
+- latest orchestrator summaries
+- latest local findings artifact metadata
+
 ## Pages
 
 ### Overview
@@ -72,3 +78,7 @@ cp .env.example .env
 python3 generate-config.py
 ./start-local-dashboard-stack.sh
 ```
+
+Optional `.env` values:
+- `SECOPSAI_ROOT`
+  - local repo root used by the helper server for native triage/orchestrator state

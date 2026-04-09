@@ -68,6 +68,7 @@ const state = {
   channelRoutes: [],
   events: [],
   integrationStatus: null,
+  localTriage: null,
   selectedFindingId: null,
   outputEvidenceCache: new Map(),
   liveRefreshTimer: null,
@@ -88,6 +89,39 @@ function fmtDate(value) {
   if (!value) return "—";
   const d = new Date(value);
   return d.toLocaleString();
+}
+
+function localTriageSummary() {
+  return state.localTriage?.summary || null;
+}
+
+function localTriageLatestRun() {
+  return state.localTriage?.orchestrator?.latest || null;
+}
+
+function localPendingActions() {
+  return Array.isArray(state.localTriage?.queue?.pending) ? state.localTriage.queue.pending : [];
+}
+
+function localAppliedActionsCount() {
+  return Number(state.localTriage?.queue?.applied_count || 0);
+}
+
+function localFindingsArtifact() {
+  return state.localTriage?.findings_artifact || null;
+}
+
+function localOrchestratorFindings() {
+  return Array.isArray(localTriageLatestRun()?.findings) ? localTriageLatestRun().findings : [];
+}
+
+function localFindingInsight(findingIdValue) {
+  const normalized = String(findingIdValue || '');
+  if (!normalized) return null;
+  const pendingAction = localPendingActions().find(item => String(item.finding_id || '') === normalized) || null;
+  const orchestratorFinding = localOrchestratorFindings().find(item => String(item.finding_id || '') === normalized) || null;
+  if (!pendingAction && !orchestratorFinding) return null;
+  return { pendingAction, orchestratorFinding };
 }
 
 function escapeHtml(str = "") {
@@ -1059,6 +1093,9 @@ function renderMissionControl() {
     return new Date(w.updated_at).toDateString() === new Date().toDateString();
   }).length;
   const secReview = state.workItems.filter(w => w.requires_security_review).length;
+  const triageSummary = localTriageSummary();
+  const triageLatest = localTriageLatestRun();
+  const pendingActions = localPendingActions();
 
   function drillToTasks({ status = '', external = null, security = null } = {}) {
     setPage('tasks');
@@ -1116,6 +1153,23 @@ function renderMissionControl() {
         <div class="metric">${openFindings}</div>
         <div class="metric-label">Findings that still need triage or closure</div>
       </div>
+      <div class="card metric-card" id="mc-native-triage" style="cursor:pointer;">
+        <h3>Native triage</h3>
+        <div class="metric">${triageSummary ? `${triageSummary.open_findings ?? 0} / ${triageSummary.pending_actions ?? pendingActions.length}` : '—'}</div>
+        <div class="metric-label">${triageSummary ? 'open findings / pending actions from local SecOpsAI' : 'local SecOpsAI triage helper unavailable'}</div>
+      </div>
+      <div class="card">
+        <h3>Latest orchestrator run</h3>
+        ${triageLatest ? `
+          <div class="kv-list">
+            <div class="kv-row"><div class="kv-key">Generated</div><div class="kv-val">${escapeHtml(fmtDate(triageLatest.generated_at))}</div></div>
+            <div class="kv-row"><div class="kv-key">Processed</div><div class="kv-val">${escapeHtml(triageLatest.processed ?? '—')}</div></div>
+            <div class="kv-row"><div class="kv-key">Queued</div><div class="kv-val">${escapeHtml(triageLatest.queued ?? triageLatest.pending_actions ?? 0)}</div></div>
+            <div class="kv-row"><div class="kv-key">Auto applied</div><div class="kv-val">${escapeHtml(triageLatest.auto_applied ?? triageLatest.applied_actions ?? 0)}</div></div>
+          </div>
+          <div class="small" style="margin-top:12px;">${escapeHtml((triageLatest.findings?.[0]?.summary || 'Recent SecOpsAI orchestration summary available locally.').slice(0, 180))}</div>
+        ` : '<div class="empty">No orchestrator summary found yet.</div>'}
+      </div>
     `;
 
     el('mc-external-facing')?.addEventListener('click', () => {
@@ -1125,6 +1179,7 @@ function renderMissionControl() {
       renderTasks();
     });
     el('mc-open-findings')?.addEventListener('click', () => setPage('findings'));
+    el('mc-native-triage')?.addEventListener('click', () => setPage('findings'));
   }
 
   const recentFeed = [...state.events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 6);
@@ -1292,6 +1347,9 @@ async function removeFinding(targetFindingId) {
 function renderFindings() {
   const findingsAvailable = state.optionalTables.findings !== false;
   if (findingsAvailable && state.findings.length && !state.selectedFindingId) selectFinding();
+  const triageSummary = localTriageSummary();
+  const triageLatest = localTriageLatestRun();
+  const pendingActions = localPendingActions();
   const summary = el('finding-summary');
   const total = state.findings.length;
   const openCount = state.findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
@@ -1308,6 +1366,8 @@ function renderFindings() {
       <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div></div>
       <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With task correlation</div></div>
       <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Native SecOpsAI open findings</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Native pending actions</div></div>
     `;
   }
 
@@ -1358,15 +1418,39 @@ function renderFindings() {
   if (intel) {
     const selected = currentSelectedFinding();
     if (!findingsAvailable) {
-      intel.innerHTML = `<div class="empty">Correlation detail will appear here once the optional <code>findings</code> table exists.</div>`;
+      intel.innerHTML = triageLatest ? `
+        <div class="card finding-detail-card">
+          <h4>Native triage overview</h4>
+          <div class="kv-list">
+            <div class="kv-row"><div class="kv-key">Open findings</div><div class="kv-val">${escapeHtml(triageSummary?.open_findings ?? '—')}</div></div>
+            <div class="kv-row"><div class="kv-key">In review</div><div class="kv-val">${escapeHtml(triageSummary?.in_review_findings ?? '—')}</div></div>
+            <div class="kv-row"><div class="kv-key">Pending actions</div><div class="kv-val">${escapeHtml(triageSummary?.pending_actions ?? pendingActions.length)}</div></div>
+            <div class="kv-row"><div class="kv-key">Latest orchestrator run</div><div class="kv-val">${escapeHtml(fmtDate(triageLatest.generated_at))}</div></div>
+          </div>
+          <div class="small" style="margin-top:12px;">Supabase findings are not available yet. The dashboard is falling back to local SecOpsAI triage state via the helper API.</div>
+        </div>
+      ` : `<div class="empty">Correlation detail will appear here once the optional <code>findings</code> table exists.</div>`;
       return;
     }
     if (!selected) {
-      intel.innerHTML = `<div class="empty">Select a finding to inspect correlation, related requests, and suggested next actions.</div>`;
+      intel.innerHTML = triageLatest ? `
+        <div class="card finding-detail-card">
+          <h4>Native triage overview</h4>
+          <div class="kv-list">
+            <div class="kv-row"><div class="kv-key">Open findings</div><div class="kv-val">${escapeHtml(triageSummary?.open_findings ?? '—')}</div></div>
+            <div class="kv-row"><div class="kv-key">Pending actions</div><div class="kv-val">${escapeHtml(triageSummary?.pending_actions ?? pendingActions.length)}</div></div>
+            <div class="kv-row"><div class="kv-key">Applied actions</div><div class="kv-val">${escapeHtml(triageSummary?.applied_actions ?? localAppliedActionsCount())}</div></div>
+            <div class="kv-row"><div class="kv-key">Latest orchestrator run</div><div class="kv-val">${escapeHtml(fmtDate(triageLatest.generated_at))}</div></div>
+          </div>
+          ${pendingActions.length ? `<div class="small" style="margin-top:12px;"><strong>Pending actions:</strong> ${escapeHtml(pendingActions.slice(0, 3).map(item => `${item.action_id}: ${item.summary || item.action_type}`).join(' • '))}</div>` : ''}
+          <div class="small" style="margin-top:12px;">Select a finding to inspect correlation, related requests, and native SecOpsAI triage context.</div>
+        </div>
+      ` : `<div class="empty">Select a finding to inspect correlation, related requests, and suggested next actions.</div>`;
       return;
     }
     const related = relatedTasksForFinding(selected);
     const requests = correlatedRunRequestsForFinding(selected);
+    const nativeInsight = localFindingInsight(findingId(selected));
     intel.innerHTML = `
       <div class="finding-detail-header">
         <div>
@@ -1389,6 +1473,21 @@ function renderFindings() {
           <h4>Task linkage</h4>
           ${related.length ? related.map(match => `<div class="feed-item"><div><strong>${escapeHtml(match.item.title)}</strong></div><div class="small">${escapeHtml(match.item.status || 'unknown')} • score ${match.score}</div><div class="small">${escapeHtml(match.reasons.join(' • '))}</div></div>`).join('') : '<div class="empty">No convincing task match yet. Create a dedicated investigation task.</div>'}
         </div>
+      </div>
+      <div class="card finding-detail-card" style="margin-top:14px;">
+        <h4>Native SecOpsAI triage</h4>
+        ${nativeInsight ? `
+          <div class="kv-list">
+            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Recommended disposition</div><div class="kv-val">${escapeHtml(nativeInsight.orchestratorFinding.recommended_disposition || '—')}</div></div>` : ''}
+            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Latest outcome</div><div class="kv-val">${escapeHtml(nativeInsight.orchestratorFinding.outcome || '—')}</div></div>` : ''}
+            ${nativeInsight.orchestratorFinding ? `<div class="kv-row"><div class="kv-key">Confidence</div><div class="kv-val">${escapeHtml(nativeInsight.orchestratorFinding.confidence ?? '—')}</div></div>` : ''}
+            ${nativeInsight.pendingAction ? `<div class="kv-row"><div class="kv-key">Pending action</div><div class="kv-val">${escapeHtml(nativeInsight.pendingAction.action_id || nativeInsight.pendingAction.action_type || '—')}</div></div>` : ''}
+          </div>
+          <div class="small" style="margin-top:12px;">${escapeHtml(nativeInsight.pendingAction?.summary || nativeInsight.orchestratorFinding?.summary || 'Native triage context available.')}</div>
+        ` : `
+          <div class="small">No native queue or latest orchestrator insight was found for this specific finding ID.</div>
+          ${triageLatest ? `<div class="small" style="margin-top:10px;">Latest orchestrator run: ${escapeHtml(fmtDate(triageLatest.generated_at))} • processed ${escapeHtml(triageLatest.processed ?? '—')} findings</div>` : ''}
+        `}
       </div>
       <div class="card finding-detail-card" style="margin-top:14px;">
         <h4>Run-request correlation</h4>
@@ -1836,12 +1935,15 @@ function renderIntegrations() {
   const summary = el('integration-summary');
   const queuedRequests = state.runRequests.filter(r => r.status === 'queued').length;
   const runningRequests = state.runRequests.filter(r => r.status === 'running').length;
+  const triageSummary = localTriageSummary();
   if (summary) {
     summary.innerHTML = `
       <div class="card"><div class="metric">${state.channelRoutes.length}</div><div class="metric-label">Channel routes</div></div>
       <div class="card"><div class="metric">${state.channelRoutes.filter(r => r.active).length}</div><div class="metric-label">Active routes</div></div>
       <div class="card"><div class="metric">${queuedRequests}</div><div class="metric-label">Queued run requests</div></div>
-      <div class="card"><div class="metric">${runningRequests}</div><div class="metric-label">Running run requests</div></div>`;
+      <div class="card"><div class="metric">${runningRequests}</div><div class="metric-label">Running run requests</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">SecOpsAI open findings</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? localPendingActions().length : '—'}</div><div class="metric-label">SecOpsAI pending actions</div></div>`;
   }
 
   const cfgEl = el('integration-config');
@@ -1860,10 +1962,21 @@ function renderIntegrations() {
         <div class="kv-list">
           <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">${escapeHtml(state.integrationStatus?.helper?.mode || 'local-control-panel')}</div></div>
           <div class="kv-row"><div class="kv-key">Run output API</div><div class="kv-val">${state.integrationStatus?.helper?.run_output_api ? 'Ready' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">Queue model</div><div class="kv-val">run_requests + findings</div></div>
+          <div class="kv-row"><div class="kv-key">Native triage API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_triage_api ? 'Ready' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Queue model</div><div class="kv-val">run_requests + findings + triage actions</div></div>
           <div class="kv-row"><div class="kv-key">Runtime authority</div><div class="kv-val">SecOpsAI / OpenClaw</div></div>
         </div>
-        <div class="small" style="margin-top:12px;">The dashboard keeps observability and queue state. It no longer owns Discord dispatch or direct agent messaging.</div>
+        <div class="small" style="margin-top:12px;">The dashboard keeps observability and queue state. Native investigation, orchestration, and action application stay in SecOpsAI.</div>
+      </div>
+      <div class="card">
+        <h3>Native SecOpsAI</h3>
+        <div class="kv-list">
+          <div class="kv-row"><div class="kv-key">Repo root</div><div class="kv-val">${escapeHtml(state.localTriage?.secopsai_root || 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Latest findings artifact</div><div class="kv-val">${escapeHtml(localFindingsArtifact()?.name || 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Latest orchestrator summary</div><div class="kv-val">${escapeHtml(localTriageLatestRun()?.name || 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Queue file</div><div class="kv-val">${escapeHtml(state.localTriage?.queue?.path || 'Unavailable')}</div></div>
+        </div>
+        <div class="small" style="margin-top:12px;">This helper-backed view makes the dashboard usable even when Supabase lags behind local SecOpsAI triage activity.</div>
       </div>`;
   }
 
@@ -1895,7 +2008,9 @@ function renderAll() {
   renderFindings();
   renderRunRequests();
   renderIntegrations();
-  setStatus(`<span class="dot"></span> Supabase connected • ${state.channelRoutes.length} routes loaded`);
+  const triageSummary = localTriageSummary();
+  const triageBit = triageSummary ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending` : '';
+  setStatus(`<span class="dot"></span> Supabase connected • ${state.channelRoutes.length} routes loaded${triageBit}`);
 }
 
 async function loadTable(table, options = {}) {
@@ -2104,6 +2219,7 @@ async function backgroundRefreshOpsData() {
     ]);
     state.runs = runs;
     state.events = events;
+    await loadLocalTriageState();
     renderMissionControl();
     renderIntegrations();
     renderFindings();
@@ -2120,6 +2236,17 @@ async function loadIntegrationStatus() {
   } catch (error) {
     console.error('integration status load failed', error);
     state.integrationStatus = { ok: false, helper: { mode: 'local-control-panel', run_output_api: false } };
+  }
+}
+
+async function loadLocalTriageState() {
+  try {
+    const res = await fetch('/api/secopsai/triage-state');
+    if (!res.ok) throw new Error(`Local triage HTTP ${res.status}`);
+    state.localTriage = await res.json();
+  } catch (error) {
+    console.warn('local triage load failed', error);
+    state.localTriage = { ok: false, error: error?.message || String(error) };
   }
 }
 
@@ -2303,10 +2430,12 @@ async function backgroundRefreshLiveExecutionState() {
     ]);
     state.runs = runs;
     state.runRequests = runRequests;
+    await loadLocalTriageState();
     await hydrateRunRequestOutputEvidence();
     await synchronizeSuccessfulTaskTransitions();
     renderTasks();
     renderMissionControl();
+    renderFindings();
     renderIntegrations();
   } catch (e) {
     console.warn('background live execution refresh failed', e);
@@ -2361,6 +2490,13 @@ async function boot() {
   } catch (err) {
     console.warn('loadIntegrationStatus failed during boot', err);
     errors.push(`integration status: ${err.message || String(err)}`);
+  }
+
+  try {
+    await loadLocalTriageState();
+  } catch (err) {
+    console.warn('loadLocalTriageState failed during boot', err);
+    errors.push(`local triage: ${err.message || String(err)}`);
   }
 
   renderAll();

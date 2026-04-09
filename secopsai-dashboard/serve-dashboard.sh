@@ -14,6 +14,10 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+set -a
+source "$DIR/.env"
+set +a
+
 python3 "$DIR/generate-config.py"
 
 export PORT HOST

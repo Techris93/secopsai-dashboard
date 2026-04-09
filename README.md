@@ -84,3 +84,9 @@ The next logical upgrade is extending the dashboard schema and UI for:
 - triage action queue
 - orchestrator summaries
 - policy-tuning recommendations
+
+The local helper now exposes native SecOpsAI triage state so the dashboard can show:
+- local `triage summary`
+- pending triage actions from `action_queue.json`
+- recent orchestrator summaries under `reports/triage/orchestrator/`
+- latest local findings artifact metadata
