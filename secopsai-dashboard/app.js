@@ -138,6 +138,48 @@ async function copyTextWithStatus(text, successMessage) {
   setStatus(`<span class="dot"></span> ${escapeHtml(successMessage)}`);
 }
 
+async function postNativeHelper(path, payload) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.ok === false) {
+    throw new Error(data?.error || data?.stderr || data?.stdout || `Request failed (${response.status})`);
+  }
+  return data;
+}
+
+async function runNativeInvestigate(finding) {
+  const id = String(findingId(finding) || '').trim();
+  if (!id) return;
+  setStatus(`<span class="dot"></span> Running native investigate for ${escapeHtml(id)}…`);
+  const result = await postNativeHelper('/api/secopsai/investigate', { finding_id: id });
+  const summary =
+    result?.result?.summary ||
+    result?.result?.verdict_explanation?.summary ||
+    result?.result?.recommendation?.summary ||
+    'Native investigation completed.';
+  setStatus(`<span class="dot"></span> ${escapeHtml(summary)}`);
+  await loadLocalTriageState();
+  renderFindings();
+  renderIntegrations();
+}
+
+async function runNativeApplyAction(action) {
+  const id = String(action?.action_id || '').trim();
+  if (!id) return;
+  setStatus(`<span class="dot"></span> Applying native action ${escapeHtml(id)}…`);
+  const result = await postNativeHelper('/api/secopsai/apply-action', { action_id: id });
+  const line = String(result?.stdout || '').trim().split('\n').filter(Boolean).pop() || `Applied ${id}`;
+  setStatus(`<span class="dot"></span> ${escapeHtml(line)}`);
+  await loadLocalTriageState();
+  renderFindings();
+  renderIntegrations();
+  renderRunRequests();
+}
+
 function escapeHtml(str = "") {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -1378,7 +1420,7 @@ function renderFindings() {
               <td>${renderStatusPill(String(findingStatus(f)).toLowerCase(), humanizeSnake(findingStatus(f)))}</td>
               <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
               <td>${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
-              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate</button></div></td>
+              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-run-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Investigate now</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate</button></div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
@@ -1386,6 +1428,17 @@ function renderFindings() {
         event.stopPropagation();
         const finding = state.findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
         if (finding) openFindingTaskModal(finding);
+      }));
+      table.querySelectorAll('.finding-run-investigate-btn').forEach(btn => btn.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        const finding = state.findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
+        if (!finding) return;
+        try {
+          await runNativeInvestigate(finding);
+        } catch (err) {
+          console.error('native investigate failed', err);
+          setStatus(err.message || String(err), true);
+        }
       }));
       table.querySelectorAll('.finding-copy-investigate-btn').forEach(btn => btn.addEventListener('click', async (event) => {
         event.stopPropagation();
@@ -1479,7 +1532,7 @@ function renderFindings() {
       <div class="card finding-detail-card" style="margin-top:14px;">
         <h4>Run-request correlation</h4>
         ${requests.length ? requests.map(match => `<div class="feed-item"><div><strong>${escapeHtml(match.request.role_label)}</strong></div><div class="small">${escapeHtml(match.request.status || 'queued')} • score ${match.score}</div><div class="small">${escapeHtml((match.request.prompt_text || '').slice(0, 180) || '—')}</div></div>`).join('') : '<div class="empty">No strong run-request overlap yet. This gracefully stays empty when the queue or text hints are absent.</div>'}
-        <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}<button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button>${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}</div>
+        <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}<button class="mini-btn" id="selected-finding-run-investigate-btn">Investigate now</button><button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button>${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply now</button><button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}</div>
       </div>
     `;
     el('selected-finding-task-btn')?.addEventListener('click', () => openFindingTaskModal(selected));
@@ -1487,7 +1540,23 @@ function renderFindings() {
       const top = related[0]?.item;
       if (top) openPromptModal(top);
     });
+    el('selected-finding-run-investigate-btn')?.addEventListener('click', async () => {
+      try {
+        await runNativeInvestigate(selected);
+      } catch (err) {
+        console.error('native investigate failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    });
     el('selected-finding-copy-investigate-btn')?.addEventListener('click', () => copyTextWithStatus(investigateFindingCommand(selected), `Investigate command copied for ${findingTitle(selected)}`));
+    el('selected-finding-run-apply-btn')?.addEventListener('click', async () => {
+      try {
+        await runNativeApplyAction(nativeInsight?.pendingAction);
+      } catch (err) {
+        console.error('native apply-action failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    });
     el('selected-finding-copy-apply-btn')?.addEventListener('click', () => copyTextWithStatus(nativeActionCommand(nativeInsight?.pendingAction), `Apply-action command copied for ${findingTitle(selected)}`));
   }
 }
@@ -1820,10 +1889,22 @@ function renderRunRequests() {
           <td><strong>${escapeHtml(action.action_type || 'unknown')}</strong><div class="small">${escapeHtml(action.action_id || '—')}</div></td>
           <td><div class="small">${escapeHtml(action.finding_id || '—')}</div></td>
           <td><div class="small rr-result">${escapeHtml(compactText(action.summary || action.note || 'No action summary available.', 180))}</div></td>
-          <td><div class="task-card-actions rr-actions">${action.status === 'pending' ? `<button class="mini-btn native-action-copy-btn" data-command="${escapeHtml(nativeActionCommand(action))}">Copy apply-action</button>` : '<span class="small">Already applied</span>'}</div></td>
+          <td><div class="task-card-actions rr-actions">${action.status === 'pending' ? `<button class="mini-btn native-action-run-btn" data-action-id="${escapeHtml(action.action_id || '')}">Apply now</button><button class="mini-btn native-action-copy-btn" data-command="${escapeHtml(nativeActionCommand(action))}">Copy apply-action</button>` : '<span class="small">Already applied</span>'}</div></td>
         </tr>`).join('')}</tbody>
     </table></div>`;
 
+  host.querySelectorAll('.native-action-run-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const action = pending.find(item => String(item.action_id || '') === String(btn.dataset.actionId || ''));
+      if (!action) return;
+      try {
+        await runNativeApplyAction(action);
+      } catch (err) {
+        console.error('native apply-action failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    });
+  });
   host.querySelectorAll('.native-action-copy-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       await copyTextWithStatus(btn.dataset.command || '', 'Apply-action command copied');

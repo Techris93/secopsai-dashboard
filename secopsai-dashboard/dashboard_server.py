@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import subprocess
 import urllib.parse
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
@@ -10,6 +11,8 @@ from urllib.parse import urlparse
 DIR = Path(__file__).resolve().parent
 SECOPSAI_ROOT = Path(os.environ.get('SECOPSAI_ROOT', '/Users/chrixchange/secopsai')).expanduser().resolve()
 OPENCLAW_WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace').resolve()
+FINDING_ID_RE = re.compile(r'^[A-Z]{3}-[A-Z0-9]+$')
+ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 
 
 def read_json_file(path: Path, default=None):
@@ -138,6 +141,44 @@ def json_response(handler, code, payload):
     handler.wfile.write(body)
 
 
+def read_request_json(handler):
+    content_length = int(handler.headers.get('Content-Length', '0') or '0')
+    if content_length <= 0:
+        return {}
+    raw = handler.rfile.read(content_length)
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw.decode('utf-8'))
+    except Exception:
+        return {}
+
+
+def secopsai_python_bin():
+    python_bin = SECOPSAI_ROOT / '.venv' / 'bin' / 'python3'
+    return python_bin if python_bin.exists() else None
+
+
+def run_secopsai_cli(args, timeout=120):
+    python_bin = secopsai_python_bin()
+    if not python_bin:
+        raise RuntimeError('SecOpsAI venv python not found')
+    result = subprocess.run(
+        [str(python_bin), '-m', 'secopsai.cli', *args],
+        cwd=str(SECOPSAI_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    return {
+        'ok': result.returncode == 0,
+        'returncode': result.returncode,
+        'stdout': result.stdout,
+        'stderr': result.stderr,
+    }
+
+
 class DashboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, directory=None, **kwargs):
         super().__init__(*args, directory=str(DIR), **kwargs)
@@ -186,6 +227,58 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        parsed = urlparse(self.path)
+        payload = read_request_json(self)
+
+        if parsed.path == '/api/secopsai/investigate':
+            finding_id = str(payload.get('finding_id') or '').strip()
+            if not FINDING_ID_RE.match(finding_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid finding_id'})
+            try:
+                result = run_secopsai_cli(
+                    ['triage', 'investigate', finding_id, '--search-root', str(SECOPSAI_ROOT), '--json'],
+                    timeout=180,
+                )
+                parsed_stdout = None
+                try:
+                    parsed_stdout = json.loads(result['stdout']) if result['stdout'].strip() else None
+                except Exception:
+                    parsed_stdout = None
+                return json_response(
+                    self,
+                    200 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'finding_id': finding_id,
+                        'result': parsed_stdout,
+                        'stdout': result['stdout'],
+                        'stderr': result['stderr'],
+                        'returncode': result['returncode'],
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/apply-action':
+            action_id = str(payload.get('action_id') or '').strip()
+            if not ACTION_ID_RE.match(action_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid action_id'})
+            try:
+                result = run_secopsai_cli(['triage', 'apply-action', action_id, '--yes'], timeout=180)
+                return json_response(
+                    self,
+                    200 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'action_id': action_id,
+                        'stdout': result['stdout'],
+                        'stderr': result['stderr'],
+                        'returncode': result['returncode'],
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
         return json_response(self, 404, {'ok': False, 'error': 'Not found'})
 
 

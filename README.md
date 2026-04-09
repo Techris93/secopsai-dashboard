@@ -5,17 +5,18 @@ SecOpsAI Dashboard is a lightweight control surface for the current SecOpsAI pro
 It is focused on:
 - findings visibility
 - triage task management
-- run-request queue visibility
+- native triage queue visibility
+- helper-backed native investigate/apply-action controls
 - Supabase-backed operational state
 
-It is not the execution runtime. Native SecOpsAI and OpenClaw flows own investigation, orchestration, and outbound operator messaging.
+It is not the core execution runtime. Native SecOpsAI and OpenClaw still own investigation, orchestration, and outbound operator messaging, but the local helper can now invoke selected native SecOpsAI triage actions directly.
 
 ## Current surfaces
 
 - `Overview` — top-level run, blocker, review, and findings posture
 - `Tasks` — Kanban workflow for work items
 - `Findings` — findings backlog with task correlation
-- `Integrations` — Supabase state, channel route metadata, and run-request visibility
+- `Native Triage` — local helper health, pending actions, orchestrator history, and selected native action controls
 
 ## What was removed
 
@@ -30,7 +31,7 @@ The dashboard no longer ships the older generic mission-control extras that were
 - HTML + Vanilla JS
 - Tailwind CSS
 - Supabase JS SDK
-- optional local Python helper server for integration status and run-output reads
+- optional local Python helper server for integration status, run-output reads, native triage state, and selected native triage actions
 
 Important files:
 
@@ -80,13 +81,10 @@ This dashboard now complements the latest `secopsai` repo work:
 - action queue / apply-action flow
 - findings sync into Supabase
 
-The next logical upgrade is extending the dashboard schema and UI for:
-- triage action queue
-- orchestrator summaries
-- policy-tuning recommendations
-
 The local helper now exposes native SecOpsAI triage state so the dashboard can show:
 - local `triage summary`
 - pending triage actions from `action_queue.json`
 - recent orchestrator summaries under `reports/triage/orchestrator/`
 - latest local findings artifact metadata
+- direct helper-backed `triage investigate`
+- direct helper-backed `triage apply-action`

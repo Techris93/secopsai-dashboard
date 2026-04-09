@@ -6,7 +6,8 @@ The dashboard is now intentionally narrow:
 - overview of operational state
 - findings queue and correlation
 - task management
-- run-request visibility
+- native triage queue visibility
+- helper-backed native SecOpsAI actions
 - Supabase-backed integration status
 
 It is not a Discord control plane and not a generic multi-agent org shell.
@@ -16,6 +17,8 @@ It now also reads native local SecOpsAI state through the helper server:
 - pending/applyable triage actions
 - latest orchestrator summaries
 - latest local findings artifact metadata
+- direct native `triage investigate`
+- direct native `triage apply-action`
 
 ## Pages
 
@@ -41,11 +44,12 @@ It now also reads native local SecOpsAI state through the helper server:
 - finding detail and correlation
 - create a task directly from a finding
 
-### Integrations
-- Supabase readiness
-- local helper readiness
-- `run_requests` queue state
-- `channel_routes` metadata
+### Native Triage
+- helper readiness
+- pending action queue
+- recent orchestrator summaries
+- findings/orchestrator freshness
+- direct native investigate and apply-action controls
 
 ## Runtime split
 
@@ -81,4 +85,4 @@ python3 generate-config.py
 
 Optional `.env` values:
 - `SECOPSAI_ROOT`
-  - local repo root used by the helper server for native triage/orchestrator state
+  - local repo root used by the helper server for native triage/orchestrator state and helper-backed native actions
