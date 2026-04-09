@@ -50,6 +50,19 @@ def collect_secopsai_triage_state():
     if not isinstance(summary, dict):
         latest_summary_files = latest_json_files(SECOPSAI_ROOT / 'reports' / 'triage' / 'orchestrator', '*.json', limit=1)
         summary = read_json_file(latest_summary_files[0], {}) if latest_summary_files else {}
+    raw_summary_findings = summary.get('findings', []) if isinstance(summary, dict) else []
+    if not isinstance(raw_summary_findings, list):
+        raw_summary_findings = []
+    active_summary_findings = [
+        item for item in raw_summary_findings
+        if str((item or {}).get('status') or '').lower() in {'open', 'in_review'}
+    ][:10]
+    if isinstance(summary, dict):
+        summary = {
+            **summary,
+            'findings': active_summary_findings,
+            'historical_findings_count': len(raw_summary_findings),
+        }
 
     queue_file = SECOPSAI_ROOT / 'data' / 'triage' / 'action_queue.json'
     queue_actions = read_json_file(queue_file, [])
@@ -74,7 +87,10 @@ def collect_secopsai_triage_state():
                 'open_findings': payload.get('open_findings'),
                 'pending_actions': payload.get('pending_actions'),
                 'applied_actions': payload.get('applied_actions'),
-                'findings': payload.get('findings', [])[:10],
+                'findings': [
+                    item for item in (payload.get('findings', []) if isinstance(payload.get('findings', []), list) else [])
+                    if str((item or {}).get('status') or '').lower() in {'open', 'in_review'}
+                ][:10],
             }
         )
 

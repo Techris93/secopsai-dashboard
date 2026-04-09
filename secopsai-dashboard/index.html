@@ -36,8 +36,8 @@
           <span class="desc">Detection backlog, triage, task linkage</span>
         </button>
         <button class="nav-btn" data-page="integrations">
-          <span class="title">Integrations</span>
-          <span class="desc">Supabase, routes, run request visibility</span>
+          <span class="title">Native Triage</span>
+          <span class="desc">Pending actions, orchestrator history, helper health</span>
         </button>
       </nav>
 
@@ -80,11 +80,11 @@
         <div class="small" style="margin-bottom:12px;">Task changes create dashboard events and orchestrator audit runs. The dashboard manages state and visibility; SecOpsAI/OpenClaw runtimes handle actual execution.</div>
         <div class="grid cols-4" style="margin-bottom:18px;">
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
-          <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option><option value="product">product</option><option value="revenue">revenue</option><option value="support">support</option></select></label></div>
+          <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option></select></label></div>
           <div class="card"><label><span class="small">Priority</span><select id="task-filter-priority"><option value="">All</option><option value="urgent">urgent</option><option value="high">high</option><option value="normal">normal</option><option value="low">low</option></select></label></div>
           <div class="card"><label><span class="small">Status</span><select id="task-filter-status"><option value="">All</option><option value="inbox">Inbox</option><option value="planned">Planned</option><option value="in_progress">In Progress</option><option value="review">Review</option><option value="blocked">Blocked</option><option value="done">Done</option></select></label></div>
           <div class="card"><label><span class="small">Owner contains</span><input id="task-filter-owner" type="text" placeholder="e.g. security" /></label></div>
-          <div class="card"><label><span class="small">Reviewer contains</span><input id="task-filter-reviewer" type="text" placeholder="e.g. product" /></label></div>
+          <div class="card"><label><span class="small">Reviewer contains</span><input id="task-filter-reviewer" type="text" placeholder="e.g. security" /></label></div>
           <div class="card"><div class="small" style="margin-bottom:10px;">Flags</div>
             <label class="checkbox-row" style="margin-top:0;"><input id="task-filter-external" type="checkbox" /> <span>External-facing only</span></label>
             <label class="checkbox-row" style="margin-top:10px;"><input id="task-filter-security" type="checkbox" /> <span>Security review only</span></label>
@@ -100,7 +100,7 @@
             <h2>Findings</h2>
             <p>Findings triage view with task/run correlation, richer context, and graceful fallback when optional finding fields or tables are missing.</p>
           </div>
-          <div class="status-pill" id="new-finding-task-btn" style="cursor:pointer;"><span class="dot"></span> New task from finding</div>
+          <div class="status-pill" id="new-finding-task-btn" style="cursor:pointer;"><span class="dot"></span> New investigation task</div>
         </div>
         <div class="grid cols-5" id="finding-summary"></div>
         <div class="grid cols-2" style="margin-top:18px;">
@@ -118,8 +118,8 @@
       <section class="page" id="page-integrations">
         <div class="page-header">
           <div>
-            <h2>Integrations</h2>
-            <p>Source-of-truth view for Supabase configuration, channel metadata, and run-request visibility. Live execution stays in SecOpsAI and OpenClaw runtimes.</p>
+            <h2>Native Triage</h2>
+            <p>First-class view of local SecOpsAI queue state, orchestrator history, findings freshness, and helper/runtime health.</p>
           </div>
         </div>
         <div class="grid cols-4" id="integration-summary"></div>
@@ -127,14 +127,14 @@
         <div class="card" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
-              <h3 style="margin:0;">Run requests</h3>
-              <p class="small" style="margin:6px 0 0;">Queue visibility for dashboard-triggered executions and dispatcher pickup.</p>
+              <h3 style="margin:0;">Native action queue</h3>
+              <p class="small" style="margin:6px 0 0;">Pending and recently applied local SecOpsAI triage actions.</p>
             </div>
           </div>
           <div id="run-requests-table"></div>
         </div>
         <div class="card" style="margin-top:18px;">
-          <h3>Channel route metadata</h3>
+          <h3>Recent orchestrator runs</h3>
           <div id="routes-table"></div>
         </div>
       </section>
@@ -154,9 +154,6 @@
             <option value="exec">exec</option>
             <option value="platform">platform</option>
             <option value="security">security</option>
-            <option value="product">product</option>
-            <option value="revenue">revenue</option>
-            <option value="support">support</option>
           </select>
         </label>
         <label><span>Priority</span>
@@ -250,7 +247,7 @@
         <div class="small">Copy this brief into OpenClaw-native orchestrator flows or ACP runs. Direct dashboard-side sending is retired.</div>
         <div class="modal-actions-right">
           <button id="prompt-copy-btn" class="secondary-btn">Copy brief</button>
-          <button id="prompt-run-btn" class="primary-btn">Run now</button>
+          <button id="prompt-run-btn" class="primary-btn">Queue run</button>
           <button id="prompt-close-btn" class="secondary-btn">Close</button>
         </div>
       </div>

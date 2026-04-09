@@ -196,10 +196,6 @@ a { color: inherit; }
 .badge.domain-exec { border-color: rgba(34,211,238,0.35); background: rgba(34,211,238,0.12); }
 .badge.domain-platform { border-color: rgba(96,165,250,0.35); background: rgba(96,165,250,0.12); }
 .badge.domain-security { border-color: rgba(167,139,250,0.35); background: rgba(167,139,250,0.12); }
-.badge.domain-product { border-color: rgba(129,140,248,0.35); background: rgba(129,140,248,0.12); }
-.badge.domain-revenue { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); }
-.badge.domain-support { border-color: rgba(52,211,153,0.35); background: rgba(52,211,153,0.12); }
-
 .badge.external { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); }
 .badge.review { border-color: rgba(251,113,133,0.35); background: rgba(251,113,133,0.12); }
 
@@ -856,4 +852,3 @@ input, select, textarea { width: 100%; max-width: 100%; }
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-

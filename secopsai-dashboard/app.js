@@ -41,13 +41,7 @@ const ROLE_LABELS = (() => {
     'platform/ai-engineer',
     'platform/devops-automator',
     'security/security-engineer',
-    'security/threat-detection-engineer',
-    'product/product-manager',
-    'product/ui-designer',
-    'revenue/content-creator',
-    'revenue/outbound-strategist',
-    'revenue/sales-engineer',
-    'support/support-responder'
+    'security/threat-detection-engineer'
   ];
 })();
 
@@ -122,6 +116,26 @@ function localFindingInsight(findingIdValue) {
   const orchestratorFinding = localOrchestratorFindings().find(item => String(item.finding_id || '') === normalized) || null;
   if (!pendingAction && !orchestratorFinding) return null;
   return { pendingAction, orchestratorFinding };
+}
+
+function nativeActionCommand(action) {
+  if (!action) return '';
+  const id = String(action.action_id || '').trim();
+  if (!id) return '';
+  return `secopsai triage apply-action ${id} --yes`;
+}
+
+function investigateFindingCommand(finding) {
+  const id = String(findingId(finding) || '').trim();
+  if (!id) return '';
+  const root = state.localTriage?.secopsai_root || '/Users/chrixchange/secopsai';
+  return `secopsai triage investigate ${id} --search-root ${root} --json`;
+}
+
+async function copyTextWithStatus(text, successMessage) {
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  setStatus(`<span class="dot"></span> ${escapeHtml(successMessage)}`);
 }
 
 function escapeHtml(str = "") {
@@ -272,7 +286,7 @@ function findingDomainHint(finding) {
   const text = `${findingTitle(finding)} ${findingBody(finding)} ${findingSource(finding)}`.toLowerCase();
   if (["phish", "credential", "malware", "cve", "ransom", "threat", "vuln", "ioc", "alert"].some(x => text.includes(x))) return 'security';
   if (["deploy", "infra", "pipeline", "service", "backend"].some(x => text.includes(x))) return 'platform';
-  if (["customer", "copy", "launch", "website"].some(x => text.includes(x))) return 'revenue';
+  if (["build", "ci", "dependency", "package", "artifact"].some(x => text.includes(x))) return 'platform';
   return 'security';
 }
 
@@ -447,10 +461,7 @@ function suggestRoleForTask(item) {
   const domainMap = {
     exec: 'exec/agents-orchestrator',
     platform: 'platform/backend-architect',
-    security: 'security/security-engineer',
-    product: 'product/product-manager',
-    revenue: 'revenue/content-creator',
-    support: 'support/support-responder'
+    security: 'security/security-engineer'
   };
   const suggested = domainMap[item?.domain] || 'exec/agents-orchestrator';
   return ROLE_LABELS.includes(suggested) ? suggested : 'exec/agents-orchestrator';
@@ -712,7 +723,7 @@ function syncPromptRunButtonState() {
     btn.textContent = 'Run again';
     return;
   }
-  btn.textContent = 'Run now';
+  btn.textContent = 'Queue run';
 }
 
 function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '', detailHtml = '', viewUrl = null } = {}) {
@@ -781,7 +792,7 @@ function openPromptModal(item, roleLabel = null) {
   promptModalState.relatedRunId = null;
   stopRunStatusPolling();
 
-  el('prompt-modal-title').textContent = 'Intelligent work brief';
+  el('prompt-modal-title').textContent = 'Work brief';
   const route = findRouteForRole(role);
   const reviewer = item?.reviewer_role || null;
   el('prompt-modal-meta').textContent = `Suggested owner: ${role}${reviewer ? ` • Reviewer: ${reviewer}` : ''}${route ? ` • Route metadata: #${route.channel_name}` : ''} • Direct dashboard-side sending retired`;
@@ -813,12 +824,12 @@ async function queueTaskExecutionDirect(item, promptOverride = null) {
   const route = findRouteForRole(role);
 
   const run = await createOrchestratorRun({
-    taskSummary: `Run now requested for ${role}`,
+    taskSummary: `Queued run requested for ${role}`,
     taskDetail: prompt,
     status: 'queued',
     outputSummary: route
-      ? `Dashboard requested immediate execution. Suggested route: #${route.channel_name}.`
-      : 'Dashboard requested immediate execution (no active route found).',
+      ? `Dashboard queued work. Suggested route: #${route.channel_name}.`
+      : 'Dashboard queued work (no active route found).',
     relatedWorkItemId: item?.id || null
   });
 
@@ -882,12 +893,12 @@ async function runPromptNow() {
 
   // Create an audit run row (queued) in agent_runs.
   const run = await createOrchestratorRun({
-    taskSummary: `Run now requested for ${role}`,
+    taskSummary: `Queued run requested for ${role}`,
     taskDetail: prompt,
     status: 'queued',
     outputSummary: route
-      ? `Dashboard requested immediate execution. Suggested route: #${route.channel_name}.`
-      : 'Dashboard requested immediate execution (no active route found).',
+      ? `Dashboard queued work. Suggested route: #${route.channel_name}.`
+      : 'Dashboard queued work (no active route found).',
     relatedWorkItemId: item?.id || null
   });
 
@@ -934,8 +945,8 @@ async function runPromptNow() {
   promptModalState.relatedRunId = run?.id || null;
 
   await createDashboardEvent(
-    'run_now_requested',
-    `Run now: ${role}`,
+    'run_queued',
+    `Queue run: ${role}`,
     route
       ? `Queued run request. Suggested route metadata: #${route.channel_name}.`
       : `Queued run request. No active route metadata found for this role.`,
@@ -1146,7 +1157,7 @@ function renderMissionControl() {
       <div class="card metric-card" id="mc-external-facing" style="cursor:pointer;">
         <h3>External-facing work</h3>
         <div class="metric">${extFacing}</div>
-        <div class="metric-label">Items that need careful product/security review</div>
+        <div class="metric-label">Items that need careful operator and security review</div>
       </div>
       <div class="card metric-card" id="mc-open-findings" style="cursor:pointer;">
         <h3>Open findings</h3>
@@ -1272,7 +1283,7 @@ function renderTasks() {
           <div class="task-card-actions">
             <button class="mini-btn" data-action="assign-owner">Suggest owner</button>
             <button class="mini-btn" data-action="assign-reviewer">Suggest reviewer</button>
-            <button class="mini-btn" data-action="prompt">Execute</button>
+            <button class="mini-btn" data-action="prompt">Open brief</button>
           </div>
         `;
         div.addEventListener('dragstart', (e) => {
@@ -1317,31 +1328,6 @@ function renderTasks() {
     }
     board.appendChild(col);
   });
-}
-
-async function removeFinding(targetFindingId) {
-  const finding = state.findings.find(f => String(findingId(f)) === String(targetFindingId));
-  if (!targetFindingId || !finding) return;
-  if (!confirm(`Remove this finding: ${findingTitle(finding)}?`)) return;
-
-  let deleteError = null;
-  for (const key of ['id', 'finding_id']) {
-    const { error } = await supabaseClient.from('findings').delete().eq(key, targetFindingId);
-    if (!error) {
-      deleteError = null;
-      break;
-    }
-    deleteError = error;
-  }
-  if (deleteError) return alert(`Failed to remove finding: ${deleteError.message}`);
-
-  state.findings = state.findings.filter(f => String(findingId(f)) !== String(targetFindingId));
-  if (String(state.selectedFindingId || '') === String(targetFindingId)) {
-    state.selectedFindingId = findingId(state.findings[0]) || null;
-  }
-  renderFindings();
-  setStatus(`<span class="dot"></span> Finding removed`);
-  Promise.resolve().then(() => createDashboardEvent('finding_removed', `Finding removed`, findingTitle(finding), 'warning', { related_run_id: finding.run_id || finding.related_run_id || null, related_work_item_id: finding.related_work_item_id || finding.work_item_id || null })).catch(e => console.warn('finding_removed event failed', e));
 }
 
 function renderFindings() {
@@ -1392,7 +1378,7 @@ function renderFindings() {
               <td>${renderStatusPill(String(findingStatus(f)).toLowerCase(), humanizeSnake(findingStatus(f)))}</td>
               <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
               <td>${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
-              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-remove-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Remove</button></div></td>
+              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate</button></div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
@@ -1401,9 +1387,10 @@ function renderFindings() {
         const finding = state.findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
         if (finding) openFindingTaskModal(finding);
       }));
-      table.querySelectorAll('.finding-remove-btn').forEach(btn => btn.addEventListener('click', async (event) => {
+      table.querySelectorAll('.finding-copy-investigate-btn').forEach(btn => btn.addEventListener('click', async (event) => {
         event.stopPropagation();
-        await removeFinding(btn.dataset.findingId);
+        const finding = state.findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
+        if (finding) await copyTextWithStatus(investigateFindingCommand(finding), `Investigate command copied for ${findingTitle(finding)}`);
       }));
       table.querySelectorAll('.finding-select-btn, .finding-row').forEach(row => row.addEventListener('click', (event) => {
         const target = event.target.closest('[data-finding-id]');
@@ -1492,7 +1479,7 @@ function renderFindings() {
       <div class="card finding-detail-card" style="margin-top:14px;">
         <h4>Run-request correlation</h4>
         ${requests.length ? requests.map(match => `<div class="feed-item"><div><strong>${escapeHtml(match.request.role_label)}</strong></div><div class="small">${escapeHtml(match.request.status || 'queued')} • score ${match.score}</div><div class="small">${escapeHtml((match.request.prompt_text || '').slice(0, 180) || '—')}</div></div>`).join('') : '<div class="empty">No strong run-request overlap yet. This gracefully stays empty when the queue or text hints are absent.</div>'}
-        <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}<button class="mini-btn" id="selected-finding-remove-btn">Remove finding</button></div>
+        <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}<button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button>${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}</div>
       </div>
     `;
     el('selected-finding-task-btn')?.addEventListener('click', () => openFindingTaskModal(selected));
@@ -1500,7 +1487,8 @@ function renderFindings() {
       const top = related[0]?.item;
       if (top) openPromptModal(top);
     });
-    el('selected-finding-remove-btn')?.addEventListener('click', () => removeFinding(findingId(selected)));
+    el('selected-finding-copy-investigate-btn')?.addEventListener('click', () => copyTextWithStatus(investigateFindingCommand(selected), `Investigate command copied for ${findingTitle(selected)}`));
+    el('selected-finding-copy-apply-btn')?.addEventListener('click', () => copyTextWithStatus(nativeActionCommand(nativeInsight?.pendingAction), `Apply-action command copied for ${findingTitle(selected)}`));
   }
 }
 
@@ -1564,14 +1552,10 @@ function deriveSuggestedReviewer(item = {}, fallbackReviewer = '') {
   if (item?.requires_security_review) return 'security/security-engineer';
   if (item?.external_facing) return 'exec/agents-orchestrator';
   const domain = String(item?.domain || '').toLowerCase();
-  // Cross-functional review: suggest a reviewer from a DIFFERENT domain
-  if (domain === 'security') return 'exec/agents-orchestrator';      // Security work reviewed by exec
-  if (domain === 'product') return 'security/security-engineer';    // Product work reviewed by security
-  if (domain === 'platform') return 'security/security-engineer';   // Platform work reviewed by security
-  if (domain === 'support') return 'exec/agents-orchestrator';      // Support work reviewed by exec
-  if (domain === 'revenue') return 'security/security-engineer';    // Revenue work reviewed by security
-  if (domain === 'exec') return 'security/security-engineer';       // Exec work reviewed by security
-  return 'security/security-engineer'; // Default reviewer
+  if (domain === 'security') return 'exec/agents-orchestrator';
+  if (domain === 'platform') return 'security/security-engineer';
+  if (domain === 'exec') return 'security/security-engineer';
+  return 'security/security-engineer';
 }
 
 function collectRunRequestText(req, run = null) {
@@ -1818,115 +1802,31 @@ function summarizeRunRequestResult(req, run = null) {
   return compactText(stripAnsi(text), 160);
 }
 
-async function removeRunRequest(requestId) {
-  const req = state.runRequests.find(r => r.id === requestId);
-  if (!req) return;
-  const actionLabel = ['queued', 'failed', 'cancelled', 'completed'].includes(String(req.status || '').toLowerCase()) ? 'remove' : 'delete';
-  if (!confirm(`Remove this run request${req.role_label ? ` for ${req.role_label}` : ''}?`)) return;
-  const { error } = await supabaseClient.from('run_requests').delete().eq('id', requestId);
-  if (error) return alert(`Failed to remove run request: ${error.message}`);
-  state.runRequests = state.runRequests.filter(r => r.id !== requestId);
-  renderRunRequests();
-  renderIntegrations();
-  setStatus(`<span class="dot"></span> Run request removed`);
-  Promise.resolve().then(() => createDashboardEvent('run_request_removed', `Run request removed`, `${req.role_label || 'Unknown role'} • ${req.id}`, 'info', { related_run_id: req.related_run_id || null, related_work_item_id: req.related_work_item_id || null })).catch(e => console.warn('run_request_removed event failed', e));
-}
-
-async function cancelRunRequest(requestId) {
-  const req = state.runRequests.find(r => r.id === requestId);
-  if (!req) return;
-  if (!confirm(`Cancel queued run request${req.role_label ? ` for ${req.role_label}` : ''}?`)) return;
-  const { data, error } = await supabaseClient.from('run_requests').update({ status: 'cancelled' }).eq('id', requestId).select().single();
-  if (error) return alert(`Failed to cancel run request: ${error.message}`);
-  const idx = state.runRequests.findIndex(r => r.id === requestId);
-  if (idx >= 0) state.runRequests[idx] = data;
-  renderRunRequests();
-  renderIntegrations();
-  setStatus(`<span class="dot"></span> Run request cancelled`);
-  Promise.resolve().then(() => createDashboardEvent('run_request_cancelled', `Run request cancelled`, `${req.role_label || 'Unknown role'} • ${req.id}`, 'warning', { related_run_id: req.related_run_id || null, related_work_item_id: req.related_work_item_id || null })).catch(e => console.warn('run_request_cancelled event failed', e));
-}
-
 function renderRunRequests() {
   const host = el('run-requests-table');
   if (!host) return;
-  if (state.optionalTables.run_requests === false) {
-    host.innerHTML = `<div class="empty">The run requests table is not available yet. Apply the migration and this panel will start showing queue state.</div>`;
-    return;
-  }
-  if (!state.runRequests.length) {
-    host.innerHTML = `<div class="empty">No run requests yet. Use “Run now” from an intelligent brief to populate this queue.</div>`;
+  const pending = localPendingActions();
+  const applied = Array.isArray(state.localTriage?.queue?.applied_recent) ? state.localTriage.queue.applied_recent : [];
+  if (!pending.length && !applied.length) {
+    host.innerHTML = `<div class="empty">No native pending actions right now. When the SecOpsAI orchestrator queues manual-review actions, they will appear here with copyable apply commands.</div>`;
     return;
   }
   host.innerHTML = `
     <div class="table-wrap"><table class="run-requests-grid">
-      <thead><tr><th>Lifecycle proof</th><th>Request</th><th>Worker / Run</th><th>Paths / Output</th><th>Result evidence</th><th>Actions</th></tr></thead>
-      <tbody>${state.runRequests.map(req => {
-        const workItem = state.workItems.find(w => w.id === req.related_work_item_id);
-        const run = relatedRunForRequest(req);
-        const lifecycle = runRequestLifecycle(req, run);
-        const artifacts = parseRunRequestArtifacts(req, run);
-        const worker = runRequestWorkerIdentity(req, run);
-        const canCancel = ['queued', 'running', 'picked_up'].includes(String(lifecycle.displayStatus || '').toLowerCase());
-        return `<tr>
-          <td>
-            ${renderStatusPill(lifecycle.displayStatus, lifecycle.displayLabel)}
-            ${lifecycle.outcomeHint ? `<div class="small rr-sub" style="margin-top:8px;">${escapeHtml(lifecycle.outcomeHint)}</div>` : ''}
-            ${lifecycle.evidence.length ? `<div class="small rr-proof-list">${lifecycle.evidence.map(line => `<div>${escapeHtml(line)}</div>`).join('')}</div>` : ''}
-          </td>
-          <td>
-            <div class="rr-main"><strong>${escapeHtml(req.role_label || 'Unknown role')}</strong></div>
-            <div class="small rr-sub">${escapeHtml(summarizePromptText(req.prompt_text))}</div>
-            <div class="small rr-meta">${escapeHtml(fmtDate(req.created_at))}</div>
-            <div class="small rr-proof-list" style="margin-top:8px;">
-              <div><strong>Task:</strong> ${escapeHtml(workItem?.title || '—')}</div>
-              <div>${req.related_work_item_id ? `Work item ${escapeHtml(String(req.related_work_item_id))}` : 'No linked task id'}</div>
-              <div>${escapeHtml(req.suggested_channel_name ? `Suggested route #${req.suggested_channel_name}` : 'No suggested route')}</div>
-            </div>
-          </td>
-          <td>
-            <div class="rr-main">${escapeHtml(worker || 'Worker unknown')}</div>
-            <div class="small rr-sub">${escapeHtml(run?.runtime || req?.initiated_by || 'dashboard')}</div>
-            <div class="small rr-proof-list" style="margin-top:8px;">
-              <div>${req.related_run_id ? `Related run ${escapeHtml(String(req.related_run_id))}` : 'No related run id'}</div>
-              <div>${escapeHtml(firstNonEmpty(run?.source_surface, run?.source_channel_id) || 'No source surface metadata')}</div>
-              <div>${escapeHtml(firstNonEmpty(run?.model_used, req?.agent_model) || 'No model/agent field')}</div>
-            </div>
-          </td>
-          <td>
-            <div class="small rr-proof-list">
-              <div><strong>Repo:</strong> ${escapeHtml(firstNonEmpty(req?.repo_path, run?.repo_path) || '—')}</div>
-              <div><strong>Output:</strong> ${escapeHtml(firstNonEmpty(req?.output_path, run?.output_path) || '—')}</div>
-              <div><strong>Summary:</strong> ${escapeHtml(compactText(artifacts.summary || summarizeRunRequestResult(req, run), 120))}</div>
-            </div>
-          </td>
-          <td>
-            <div class="small rr-result">${escapeHtml(summarizeRunRequestResult(req, run))}</div>
-            <div class="small rr-proof-list" style="margin-top:8px;">
-              <div><strong>Implementation likely:</strong> ${escapeHtml(lifecycle.implementationLikely ? 'yes' : lifecycle.analysisOnly ? 'no (analysis only)' : 'unclear')}</div>
-              <div><strong>Files changed:</strong> ${escapeHtml(String(artifacts.filesChanged || '—'))}</div>
-              <div><strong>Commit:</strong> ${escapeHtml(artifacts.commit || '—')}</div>
-              <div><strong>PR:</strong> ${escapeHtml(artifacts.prUrl || (artifacts.prNumber ? `#${artifacts.prNumber}` : '—'))}</div>
-            </div>
-          </td>
-          <td>
-            <div class="task-card-actions rr-actions">
-              ${canCancel ? `<button class="mini-btn" data-runreq-action="cancel" data-runreq-id="${escapeHtml(req.id)}">Cancel</button>` : ''}
-              <button class="mini-btn" data-runreq-action="remove" data-runreq-id="${escapeHtml(req.id)}">Remove</button>
-            </div>
-          </td>
-        </tr>`;
-      }).join('')}</tbody>
+      <thead><tr><th>Status</th><th>Action</th><th>Finding</th><th>Summary</th><th>Apply</th></tr></thead>
+      <tbody>${[...pending, ...applied].map(action => `
+        <tr>
+          <td>${renderStatusPill(String(action.status || 'unknown').toLowerCase(), humanizeSnake(action.status || 'unknown'))}</td>
+          <td><strong>${escapeHtml(action.action_type || 'unknown')}</strong><div class="small">${escapeHtml(action.action_id || '—')}</div></td>
+          <td><div class="small">${escapeHtml(action.finding_id || '—')}</div></td>
+          <td><div class="small rr-result">${escapeHtml(compactText(action.summary || action.note || 'No action summary available.', 180))}</div></td>
+          <td><div class="task-card-actions rr-actions">${action.status === 'pending' ? `<button class="mini-btn native-action-copy-btn" data-command="${escapeHtml(nativeActionCommand(action))}">Copy apply-action</button>` : '<span class="small">Already applied</span>'}</div></td>
+        </tr>`).join('')}</tbody>
     </table></div>`;
 
-  host.querySelectorAll('[data-runreq-action]').forEach(btn => {
-    btn.addEventListener('click', async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const id = event.currentTarget.dataset.runreqId;
-      const action = event.currentTarget.dataset.runreqAction;
-      if (!id || !action) return;
-      if (action === 'cancel') return cancelRunRequest(id);
-      if (action === 'remove') return removeRunRequest(id);
+  host.querySelectorAll('.native-action-copy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await copyTextWithStatus(btn.dataset.command || '', 'Apply-action command copied');
     });
   });
 }
@@ -1936,37 +1836,32 @@ function renderIntegrations() {
   const queuedRequests = state.runRequests.filter(r => r.status === 'queued').length;
   const runningRequests = state.runRequests.filter(r => r.status === 'running').length;
   const triageSummary = localTriageSummary();
+  const pendingActions = localPendingActions();
+  const recentRuns = Array.isArray(state.localTriage?.orchestrator?.recent) ? state.localTriage.orchestrator.recent : [];
   if (summary) {
     summary.innerHTML = `
-      <div class="card"><div class="metric">${state.channelRoutes.length}</div><div class="metric-label">Channel routes</div></div>
-      <div class="card"><div class="metric">${state.channelRoutes.filter(r => r.active).length}</div><div class="metric-label">Active routes</div></div>
-      <div class="card"><div class="metric">${queuedRequests}</div><div class="metric-label">Queued run requests</div></div>
-      <div class="card"><div class="metric">${runningRequests}</div><div class="metric-label">Running run requests</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">SecOpsAI open findings</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? localPendingActions().length : '—'}</div><div class="metric-label">SecOpsAI pending actions</div></div>`;
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Open findings</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.in_review_findings ?? 0 : '—'}</div><div class="metric-label">In review</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Pending actions</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.applied_actions ?? localAppliedActionsCount() : '—'}</div><div class="metric-label">Applied actions</div></div>
+      <div class="card"><div class="metric">${localFindingsArtifact()?.total_findings ?? '—'}</div><div class="metric-label">Latest findings artifact total</div></div>
+      <div class="card"><div class="metric">${recentRuns.length}</div><div class="metric-label">Recent orchestrator runs</div></div>`;
   }
 
   const cfgEl = el('integration-config');
   if (cfgEl) {
     cfgEl.innerHTML = `
       <div class="card">
-        <h3>Supabase</h3>
-        <div class="kv-list">
-          <div class="kv-row"><div class="kv-key">Project URL</div><div class="kv-val">${escapeHtml(cfg.supabaseUrl)}</div></div>
-          <div class="kv-row"><div class="kv-key">Anon key</div><div class="kv-val">Configured</div></div>
-          <div class="kv-row"><div class="kv-key">Connection</div><div class="kv-val good">Ready</div></div>
-        </div>
-      </div>
-      <div class="card">
-        <h3>Local helper</h3>
+        <h3>Native triage helper</h3>
         <div class="kv-list">
           <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">${escapeHtml(state.integrationStatus?.helper?.mode || 'local-control-panel')}</div></div>
           <div class="kv-row"><div class="kv-key">Run output API</div><div class="kv-val">${state.integrationStatus?.helper?.run_output_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Native triage API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_triage_api ? 'Ready' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">Queue model</div><div class="kv-val">run_requests + findings + triage actions</div></div>
+          <div class="kv-row"><div class="kv-key">Latest findings artifact</div><div class="kv-val">${escapeHtml(localFindingsArtifact()?.generated_at ? fmtDate(localFindingsArtifact().generated_at) : 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Latest orchestrator run</div><div class="kv-val">${escapeHtml(localTriageLatestRun()?.generated_at ? fmtDate(localTriageLatestRun().generated_at) : 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Runtime authority</div><div class="kv-val">SecOpsAI / OpenClaw</div></div>
         </div>
-        <div class="small" style="margin-top:12px;">The dashboard keeps observability and queue state. Native investigation, orchestration, and action application stay in SecOpsAI.</div>
+        <div class="small" style="margin-top:12px;">The dashboard now treats local SecOpsAI triage as a first-class source of truth instead of just a side helper.</div>
       </div>
       <div class="card">
         <h3>Native SecOpsAI</h3>
@@ -1976,28 +1871,37 @@ function renderIntegrations() {
           <div class="kv-row"><div class="kv-key">Latest orchestrator summary</div><div class="kv-val">${escapeHtml(localTriageLatestRun()?.name || 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Queue file</div><div class="kv-val">${escapeHtml(state.localTriage?.queue?.path || 'Unavailable')}</div></div>
         </div>
-        <div class="small" style="margin-top:12px;">This helper-backed view makes the dashboard usable even when Supabase lags behind local SecOpsAI triage activity.</div>
+        <div class="small" style="margin-top:12px;">Copy native CLI commands from this dashboard for investigation and action application without deleting or mutating findings from the UI.</div>
+      </div>
+      <div class="card">
+        <h3>Supabase and run visibility</h3>
+        <div class="kv-list">
+          <div class="kv-row"><div class="kv-key">Project URL</div><div class="kv-val">${escapeHtml(cfg.supabaseUrl)}</div></div>
+          <div class="kv-row"><div class="kv-key">Queued run requests</div><div class="kv-val">${queuedRequests}</div></div>
+          <div class="kv-row"><div class="kv-key">Running run requests</div><div class="kv-val">${runningRequests}</div></div>
+          <div class="kv-row"><div class="kv-key">Active routes</div><div class="kv-val">${state.channelRoutes.filter(r => r.active).length}</div></div>
+        </div>
+        <div class="small" style="margin-top:12px;">Supabase remains useful for tasks and run visibility, but native triage queue state now sits above it in the dashboard.</div>
       </div>`;
   }
 
   const table = el('routes-table');
   if (!table) return;
-  if (!state.channelRoutes.length) {
-    table.innerHTML = `<div class="empty">No channel routes found.</div>`;
+  if (!recentRuns.length) {
+    table.innerHTML = `<div class="empty">No orchestrator summaries found yet. Run the SecOpsAI orchestrator locally and refresh this page to populate recent history.</div>`;
     return;
   }
   table.innerHTML = `
     <div class="table-wrap"><table>
-      <thead><tr><th>Channel</th><th>Channel ID</th><th>Default role</th><th>Override</th><th>Summaries</th><th>Run logs</th><th>Active</th></tr></thead>
-      <tbody>${state.channelRoutes.map(r => `
+      <thead><tr><th>Generated</th><th>Processed</th><th>Open findings</th><th>Queued</th><th>Applied</th><th>Summary</th></tr></thead>
+      <tbody>${recentRuns.map(run => `
         <tr>
-          <td>${escapeHtml(r.channel_name)}</td>
-          <td>${escapeHtml(r.channel_id)}</td>
-          <td>${escapeHtml(r.default_role_label)}</td>
-          <td>${r.allow_orchestrator_override ? 'Yes' : 'No'}</td>
-          <td>${r.post_summaries ? 'Yes' : 'No'}</td>
-          <td>${r.post_run_logs ? 'Yes' : 'No'}</td>
-          <td>${r.active ? 'Yes' : 'No'}</td>
+          <td>${escapeHtml(fmtDate(run.generated_at))}</td>
+          <td>${escapeHtml(String(run.processed ?? '—'))}</td>
+          <td>${escapeHtml(String(run.open_findings ?? '—'))}</td>
+          <td>${escapeHtml(String(run.queued ?? '—'))}</td>
+          <td>${escapeHtml(String(run.auto_applied ?? run.applied_actions ?? '—'))}</td>
+          <td><div class="small">${escapeHtml(compactText(run.findings?.[0]?.summary || 'Native orchestrator run recorded locally.', 160))}</div></td>
         </tr>`).join("")}</tbody>
     </table></div>`;
 }
