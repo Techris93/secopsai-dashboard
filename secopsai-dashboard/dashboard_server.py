@@ -53,22 +53,52 @@ def run_secopsai_triage_summary():
         return None
 
 
+def run_secopsai_triage_list(status='open', limit=20):
+    python_bin = SECOPSAI_ROOT / '.venv' / 'bin' / 'python3'
+    if not python_bin.exists():
+        return None
+    try:
+        args = [str(python_bin), '-m', 'secopsai.cli', 'triage', 'list', '--status', status, '--json', '--limit', str(limit)]
+        if SECOPSAI_DB_PATH:
+            args.extend(['--db-path', SECOPSAI_DB_PATH])
+        result = subprocess.run(
+            args,
+            cwd=str(SECOPSAI_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=True,
+        )
+        return json.loads(result.stdout)
+    except Exception:
+        return None
+
+
 def collect_secopsai_triage_state():
     summary = run_secopsai_triage_summary()
     if not isinstance(summary, dict):
         latest_summary_files = latest_json_files(SECOPSAI_ROOT / 'reports' / 'triage' / 'orchestrator', '*.json', limit=1)
         summary = read_json_file(latest_summary_files[0], {}) if latest_summary_files else {}
+
+    active_list_payload = run_secopsai_triage_list(status='open', limit=50)
+    active_findings = active_list_payload.get('findings', []) if isinstance(active_list_payload, dict) else []
+    if not isinstance(active_findings, list):
+        active_findings = []
+
     raw_summary_findings = summary.get('findings', []) if isinstance(summary, dict) else []
     if not isinstance(raw_summary_findings, list):
         raw_summary_findings = []
-    active_summary_findings = [
-        item for item in raw_summary_findings
-        if str((item or {}).get('status') or '').lower() in {'open', 'in_review'}
-    ][:10]
+
+    active_severity_counts = {}
+    for item in active_findings:
+        severity = str((item or {}).get('severity') or 'unknown').lower()
+        active_severity_counts[severity] = active_severity_counts.get(severity, 0) + 1
+
     if isinstance(summary, dict):
         summary = {
             **summary,
-            'findings': active_summary_findings,
+            'findings': active_findings[:10],
+            'severity_counts': active_severity_counts,
             'historical_findings_count': len(raw_summary_findings),
         }
 

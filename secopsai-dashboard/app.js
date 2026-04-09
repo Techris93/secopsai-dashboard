@@ -1572,18 +1572,22 @@ function renderFindings() {
     intel.innerHTML = `
       <div class="finding-detail-header">
         <div>
+          <div class="detail-eyebrow">Finding detail</div>
           <h4>${escapeHtml(findingTitle(selected))}</h4>
           <div class="finding-meta-line">
             <span>${escapeHtml(displayFindingSource(selected))}</span>
             <span>${escapeHtml(fmtDate(findingDetectedAt(selected)))}</span>
             ${findingFingerprint(selected) ? `<span>${escapeHtml(findingFingerprint(selected))}</span>` : ''}
           </div>
-          <div class="small" style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span class="muted-inline">Selected finding status:</span>${renderStatusPill(String(effectiveFindingStatus(selected)).toLowerCase(), humanizeSnake(effectiveFindingStatus(selected)))}</div>
+        </div>
+        <div class="detail-status-stack">
+          <div class="small muted-inline">Current status</div>
+          ${renderStatusPill(String(effectiveFindingStatus(selected)).toLowerCase(), humanizeSnake(effectiveFindingStatus(selected)))}
         </div>
       </div>
       <div class="finding-detail-grid">
         <div class="card finding-detail-card">
-          <h4>Overview</h4>
+          <h4>Finding overview</h4>
           <div class="kv-list">
             <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val">${escapeHtml(findingSeverity(selected))}</div></div>
             <div class="kv-row"><div class="kv-key">Confidence</div><div class="kv-val">${escapeHtml(findingConfidence(selected) ?? '—')}</div></div>
@@ -1593,7 +1597,7 @@ function renderFindings() {
           <div class="detail-summary">${escapeHtml(findingBody(selected) || 'No additional finding narrative available.')}</div>
         </div>
         <div class="card finding-detail-card">
-          <h4>Task linkage</h4>
+          <h4>Related tasks</h4>
           ${related.length ? related.map(match => `<div class="feed-item compact-feed-item"><div><strong>${escapeHtml(match.item.title)}</strong></div><div class="small">${escapeHtml(humanizeSnake(match.item.status || 'unknown'))} • score ${match.score}</div><div class="small">${escapeHtml(compactText(match.reasons.join(' • '), 140))}</div></div>`).join('') : '<div class="empty">No convincing task match yet. Create a dedicated investigation task.</div>'}
         </div>
       </div>
@@ -1608,14 +1612,14 @@ function renderFindings() {
           </div>
           <div class="detail-summary">${escapeHtml(nativeInsight.pendingAction?.summary || nativeInsight.orchestratorFinding?.summary || 'Native triage context available.')}</div>
         ` : `
-          <div class="small">No native queue or latest orchestrator insight was found for this specific finding ID.</div>
+          <div class="empty compact-empty">No direct triage insight was found for this finding yet. You can still investigate it now or close it with a guarded disposition after review.</div>
           ${triageLatest ? `<div class="small" style="margin-top:10px;">Latest orchestrator run: ${escapeHtml(fmtDate(triageLatest.generated_at))} • processed ${escapeHtml(triageLatest.processed ?? '—')} findings</div>` : ''}
         `}
         ${String(effectiveFindingStatus(selected)).toLowerCase() !== 'closed' ? `
           <div class="native-close-panel">
             <div class="form-grid native-close-grid">
               <label>
-                <span>Guarded close disposition</span>
+                <span>Close disposition</span>
                 <select id="selected-finding-close-disposition">
                   <option value="needs_review">Needs Review</option>
                   <option value="tune_policy">Tune Policy</option>
@@ -1639,9 +1643,12 @@ function renderFindings() {
         `}
       </div>
       <div class="card finding-detail-card" style="margin-top:14px;">
-        <h4>Run-request correlation</h4>
-        ${requests.length ? requests.map(match => `<div class="feed-item compact-feed-item"><div><strong>${escapeHtml(shortRoleLabel(match.request.role_label || 'unknown'))}</strong></div><div class="small">${escapeHtml(humanizeSnake(match.request.status || 'queued'))} • score ${match.score}</div><div class="small">${escapeHtml(summarizePromptText(match.request.prompt_text || '—'))}</div></div>`).join('') : '<div class="empty">No strong run-request overlap yet. This gracefully stays empty when the queue or text hints are absent.</div>'}
-        <div class="task-card-actions" style="margin-top:14px;"><button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open top task brief</button>` : ''}<button class="mini-btn" id="selected-finding-run-investigate-btn">Investigate now</button><button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button>${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply now</button><button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}</div>
+        <h4>Run context</h4>
+        ${requests.length ? requests.map(match => `<div class="feed-item compact-feed-item"><div><strong>${escapeHtml(shortRoleLabel(match.request.role_label || 'unknown'))}</strong></div><div class="small">${escapeHtml(humanizeSnake(match.request.status || 'queued'))} • score ${match.score}</div><div class="small">${escapeHtml(summarizePromptText(match.request.prompt_text || '—'))}</div></div>`).join('') : '<div class="empty compact-empty">No strong queued-run overlap yet. This stays empty when the local run queue does not meaningfully reference the finding.</div>'}
+        <div class="action-cluster">
+          <div class="small action-cluster-label">Next actions</div>
+          <div class="task-card-actions" style="margin-top:10px;"><button class="mini-btn" id="selected-finding-run-investigate-btn">Investigate now</button><button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button>${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply now</button><button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}<button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open lead brief</button>` : ''}</div>
+        </div>
       </div>
     `;
     el('selected-finding-task-btn')?.addEventListener('click', () => openFindingTaskModal(selected));
