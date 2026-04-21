@@ -21,19 +21,26 @@
     </div>
   </main>
 
+  <script src="./config.js"></script>
   <script>
+    const cfg = window.SECOPSAI_CONFIG || {};
     const qs = new URLSearchParams(location.search);
     const path = qs.get('path');
     const role = qs.get('role');
     const id = qs.get('id');
     const meta = document.getElementById('meta');
     const out = document.getElementById('output');
+    const runOutputUrl = relPath => {
+      const url = new URL(cfg.runOutputEndpoint || '/api/run-output', window.location.origin);
+      url.searchParams.set('path', relPath);
+      return url.toString();
+    };
 
     if (!path) {
       meta.textContent = 'Missing path parameter.';
     } else {
       meta.textContent = `${role ? role + ' • ' : ''}${id ? id + ' • ' : ''}${path}`;
-      fetch(`/api/run-output?path=${encodeURIComponent(path)}`)
+      fetch(runOutputUrl(path))
         .then(r => r.json())
         .then(data => {
           if (!data.ok) {

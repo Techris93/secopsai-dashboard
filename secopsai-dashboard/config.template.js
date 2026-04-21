@@ -3,6 +3,7 @@ window.SECOPSAI_CONFIG = {
   supabaseAnonKey: "__SUPABASE_ANON_KEY__",
   appName: "__APP_NAME__",
   integrationStatusEndpoint: "/api/integration-status",
+  runOutputEndpoint: "/api/run-output",
   departments: {
     exec: "#06B6D4",
     platform: "#3B82F6",

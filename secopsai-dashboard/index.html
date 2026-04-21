@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="./styles.css?v=20260322d" />
 </head>
@@ -15,38 +15,56 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-badge">S</div>
-        <div>
-          <h1>SecOpsAI Triage Dashboard</h1>
-          <p>Findings, triage, and execution visibility</p>
+        <div class="brand-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l7 3v5c0 5-3.5 8.8-7 10-3.5-1.2-7-5-7-10V6l7-3Z"></path>
+            <path d="M9.5 11.8 11.4 13.7 14.9 10.2"></path>
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <div class="brand-overline">LIVE TRIAGE PLANE</div>
+          <h1>SecOpsAI</h1>
+          <p>Triage Dashboard</p>
         </div>
       </div>
 
       <nav class="nav-list">
         <button class="nav-btn active" data-page="mission-control">
-          <span class="title">Overview</span>
-          <span class="desc">Runs, blockers, review queue</span>
+          <span class="nav-icon">MC</span>
+          <span class="nav-copy"><span class="title">Overview</span><span class="desc">Runs, blockers, review queue</span></span>
         </button>
         <button class="nav-btn" data-page="tasks">
-          <span class="title">Tasks</span>
-          <span class="desc">Work queue, ownership, run visibility</span>
+          <span class="nav-icon">TK</span>
+          <span class="nav-copy"><span class="title">Tasks</span><span class="desc">Work queue, ownership, run visibility</span></span>
         </button>
         <button class="nav-btn" data-page="findings">
-          <span class="title">Findings</span>
-          <span class="desc">Detection backlog, triage, task linkage</span>
+          <span class="nav-icon">FD</span>
+          <span class="nav-copy"><span class="title">Findings</span><span class="desc">Detection backlog, triage, task linkage</span></span>
         </button>
         <button class="nav-btn" data-page="integrations">
-          <span class="title">Native Triage</span>
-          <span class="desc">Pending actions, orchestrator history, helper health</span>
+          <span class="nav-icon">NT</span>
+          <span class="nav-copy"><span class="title">Native Triage</span><span class="desc">Pending actions, orchestrator history, helper health</span></span>
         </button>
       </nav>
 
       <div class="sidebar-footer">
+        <div class="sidebar-footer-label">Operator status</div>
         <div id="global-status">Booting…</div>
       </div>
     </aside>
 
     <main class="main">
+      <div class="top-strip">
+        <div class="top-strip-live">
+          <span class="dot"></span>
+          <span>LIVE</span>
+        </div>
+        <div class="top-strip-meta">
+          <span id="top-strip-context">Mission Control overview</span>
+          <span id="top-strip-time">--:--:--</span>
+        </div>
+      </div>
+
       <section class="page active" id="page-mission-control">
         <div class="page-header">
           <div>

@@ -89,3 +89,7 @@ Optional `.env` values:
   - local repo root used by the helper server for native triage/orchestrator state and helper-backed native actions
 - `SECOPSAI_DB_PATH`
   - optional SQLite override for testing helper-backed native actions against a copied SecOpsAI database
+
+## Cloudflare Pages
+
+For hosted deployment with same-origin backend endpoints, see [CLOUDFLARE_PAGES.md](./CLOUDFLARE_PAGES.md).

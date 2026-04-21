@@ -77,8 +77,28 @@ const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
 const pages = ["mission-control", "tasks", "findings", "integrations"];
+const PAGE_CONTEXT = {
+  "mission-control": "Mission Control overview",
+  "tasks": "Task queue, ownership, and run visibility",
+  "findings": "Detection triage and correlation surface",
+  "integrations": "Native triage and helper visibility"
+};
 
 function el(id) { return document.getElementById(id); }
+
+function getRunOutputEndpointUrl(relPath) {
+  const url = new URL(cfg.runOutputEndpoint || "/api/run-output", window.location.origin);
+  if (relPath) url.searchParams.set("path", relPath);
+  return url.toString();
+}
+
+function getRunOutputViewerUrl(relPath, { role = "", id = "" } = {}) {
+  const url = new URL("/view-run-output.html", window.location.origin);
+  if (relPath) url.searchParams.set("path", relPath);
+  if (role) url.searchParams.set("role", role);
+  if (id) url.searchParams.set("id", id);
+  return url.toString();
+}
 
 function fmtDate(value) {
   if (!value) return "—";
@@ -259,6 +279,27 @@ function setStatus(message, isError = false) {
   target.innerHTML = isError ? `<span class="error">${escapeHtml(message)}</span>` : message;
 }
 
+function updateTopStrip(pageId) {
+  const context = el('top-strip-context');
+  if (context) context.textContent = PAGE_CONTEXT[pageId] || 'SecOpsAI dashboard';
+}
+
+function updateTopStripClock() {
+  const clock = el('top-strip-time');
+  if (!clock) return;
+  clock.textContent = new Date().toLocaleTimeString('en-US', {
+    hour12: true,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
+function startTopStripClock() {
+  updateTopStripClock();
+  window.setInterval(updateTopStripClock, 1000);
+}
+
 function setPage(pageId) {
   pages.forEach((id) => {
     const page = el(`page-${id}`);
@@ -267,6 +308,7 @@ function setPage(pageId) {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.page === pageId);
   });
+  updateTopStrip(pageId);
 }
 
 function roleDepartment(role) {
@@ -1118,7 +1160,10 @@ async function runPromptNow() {
       let viewUrl = null;
       if (['completed','failed','cancelled','needs_review','completed_with_gaps'].includes(lifecycle.displayStatus) && finalOutputPath) {
         const rel = String(finalOutputPath).replace('/Users/chrixchange/.openclaw/workspace/', '');
-        viewUrl = `http://127.0.0.1:45680/view-run-output.html?path=${encodeURIComponent(rel)}&role=${encodeURIComponent(data.role_label || '')}&id=${encodeURIComponent(data.id || '')}`;
+        viewUrl = getRunOutputViewerUrl(rel, {
+          role: data.role_label || '',
+          id: data.id || ''
+        });
       }
       setRunStatusUI({ status: lifecycle.displayStatus, line, detailHtml, viewUrl });
       if (lifecycle.displayStatus === 'completed' && data?.related_work_item_id) {
@@ -2287,7 +2332,7 @@ async function fetchRunOutputEvidence(rel, { force = false } = {}) {
   if (existing?.pending) return existing.pending;
   if (!force && existing && !existing.text && (now - existing.fetchedAt) < failureBackoffMs) return null;
 
-  const pending = fetch(`/api/run-output?path=${encodeURIComponent(rel)}`)
+  const pending = fetch(getRunOutputEndpointUrl(rel))
     .then(resp => resp.json())
     .then(payload => {
       const text = payload?.ok && payload?.text ? payload.text : null;
@@ -2704,6 +2749,7 @@ function bindEvents() {
 
 window.addEventListener('DOMContentLoaded', () => {
   bindEvents();
+  startTopStripClock();
   setPage('mission-control');
   if (bootError) {
     setStatus(bootError, true);
