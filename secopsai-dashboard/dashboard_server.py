@@ -289,6 +289,12 @@ def json_response(handler, code, payload):
     handler.wfile.write(body)
 
 
+def sse_send(handler, event_name, payload):
+    body = f"event: {event_name}\ndata: {json.dumps(payload)}\n\n".encode('utf-8')
+    handler.wfile.write(body)
+    handler.wfile.flush()
+
+
 def read_request_json(handler):
     content_length = int(handler.headers.get('Content-Length', '0') or '0')
     if content_length <= 0:
@@ -354,6 +360,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'secopsai_triage_api': True,
                     'secopsai_sessions_api': True,
                     'secopsai_research_api': True,
+                    'secopsai_events_api': True,
                 },
                 'ai_guard': build_ai_guard(),
             }
@@ -395,6 +402,50 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return json_response(self, 404, {'ok': False, 'error': str(exc)})
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/events':
+            qs = urllib.parse.parse_qs(parsed.query or '')
+
+            def bounded_int(value, default, lower, upper):
+                try:
+                    parsed_value = int(value or default)
+                except (TypeError, ValueError):
+                    parsed_value = default
+                return max(lower, min(parsed_value, upper))
+
+            interval = bounded_int((qs.get('interval') or ['5'])[0], 5, 1, 30)
+            ticks = bounded_int((qs.get('ticks') or ['60'])[0], 60, 1, 720)
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Connection', 'keep-alive')
+            self.end_headers()
+            last_signature = None
+            try:
+                for _ in range(ticks):
+                    payload = collect_secopsai_triage_state()
+                    signature = json.dumps(
+                        {
+                            'sessions': payload.get('sessions', {}).get('latest_updated_at'),
+                            'pending_actions': payload.get('queue', {}).get('pending_count'),
+                            'applied_actions': payload.get('queue', {}).get('applied_count'),
+                            'latest_orchestrator': payload.get('orchestrator', {}).get('latest', {}).get('generated_at')
+                            if payload.get('orchestrator', {}).get('latest') else None,
+                        },
+                        sort_keys=True,
+                    )
+                    event_name = 'triage-state' if signature != last_signature else 'heartbeat'
+                    sse_send(self, event_name, payload if event_name == 'triage-state' else {'ok': True, 'ts': time.time()})
+                    last_signature = signature
+                    time.sleep(interval)
+            except (BrokenPipeError, ConnectionResetError):
+                return
+            except Exception as exc:
+                try:
+                    sse_send(self, 'error', {'ok': False, 'error': str(exc)})
+                except Exception:
+                    return
+            return
 
         if parsed.path == '/api/run-output':
             # Serve run output text from within the OpenClaw workspace only.

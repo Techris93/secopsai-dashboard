@@ -19,7 +19,7 @@ The worker falls back to `env.ASSETS.fetch(request)` for normal static files, wh
 - Hosted run-output delivery supports two modes:
   - **Recommended:** read output files from an R2 bucket binding.
   - **Fallback:** proxy to an upstream helper via `RUN_OUTPUT_BASE_URL`.
-- Hosted native triage/session/research actions can optionally proxy to a secured local or private SecOpsAI helper via `SECOPSAI_HELPER_BASE_URL`.
+- Hosted native triage/session/research actions and the native event stream can optionally proxy to a secured local or private SecOpsAI helper via `SECOPSAI_HELPER_BASE_URL`.
 - The retired `/api/discord-send-message` route still returns `410 Gone` so the current UI behavior stays compatible.
 
 ## Recommended production architecture
@@ -69,7 +69,7 @@ Notes:
   - R2 mode: configure an R2 binding and optionally `RUN_OUTPUT_R2_PREFIX`.
   - Proxy mode: configure `RUN_OUTPUT_BASE_URL` and optionally auth settings.
 - Native triage/session features in hosted mode need a reachable SecOpsAI helper:
-  - Set `SECOPSAI_HELPER_BASE_URL` to a helper that exposes `/api/secopsai/triage-state`, `/api/secopsai/sessions`, `/api/secopsai/session`, `/api/secopsai/research-finding`, and the mutation endpoints used by the dashboard.
+  - Set `SECOPSAI_HELPER_BASE_URL` to a helper that exposes `/api/secopsai/triage-state`, `/api/secopsai/events`, `/api/secopsai/sessions`, `/api/secopsai/session`, `/api/secopsai/research-finding`, and the mutation endpoints used by the dashboard.
   - Optionally protect that helper with `SECOPSAI_HELPER_AUTH_HEADER` and `SECOPSAI_HELPER_AUTH_TOKEN`.
 - `HOSTED_AI_*` values are rendered into `window.SECOPSAI_CONFIG.aiGuard` so the hosted dashboard can show model/budget/mutation guardrails without hardcoding them in the bundle.
 
