@@ -64,6 +64,8 @@ const state = {
   integrationStatus: null,
   localTriage: null,
   selectedFindingId: null,
+  selectedSessionId: null,
+  selectedSessionDetail: null,
   nativeFindingOverrides: new Map(),
   outputEvidenceCache: new Map(),
   liveRefreshTimer: null,
@@ -85,6 +87,14 @@ const PAGE_CONTEXT = {
 };
 
 function el(id) { return document.getElementById(id); }
+
+function aiGuardConfig() {
+  return cfg.aiGuard || {};
+}
+
+function aiGuardStatusLabel() {
+  return aiGuardConfig().hostedEnabled ? 'Guarded enabled' : 'Local-first only';
+}
 
 function getRunOutputEndpointUrl(relPath) {
   const url = new URL(cfg.runOutputEndpoint || "/api/run-output", window.location.origin);
@@ -108,6 +118,38 @@ function fmtDate(value) {
 
 function localTriageSummary() {
   return state.localTriage?.summary || null;
+}
+
+function localSessionSummary() {
+  return state.localTriage?.sessions || null;
+}
+
+function recentLocalSessions() {
+  return Array.isArray(localSessionSummary()?.recent) ? localSessionSummary().recent : [];
+}
+
+function openLocalSessionsCount() {
+  return Number(localSessionSummary()?.open_count || 0);
+}
+
+function pendingLocalApprovalsCount() {
+  return Number(localSessionSummary()?.pending_approvals || 0);
+}
+
+function sessionsForFinding(findingOrId) {
+  const id = typeof findingOrId === 'string' ? findingOrId : findingId(findingOrId);
+  if (!id) return [];
+  return recentLocalSessions().filter(session => String(session?.subject?.finding_id || '') === String(id));
+}
+
+function latestSessionForFinding(findingOrId) {
+  return sessionsForFinding(findingOrId)[0] || null;
+}
+
+function pendingApprovalsForSession(session) {
+  return Array.isArray(session?.approvals)
+    ? session.approvals.filter(item => String(item?.state || '').toLowerCase() === 'pending')
+    : [];
 }
 
 function localTriageLatestRun() {
@@ -157,21 +199,53 @@ function nativeActionCommand(action) {
   if (!action) return '';
   const id = String(action.action_id || '').trim();
   if (!id) return '';
-  return `secopsai triage apply-action ${id} --yes`;
+  const session = latestSessionForFinding(action.finding_id || '');
+  const sessionPart = session?.status === 'open' ? ` --session-id ${session.session_id}` : '';
+  return `secopsai triage apply-action ${id} --yes${sessionPart}`;
 }
 
 function investigateFindingCommand(finding) {
   const id = String(findingId(finding) || '').trim();
   if (!id) return '';
   const root = state.localTriage?.secopsai_root || '/Users/chrixchange/secopsai';
-  return `secopsai triage investigate ${id} --search-root ${root} --json`;
+  const session = latestSessionForFinding(finding);
+  const sessionPart = session?.status === 'open' ? ` --session-id ${session.session_id}` : ' --open-session';
+  return `secopsai triage investigate ${id} --search-root ${root}${sessionPart} --json`;
 }
 
 function closeFindingCommand(finding, disposition = 'needs_review', note = 'Analyst review note required.') {
   const id = String(findingId(finding) || '').trim();
   if (!id) return '';
   const normalizedNote = String(note || '').trim().replace(/"/g, '\\"');
-  return `secopsai triage close ${id} --disposition ${disposition} --status closed --note "${normalizedNote}"`;
+  const session = latestSessionForFinding(finding);
+  const sessionPart = session?.status === 'open' ? ` --session-id ${session.session_id}` : '';
+  return `secopsai triage close ${id} --disposition ${disposition} --status closed --note "${normalizedNote}"${sessionPart}`;
+}
+
+function researchFindingCommand(finding) {
+  const id = String(findingId(finding) || '').trim();
+  if (!id) return '';
+  const root = state.localTriage?.secopsai_root || '/Users/chrixchange/secopsai';
+  const session = latestSessionForFinding(finding);
+  const sessionPart = session?.status === 'open' ? ` --session-id ${session.session_id}` : '';
+  return `secopsai research finding ${id} --search-root ${root}${sessionPart}`;
+}
+
+function sessionShowCommand(sessionOrId) {
+  const id = typeof sessionOrId === 'string' ? sessionOrId : String(sessionOrId?.session_id || '').trim();
+  if (!id) return '';
+  return `secopsai session show ${id}`;
+}
+
+function sessionResumeCommand(sessionOrId, { withResearch = false } = {}) {
+  const session = typeof sessionOrId === 'string'
+    ? recentLocalSessions().find(item => String(item?.session_id || '') === String(sessionOrId)) || state.selectedSessionDetail
+    : sessionOrId;
+  const findingIdValue = String(session?.subject?.finding_id || '').trim();
+  if (!findingIdValue) return sessionShowCommand(sessionOrId);
+  const root = state.localTriage?.secopsai_root || '/Users/chrixchange/secopsai';
+  const researchPart = withResearch ? ' --with-research' : '';
+  return `secopsai triage investigate ${findingIdValue} --search-root ${root} --session-id ${session.session_id}${researchPart} --json`;
 }
 
 async function copyTextWithStatus(text, successMessage) {
@@ -195,14 +269,44 @@ async function postNativeHelper(path, payload) {
 
 async function runNativeInvestigate(finding) {
   const id = String(findingId(finding) || '').trim();
+  const session = latestSessionForFinding(finding);
   if (!id) return;
   setStatus(`<span class="dot"></span> Running native investigate for ${escapeHtml(id)}…`);
-  const result = await postNativeHelper('/api/secopsai/investigate', { finding_id: id });
+  const result = await postNativeHelper('/api/secopsai/investigate', {
+    finding_id: id,
+    session_id: session?.status === 'open' ? session.session_id : null
+  });
   const summary =
+    result?.result?.investigation?.summary ||
     result?.result?.summary ||
     result?.result?.verdict_explanation?.summary ||
     result?.result?.recommendation?.summary ||
     'Native investigation completed.';
+  const sessionSuffix = result?.result?.session_id ? ` (session ${result.result.session_id})` : '';
+  setStatus(`<span class="dot"></span> ${escapeHtml(`${summary}${sessionSuffix}`)}`);
+  await loadLocalTriageState();
+  renderFindings();
+  renderIntegrations();
+}
+
+async function runNativeResearchFinding(finding) {
+  const id = String(findingId(finding) || '').trim();
+  const session = latestSessionForFinding(finding);
+  if (!id) return;
+  setStatus(`<span class="dot"></span> Building source-backed research for ${escapeHtml(id)}…`);
+  const result = await postNativeHelper('/api/secopsai/research-finding', {
+    finding_id: id,
+    session_id: session?.status === 'open' ? session.session_id : null,
+    search_root: state.localTriage?.secopsai_root || '/Users/chrixchange/secopsai'
+  });
+  const reportPath =
+    result?.result?.markdown_report ||
+    result?.result?.json_report ||
+    result?.result?.report_path ||
+    '';
+  const summary = reportPath
+    ? `Research ready for ${id} • ${reportPath.split('/').pop()}`
+    : `Research ready for ${id}`;
   setStatus(`<span class="dot"></span> ${escapeHtml(summary)}`);
   await loadLocalTriageState();
   renderFindings();
@@ -212,8 +316,12 @@ async function runNativeInvestigate(finding) {
 async function runNativeApplyAction(action) {
   const id = String(action?.action_id || '').trim();
   if (!id) return;
+  const session = latestSessionForFinding(action?.finding_id || '');
   setStatus(`<span class="dot"></span> Applying native action ${escapeHtml(id)}…`);
-  const result = await postNativeHelper('/api/secopsai/apply-action', { action_id: id });
+  const result = await postNativeHelper('/api/secopsai/apply-action', {
+    action_id: id,
+    session_id: session?.session_id || null
+  });
   const line = String(result?.stdout || '').trim().split('\n').filter(Boolean).pop() || `Applied ${id}`;
   setStatus(`<span class="dot"></span> ${escapeHtml(line)}`);
   await loadLocalTriageState();
@@ -226,6 +334,7 @@ async function runNativeCloseFinding(finding, disposition, note, status = 'close
   const id = String(findingId(finding) || '').trim();
   const normalizedDisposition = String(disposition || '').trim();
   const normalizedNote = String(note || '').trim();
+  const session = latestSessionForFinding(finding);
   if (!id) return;
   if (normalizedNote.length < 12) {
     throw new Error('Add an analyst note before closing this finding.');
@@ -235,7 +344,8 @@ async function runNativeCloseFinding(finding, disposition, note, status = 'close
     finding_id: id,
     disposition: normalizedDisposition,
     note: normalizedNote,
-    status
+    status,
+    session_id: session?.session_id || null
   });
   state.nativeFindingOverrides.set(id, {
     status: result?.status || status,
@@ -246,6 +356,87 @@ async function runNativeCloseFinding(finding, disposition, note, status = 'close
   setStatus(`<span class="dot"></span> ${escapeHtml(line)}`);
   await loadLocalTriageState();
   renderFindings();
+  renderIntegrations();
+}
+
+async function runNativeResolveApproval(sessionId, approvalId, { decision = 'approved', apply = true, note = '', decidedBy = 'dashboard' } = {}) {
+  const normalizedSessionId = String(sessionId || '').trim();
+  const normalizedApprovalId = String(approvalId || '').trim();
+  const normalizedDecision = String(decision || '').trim().toLowerCase();
+  if (!normalizedSessionId || !normalizedApprovalId) return;
+  setStatus(`<span class="dot"></span> ${escapeHtml(humanizeSnake(normalizedDecision))} approval ${escapeHtml(normalizedApprovalId)}…`);
+  const result = await postNativeHelper('/api/secopsai/resolve-approval', {
+    session_id: normalizedSessionId,
+    approval_id: normalizedApprovalId,
+    decision: normalizedDecision,
+    apply,
+    note,
+    decided_by: decidedBy
+  });
+  const summary =
+    result?.result?.applied?.result?.summary ||
+    result?.result?.approval?.summary ||
+    `${humanizeSnake(normalizedDecision)} ${normalizedApprovalId}`;
+  setStatus(`<span class="dot"></span> ${escapeHtml(summary)}`);
+  await loadLocalTriageState();
+  renderFindings();
+  renderIntegrations();
+  renderRunRequests();
+}
+
+async function loadSessionDetail(sessionId) {
+  const normalized = String(sessionId || '').trim();
+  if (!normalized) {
+    state.selectedSessionDetail = null;
+    return null;
+  }
+  const response = await fetch(`/api/secopsai/session?session_id=${encodeURIComponent(normalized)}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.ok === false) {
+    throw new Error(data?.error || `Session detail HTTP ${response.status}`);
+  }
+  state.selectedSessionDetail = data.session || null;
+  return state.selectedSessionDetail;
+}
+
+async function refreshSelectedSessionDetail() {
+  const recent = recentLocalSessions();
+  if (!recent.length) {
+    state.selectedSessionId = null;
+    state.selectedSessionDetail = null;
+    return null;
+  }
+  if (!state.selectedSessionId || !recent.some(item => String(item?.session_id || '') === String(state.selectedSessionId))) {
+    state.selectedSessionId = String(recent[0]?.session_id || '').trim() || null;
+  }
+  if (!state.selectedSessionId) {
+    state.selectedSessionDetail = null;
+    return null;
+  }
+  try {
+    return await loadSessionDetail(state.selectedSessionId);
+  } catch (error) {
+    console.warn('session detail load failed', error);
+    state.selectedSessionDetail = null;
+    return null;
+  }
+}
+
+async function selectNativeSession(sessionId, { focusFinding = false } = {}) {
+  state.selectedSessionId = String(sessionId || '').trim() || null;
+  if (!state.selectedSessionId) {
+    state.selectedSessionDetail = null;
+    renderIntegrations();
+    return;
+  }
+  await refreshSelectedSessionDetail();
+  if (focusFinding) {
+    const findingIdValue = String(state.selectedSessionDetail?.subject?.finding_id || '').trim();
+    if (findingIdValue) {
+      selectFinding(findingIdValue);
+      renderFindings();
+    }
+  }
   renderIntegrations();
 }
 
@@ -1260,6 +1451,14 @@ async function assignSuggestedReviewerForTask(item) {
   setStatus(`<span class="dot"></span> Suggested reviewer set to ${escapeHtml(reviewer ? shortRoleLabel(reviewer) : 'none')}`);
 }
 
+function sessionProgressLabel(session) {
+  const plan = Array.isArray(session?.plan) ? session.plan : [];
+  const completed = Number(session?.plan_completed ?? (plan.filter(item => String(item?.status || '').toLowerCase() === 'completed').length || 0));
+  const total = Number(session?.plan_total ?? (plan.length || 0));
+  if (!total) return 'No plan';
+  return `${completed}/${total} steps`;
+}
+
 function renderMissionControl() {
   const activeRuns = state.runs.filter(r => ["queued", "running"].includes(r.status)).length;
   const blocked = state.workItems.filter(w => w.status === "blocked").length;
@@ -1272,6 +1471,8 @@ function renderMissionControl() {
   const triageSummary = localTriageSummary();
   const triageLatest = localTriageLatestRun();
   const pendingActions = localPendingActions();
+  const openSessions = openLocalSessionsCount();
+  const pendingApprovals = pendingLocalApprovalsCount();
 
   function drillToTasks({ status = '', external = null, security = null } = {}) {
     setPage('tasks');
@@ -1332,7 +1533,7 @@ function renderMissionControl() {
       <div class="card metric-card" id="mc-native-triage" style="cursor:pointer;">
         <h3>Native triage</h3>
         <div class="metric">${triageSummary ? `${triageSummary.open_findings ?? 0} / ${triageSummary.pending_actions ?? pendingActions.length}` : '—'}</div>
-        <div class="metric-label">${triageSummary ? 'open findings / pending actions from local SecOpsAI' : 'local SecOpsAI triage helper unavailable'}</div>
+        <div class="metric-label">${triageSummary ? `open findings / pending actions • ${openSessions} sessions • ${pendingApprovals} pending approvals` : 'local SecOpsAI triage helper unavailable'}</div>
       </div>
       <div class="card">
         <h3>Latest orchestrator run</h3>
@@ -1519,6 +1720,8 @@ function renderFindings() {
       <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div></div>
       <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Native SecOpsAI open findings</div></div>
       <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Native pending actions</div></div>
+      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open investigation sessions</div></div>
+      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending session approvals</div></div>
     `;
   }
 
@@ -1614,6 +1817,9 @@ function renderFindings() {
     const related = relatedTasksForFinding(selected);
     const requests = correlatedRunRequestsForFinding(selected);
     const nativeInsight = localFindingInsight(findingId(selected));
+    const findingSessions = sessionsForFinding(selected);
+    const latestSession = findingSessions[0] || null;
+    const sessionApprovals = pendingApprovalsForSession(latestSession);
     intel.innerHTML = `
       <div class="finding-detail-header">
         <div>
@@ -1660,6 +1866,40 @@ function renderFindings() {
           <div class="empty compact-empty">No direct triage insight was found for this finding yet. You can still investigate it now or close it with a guarded disposition after review.</div>
           ${triageLatest ? `<div class="small" style="margin-top:10px;">Latest orchestrator run: ${escapeHtml(fmtDate(triageLatest.generated_at))} • processed ${escapeHtml(triageLatest.processed ?? '—')} findings</div>` : ''}
         `}
+        ${latestSession ? `
+          <div class="card" style="margin-top:14px; background:rgba(8,13,26,0.72);">
+            <h4>Investigation session</h4>
+            <div class="kv-list">
+              <div class="kv-row"><div class="kv-key">Session</div><div class="kv-val">${escapeHtml(latestSession.session_id)}</div></div>
+              <div class="kv-row"><div class="kv-key">Status</div><div class="kv-val">${escapeHtml(humanizeSnake(latestSession.status || 'open'))}</div></div>
+              <div class="kv-row"><div class="kv-key">Progress</div><div class="kv-val">${escapeHtml(sessionProgressLabel(latestSession))}</div></div>
+              <div class="kv-row"><div class="kv-key">Approvals pending</div><div class="kv-val">${escapeHtml(String(latestSession.pending_approvals || 0))}</div></div>
+              <div class="kv-row"><div class="kv-key">Artifacts</div><div class="kv-val">${escapeHtml(String(latestSession.artifact_count || 0))}</div></div>
+              <div class="kv-row"><div class="kv-key">Updated</div><div class="kv-val">${escapeHtml(fmtDate(latestSession.updated_at))}</div></div>
+            </div>
+            <div class="detail-summary">${escapeHtml(latestSession.latest_event?.message || latestSession.title || 'Session context available.')}</div>
+            <div class="task-card-actions" style="margin-top:12px;">
+              <button class="mini-btn" id="selected-finding-copy-session-btn">Copy session show</button>
+              <button class="mini-btn" id="selected-finding-open-session-btn">Open in Native Triage</button>
+              <button class="mini-btn" id="selected-finding-run-research-btn">Run source-backed research</button>
+            </div>
+            ${sessionApprovals.length ? `
+              <div class="small" style="margin-top:12px;"><strong>Pending approvals</strong></div>
+              <div style="margin-top:10px;">
+                ${sessionApprovals.slice(0, 3).map(approval => `
+                  <div class="feed-item compact-feed-item">
+                    <div><strong>${escapeHtml(approval.approval_id || 'approval')}</strong> • ${escapeHtml(humanizeSnake(approval.type || 'pending'))}</div>
+                    <div class="small">${escapeHtml(compactText(approval.summary || 'Approval waiting for review.', 180))}</div>
+                    <div class="task-card-actions" style="margin-top:10px;">
+                      <button class="mini-btn session-approval-approve-btn" data-session-id="${escapeHtml(latestSession.session_id || '')}" data-approval-id="${escapeHtml(approval.approval_id || '')}">Approve & apply</button>
+                      <button class="mini-btn session-approval-reject-btn" data-session-id="${escapeHtml(latestSession.session_id || '')}" data-approval-id="${escapeHtml(approval.approval_id || '')}">Reject</button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
         ${String(effectiveFindingStatus(selected)).toLowerCase() !== 'closed' ? `
           <div class="native-close-panel">
             <div class="form-grid native-close-grid">
@@ -1692,7 +1932,7 @@ function renderFindings() {
         ${requests.length ? requests.map(match => `<div class="feed-item compact-feed-item"><div><strong>${escapeHtml(shortRoleLabel(match.request.role_label || 'unknown'))}</strong></div><div class="small">${escapeHtml(humanizeSnake(match.request.status || 'queued'))} • score ${match.score}</div><div class="small">${escapeHtml(summarizePromptText(match.request.prompt_text || '—'))}</div></div>`).join('') : '<div class="empty compact-empty">No strong queued-run overlap yet. This stays empty when the local run queue does not meaningfully reference the finding.</div>'}
         <div class="action-cluster">
           <div class="small action-cluster-label">Next actions</div>
-          <div class="task-card-actions" style="margin-top:10px;"><button class="mini-btn" id="selected-finding-run-investigate-btn">Investigate now</button><button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button>${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply now</button><button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}<button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open lead brief</button>` : ''}</div>
+          <div class="task-card-actions" style="margin-top:10px;"><button class="mini-btn" id="selected-finding-run-investigate-btn">Investigate now</button><button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button><button class="mini-btn" id="selected-finding-copy-research-btn">Copy research</button>${!latestSession ? `<button class="mini-btn" id="selected-finding-run-research-btn">Run source-backed research</button>` : ''}${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply now</button><button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}<button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open lead brief</button>` : ''}</div>
         </div>
       </div>
     `;
@@ -1710,6 +1950,22 @@ function renderFindings() {
       }
     });
     el('selected-finding-copy-investigate-btn')?.addEventListener('click', () => copyTextWithStatus(investigateFindingCommand(selected), `Investigate command copied for ${findingTitle(selected)}`));
+    el('selected-finding-copy-session-btn')?.addEventListener('click', () => copyTextWithStatus(sessionShowCommand(latestSession), `Session command copied for ${findingTitle(selected)}`));
+    el('selected-finding-open-session-btn')?.addEventListener('click', async () => {
+      if (latestSession?.session_id) {
+        await selectNativeSession(latestSession.session_id, { focusFinding: false });
+        setPage('integrations');
+      }
+    });
+    el('selected-finding-run-research-btn')?.addEventListener('click', async () => {
+      try {
+        await runNativeResearchFinding(selected);
+      } catch (err) {
+        console.error('native research failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    });
+    el('selected-finding-copy-research-btn')?.addEventListener('click', () => copyTextWithStatus(researchFindingCommand(selected), `Research command copied for ${findingTitle(selected)}`));
     el('selected-finding-run-apply-btn')?.addEventListener('click', async () => {
       try {
         await runNativeApplyAction(nativeInsight?.pendingAction);
@@ -1734,6 +1990,22 @@ function renderFindings() {
       const note = el('selected-finding-close-note')?.value || 'Analyst review note required.';
       copyTextWithStatus(closeFindingCommand(selected, disposition, note), `Close command copied for ${findingTitle(selected)}`);
     });
+    intel.querySelectorAll('.session-approval-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await runNativeResolveApproval(btn.dataset.sessionId, btn.dataset.approvalId, { decision: 'approved', apply: true });
+      } catch (err) {
+        console.error('native approval resolve failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    }));
+    intel.querySelectorAll('.session-approval-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await runNativeResolveApproval(btn.dataset.sessionId, btn.dataset.approvalId, { decision: 'rejected', apply: false });
+      } catch (err) {
+        console.error('native approval reject failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    }));
   }
 }
 
@@ -2088,6 +2360,88 @@ function renderRunRequests() {
   });
 }
 
+function renderSessionDetail(session) {
+  if (!session) {
+    return `<div class="empty">Select a session to inspect plan progress, recent events, artifacts, and pending approvals.</div>`;
+  }
+  const pendingApprovals = pendingApprovalsForSession(session);
+  const recentEvents = Array.isArray(session?.events) ? session.events.slice(-6).reverse() : [];
+  const artifacts = Array.isArray(session?.artifacts) ? session.artifacts.slice().reverse() : [];
+  const plan = Array.isArray(session?.plan) ? session.plan : [];
+  const findingIdValue = String(session?.subject?.finding_id || '').trim();
+  return `
+    <div class="finding-detail-card">
+      <div class="finding-detail-header">
+        <div>
+          <div class="detail-eyebrow">Selected session</div>
+          <h4>${escapeHtml(session.title || session.session_id || 'Session')}</h4>
+          <div class="finding-meta-line">
+            <span>${escapeHtml(session.session_id || '—')}</span>
+            <span>${escapeHtml(humanizeSnake(session.status || 'open'))}</span>
+            ${findingIdValue ? `<span>${escapeHtml(findingIdValue)}</span>` : ''}
+            <span>${escapeHtml(fmtDate(session.updated_at))}</span>
+          </div>
+        </div>
+        <div class="detail-status-stack">
+          <div class="small muted-inline">Progress</div>
+          ${renderStatusPill(String(session.status || 'open').toLowerCase(), sessionProgressLabel(session))}
+        </div>
+      </div>
+      <div class="finding-detail-grid">
+        <div class="card finding-detail-card">
+          <h4>Plan</h4>
+          ${plan.length ? plan.map(step => `
+            <div class="feed-item compact-feed-item">
+              <div><strong>${escapeHtml(step.title || step.step_id || 'step')}</strong></div>
+              <div class="small">${escapeHtml(humanizeSnake(step.status || 'pending'))} • ${escapeHtml(fmtDate(step.updated_at))}</div>
+              ${step.note ? `<div class="small">${escapeHtml(compactText(step.note, 220))}</div>` : ''}
+            </div>
+          `).join('') : '<div class="empty compact-empty">No plan steps recorded for this session yet.</div>'}
+        </div>
+        <div class="card finding-detail-card">
+          <h4>Pending approvals</h4>
+          ${pendingApprovals.length ? pendingApprovals.map(approval => `
+            <div class="feed-item compact-feed-item">
+              <div><strong>${escapeHtml(approval.approval_id || 'approval')}</strong> • ${escapeHtml(humanizeSnake(approval.type || 'pending'))}</div>
+              <div class="small">${escapeHtml(compactText(approval.summary || 'Approval waiting for review.', 220))}</div>
+              <div class="task-card-actions" style="margin-top:10px;">
+                <button class="mini-btn selected-session-approve-btn" data-session-id="${escapeHtml(session.session_id || '')}" data-approval-id="${escapeHtml(approval.approval_id || '')}">Approve & apply</button>
+                <button class="mini-btn selected-session-reject-btn" data-session-id="${escapeHtml(session.session_id || '')}" data-approval-id="${escapeHtml(approval.approval_id || '')}">Reject</button>
+              </div>
+            </div>
+          `).join('') : '<div class="empty compact-empty">No pending approvals in this session.</div>'}
+        </div>
+      </div>
+      <div class="finding-detail-grid" style="margin-top:14px;">
+        <div class="card finding-detail-card">
+          <h4>Recent events</h4>
+          ${recentEvents.length ? recentEvents.map(event => `
+            <div class="feed-item compact-feed-item">
+              <div><strong>${escapeHtml(humanizeSnake(event.type || 'event'))}</strong></div>
+              <div class="small">${escapeHtml(fmtDate(event.ts))}${event.author ? ` • ${escapeHtml(event.author)}` : ''}</div>
+              <div class="small">${escapeHtml(compactText(event.message || 'Session event', 220))}</div>
+            </div>
+          `).join('') : '<div class="empty compact-empty">No session events recorded yet.</div>'}
+        </div>
+        <div class="card finding-detail-card">
+          <h4>Artifacts</h4>
+          ${artifacts.length ? artifacts.map(artifact => `
+            <div class="feed-item compact-feed-item">
+              <div><strong>${escapeHtml(artifact.label || humanizeSnake(artifact.kind || 'artifact'))}</strong></div>
+              <div class="small">${escapeHtml(artifact.kind || 'artifact')} • ${escapeHtml(fmtDate(artifact.created_at))}</div>
+              <div class="small">${escapeHtml(compactText(artifact.path || 'No artifact path recorded.', 220))}</div>
+            </div>
+          `).join('') : '<div class="empty compact-empty">No artifacts attached yet.</div>'}
+        </div>
+      </div>
+      <div class="task-card-actions" style="margin-top:14px;">
+        <button class="mini-btn" id="selected-session-copy-show-btn">Copy show</button>
+        <button class="mini-btn" id="selected-session-copy-resume-btn">Copy resume investigate</button>
+        ${findingIdValue ? `<button class="mini-btn" id="selected-session-open-finding-btn">Open finding</button>` : ''}
+      </div>
+    </div>`;
+}
+
 function renderIntegrations() {
   const summary = el('integration-summary');
   const queuedRequests = state.runRequests.filter(r => r.status === 'queued').length;
@@ -2095,14 +2449,22 @@ function renderIntegrations() {
   const triageSummary = localTriageSummary();
   const pendingActions = localPendingActions();
   const recentRuns = Array.isArray(state.localTriage?.orchestrator?.recent) ? state.localTriage.orchestrator.recent : [];
+  const recentSessions = recentLocalSessions();
+  const openSessions = openLocalSessionsCount();
+  const pendingApprovals = pendingLocalApprovalsCount();
+  const selectedSession = state.selectedSessionDetail;
+  const currentAiGuard = state.integrationStatus?.ai_guard || aiGuardConfig();
   if (summary) {
     summary.innerHTML = `
       <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Open findings</div></div>
       <div class="card"><div class="metric">${triageSummary ? triageSummary.in_review_findings ?? 0 : '—'}</div><div class="metric-label">In review</div></div>
       <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Pending actions</div></div>
       <div class="card"><div class="metric">${triageSummary ? triageSummary.applied_actions ?? localAppliedActionsCount() : '—'}</div><div class="metric-label">Applied actions</div></div>
+      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open sessions</div></div>
+      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending approvals</div></div>
       <div class="card"><div class="metric">${localFindingsArtifact()?.total_findings ?? '—'}</div><div class="metric-label">Latest findings artifact total</div></div>
-      <div class="card"><div class="metric">${recentRuns.length}</div><div class="metric-label">Recent orchestrator runs</div></div>`;
+      <div class="card"><div class="metric">${recentRuns.length}</div><div class="metric-label">Recent orchestrator runs</div></div>
+      <div class="card"><div class="metric">${escapeHtml(currentAiGuard.hostedEnabled ? 'Guarded enabled' : 'Local-first only')}</div><div class="metric-label">Hosted AI guardrail mode</div></div>`;
   }
 
   const cfgEl = el('integration-config');
@@ -2114,6 +2476,8 @@ function renderIntegrations() {
           <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">${escapeHtml(state.integrationStatus?.helper?.mode || 'local-control-panel')}</div></div>
           <div class="kv-row"><div class="kv-key">Run output API</div><div class="kv-val">${state.integrationStatus?.helper?.run_output_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Native triage API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_triage_api ? 'Ready' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Sessions API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_sessions_api ? 'Ready' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Research API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_research_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Latest findings artifact</div><div class="kv-val">${escapeHtml(localFindingsArtifact()?.generated_at ? fmtDate(localFindingsArtifact().generated_at) : 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Latest orchestrator run</div><div class="kv-val">${escapeHtml(localTriageLatestRun()?.generated_at ? fmtDate(localTriageLatestRun().generated_at) : 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Runtime authority</div><div class="kv-val">SecOpsAI / OpenClaw</div></div>
@@ -2127,8 +2491,19 @@ function renderIntegrations() {
           <div class="kv-row"><div class="kv-key">Latest findings artifact</div><div class="kv-val">${escapeHtml(localFindingsArtifact()?.name || 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Latest orchestrator summary</div><div class="kv-val">${escapeHtml(localTriageLatestRun()?.name || 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Queue file</div><div class="kv-val">${escapeHtml(state.localTriage?.queue?.path || 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Session store</div><div class="kv-val">${escapeHtml(localSessionSummary()?.path || 'Unavailable')}</div></div>
         </div>
         <div class="small" style="margin-top:12px;">Copy native CLI commands from this dashboard for investigation and action application without deleting or mutating findings from the UI.</div>
+      </div>
+      <div class="card">
+        <h3>Hosted AI guardrails</h3>
+        <div class="kv-list">
+          <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">${escapeHtml(currentAiGuard.hostedEnabled ? 'Guarded enabled' : 'Local-first only')}</div></div>
+          <div class="kv-row"><div class="kv-key">Default model</div><div class="kv-val">${escapeHtml(currentAiGuard.defaultModel || 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Run budget</div><div class="kv-val">$${escapeHtml(String(currentAiGuard.maxCostUsd ?? '0'))}</div></div>
+          <div class="kv-row"><div class="kv-key">Hosted mutations</div><div class="kv-val">${currentAiGuard.allowMutations ? 'Allowed' : 'Blocked'}</div></div>
+        </div>
+        <div class="small" style="margin-top:12px;">These guardrails make hosted AI use explicit. Local SecOpsAI triage remains the authority for investigations and writes.</div>
       </div>
       <div class="card">
         <h3>Supabase and run visibility</h3>
@@ -2140,6 +2515,83 @@ function renderIntegrations() {
         </div>
         <div class="small" style="margin-top:12px;">Supabase remains useful for tasks and run visibility, but native triage queue state now sits above it in the dashboard.</div>
       </div>`;
+  }
+
+  const sessionsTable = el('native-sessions-table');
+  if (sessionsTable) {
+    if (!recentSessions.length) {
+      sessionsTable.innerHTML = `<div class="empty">No investigation sessions found yet. Use “Investigate now” on a finding and the dashboard will create and track a native SecOpsAI session automatically.</div>`;
+    } else {
+      sessionsTable.innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr><th>Status</th><th>Session</th><th>Finding</th><th>Progress</th><th>Approvals</th><th>Updated</th><th>Actions</th></tr></thead>
+          <tbody>${recentSessions.map(session => `
+            <tr>
+              <td>${renderStatusPill(String(session.status || 'open').toLowerCase(), humanizeSnake(session.status || 'open'))}</td>
+              <td><strong>${escapeHtml(session.title || session.session_id || 'session')}</strong><div class="small">${escapeHtml(session.session_id || '—')}</div></td>
+              <td><div class="small">${escapeHtml(session.subject?.finding_id || '—')}</div><div class="small muted-inline">${escapeHtml(compactText(session.subject?.title || '', 90))}</div></td>
+              <td><div class="small">${escapeHtml(sessionProgressLabel(session))}</div><div class="small muted-inline">${escapeHtml(compactText(session.latest_event?.message || 'No recent event.', 120))}</div></td>
+              <td><div class="small">${escapeHtml(String(session.pending_approvals || 0))} pending</div><div class="small muted-inline">${escapeHtml(String(session.artifact_count || 0))} artifacts</div></td>
+              <td>${escapeHtml(fmtDate(session.updated_at))}</td>
+              <td><div class="task-card-actions"><button class="mini-btn integration-session-select-btn" data-session-id="${escapeHtml(session.session_id || '')}">Inspect</button>${pendingApprovalsForSession(session)[0] ? `<button class="mini-btn integration-session-approve-btn" data-session-id="${escapeHtml(session.session_id || '')}" data-approval-id="${escapeHtml(pendingApprovalsForSession(session)[0].approval_id || '')}">Approve top</button>` : ''}<button class="mini-btn integration-session-copy-btn" data-command="${escapeHtml(sessionShowCommand(session))}">Copy show</button></div></td>
+            </tr>
+          `).join("")}</tbody>
+        </table></div>`;
+      sessionsTable.querySelectorAll('.integration-session-select-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await selectNativeSession(btn.dataset.sessionId, { focusFinding: false });
+        });
+      });
+      sessionsTable.querySelectorAll('.integration-session-copy-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await copyTextWithStatus(btn.dataset.command || '', 'Session command copied');
+        });
+      });
+      sessionsTable.querySelectorAll('.integration-session-approve-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await runNativeResolveApproval(btn.dataset.sessionId, btn.dataset.approvalId, { decision: 'approved', apply: true });
+          } catch (err) {
+            console.error('session approval failed', err);
+            setStatus(err.message || String(err), true);
+          }
+        });
+      });
+    }
+  }
+
+  const sessionDetailHost = el('native-session-detail');
+  if (sessionDetailHost) {
+    sessionDetailHost.innerHTML = renderSessionDetail(selectedSession);
+    sessionDetailHost.querySelector('#selected-session-copy-show-btn')?.addEventListener('click', () => {
+      copyTextWithStatus(sessionShowCommand(selectedSession), 'Session show command copied');
+    });
+    sessionDetailHost.querySelector('#selected-session-copy-resume-btn')?.addEventListener('click', () => {
+      copyTextWithStatus(sessionResumeCommand(selectedSession, { withResearch: true }), 'Resume investigate command copied');
+    });
+    sessionDetailHost.querySelector('#selected-session-open-finding-btn')?.addEventListener('click', async () => {
+      const findingIdValue = String(selectedSession?.subject?.finding_id || '').trim();
+      if (!findingIdValue) return;
+      selectFinding(findingIdValue);
+      renderFindings();
+      await selectNativeSession(selectedSession?.session_id, { focusFinding: false });
+    });
+    sessionDetailHost.querySelectorAll('.selected-session-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await runNativeResolveApproval(btn.dataset.sessionId, btn.dataset.approvalId, { decision: 'approved', apply: true });
+      } catch (err) {
+        console.error('selected session approval failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    }));
+    sessionDetailHost.querySelectorAll('.selected-session-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await runNativeResolveApproval(btn.dataset.sessionId, btn.dataset.approvalId, { decision: 'rejected', apply: false });
+      } catch (err) {
+        console.error('selected session rejection failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    }));
   }
 
   const table = el('routes-table');
@@ -2170,7 +2622,9 @@ function renderAll() {
   renderRunRequests();
   renderIntegrations();
   const triageSummary = localTriageSummary();
-  const triageBit = triageSummary ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending` : '';
+  const triageBit = triageSummary
+    ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending / ${openLocalSessionsCount()} sessions`
+    : '';
   setStatus(`<span class="dot"></span> Supabase connected • ${state.channelRoutes.length} routes loaded${triageBit}`);
 }
 
@@ -2396,7 +2850,17 @@ async function loadIntegrationStatus() {
     state.integrationStatus = await res.json();
   } catch (error) {
     console.error('integration status load failed', error);
-    state.integrationStatus = { ok: false, helper: { mode: 'local-control-panel', run_output_api: false } };
+    state.integrationStatus = {
+      ok: false,
+      helper: {
+        mode: 'local-control-panel',
+        run_output_api: false,
+        secopsai_triage_api: false,
+        secopsai_sessions_api: false,
+        secopsai_research_api: false
+      },
+      ai_guard: aiGuardConfig()
+    };
   }
 }
 
@@ -2405,9 +2869,11 @@ async function loadLocalTriageState() {
     const res = await fetch('/api/secopsai/triage-state');
     if (!res.ok) throw new Error(`Local triage HTTP ${res.status}`);
     state.localTriage = await res.json();
+    await refreshSelectedSessionDetail();
   } catch (error) {
     console.warn('local triage load failed', error);
     state.localTriage = { ok: false, error: error?.message || String(error) };
+    state.selectedSessionDetail = null;
   }
 }
 

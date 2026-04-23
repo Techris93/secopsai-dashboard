@@ -10,11 +10,39 @@ from urllib.parse import urlparse
 
 DIR = Path(__file__).resolve().parent
 SECOPSAI_ROOT = Path(os.environ.get('SECOPSAI_ROOT', '/Users/chrixchange/secopsai')).expanduser().resolve()
+SECOPSAI_SESSION_DIR = Path(
+    os.environ.get('SECOPSAI_SESSION_DIR', str(SECOPSAI_ROOT / 'data' / 'sessions'))
+).expanduser().resolve()
 SECOPSAI_DB_PATH = os.environ.get('SECOPSAI_DB_PATH', '').strip()
 OPENCLAW_WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace').resolve()
 FINDING_ID_RE = re.compile(r'^[A-Z]{3}-[A-Z0-9]+$')
 ACTION_ID_RE = re.compile(r'^ACT-\d+$')
+SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
+APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
 ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive'}
+
+
+def env_truthy(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == '':
+        return default
+    return str(raw).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def env_number(name: str, default: float) -> float:
+    try:
+        return float(str(os.environ.get(name, '')).strip())
+    except Exception:
+        return float(default)
+
+
+def build_ai_guard():
+    return {
+        'hostedEnabled': env_truthy('HOSTED_AI_ENABLED', False),
+        'defaultModel': os.environ.get('HOSTED_AI_MODEL', 'gpt-5.4-mini').strip() or 'gpt-5.4-mini',
+        'maxCostUsd': env_number('HOSTED_AI_MAX_COST_USD', 3.0),
+        'allowMutations': env_truthy('HOSTED_AI_ALLOW_MUTATIONS', False),
+    }
 
 
 def read_json_file(path: Path, default=None):
@@ -30,6 +58,79 @@ def latest_json_files(directory: Path, pattern: str, limit: int = 5):
     if not directory.exists():
         return []
     return sorted(directory.glob(pattern), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]
+
+
+def session_storage_path():
+    return SECOPSAI_SESSION_DIR
+
+
+def compact_session_payload(payload):
+    if not isinstance(payload, dict):
+        return None
+    plan = payload.get('plan', [])
+    approvals = payload.get('approvals', [])
+    artifacts = payload.get('artifacts', [])
+    events = payload.get('events', [])
+    if not isinstance(plan, list):
+        plan = []
+    if not isinstance(approvals, list):
+        approvals = []
+    if not isinstance(artifacts, list):
+        artifacts = []
+    if not isinstance(events, list):
+        events = []
+    pending_approvals = [item for item in approvals if str(item.get('state') or '').lower() == 'pending']
+    completed_steps = sum(1 for item in plan if str((item or {}).get('status') or '').lower() == 'completed')
+    return {
+        'session_id': payload.get('session_id'),
+        'kind': payload.get('kind'),
+        'title': payload.get('title'),
+        'status': payload.get('status'),
+        'created_at': payload.get('created_at'),
+        'updated_at': payload.get('updated_at'),
+        'subject': payload.get('subject') or {},
+        'metadata': payload.get('metadata') or {},
+        'plan': plan,
+        'plan_total': len(plan),
+        'plan_completed': completed_steps,
+        'approvals': approvals,
+        'pending_approvals': len(pending_approvals),
+        'artifacts': artifacts,
+        'artifact_count': len(artifacts),
+        'latest_event': events[-1] if events else None,
+        'recent_events': events[-3:],
+    }
+
+
+def load_session_payload(session_id: str):
+    if not SESSION_ID_RE.match(session_id):
+        raise ValueError('Invalid session_id')
+    target = session_storage_path() / f'{session_id}.json'
+    payload = read_json_file(target, None)
+    if not isinstance(payload, dict):
+        raise FileNotFoundError(f'session not found: {session_id}')
+    return payload
+
+
+def list_session_payloads(status=None, finding_id=None, limit=20):
+    root = session_storage_path()
+    if not root.exists():
+        return []
+    rows = []
+    for candidate in root.glob('SES-*.json'):
+        payload = read_json_file(candidate, None)
+        if not isinstance(payload, dict):
+            continue
+        if status and str(payload.get('status') or '').lower() != str(status).lower():
+            continue
+        subject = payload.get('subject') or {}
+        if finding_id and str(subject.get('finding_id') or '') != str(finding_id):
+            continue
+        compact = compact_session_payload(payload)
+        if compact:
+            rows.append(compact)
+    rows.sort(key=lambda item: str(item.get('updated_at') or ''), reverse=True)
+    return rows[:limit]
 
 
 def run_secopsai_triage_summary():
@@ -147,6 +248,10 @@ def collect_secopsai_triage_state():
                 'candidate_findings': artifact.get('candidate_findings'),
             }
 
+    sessions = list_session_payloads(limit=25)
+    open_sessions = [item for item in sessions if str(item.get('status') or '').lower() == 'open']
+    pending_session_approvals = sum(int(item.get('pending_approvals') or 0) for item in sessions)
+
     return {
         'ok': True,
         'secopsai_root': str(SECOPSAI_ROOT),
@@ -161,6 +266,14 @@ def collect_secopsai_triage_state():
         'orchestrator': {
             'latest': recent_orchestrator[0] if recent_orchestrator else None,
             'recent': recent_orchestrator,
+        },
+        'sessions': {
+            'path': str(session_storage_path()),
+            'total_count': len(sessions),
+            'open_count': len(open_sessions),
+            'pending_approvals': pending_session_approvals,
+            'recent': sessions,
+            'latest_updated_at': sessions[0].get('updated_at') if sessions else None,
         },
         'findings_artifact': findings_artifact,
     }
@@ -196,6 +309,10 @@ def secopsai_python_bin():
 
 def secopsai_db_args():
     return ['--db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else []
+
+
+def secopsai_session_args():
+    return ['--session-dir', str(session_storage_path())]
 
 
 def run_secopsai_cli(args, timeout=120):
@@ -235,7 +352,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'mode': 'local-control-panel',
                     'run_output_api': True,
                     'secopsai_triage_api': True,
+                    'secopsai_sessions_api': True,
+                    'secopsai_research_api': True,
                 },
+                'ai_guard': build_ai_guard(),
             }
             return json_response(self, 200, payload)
 
@@ -244,6 +364,37 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return json_response(self, 200, collect_secopsai_triage_state())
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/sessions':
+            try:
+                qs = urllib.parse.parse_qs(parsed.query or '')
+                limit = int((qs.get('limit') or ['20'])[0] or '20')
+                status = (qs.get('status') or [None])[0]
+                finding_id = (qs.get('finding_id') or [None])[0]
+                sessions = list_session_payloads(status=status, finding_id=finding_id, limit=max(1, min(limit, 100)))
+                return json_response(
+                    self,
+                    200,
+                    {
+                        'ok': True,
+                        'path': str(session_storage_path()),
+                        'total': len(sessions),
+                        'sessions': sessions,
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/session':
+            try:
+                qs = urllib.parse.parse_qs(parsed.query or '')
+                session_id = str((qs.get('session_id') or [''])[0] or '').strip()
+                session = load_session_payload(session_id)
+                return json_response(self, 200, {'ok': True, 'session': session})
+            except FileNotFoundError as exc:
+                return json_response(self, 404, {'ok': False, 'error': str(exc)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
         if parsed.path == '/api/run-output':
             # Serve run output text from within the OpenClaw workspace only.
@@ -271,11 +422,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == '/api/secopsai/investigate':
             finding_id = str(payload.get('finding_id') or '').strip()
+            session_id = str(payload.get('session_id') or '').strip()
             if not FINDING_ID_RE.match(finding_id):
                 return json_response(self, 400, {'ok': False, 'error': 'Invalid finding_id'})
+            if session_id and not SESSION_ID_RE.match(session_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid session_id'})
             try:
+                cli_args = ['triage', 'investigate', finding_id, '--search-root', str(SECOPSAI_ROOT), '--json', *secopsai_db_args(), *secopsai_session_args()]
+                if session_id:
+                    cli_args.extend(['--session-id', session_id])
+                else:
+                    cli_args.append('--open-session')
                 result = run_secopsai_cli(
-                    ['triage', 'investigate', finding_id, '--search-root', str(SECOPSAI_ROOT), '--json', *secopsai_db_args()],
+                    cli_args,
                     timeout=180,
                 )
                 parsed_stdout = None
@@ -298,12 +457,59 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/secopsai/research-finding':
+            finding_id = str(payload.get('finding_id') or '').strip()
+            session_id = str(payload.get('session_id') or '').strip()
+            search_root = str(payload.get('search_root') or str(SECOPSAI_ROOT)).strip() or str(SECOPSAI_ROOT)
+            if not FINDING_ID_RE.match(finding_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid finding_id'})
+            if session_id and not SESSION_ID_RE.match(session_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid session_id'})
+            try:
+                cli_args = [
+                    'research',
+                    'finding',
+                    finding_id,
+                    '--search-root',
+                    search_root,
+                    *secopsai_db_args(),
+                    *secopsai_session_args(),
+                ]
+                if session_id:
+                    cli_args.extend(['--session-id', session_id])
+                result = run_secopsai_cli(cli_args, timeout=180)
+                parsed_stdout = None
+                try:
+                    parsed_stdout = json.loads(result['stdout']) if result['stdout'].strip() else None
+                except Exception:
+                    parsed_stdout = None
+                return json_response(
+                    self,
+                    200 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'finding_id': finding_id,
+                        'result': parsed_stdout,
+                        'stdout': result['stdout'],
+                        'stderr': result['stderr'],
+                        'returncode': result['returncode'],
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
         if parsed.path == '/api/secopsai/apply-action':
             action_id = str(payload.get('action_id') or '').strip()
+            session_id = str(payload.get('session_id') or '').strip()
             if not ACTION_ID_RE.match(action_id):
                 return json_response(self, 400, {'ok': False, 'error': 'Invalid action_id'})
+            if session_id and not SESSION_ID_RE.match(session_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid session_id'})
             try:
-                result = run_secopsai_cli(['triage', 'apply-action', action_id, '--yes', *secopsai_db_args()], timeout=180)
+                cli_args = ['triage', 'apply-action', action_id, '--yes', *secopsai_db_args(), *secopsai_session_args()]
+                if session_id:
+                    cli_args.extend(['--session-id', session_id])
+                result = run_secopsai_cli(cli_args, timeout=180)
                 return json_response(
                     self,
                     200 if result['ok'] else 500,
@@ -323,6 +529,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             disposition = str(payload.get('disposition') or '').strip()
             note = ' '.join(str(payload.get('note') or '').split())
             status = str(payload.get('status') or 'closed').strip() or 'closed'
+            session_id = str(payload.get('session_id') or '').strip()
             if not FINDING_ID_RE.match(finding_id):
                 return json_response(self, 400, {'ok': False, 'error': 'Invalid finding_id'})
             if disposition not in ALLOWED_CLOSE_DISPOSITIONS:
@@ -331,15 +538,21 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return json_response(self, 400, {'ok': False, 'error': 'Invalid status'})
             if len(note) < 12:
                 return json_response(self, 400, {'ok': False, 'error': 'Analyst note is required'})
+            if session_id and not SESSION_ID_RE.match(session_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid session_id'})
             try:
+                cli_args = [
+                    'triage', 'close', finding_id,
+                    '--disposition', disposition,
+                    '--note', note,
+                    '--status', status,
+                    *secopsai_db_args(),
+                    *secopsai_session_args(),
+                ]
+                if session_id:
+                    cli_args.extend(['--session-id', session_id])
                 result = run_secopsai_cli(
-                    [
-                        'triage', 'close', finding_id,
-                        '--disposition', disposition,
-                        '--note', note,
-                        '--status', status,
-                        *secopsai_db_args(),
-                    ],
+                    cli_args,
                     timeout=180,
                 )
                 return json_response(
@@ -351,6 +564,56 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         'disposition': disposition,
                         'status': status,
                         'note': note,
+                        'stdout': result['stdout'],
+                        'stderr': result['stderr'],
+                        'returncode': result['returncode'],
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/resolve-approval':
+            session_id = str(payload.get('session_id') or '').strip()
+            approval_id = str(payload.get('approval_id') or '').strip()
+            decision = str(payload.get('decision') or '').strip().lower()
+            decided_by = str(payload.get('decided_by') or '').strip()
+            note = ' '.join(str(payload.get('note') or '').split())
+            apply_change = bool(payload.get('apply'))
+            if not SESSION_ID_RE.match(session_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid session_id'})
+            if not APPROVAL_ID_RE.match(approval_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid approval_id'})
+            if decision not in {'approved', 'rejected'}:
+                return json_response(self, 400, {'ok': False, 'error': 'Decision must be approved or rejected'})
+            try:
+                cli_args = [
+                    'session', 'resolve-approval', session_id, approval_id,
+                    '--approve' if decision == 'approved' else '--reject',
+                    '--json',
+                    *secopsai_db_args(),
+                    *secopsai_session_args(),
+                ]
+                if note:
+                    cli_args.extend(['--note', note])
+                if decided_by:
+                    cli_args.extend(['--decided-by', decided_by])
+                if apply_change and decision == 'approved':
+                    cli_args.append('--apply')
+                result = run_secopsai_cli(cli_args, timeout=180)
+                parsed_stdout = None
+                try:
+                    parsed_stdout = json.loads(result['stdout']) if result['stdout'].strip() else None
+                except Exception:
+                    parsed_stdout = None
+                return json_response(
+                    self,
+                    200 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'session_id': session_id,
+                        'approval_id': approval_id,
+                        'decision': decision,
+                        'result': parsed_stdout,
                         'stdout': result['stdout'],
                         'stderr': result['stderr'],
                         'returncode': result['returncode'],

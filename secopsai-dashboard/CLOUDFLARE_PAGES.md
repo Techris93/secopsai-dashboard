@@ -4,6 +4,8 @@ This dashboard is now prepared for **Cloudflare Pages advanced mode** with a roo
 
 - `GET /config.js`
 - `GET /api/integration-status`
+- `GET /api/secopsai/*` via optional upstream helper proxy
+- `POST /api/secopsai/*` via optional upstream helper proxy
 - `POST /api/discord-notify`
 - `POST /api/discord-send-message`
 - `GET /api/run-output`
@@ -17,6 +19,7 @@ The worker falls back to `env.ASSETS.fetch(request)` for normal static files, wh
 - Hosted run-output delivery supports two modes:
   - **Recommended:** read output files from an R2 bucket binding.
   - **Fallback:** proxy to an upstream helper via `RUN_OUTPUT_BASE_URL`.
+- Hosted native triage/session/research actions can optionally proxy to a secured local or private SecOpsAI helper via `SECOPSAI_HELPER_BASE_URL`.
 - The retired `/api/discord-send-message` route still returns `410 Gone` so the current UI behavior stays compatible.
 
 ## Recommended production architecture
@@ -40,16 +43,23 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `SUPABASE_ANON_KEY`
 - `APP_NAME`
 - `DISCORD_SERVER_ID`
+- `HOSTED_AI_ENABLED`
+- `HOSTED_AI_MODEL`
+- `HOSTED_AI_MAX_COST_USD`
+- `HOSTED_AI_ALLOW_MUTATIONS`
 - `RUN_OUTPUT_R2_BINDING`
 - `RUN_OUTPUT_R2_PREFIX`
 - `RUN_OUTPUT_BASE_URL`
 - `RUN_OUTPUT_AUTH_HEADER`
+- `SECOPSAI_HELPER_BASE_URL`
+- `SECOPSAI_HELPER_AUTH_HEADER`
 
 ### Secrets
 
 - `DISCORD_OPS_LOG_WEBHOOK`
 - `DISCORD_KANBAN_UPDATES_WEBHOOK`
 - `RUN_OUTPUT_AUTH_TOKEN`
+- `SECOPSAI_HELPER_AUTH_TOKEN`
 
 Notes:
 
@@ -58,6 +68,10 @@ Notes:
 - You only need **one** run-output mode:
   - R2 mode: configure an R2 binding and optionally `RUN_OUTPUT_R2_PREFIX`.
   - Proxy mode: configure `RUN_OUTPUT_BASE_URL` and optionally auth settings.
+- Native triage/session features in hosted mode need a reachable SecOpsAI helper:
+  - Set `SECOPSAI_HELPER_BASE_URL` to a helper that exposes `/api/secopsai/triage-state`, `/api/secopsai/sessions`, `/api/secopsai/session`, `/api/secopsai/research-finding`, and the mutation endpoints used by the dashboard.
+  - Optionally protect that helper with `SECOPSAI_HELPER_AUTH_HEADER` and `SECOPSAI_HELPER_AUTH_TOKEN`.
+- `HOSTED_AI_*` values are rendered into `window.SECOPSAI_CONFIG.aiGuard` so the hosted dashboard can show model/budget/mutation guardrails without hardcoding them in the bundle.
 
 ## R2 key format
 
@@ -201,8 +215,9 @@ After deployment, verify:
 
 1. `/config.js` returns real config values.
 2. The dashboard loads and connects to Supabase.
-3. **Integrations** shows `cloudflare-pages` mode for Discord.
-4. A run output link opens `view-run-output.html` on the same domain.
+3. **Integrations** shows helper state for hosted Discord and native triage/session proxying.
+4. If `SECOPSAI_HELPER_BASE_URL` is configured, the Native Triage page shows real session/approval state.
+5. A run output link opens `view-run-output.html` on the same domain.
 
 ### 7. Attach your custom domain
 

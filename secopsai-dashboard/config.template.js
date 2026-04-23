@@ -4,6 +4,12 @@ window.SECOPSAI_CONFIG = {
   appName: "__APP_NAME__",
   integrationStatusEndpoint: "/api/integration-status",
   runOutputEndpoint: "/api/run-output",
+  aiGuard: {
+    hostedEnabled: __HOSTED_AI_ENABLED__,
+    defaultModel: "__HOSTED_AI_MODEL__",
+    maxCostUsd: __HOSTED_AI_MAX_COST_USD__,
+    allowMutations: __HOSTED_AI_ALLOW_MUTATIONS__
+  },
   departments: {
     exec: "#06B6D4",
     platform: "#3B82F6",

@@ -3,6 +3,8 @@ const DEFAULT_SERVER_ID = "1484917962245668874";
 const DEFAULT_RUN_OUTPUT_PROXY_PATH = "/api/run-output";
 const DEFAULT_RUN_OUTPUTS_BINDING = "RUN_OUTPUTS";
 const DEFAULT_RUN_OUTPUT_R2_PREFIX = "";
+const DEFAULT_HOSTED_AI_MODEL = "gpt-5.4-mini";
+const DEFAULT_HOSTED_AI_MAX_COST_USD = 3;
 const DASHBOARD_DEPARTMENTS = {
   exec: "#06B6D4",
   platform: "#3B82F6",
@@ -65,6 +67,7 @@ function buildBrowserConfig(env) {
     discordNotifyEndpoint: "/api/discord-notify",
     integrationStatusEndpoint: "/api/integration-status",
     runOutputEndpoint: DEFAULT_RUN_OUTPUT_PROXY_PATH,
+    aiGuard: buildAiGuard(env),
     departments: DASHBOARD_DEPARTMENTS,
     roleGroups: DASHBOARD_ROLE_GROUPS,
   };
@@ -83,6 +86,26 @@ function trimToLength(value, maxLength = 1800) {
 
 function parseJsonBody(request) {
   return request.json().catch(() => null);
+}
+
+function truthyEnv(value, fallback = false) {
+  if (typeof value === "undefined" || value === null || value === "") return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(normalized);
+}
+
+function numberEnv(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function buildAiGuard(env) {
+  return {
+    hostedEnabled: truthyEnv(env.HOSTED_AI_ENABLED, false),
+    defaultModel: String(env.HOSTED_AI_MODEL || DEFAULT_HOSTED_AI_MODEL).trim() || DEFAULT_HOSTED_AI_MODEL,
+    maxCostUsd: numberEnv(env.HOSTED_AI_MAX_COST_USD, DEFAULT_HOSTED_AI_MAX_COST_USD),
+    allowMutations: truthyEnv(env.HOSTED_AI_ALLOW_MUTATIONS, false),
+  };
 }
 
 function getDiscordWebhookForChannel(env, channel) {
@@ -197,6 +220,8 @@ async function proxyRunOutputFromUpstream(relPath, env) {
 async function handleIntegrationStatus(env) {
   const runOutputBinding = getRunOutputBinding(env);
   const runOutputProxy = String(env.RUN_OUTPUT_BASE_URL || "").trim();
+  const secopsaiHelperBase = String(env.SECOPSAI_HELPER_BASE_URL || "").trim();
+  const aiGuard = buildAiGuard(env);
   return jsonResponse({
     ok: true,
     discord: {
@@ -208,6 +233,58 @@ async function handleIntegrationStatus(env) {
       mode: runOutputBinding ? "r2" : runOutputProxy ? "proxy" : "disabled",
       configured: Boolean(runOutputBinding || runOutputProxy),
     },
+    helper: {
+      mode: secopsaiHelperBase ? "upstream-proxy" : "cloudflare-pages",
+      secopsai_triage_api: Boolean(secopsaiHelperBase),
+      secopsai_sessions_api: Boolean(secopsaiHelperBase),
+      secopsai_research_api: Boolean(secopsaiHelperBase),
+    },
+    ai_guard: aiGuard,
+  });
+}
+
+async function proxySecopsaiHelper(request, env) {
+  const baseUrl = String(env.SECOPSAI_HELPER_BASE_URL || "").trim();
+  if (!baseUrl) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "SecOpsAI helper is not configured for hosted mode. Set SECOPSAI_HELPER_BASE_URL.",
+      },
+      { status: 501 },
+    );
+  }
+
+  const incomingUrl = new URL(request.url);
+  const upstreamUrl = new URL(baseUrl);
+  upstreamUrl.pathname = incomingUrl.pathname;
+  upstreamUrl.search = incomingUrl.search;
+
+  const headers = new Headers();
+  const contentType = request.headers.get("content-type");
+  if (contentType) headers.set("content-type", contentType);
+
+  const authHeader = String(env.SECOPSAI_HELPER_AUTH_HEADER || "").trim();
+  const authToken = String(env.SECOPSAI_HELPER_AUTH_TOKEN || "").trim();
+  if (authHeader && authToken) {
+    headers.set(authHeader, authToken);
+  }
+
+  const init = {
+    method: request.method,
+    headers,
+  };
+
+  if (!["GET", "HEAD"].includes(request.method.toUpperCase())) {
+    init.body = await request.text();
+  }
+
+  const response = await fetch(upstreamUrl.toString(), init);
+  const responseHeaders = new Headers(response.headers);
+  responseHeaders.set("Cache-Control", "no-store");
+  return new Response(response.body, {
+    status: response.status,
+    headers: responseHeaders,
   });
 }
 
@@ -308,6 +385,10 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/api/integration-status") {
       return handleIntegrationStatus(env);
+    }
+
+    if (url.pathname.startsWith("/api/secopsai/")) {
+      return proxySecopsaiHelper(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/api/run-output") {
