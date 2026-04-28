@@ -1705,6 +1705,8 @@ function renderFindings() {
   const triageSummary = localTriageSummary();
   const triageLatest = localTriageLatestRun();
   const pendingActions = localPendingActions();
+  const openSessions = openLocalSessionsCount();
+  const pendingApprovals = pendingLocalApprovalsCount();
   const summary = el('finding-summary');
   const total = state.findings.length;
   const openCount = state.findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
