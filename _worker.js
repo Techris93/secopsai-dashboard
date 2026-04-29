@@ -2,6 +2,7 @@ import dashboardWorker from "./secopsai-dashboard/_worker.js";
 
 const DASHBOARD_ASSET_ROOT = "/secopsai-dashboard";
 const ROOT_ASSET_PATHS = new Set([
+  "/favicon.svg",
   "/app.js",
   "/styles.css",
   "/radar-texture.png",

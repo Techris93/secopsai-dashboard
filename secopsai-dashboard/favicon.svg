@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SecOpsAI Dashboard">
+  <rect width="64" height="64" rx="14" fill="#07111f"/>
+  <path d="M32 9l19 8v13c0 13.5-9.4 21.6-19 25-9.6-3.4-19-11.5-19-25V17l19-8Z" fill="#0f766e" stroke="#67e8f9" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="32" cy="31" r="11" fill="none" stroke="#dbeafe" stroke-width="2.8"/>
+  <path d="M32 20v22M21 31h22" stroke="#dbeafe" stroke-width="2.8" stroke-linecap="round"/>
+  <circle cx="32" cy="31" r="4" fill="#22c55e"/>
+</svg>
