@@ -3065,3 +3065,117 @@ label span,
     flex-direction: column;
   }
 }
+
+/* Blog Ops control plane */
+.blog-auth-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 520px);
+  gap: 18px;
+  align-items: center;
+}
+.blog-auth-controls,
+.blog-actions,
+.blog-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.blog-actions label {
+  width: 110px;
+  display: grid;
+  gap: 8px;
+}
+.blog-filter-label {
+  min-width: 180px;
+  display: grid;
+  gap: 8px;
+}
+.blog-draft-list {
+  display: grid;
+  gap: 12px;
+  max-height: 720px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.blog-draft-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.94));
+  padding: 16px;
+  cursor: pointer;
+  color: var(--text);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.blog-draft-card:hover,
+.blog-draft-card.selected-row {
+  transform: translateY(-1px);
+  border-color: rgba(15,157,182,0.32);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.1);
+}
+.blog-draft-card h4 {
+  margin: 12px 0 8px;
+  font-size: 1rem;
+}
+.blog-draft-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.blog-draft-topline,
+.blog-draft-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.blog-draft-meta {
+  margin-top: 12px;
+  justify-content: space-between;
+}
+.blog-reference-list {
+  display: grid;
+  gap: 8px;
+  word-break: break-word;
+}
+.blog-reference-list a {
+  color: var(--blue);
+  font-size: 0.88rem;
+}
+.blog-preview-body {
+  white-space: pre-wrap;
+  overflow: auto;
+  max-height: 420px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(15,23,42,0.08);
+  background: #0f172a;
+  color: #dbeafe;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+.blog-review-note {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.blog-metric-card .metric {
+  font-size: 1.6rem;
+}
+.empty-state {
+  padding: 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 16px;
+  color: var(--muted);
+  background: rgba(255,255,255,0.68);
+}
+@media (max-width: 980px) {
+  .blog-auth-card { grid-template-columns: 1fr; }
+  .blog-actions label { width: 100%; }
+}

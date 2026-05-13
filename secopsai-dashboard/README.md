@@ -8,6 +8,7 @@ The dashboard is now intentionally narrow:
 - task management
 - native triage queue visibility
 - helper-backed native SecOpsAI actions
+- Blog Ops workflow dispatch and review queue
 - Supabase-backed integration status
 
 It is not a Discord control plane and not a generic multi-agent org shell.
@@ -52,6 +53,15 @@ It now also reads native local SecOpsAI state through the helper server:
 - findings/orchestrator freshness
 - direct native investigate, apply-action, and guarded close controls
 
+### Blog Ops
+- GitHub Actions-backed security-blog news ingestion
+- review queue for generated external-news drafts
+- preview of draft body, source links, severity, and status
+- approval-gated approve/reject/needs-review controls
+- publish-approved, rebuild-feeds, and deploy buttons
+
+Blog Ops is intentionally protected. The browser calls `/api/blog/*` Worker endpoints, and the Worker dispatches the SecOpsAI `blog-ops.yml` workflow. Operators paste `BLOG_OPS_ADMIN_TOKEN` into the page for write actions; GitHub tokens stay server-side in Cloudflare Pages secrets.
+
 ## Runtime split
 
 - `secopsai` owns detection, triage, orchestrator logic, and policy decisions
@@ -89,6 +99,10 @@ Optional `.env` values:
   - local repo root used by the helper server for native triage/orchestrator state and helper-backed native actions
 - `SECOPSAI_DB_PATH`
   - optional SQLite override for testing helper-backed native actions against a copied SecOpsAI database
+- `BLOG_OPS_GITHUB_TOKEN`
+  - optional local Pages preview token for dispatching the SecOpsAI `blog-ops.yml` workflow
+- `BLOG_OPS_ADMIN_TOKEN`
+  - local operator token required by write endpoints
 
 ## Cloudflare Pages
 

@@ -63,6 +63,16 @@ const state = {
   events: [],
   integrationStatus: null,
   localTriage: null,
+  blogOps: {
+    status: null,
+    drafts: [],
+    runs: [],
+    selectedSlug: null,
+    selectedDraft: null,
+    loading: false,
+    lastAction: null,
+    adminToken: sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
+  },
   selectedFindingId: null,
   selectedSessionId: null,
   selectedSessionDetail: null,
@@ -81,12 +91,13 @@ const state = {
 const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
-const pages = ["mission-control", "tasks", "findings", "integrations"];
+const pages = ["mission-control", "tasks", "findings", "integrations", "blog-ops"];
 const PAGE_CONTEXT = {
   "mission-control": "Mission Control overview",
   "tasks": "Task queue, ownership, and run visibility",
   "findings": "Detection triage and correlation surface",
-  "integrations": "Native triage and helper visibility"
+  "integrations": "Native triage and helper visibility",
+  "blog-ops": "Security blog newsroom control plane"
 };
 
 function el(id) { return document.getElementById(id); }
@@ -2621,12 +2632,242 @@ function renderIntegrations() {
     </table></div>`;
 }
 
+function blogOpsEndpoint(path = '') {
+  const base = String(cfg.blogOpsEndpoint || '/api/blog').replace(/\/+$/, '');
+  return `${base}${path ? `/${path.replace(/^\/+/, '')}` : ''}`;
+}
+
+function blogOpsHeaders({ write = false } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (write && state.blogOps.adminToken) {
+    headers['X-Blog-Ops-Admin-Token'] = state.blogOps.adminToken;
+  }
+  return headers;
+}
+
+async function fetchBlogOpsJson(path = '', options = {}) {
+  const isWrite = options.method && String(options.method).toUpperCase() !== 'GET';
+  const res = await fetch(blogOpsEndpoint(path), {
+    ...options,
+    headers: {
+      ...blogOpsHeaders({ write: isWrite }),
+      ...(options.headers || {})
+    }
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error || `Blog Ops HTTP ${res.status}`);
+  return payload;
+}
+
+function blogOpsDrafts() {
+  return Array.isArray(state.blogOps.drafts) ? state.blogOps.drafts : [];
+}
+
+function selectedBlogDraftSummary() {
+  const slug = String(state.blogOps.selectedSlug || '');
+  return blogOpsDrafts().find(draft => String(draft.slug || '') === slug) || null;
+}
+
+function blogDraftFilterValue() {
+  return el('blog-draft-filter')?.value || 'all';
+}
+
+function filteredBlogDrafts() {
+  const filter = blogDraftFilterValue();
+  return blogOpsDrafts().filter(draft => filter === 'all' || String(draft.review_status || '') === filter);
+}
+
+function blogOpsAdminTokenHint() {
+  return state.blogOps.adminToken ? 'Token ready for write actions' : 'Paste admin token to enable write actions';
+}
+
+async function loadBlogOpsStatus({ render = true } = {}) {
+  try {
+    const payload = await fetchBlogOpsJson('status');
+    state.blogOps.status = payload;
+    state.blogOps.drafts = payload.drafts || [];
+    state.blogOps.runs = payload.runs || [];
+    if (!state.blogOps.selectedSlug && state.blogOps.drafts[0]) {
+      state.blogOps.selectedSlug = state.blogOps.drafts[0].slug;
+    }
+  } catch (error) {
+    state.blogOps.status = { ok: false, error: error.message, drafts: [], runs: [] };
+    state.blogOps.drafts = [];
+    state.blogOps.runs = [];
+  }
+  if (render) renderBlogOps();
+}
+
+async function loadBlogDraft(slug) {
+  if (!slug) return null;
+  const payload = await fetchBlogOpsJson(`drafts/${encodeURIComponent(slug)}`);
+  state.blogOps.selectedSlug = payload.draft?.slug || slug;
+  state.blogOps.selectedDraft = payload.draft || null;
+  renderBlogOps();
+  return state.blogOps.selectedDraft;
+}
+
+async function runBlogOpsAction(action, { draft = null, note = '', button = null } = {}) {
+  const actionPath = draft ? `drafts/${encodeURIComponent(draft)}/${action}` : action;
+  const limit = Number(el('blog-action-limit')?.value || 5) || 5;
+  setButtonBusy(button, true, 'Dispatching…');
+  try {
+    const payload = await fetchBlogOpsJson(actionPath, {
+      method: 'POST',
+      body: JSON.stringify({ limit, note })
+    });
+    state.blogOps.lastAction = { action, draft, payload, at: new Date().toISOString() };
+    setStatus(`<span class="dot"></span> Blog Ops dispatched ${escapeHtml(action)} via ${escapeHtml(payload.workflow || 'workflow')}`);
+    await loadBlogOpsStatus({ render: false });
+    renderBlogOps();
+  } catch (error) {
+    setStatus(`Blog Ops ${action} failed: ${error.message}`, true);
+    alert(`Blog Ops ${action} failed: ${error.message}`);
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function renderBlogOpsStats() {
+  const host = el('blog-ops-stats');
+  if (!host) return;
+  const status = state.blogOps.status || {};
+  const counts = status.counts || {};
+  const runs = state.blogOps.runs || [];
+  const latestRun = runs[0] || null;
+  const cards = [
+    ['Sources', counts.sources ?? '—', status.configured ? 'GitHub-backed registry' : 'GitHub token needed'],
+    ['Drafts', counts.drafts ?? blogOpsDrafts().length, 'review records in repo'],
+    ['Needs review', counts.needs_review ?? 0, 'external news waits here'],
+    ['Approved', counts.approved ?? 0, 'ready for publish-approved'],
+    ['Latest run', latestRun ? statusLabel(latestRun.status || latestRun.conclusion || 'queued') : '—', latestRun ? fmtDate(latestRun.updated_at) : 'No workflow run loaded']
+  ];
+  host.innerHTML = cards.map(([label, value, sub]) => `
+    <div class="card metric-card blog-metric-card">
+      <div class="metric-label">${escapeHtml(label)}</div>
+      <div class="metric">${escapeHtml(String(value))}</div>
+      <div class="metric-label">${escapeHtml(sub)}</div>
+    </div>
+  `).join('');
+}
+
+function renderBlogDraftList() {
+  const host = el('blog-draft-list');
+  if (!host) return;
+  const drafts = filteredBlogDrafts();
+  if (!drafts.length) {
+    host.innerHTML = `<div class="empty-state">No drafts match this filter. Run fetch + draft or change the status filter.</div>`;
+    return;
+  }
+  host.innerHTML = `<div class="blog-draft-list">${drafts.map(draft => {
+    const selected = String(draft.slug || '') === String(state.blogOps.selectedSlug || '');
+    const sources = Array.isArray(draft.sources) ? draft.sources : [];
+    return `
+      <button class="blog-draft-card ${selected ? 'selected-row' : ''}" data-blog-draft="${escapeHtml(draft.slug || '')}">
+        <div class="blog-draft-topline">
+          ${renderStatusPill(draft.review_status || 'needs_review')}
+          <span class="small">${escapeHtml(draft.severity || 'info')}</span>
+        </div>
+        <h4>${escapeHtml(draft.title || 'Untitled draft')}</h4>
+        <p>${escapeHtml(draft.summary || 'No summary available.')}</p>
+        <div class="blog-draft-meta">
+          <span>${escapeHtml(draft.source_name || 'SecOpsAI')}</span>
+          <span>${escapeHtml(fmtDate(draft.updated_at))}</span>
+          <span>${sources.length} refs</span>
+        </div>
+      </button>
+    `;
+  }).join('')}</div>`;
+  host.querySelectorAll('.blog-draft-card').forEach(card => {
+    card.addEventListener('click', async () => {
+      await loadBlogDraft(card.dataset.blogDraft);
+    });
+  });
+}
+
+function renderBlogDraftPreview() {
+  const host = el('blog-draft-preview');
+  if (!host) return;
+  const draft = state.blogOps.selectedDraft || selectedBlogDraftSummary();
+  if (!draft) {
+    host.innerHTML = `<div class="empty-state">Select a draft to preview it. External-news drafts are safe text and stay private until approved and published.</div>`;
+    return;
+  }
+  const sources = Array.isArray(draft.sources) ? draft.sources : [];
+  const body = draft.body_markdown || 'Click a draft card to load the full generated body.';
+  const approved = ['approved', 'reviewed'].includes(String(draft.review_status || ''));
+  host.innerHTML = `
+    <div class="finding-detail-header">
+      <div>
+        <div class="detail-eyebrow">Blog draft</div>
+        <h4>${escapeHtml(draft.title || 'Untitled draft')}</h4>
+        <p class="small">${escapeHtml(draft.summary || '')}</p>
+      </div>
+      ${renderStatusPill(draft.review_status || 'needs_review')}
+    </div>
+    <div class="kv-list">
+      <div class="kv-row"><span class="kv-key">Source</span><span class="kv-val">${escapeHtml(draft.source_name || 'SecOpsAI')}</span></div>
+      <div class="kv-row"><span class="kv-key">Severity</span><span class="kv-val">${escapeHtml(draft.severity || 'info')}</span></div>
+      <div class="kv-row"><span class="kv-key">Path</span><span class="kv-val">${escapeHtml(draft.path || draft.slug || '')}</span></div>
+    </div>
+    <h4 style="margin-top:18px;">References</h4>
+    <div class="blog-reference-list">${sources.length ? sources.map(source => `<a href="${escapeHtml(source)}" target="_blank" rel="noreferrer">${escapeHtml(source)}</a>`).join('') : '<span class="small">No references listed.</span>'}</div>
+    <h4 style="margin-top:18px;">Generated body</h4>
+    <pre class="blog-preview-body">${escapeHtml(body)}</pre>
+    <label class="blog-review-note"><span class="small">Reviewer note</span><textarea id="blog-review-note" rows="3" placeholder="Why did you approve or reject this draft?"></textarea></label>
+    <div class="task-card-actions blog-preview-actions">
+      <button class="mini-btn" id="blog-approve-btn">Approve</button>
+      <button class="mini-btn" id="blog-needs-review-btn">Needs review</button>
+      <button class="mini-btn" id="blog-reject-btn">Reject</button>
+      <button class="primary-btn" id="blog-publish-approved-btn" ${approved ? '' : 'disabled'}>Publish approved</button>
+    </div>
+  `;
+  const noteValue = () => el('blog-review-note')?.value || '';
+  el('blog-approve-btn')?.addEventListener('click', (event) => runBlogOpsAction('approve', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
+  el('blog-needs-review-btn')?.addEventListener('click', (event) => runBlogOpsAction('needs-review', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
+  el('blog-reject-btn')?.addEventListener('click', (event) => runBlogOpsAction('reject', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
+  el('blog-publish-approved-btn')?.addEventListener('click', (event) => runBlogOpsAction('publish-approved', { button: event.currentTarget }));
+}
+
+function renderBlogWorkflowRuns() {
+  const host = el('blog-workflow-runs');
+  if (!host) return;
+  const runs = Array.isArray(state.blogOps.runs) ? state.blogOps.runs : [];
+  if (!runs.length) {
+    host.innerHTML = `<div class="empty-state">No Blog Ops workflow runs loaded yet.</div>`;
+    return;
+  }
+  host.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Run</th><th>Status</th><th>Branch</th><th>Updated</th><th>Link</th></tr></thead><tbody>${runs.map(run => `
+    <tr>
+      <td><strong>${escapeHtml(run.name || `Run ${run.id}`)}</strong><div class="small">${escapeHtml(String(run.id || ''))}</div></td>
+      <td>${renderStatusPill(run.conclusion || run.status || 'queued')}</td>
+      <td>${escapeHtml(run.branch || 'main')}</td>
+      <td>${escapeHtml(fmtDate(run.updated_at || run.created_at))}</td>
+      <td>${run.html_url ? `<a class="mini-btn" href="${escapeHtml(run.html_url)}" target="_blank" rel="noreferrer">Open</a>` : '<span class="small">—</span>'}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function renderBlogOps() {
+  const tokenInput = el('blog-admin-token');
+  if (tokenInput && tokenInput.value !== state.blogOps.adminToken) tokenInput.value = state.blogOps.adminToken;
+  const status = state.blogOps.status || {};
+  renderBlogOpsStats();
+  renderBlogDraftList();
+  renderBlogDraftPreview();
+  renderBlogWorkflowRuns();
+  const authCard = document.querySelector('.blog-auth-card .small');
+  if (authCard) {
+    authCard.textContent = `${blogOpsAdminTokenHint()}. ${status.configured === false ? 'GitHub token is not configured on the Pages project yet.' : 'Write actions dispatch GitHub Actions; no shell commands run in the browser.'}`;
+  }
+}
+
 function renderAll() {
   renderMissionControl();
   renderTasks();
   renderFindings();
   renderRunRequests();
   renderIntegrations();
+  renderBlogOps();
   const triageSummary = localTriageSummary();
   const triageBit = triageSummary
     ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending / ${openLocalSessionsCount()} sessions`
@@ -3187,6 +3428,12 @@ async function boot() {
     errors.push(`local triage: ${err.message || String(err)}`);
   }
 
+  try {
+    await loadBlogOpsStatus({ render: false });
+  } catch (err) {
+    console.warn('loadBlogOpsStatus failed during boot', err);
+  }
+
   renderAll();
   startNativeEventStream();
   startLiveExecutionRefreshLoop();
@@ -3272,6 +3519,37 @@ function bindEvents() {
   });
   ['task-filter-external', 'task-filter-security'].forEach(id => {
     el(id)?.addEventListener('change', renderTasks);
+  });
+  el('blog-save-token-btn')?.addEventListener('click', () => {
+    state.blogOps.adminToken = el('blog-admin-token')?.value || '';
+    if (state.blogOps.adminToken) {
+      sessionStorage.setItem('secopsai_blog_ops_admin_token', state.blogOps.adminToken);
+      setStatus('<span class="dot"></span> Blog Ops admin token stored for this browser session');
+    } else {
+      sessionStorage.removeItem('secopsai_blog_ops_admin_token');
+      setStatus('Blog Ops admin token cleared');
+    }
+    renderBlogOps();
+  });
+  el('blog-clear-token-btn')?.addEventListener('click', () => {
+    state.blogOps.adminToken = '';
+    sessionStorage.removeItem('secopsai_blog_ops_admin_token');
+    if (el('blog-admin-token')) el('blog-admin-token').value = '';
+    renderBlogOps();
+    setStatus('Blog Ops admin token cleared');
+  });
+  el('blog-refresh-btn')?.addEventListener('click', async () => {
+    const btn = el('blog-refresh-btn');
+    setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
+    await loadBlogOpsStatus();
+    setButtonBusy(btn, false);
+  });
+  el('blog-refresh-drafts-btn')?.addEventListener('click', async () => {
+    await loadBlogOpsStatus();
+  });
+  el('blog-draft-filter')?.addEventListener('change', renderBlogOps);
+  document.querySelectorAll('.blog-action-btn').forEach(btn => {
+    btn.addEventListener('click', () => runBlogOpsAction(btn.dataset.blogAction, { button: btn }));
   });
 }
 

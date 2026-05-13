@@ -53,6 +53,10 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `RUN_OUTPUT_AUTH_HEADER`
 - `SECOPSAI_HELPER_BASE_URL`
 - `SECOPSAI_HELPER_AUTH_HEADER`
+- `BLOG_OPS_OWNER`
+- `BLOG_OPS_REPO`
+- `BLOG_OPS_WORKFLOW`
+- `BLOG_OPS_REF`
 
 ### Secrets
 
@@ -60,6 +64,8 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `DISCORD_KANBAN_UPDATES_WEBHOOK`
 - `RUN_OUTPUT_AUTH_TOKEN`
 - `SECOPSAI_HELPER_AUTH_TOKEN`
+- `BLOG_OPS_GITHUB_TOKEN`
+- `BLOG_OPS_ADMIN_TOKEN`
 
 Notes:
 
@@ -72,6 +78,48 @@ Notes:
   - Set `SECOPSAI_HELPER_BASE_URL` to a helper that exposes `/api/secopsai/triage-state`, `/api/secopsai/events`, `/api/secopsai/sessions`, `/api/secopsai/session`, `/api/secopsai/research-finding`, and the mutation endpoints used by the dashboard.
   - Optionally protect that helper with `SECOPSAI_HELPER_AUTH_HEADER` and `SECOPSAI_HELPER_AUTH_TOKEN`.
 - `HOSTED_AI_*` values are rendered into `window.SECOPSAI_CONFIG.aiGuard` so the hosted dashboard can show model/budget/mutation guardrails without hardcoding them in the bundle.
+
+## Blog Ops Control Plane
+
+The dashboard includes a protected **Blog Ops** tab for SecOpsAI security-blog operations. The browser never runs shell commands. Buttons call same-origin Pages Worker endpoints under `/api/blog/*`, and the Worker dispatches the SecOpsAI GitHub Actions workflow `blog-ops.yml`.
+
+Set these values in Cloudflare Pages:
+
+### Variables
+
+- `BLOG_OPS_OWNER=Techris93`
+- `BLOG_OPS_REPO=secopsai`
+- `BLOG_OPS_WORKFLOW=blog-ops.yml`
+- `BLOG_OPS_REF=main`
+
+### Secrets
+
+- `BLOG_OPS_GITHUB_TOKEN`
+- `BLOG_OPS_ADMIN_TOKEN`
+
+Recommended GitHub token scope:
+
+- Fine-grained token for repository `Techris93/secopsai`.
+- Repository permissions: **Actions: Read and write**, **Contents: Read and write**, **Metadata: Read-only**.
+- Do not expose this token in `config.js`; it is read only by the Worker.
+
+`BLOG_OPS_ADMIN_TOKEN` is a separate shared operator secret. Paste it into the Blog Ops tab when you want to click write buttons. It is stored only in browser session storage and sent as `X-Blog-Ops-Admin-Token`.
+
+Daily use:
+
+1. Open **Blog Ops**.
+2. Click **Run fetch + draft** to dispatch the workflow.
+3. Refresh the draft queue after the workflow finishes.
+4. Preview drafts and click **Approve**, **Reject**, or **Needs review**.
+5. Click **Publish approved** to publish reviewed drafts and rebuild feeds.
+6. Click **Deploy blog** when you want Cloudflare Pages deployment from the workflow.
+
+Safety model:
+
+- External-news posts remain approval-gated.
+- `Fetch news` and `Create drafts` can run safely, but public publishing requires an approved/reviewed draft.
+- Drafts are persisted in the SecOpsAI repo under `blog/drafts/` by the workflow using `git add -f`; this makes the dashboard queue stable across runs.
+- The Worker returns workflow run IDs/status links, never GitHub or Cloudflare tokens.
 
 ## R2 key format
 

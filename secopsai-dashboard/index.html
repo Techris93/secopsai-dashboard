@@ -46,6 +46,10 @@
           <span class="nav-icon">NT</span>
           <span class="nav-copy"><span class="title">Native Triage</span><span class="desc">Pending actions, orchestrator history, helper health</span></span>
         </button>
+        <button class="nav-btn" data-page="blog-ops">
+          <span class="nav-icon">BO</span>
+          <span class="nav-copy"><span class="title">Blog Ops</span><span class="desc">News drafts, approvals, publishing</span></span>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -173,6 +177,79 @@
         <div class="card" style="margin-top:18px;">
           <h3>Recent orchestrator runs</h3>
           <div id="routes-table"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-blog-ops">
+        <div class="page-header">
+          <div>
+            <h2>Blog Ops</h2>
+            <p>Protected control plane for SecOpsAI security-blog news ingestion, draft review, approval-gated publishing, feed rebuilds, and Cloudflare deploys.</p>
+          </div>
+          <div class="status-pill" id="blog-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh Blog Ops</div>
+        </div>
+
+        <div class="card blog-auth-card">
+          <div>
+            <h3>Admin action token</h3>
+            <p class="small">Read-only status can load without this token. Write actions require the dashboard secret value from `BLOG_OPS_ADMIN_TOKEN`; it is stored only in this browser session.</p>
+          </div>
+          <div class="blog-auth-controls">
+            <input id="blog-admin-token" type="password" placeholder="Paste Blog Ops admin token for this session" autocomplete="off" />
+            <button class="secondary-btn" id="blog-save-token-btn">Use token</button>
+            <button class="mini-btn" id="blog-clear-token-btn">Clear</button>
+          </div>
+        </div>
+
+        <div class="grid cols-5" id="blog-ops-stats" style="margin-top:18px;"></div>
+
+        <div class="card" style="margin-top:18px;">
+          <div class="page-header compact-header">
+            <div>
+              <h3 style="margin:0;">Actions</h3>
+              <p class="small" style="margin:6px 0 0;">Buttons dispatch the protected GitHub Actions runner. External news still requires explicit approval before publishing.</p>
+            </div>
+          </div>
+          <div class="blog-actions">
+            <label><span class="small">Limit</span><input id="blog-action-limit" type="number" min="1" max="50" value="5" /></label>
+            <button class="secondary-btn blog-action-btn" data-blog-action="news-fetch">Fetch news</button>
+            <button class="secondary-btn blog-action-btn" data-blog-action="news-draft">Create drafts</button>
+            <button class="primary-btn blog-action-btn" data-blog-action="news-run">Run fetch + draft</button>
+            <button class="secondary-btn" id="blog-refresh-drafts-btn">Refresh draft queue</button>
+            <button class="secondary-btn blog-action-btn" data-blog-action="publish-approved">Publish approved</button>
+            <button class="secondary-btn blog-action-btn" data-blog-action="rebuild-feeds">Rebuild feeds</button>
+            <button class="secondary-btn blog-action-btn" data-blog-action="deploy">Deploy blog</button>
+          </div>
+        </div>
+
+        <div class="grid cols-2" style="margin-top:18px;">
+          <div class="card">
+            <div class="page-header compact-header">
+              <div>
+                <h3 style="margin:0;">Draft review queue</h3>
+                <p class="small" style="margin:6px 0 0;">Select a draft to preview source-backed content and approve or reject it.</p>
+              </div>
+              <label class="blog-filter-label"><span class="small">Status</span>
+                <select id="blog-draft-filter">
+                  <option value="all">All</option>
+                  <option value="needs_review">Needs review</option>
+                  <option value="approved">Approved</option>
+                  <option value="reviewed">Reviewed</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+            </div>
+            <div id="blog-draft-list"></div>
+          </div>
+          <div class="card">
+            <h3>Draft preview</h3>
+            <div id="blog-draft-preview" class="blog-draft-preview"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:18px;">
+          <h3>Recent Blog Ops workflow runs</h3>
+          <div id="blog-workflow-runs"></div>
         </div>
       </section>
     </main>
