@@ -513,7 +513,14 @@ function setPage(pageId) {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.page === pageId);
   });
+  document.body.classList.remove('mobile-nav-open');
+  el('mobile-menu-btn')?.setAttribute('aria-expanded', 'false');
   updateTopStrip(pageId);
+}
+
+function toggleMobileNav() {
+  const isOpen = document.body.classList.toggle('mobile-nav-open');
+  el('mobile-menu-btn')?.setAttribute('aria-expanded', String(isOpen));
 }
 
 function roleDepartment(role) {
@@ -3445,6 +3452,7 @@ async function boot() {
 
 function bindEvents() {
   document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
+  el('mobile-menu-btn')?.addEventListener('click', toggleMobileNav);
   el('refresh-btn')?.addEventListener('click', async () => {
     if (bootError) {
       setStatus(bootError, true);

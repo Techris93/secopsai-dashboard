@@ -27,9 +27,15 @@
           <h1>SecOpsAI</h1>
           <p>Triage Dashboard</p>
         </div>
+        <button class="mobile-menu-btn" id="mobile-menu-btn" type="button" aria-expanded="false" aria-controls="dashboard-nav">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span class="sr-only">Toggle dashboard sections</span>
+        </button>
       </div>
 
-      <nav class="nav-list">
+      <nav class="nav-list" id="dashboard-nav">
         <button class="nav-btn active" data-page="mission-control">
           <span class="nav-icon">MC</span>
           <span class="nav-copy"><span class="title">Overview</span><span class="desc">Runs, blockers, review queue</span></span>
