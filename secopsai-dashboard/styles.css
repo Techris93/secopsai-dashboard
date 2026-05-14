@@ -3430,6 +3430,109 @@ label span,
   line-height: 1.55;
 }
 
+.evidence-verdict-panel {
+  background: linear-gradient(180deg, rgba(240,253,250,0.98), rgba(248,250,252,0.98));
+}
+
+.evidence-score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.evidence-score-card {
+  border: 1px solid rgba(13, 148, 136, 0.2);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.86);
+  padding: 12px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+}
+
+.evidence-score-card span {
+  display: block;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.evidence-score-card strong {
+  display: block;
+  margin-top: 5px;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.evidence-notice {
+  border: 1px solid rgba(245, 158, 11, 0.36);
+  border-radius: 14px;
+  background: rgba(255, 251, 235, 0.96);
+  color: #78350f;
+  padding: 11px 12px;
+  font-weight: 800;
+}
+
+.evidence-section {
+  margin-top: 16px;
+}
+
+.evidence-section h4 {
+  margin: 0 0 8px;
+}
+
+.evidence-list,
+.score-breakdown-list {
+  display: grid;
+  gap: 8px;
+}
+
+.evidence-row,
+.score-breakdown-row {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.86);
+  padding: 10px 12px;
+  color: #334155;
+}
+
+.evidence-row strong,
+.score-breakdown-row strong {
+  color: #0f172a;
+}
+
+.score-breakdown-row {
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: start;
+}
+
+.score-breakdown-row p {
+  margin: 2px 0 0;
+  color: #475569;
+}
+
+.score-plus,
+.score-minus {
+  display: inline-flex;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 6px;
+  font-weight: 950;
+}
+
+.score-plus {
+  color: #065f46;
+  background: rgba(209, 250, 229, 0.96);
+}
+
+.score-minus {
+  color: #991b1b;
+  background: rgba(254, 226, 226, 0.96);
+}
+
 .triage-ops-actions {
   margin-top: 16px;
 }
@@ -3440,6 +3543,7 @@ label span,
   .blog-actions label { width: 100%; }
   .triage-ops-filters label { width: 100%; }
   .blog-extracted-grid { grid-template-columns: 1fr; }
+  .evidence-score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* Mobile navigation and responsive dashboard polish */

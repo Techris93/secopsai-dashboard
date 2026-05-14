@@ -142,11 +142,19 @@ Daily use:
 1. Open **Triage Ops**.
 2. Click **Refresh evidence**.
 3. Select an `SCM-*` alert.
-4. Run **Investigate**, **Explain verdict**, **Check advisory matches**, and **Check local repo usage**.
-5. Review the generated recommendation, report path, close note, and CLI fallback.
-6. Click **Generate mitigation** for the response plan.
-7. Use **Move to in review** for uncertain alerts, or **Close as false positive** only after confirming the source-backed note.
-8. Use **Create blog draft** to hand off a reviewed finding to Blog Ops. It does not autopublish.
+4. Run **Run Evidence Verdict** to score the finding from internal evidence.
+5. Run **Investigate**, **Explain verdict**, **Check advisory matches**, and **Check local repo usage** when you need deeper supporting detail.
+6. Review the package verdict, environment impact, score breakdown, report path, recommended note, and CLI fallback.
+7. Click **Generate mitigation** for the response plan.
+8. Use **Move to in review** for uncertain alerts, or **Close as false positive** only after confirming the source-backed note.
+9. Use **Create blog draft** to hand off a reviewed finding to Blog Ops. It does not autopublish.
+
+Evidence-Based Verdict uses internal evidence tiers instead of relying only on public reporting. It separates:
+
+- `package_verdict`: whether the package/version appears malicious, benign, expected behavior, or still needs review.
+- `environment_impact`: whether local exposure is confirmed, likely, not observed, or unknown.
+
+That distinction matters for advisory-backed ecosystem threats. For example, `mistralai@2.4.6` can be `likely_true_positive` as package intelligence while `environment_impact` is `not_observed` if no local dependency reference is found. In that case, keep the ecosystem finding actionable, block the version, and rotate credentials only if installation or execution is confirmed.
 
 If `SECOPSAI_HELPER_BASE_URL` is missing, hosted mode returns a clear not-configured response and the UI shows copyable CLI fallbacks.
 

@@ -86,6 +86,38 @@ async function testTriageOpsAuthorizedWriteProxiesToHelper() {
   }
 }
 
+async function testTriageOpsEvidenceVerdictIsReadOnlyProxy() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ ok: true, package_verdict: "likely_true_positive" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/triage-ops/evidence-verdict", {
+        method: "POST",
+        body: JSON.stringify({ finding_id: "SCM-ABC123", package: "mistralai", version: "2.4.6" }),
+      }),
+      {
+        SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+        TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
+      },
+    );
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.package_verdict, "likely_true_positive");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://helper.example/api/secopsai/triage-ops/evidence-verdict");
+    assert.equal(calls[0].init.headers.has("X-Triage-Ops-Admin-Token"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/blog/news-run", { method: "POST", body: "{}" }),
@@ -183,6 +215,7 @@ await testConfigExposesTriageOpsEndpoint();
 await testTriageOpsHostedModeFailsClearlyWithoutHelper();
 await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();
+await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
 await testSaveDraftDispatchIncludesEditedFields();

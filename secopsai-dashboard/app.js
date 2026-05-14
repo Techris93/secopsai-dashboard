@@ -77,6 +77,7 @@ const state = {
     alerts: [],
     selectedId: null,
     selectedDetail: null,
+    verdictNotes: {},
     lastOutput: null,
     loading: false,
     adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
@@ -3106,6 +3107,11 @@ async function runTriageOpsAction(action, { button = null, payload = {}, write =
       await loadTriageOpsAlerts({ render: false });
       await loadLocalTriageState();
     }
+    if (action === 'evidence-verdict' && result?.recommended_note) {
+      if (selectedAlert?.finding_id) state.triageOps.verdictNotes[selectedAlert.finding_id] = result.recommended_note;
+      const noteBox = el('triage-ops-note');
+      if (noteBox) noteBox.value = result.recommended_note;
+    }
     setStatus(`<span class="dot"></span> Triage Ops ${escapeHtml(statusLabel(action))} completed`);
     renderTriageOps();
   } catch (error) {
@@ -3195,6 +3201,9 @@ function renderTriageOpsOutput(output) {
   if (output.error) {
     return `<div class="triage-output error"><strong>${escapeHtml(output.title || 'Last action failed')}</strong><p>${escapeHtml(output.error)}</p>${output.hint ? `<p>${escapeHtml(output.hint)}</p>` : ''}</div>`;
   }
+  if (output.action === 'evidence-verdict') {
+    return renderEvidenceVerdict(output.result || {});
+  }
   const result = output.result || {};
   const primary =
     result.mitigation ||
@@ -3206,6 +3215,81 @@ function renderTriageOpsOutput(output) {
   return `<div class="triage-output"><strong>Last action: ${escapeHtml(statusLabel(output.action || 'status'))}</strong><pre>${escapeHtml(JSON.stringify(primary, null, 2).slice(0, 12000))}</pre></div>`;
 }
 
+function renderEvidenceRows(items = [], empty = 'None found') {
+  const rows = Array.isArray(items) ? items.filter(Boolean).slice(0, 12) : [];
+  if (!rows.length) return `<p class="small">${escapeHtml(empty)}</p>`;
+  return `<div class="evidence-list">${rows.map(item => {
+    if (typeof item === 'string') return `<div class="evidence-row"><strong>${escapeHtml(item)}</strong></div>`;
+    return `
+      <div class="evidence-row ${escapeHtml(String(item.weight || ''))}">
+        <strong>${escapeHtml(item.label || item.kind || 'Evidence')}</strong>
+        ${item.detail ? `<span>${escapeHtml(item.detail)}</span>` : ''}
+      </div>
+    `;
+  }).join('')}</div>`;
+}
+
+function renderScoreBreakdown(items = []) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!rows.length) return `<p class="small">No score details returned.</p>`;
+  return `<div class="score-breakdown-list">${rows.map(item => `
+    <div class="score-breakdown-row">
+      <span class="${Number(item.points || 0) >= 0 ? 'score-plus' : 'score-minus'}">${Number(item.points || 0) >= 0 ? '+' : ''}${escapeHtml(String(item.points || 0))}</span>
+      <div><strong>${escapeHtml(item.label || 'Score item')}</strong><p>${escapeHtml(item.reason || '')}</p></div>
+    </div>
+  `).join('')}</div>`;
+}
+
+function renderEvidenceVerdict(verdict = {}) {
+  const score = Number(verdict.score || 0);
+  const packageVerdict = statusLabel(verdict.package_verdict || 'needs_review');
+  const impact = statusLabel(verdict.environment_impact || 'unknown');
+  const caution = /true positive/i.test(packageVerdict) && String(verdict.environment_impact || '') === 'not_observed'
+    ? `<div class="evidence-notice">Package appears malicious or advisory-backed, but local exposure is not currently observed.</div>`
+    : '';
+  return `
+    <div class="triage-output evidence-verdict-panel">
+      <strong>Evidence-Based Verdict</strong>
+      <div class="evidence-score-grid">
+        <div class="evidence-score-card"><span>Package verdict</span><strong>${escapeHtml(packageVerdict)}</strong></div>
+        <div class="evidence-score-card"><span>Environment impact</span><strong>${escapeHtml(impact)}</strong></div>
+        <div class="evidence-score-card"><span>Confidence</span><strong>${escapeHtml(verdict.confidence || 'unknown')}</strong></div>
+        <div class="evidence-score-card"><span>Score</span><strong>${escapeHtml(String(score))}/100</strong></div>
+      </div>
+      ${caution}
+      <div class="evidence-section">
+        <h4>Recommended disposition</h4>
+        <p>${escapeHtml(statusLabel(verdict.recommended_disposition || 'needs_review'))}</p>
+        <label class="blog-review-note"><span class="small">Copyable analyst note</span><textarea readonly rows="5">${escapeHtml(verdict.recommended_note || '')}</textarea></label>
+      </div>
+      <div class="evidence-section">
+        <h4>Strong true-positive evidence</h4>
+        ${renderEvidenceRows(verdict.true_positive_evidence, 'No strong true-positive evidence was extracted.')}
+      </div>
+      <div class="evidence-section">
+        <h4>False-positive reducing evidence</h4>
+        ${renderEvidenceRows(verdict.false_positive_evidence, 'No false-positive reducing evidence was extracted.')}
+      </div>
+      <div class="evidence-section">
+        <h4>Missing evidence</h4>
+        ${renderBulletList(verdict.missing_evidence || [], 'No missing evidence reported.')}
+      </div>
+      <div class="evidence-section">
+        <h4>Score breakdown</h4>
+        ${renderScoreBreakdown(verdict.score_breakdown || [])}
+      </div>
+      <div class="evidence-section">
+        <h4>Mitigation actions</h4>
+        ${renderBulletList(verdict.mitigation || [], 'No mitigation actions returned.')}
+      </div>
+      <div class="evidence-section">
+        <h4>Operator commands</h4>
+        <pre class="triage-cli-fallback">${escapeHtml((verdict.operator_commands || []).join('\n'))}</pre>
+      </div>
+    </div>
+  `;
+}
+
 function renderTriageOpsDetail() {
   const host = el('triage-ops-detail');
   if (!host) return;
@@ -3215,7 +3299,7 @@ function renderTriageOpsDetail() {
     return;
   }
   const rec = alert.recommendation || {};
-  const closeNote = rec.recommended_note || `Reviewed ${alert.package}@${alert.version} from Triage Ops dashboard.`;
+  const closeNote = state.triageOps.verdictNotes[alert.finding_id] || rec.recommended_note || `Reviewed ${alert.package}@${alert.version} from Triage Ops dashboard.`;
   const cliCommands = triageOpsCliCommands(alert);
   host.innerHTML = `
     <div class="finding-detail-header">
@@ -3244,6 +3328,7 @@ function renderTriageOpsDetail() {
     ${renderBulletList(rec.evidence || [], 'No recommendation evidence loaded yet.')}
     <label class="blog-review-note"><span class="small">Close / escalation note</span><textarea id="triage-ops-note" rows="4">${escapeHtml(closeNote)}</textarea></label>
     <div class="triage-ops-actions">
+      <button class="primary-btn triage-ops-action-btn" data-triage-action="evidence-verdict">Run Evidence Verdict</button>
       <button class="secondary-btn triage-ops-action-btn" data-triage-action="investigate">Investigate</button>
       <button class="secondary-btn triage-ops-action-btn" data-triage-action="explain-verdict">Explain verdict</button>
       <button class="secondary-btn triage-ops-action-btn" data-triage-action="check-advisories">Check advisory matches</button>

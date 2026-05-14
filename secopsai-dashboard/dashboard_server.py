@@ -26,6 +26,7 @@ PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._/-]{1,220}$')
 VERSION_RE = re.compile(r'^[A-Za-z0-9.+:_~!*-]{1,160}$')
 KNOWN_COMPROMISED_VERSIONS = {
     ('pypi', 'litellm'): {'1.82.7', '1.82.8'},
+    ('pypi', 'mistralai'): {'2.4.6'},
 }
 MIN_SAFE_VERSION_HINTS = {
     ('pypi', 'litellm'): '1.83.7',
@@ -39,6 +40,16 @@ KNOWN_IOC_HINTS = {
         '/tmp/pglog',
         '/tmp/.pg_state',
         'sysmon.py',
+    ],
+    ('pypi', 'mistralai'): [
+        'git-tanstack.com',
+        'googleapis.cloud',
+        '83.142.209.194',
+        '/tmp/transformers.pyz',
+        'transformers.pyz',
+        'router_init.js',
+        'setup.mjs',
+        'python3 /tmp/transformers.pyz',
     ],
 }
 DEPENDENCY_FILE_NAMES = {
@@ -754,6 +765,347 @@ def raw_report_for_finding(finding):
     return {'ok': True, 'path': str(report_path), 'text': text[:12000], 'truncated': len(text) > 12000}
 
 
+def evidence_item(kind, label, detail='', weight='strong'):
+    return {'kind': kind, 'label': label, 'detail': detail, 'weight': weight}
+
+
+def score_item(label, points, reason):
+    return {'label': label, 'points': int(points), 'reason': reason}
+
+
+def extract_scanner_rules(finding, explanation=None):
+    rules = []
+    for source in (
+        finding.get('matched_rules'),
+        finding.get('rules'),
+        (explanation or {}).get('matched_rules') if isinstance(explanation, dict) else None,
+    ):
+        if isinstance(source, list):
+            rules.extend(str(item.get('name') if isinstance(item, dict) else item).strip() for item in source)
+    analysis = str(finding.get('analysis') or finding.get('summary') or '')
+    marker = 'Deterministic rules flagged:'
+    if marker in analysis:
+        tail = analysis.split(marker, 1)[1]
+        rules.extend(item.strip() for item in re.split(r',|\n', tail) if item.strip())
+    seen = set()
+    compact = []
+    for rule in rules:
+        rule = re.sub(r'\s+', ' ', rule).strip(' .;')
+        if rule and rule.lower() not in seen:
+            seen.add(rule.lower())
+            compact.append(rule[:140])
+    return compact
+
+
+def parse_report_evidence(report_text, ioc_hints=None):
+    text = str(report_text or '')
+    lowered = text.lower()
+    ioc_hints = [str(item) for item in (ioc_hints or []) if str(item).strip()]
+    signals = {
+        'install_time_execution': [],
+        'import_time_execution': [],
+        'outbound_network': [],
+        'credential_access': [],
+        'obfuscation': [],
+        'suspicious_file_writes': [],
+        'artifact_divergence': [],
+        'known_ioc_matches': [],
+        'weak_or_benign': [],
+    }
+    patterns = {
+        'install_time_execution': [
+            r'setup\.py', r'pyproject', r'\.pth\b', r'postinstall', r'preinstall',
+            r'prepare script', r'lifecycle', r'setup\.mjs', r'build hook',
+        ],
+        'import_time_execution': [
+            r'import-time', r'import time', r'__init__\.py', r'sitecustomize',
+            r'\.pth\b', r'python3\s+/tmp', r'exec\s*\(',
+        ],
+        'outbound_network': [
+            r'https?://', r'\bcurl\b', r'\bwget\b', r'requests\.', r'urllib',
+            r'httpx', r'fetch\s*\(', r'axios', r'xmlhttprequest',
+        ],
+        'credential_access': [
+            r'token', r'secret', r'credential', r'github_token', r'npm_token',
+            r'pypi', r'ssh', r'aws_access_key', r'oidc', r'environment variable',
+            r'\benv\b',
+        ],
+        'obfuscation': [
+            r'base64', r'\beval\s*\(', r'\bexec\s*\(', r'marshal', r'zlib',
+            r'\batob\b', r'fromcharcode', r'packed payload',
+        ],
+        'suspicious_file_writes': [
+            r'/tmp', r'\$home', r'home directory', r'\.bashrc', r'\.zshrc',
+            r'launchagent', r'\bcron\b', r'startup', r'ci path', r'write_text',
+        ],
+        'artifact_divergence': [
+            r'wheel/sdist', r'only in one', r'artifact divergence', r'\bsdist\b',
+            r'\bwheel\b',
+        ],
+        'weak_or_benign': [
+            r'generated asset', r'vendored', r'source map', r'normal framework',
+            r'generic api client', r'documented product functionality',
+        ],
+    }
+    for key, regexes in patterns.items():
+        for pattern in regexes:
+            if re.search(pattern, lowered, re.IGNORECASE):
+                signals[key].append(pattern.replace('\\b', '').replace('\\', ''))
+    for hint in ioc_hints:
+        if hint.lower() in lowered:
+            signals['known_ioc_matches'].append(hint)
+    return {
+        'signals': signals,
+        'strong_signal_count': sum(
+            1
+            for key, values in signals.items()
+            if key not in {'weak_or_benign'} and values
+        ),
+    }
+
+
+def normalize_advisory_references(advisory):
+    refs = []
+    for match in (advisory or {}).get('matches') or []:
+        if not isinstance(match, dict):
+            continue
+        for url in match.get('source_urls') or []:
+            if url and url not in refs:
+                refs.append(url)
+    return refs
+
+
+def build_evidence_verdict_payload(finding, advisory, local_usage, report, explanation=None):
+    ecosystem = str(finding.get('ecosystem') or '').lower()
+    package = str(finding.get('package') or '').strip()
+    version = str(finding.get('new_version') or finding.get('version') or '').strip()
+    key = (ecosystem, package.lower())
+    known_bad_versions = set(KNOWN_COMPROMISED_VERSIONS.get(key, set()))
+    known_iocs = KNOWN_IOC_HINTS.get(key, [])
+    advisory_matched = bool((advisory or {}).get('matched'))
+    known_bad_match = version in known_bad_versions
+    local_matches = (local_usage or {}).get('matches') or []
+    local_present = bool((local_usage or {}).get('present'))
+    exact_local_version = any(bool(item.get('version_match')) for item in local_matches if isinstance(item, dict))
+    report_text = str((report or {}).get('text') or '')
+    report_ok = bool((report or {}).get('ok'))
+    report_evidence = parse_report_evidence(report_text, known_iocs)
+    signals = report_evidence['signals']
+    scanner_rules = extract_scanner_rules(finding, explanation=explanation)
+    weak_rule_words = ('generic', 'heuristic', 'metadata', 'generated', 'vendored')
+    weak_only_rules = bool(scanner_rules) and all(
+        any(word in rule.lower() for word in weak_rule_words)
+        for rule in scanner_rules
+    )
+    strong_report_signal = report_evidence['strong_signal_count'] > 0
+
+    score = 0
+    score_breakdown = []
+    true_positive_evidence = []
+    false_positive_evidence = []
+    missing_evidence = []
+
+    def add(points, label, reason):
+        nonlocal score
+        score += points
+        score_breakdown.append(score_item(label, points, reason))
+
+    if advisory_matched:
+        add(35, 'Advisory exact/version match', 'Emergency advisory or denylist matched this package/version.')
+        true_positive_evidence.append(evidence_item('advisory', 'Advisory matched', f'{package}@{version} is source-backed in advisory data.'))
+    else:
+        missing_evidence.append('No advisory or denylist match was found for this exact version.')
+
+    if known_bad_match:
+        add(25, 'Known compromised version', f'{package}@{version} is in the local known-compromised version list.')
+        true_positive_evidence.append(evidence_item('known_bad', 'Known compromised version', f'{package}@{version} is locally denylisted.'))
+
+    if signals['install_time_execution'] or signals['import_time_execution']:
+        add(20, 'Install/import-time execution evidence', 'Raw report includes install-time or import-time execution indicators.')
+        true_positive_evidence.append(evidence_item('execution', 'Install/import-time execution', ', '.join((signals['install_time_execution'] + signals['import_time_execution'])[:6])))
+
+    if signals['credential_access']:
+        add(15, 'Credential/token access evidence', 'Raw report references credential, token, environment, or CI secret access.')
+        true_positive_evidence.append(evidence_item('credential_access', 'Credential or token access', ', '.join(signals['credential_access'][:6])))
+
+    if signals['outbound_network']:
+        add(15, 'Outbound network evidence', 'Raw report references outbound HTTP/network behavior in the suspicious path.')
+        true_positive_evidence.append(evidence_item('network', 'Outbound network behavior', ', '.join(signals['outbound_network'][:6])))
+
+    if signals['obfuscation']:
+        add(15, 'Obfuscation or dynamic execution', 'Raw report references base64/eval/exec/packed-payload behavior.')
+        true_positive_evidence.append(evidence_item('obfuscation', 'Obfuscation or dynamic execution', ', '.join(signals['obfuscation'][:6])))
+
+    if signals['suspicious_file_writes']:
+        add(10, 'Suspicious file writes/persistence', 'Raw report references /tmp, home, shell profile, startup, or CI-path writes.')
+        true_positive_evidence.append(evidence_item('file_write', 'Suspicious file writes', ', '.join(signals['suspicious_file_writes'][:6])))
+
+    if signals['artifact_divergence']:
+        add(10, 'Artifact divergence', 'Raw report references wheel/sdist or artifact-only divergence.')
+        true_positive_evidence.append(evidence_item('artifact_divergence', 'Wheel/sdist or artifact divergence', ', '.join(signals['artifact_divergence'][:6])))
+
+    if local_present:
+        add(10, 'Local dependency reference', f'{package} appears in local dependency manifests.')
+        true_positive_evidence.append(evidence_item('local_usage', 'Package appears locally', f'{len(local_matches)} dependency match(es).'))
+    else:
+        false_positive_evidence.append(evidence_item('local_usage', 'No local dependency reference', 'No manifest or lockfile reference was found in the configured SecOpsAI root.', 'medium'))
+
+    if exact_local_version:
+        add(15, 'Exact local version reference', f'{package}@{version} appears in local dependency manifests.')
+
+    if signals['known_ioc_matches']:
+        add(10, 'Known IOC match', 'Raw report references known campaign IOCs or filenames.')
+        true_positive_evidence.append(evidence_item('ioc', 'Known IOC match', ', '.join(signals['known_ioc_matches'][:10])))
+
+    if known_bad_versions and not known_bad_match and not advisory_matched and not local_present:
+        add(-35, 'Outside local known-compromised set', 'This package has known bad versions, but this exact version is not listed and no local usage was found.')
+        false_positive_evidence.append(
+            evidence_item(
+                'known_bad_miss',
+                'Exact version is outside local known-compromised set',
+                f'Known bad versions: {", ".join(sorted(known_bad_versions))}',
+                'strong',
+            )
+        )
+
+    if weak_only_rules:
+        add(-20, 'Weak-only scanner rules', 'Only weak/generic scanner rule names were available.')
+        false_positive_evidence.append(evidence_item('scanner', 'Only weak/generic scanner rules observed', ', '.join(scanner_rules[:6]), 'medium'))
+
+    if signals['weak_or_benign'] and not (advisory_matched or known_bad_match or strong_report_signal):
+        add(-15, 'Benign/generated-report hints', 'Raw report appears to describe generated assets, vendored code, or normal framework behavior.')
+        false_positive_evidence.append(evidence_item('benign_hint', 'Benign/generated report hints', ', '.join(signals['weak_or_benign'][:6]), 'medium'))
+
+    if not advisory_matched and weak_only_rules and not strong_report_signal:
+        add(-10, 'Advisory miss with weak evidence', 'No advisory match and scanner evidence appears weak or generic.')
+
+    if not scanner_rules:
+        missing_evidence.append('No structured scanner rule list was available.')
+    if not report_ok:
+        missing_evidence.append(str((report or {}).get('error') or 'Raw report was not available.'))
+    if not strong_report_signal:
+        missing_evidence.append('No strong install/import/network/credential/IOC behavior was extracted from the raw report.')
+    missing_evidence.append('Sandbox status: not_available unless a separate sandbox artifact is attached.')
+
+    score = max(0, min(100, score))
+    if exact_local_version:
+        environment_impact = 'confirmed_affected'
+    elif local_present:
+        environment_impact = 'likely_affected'
+    elif local_matches:
+        environment_impact = 'unknown'
+    else:
+        environment_impact = 'not_observed'
+
+    if (advisory_matched or known_bad_match) and strong_report_signal:
+        package_verdict = 'confirmed_true_positive'
+    elif advisory_matched or known_bad_match or score >= 65:
+        package_verdict = 'likely_true_positive'
+    elif score >= 35:
+        package_verdict = 'needs_review'
+    elif weak_only_rules and not advisory_matched and not local_present and not strong_report_signal:
+        package_verdict = 'likely_false_positive'
+    elif score <= 15 and false_positive_evidence and not advisory_matched:
+        package_verdict = 'false_positive'
+    else:
+        package_verdict = 'needs_review'
+
+    if package_verdict in {'confirmed_true_positive', 'likely_true_positive'}:
+        confidence = 'high' if advisory_matched or known_bad_match or score >= 75 else 'medium'
+        recommended_disposition = 'needs_review' if environment_impact == 'not_observed' else 'true_positive'
+    elif package_verdict in {'likely_false_positive', 'false_positive'}:
+        confidence = 'medium' if score <= 20 else 'low'
+        recommended_disposition = 'false_positive'
+    else:
+        confidence = 'medium' if score >= 35 else 'low'
+        recommended_disposition = 'needs_review'
+
+    if package_verdict in {'confirmed_true_positive', 'likely_true_positive'}:
+        note = (
+            f'Reviewed {package}@{version}. SecOpsAI found '
+            f'{"advisory-backed " if advisory_matched else ""}supply-chain evidence for this exact package version. '
+        )
+        if environment_impact == 'not_observed':
+            note += 'No local dependency reference was found, so local exposure is not currently confirmed. Keep this as actionable ecosystem intelligence, block this version, and rotate credentials only if installation or execution is confirmed.'
+        else:
+            note += 'Local dependency evidence was found, so treat local exposure as actionable until remediation is confirmed.'
+    elif package_verdict in {'likely_false_positive', 'false_positive'}:
+        if true_positive_evidence:
+            note = (
+                f'Reviewed {package}@{version}. SecOpsAI saw generic suspicious report indicators, but no advisory match, '
+                'the exact version is outside the local known-compromised set, and no local dependency reference was found. '
+                'Review the raw report one final time before closing as false positive.'
+            )
+        else:
+            note = (
+                f'Reviewed {package}@{version}. No advisory match, no strong raw-report behavior, and no exact local dependency evidence were found. '
+                'Review the raw report one final time before closing as false positive.'
+            )
+    else:
+        note = (
+            f'Reviewed {package}@{version}. Evidence is mixed or incomplete. Keep in review until raw report, advisory, local usage, and optional sandbox evidence are reconciled.'
+        )
+
+    finding_id = finding.get('finding_id')
+    mitigation = mitigation_for_finding(
+        finding,
+        recommendation={'recommended_disposition': recommended_disposition},
+        local_usage=local_usage,
+        advisory=advisory,
+    )
+    operator_commands = [
+        f'secopsai triage investigate {finding_id} --json',
+        f'secopsai supply-chain explain-verdict --ecosystem {ecosystem} --package {package} --version {version}',
+        f'secopsai supply-chain advisory check --ecosystem {ecosystem} --package {package} --version {version}',
+        f'rg -n "{re.escape(package)}|{re.escape(version)}" pyproject.toml requirements*.txt poetry.lock uv.lock Pipfile* .',
+    ]
+
+    return {
+        'package_verdict': package_verdict,
+        'environment_impact': environment_impact,
+        'confidence': confidence,
+        'score': score,
+        'score_breakdown': score_breakdown,
+        'true_positive_evidence': true_positive_evidence,
+        'false_positive_evidence': false_positive_evidence,
+        'missing_evidence': missing_evidence,
+        'recommended_disposition': recommended_disposition,
+        'recommended_note': note,
+        'mitigation': mitigation.get('actions') or [],
+        'operator_commands': operator_commands,
+        'references': normalize_advisory_references(advisory),
+        'raw_inputs': {
+            'advisory_matched': advisory_matched,
+            'known_bad_version_match': known_bad_match,
+            'local_dependency_reference': local_present,
+            'exact_local_version_reference': exact_local_version,
+            'report_path': (report or {}).get('path') or finding.get('report_path'),
+            'scanner_rules': scanner_rules,
+            'sandbox_status': 'not_available',
+        },
+    }
+
+
+def evidence_verdict_for_finding(finding):
+    ecosystem = str(finding.get('ecosystem') or '').lower()
+    package = str(finding.get('package') or '').strip()
+    version = str(finding.get('new_version') or finding.get('version') or '').strip()
+    advisory = advisory_check(ecosystem, package, version)
+    local_usage = check_local_dependency_usage(package, version)
+    report = raw_report_for_finding(finding)
+    explanation = None
+    try:
+        args = ['supply-chain', 'explain-verdict', '--ecosystem', ecosystem, '--package', package, '--version', version]
+        if finding.get('report_path'):
+            args.extend(['--report', str(finding.get('report_path'))])
+        result, parsed = run_cli_json(args, timeout=90)
+        if result.get('ok') and isinstance(parsed, dict):
+            explanation = parsed
+    except Exception:
+        explanation = None
+    return build_evidence_verdict_payload(finding, advisory, local_usage, report, explanation=explanation)
+
+
 class DashboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, directory=None, **kwargs):
         super().__init__(*args, directory=str(DIR), **kwargs)
@@ -979,6 +1331,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if action == 'check-local-usage':
                     usage = check_local_dependency_usage(package, version)
                     return json_response(self, 200, {'ok': True, 'finding_id': finding_id, 'usage': usage})
+
+                if action == 'evidence-verdict':
+                    verdict = evidence_verdict_for_finding(finding)
+                    return json_response(self, 200, {'ok': True, 'finding_id': finding_id, **verdict})
 
                 if action == 'generate-mitigation':
                     usage = check_local_dependency_usage(package, version)
