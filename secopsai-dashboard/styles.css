@@ -3122,7 +3122,7 @@ label span,
 }
 .blog-draft-card p {
   margin: 0;
-  color: var(--muted);
+  color: #334155;
   line-height: 1.5;
 }
 .blog-draft-topline,
@@ -3131,7 +3131,7 @@ label span,
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  color: var(--muted);
+  color: #475569;
   font-size: 0.82rem;
 }
 .blog-draft-meta {
@@ -3167,6 +3167,11 @@ label span,
   background: rgba(209, 250, 229, 0.95);
   border-color: rgba(16, 185, 129, 0.35);
 }
+.readiness-pill.not-scored {
+  color: #475569;
+  background: rgba(241, 245, 249, 0.98);
+  border-color: rgba(100, 116, 139, 0.32);
+}
 .blog-preview-status-stack {
   display: flex;
   flex-wrap: wrap;
@@ -3182,7 +3187,28 @@ label span,
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 12px;
-  background: rgba(248,250,252,0.82);
+  background: rgba(255,255,255,0.9);
+  color: var(--text);
+}
+.blog-field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #0f172a;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.blog-empty-value {
+  display: inline-flex;
+  margin-top: 2px;
+  border: 1px dashed rgba(100, 116, 139, 0.38);
+  border-radius: 10px;
+  padding: 7px 9px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 800;
 }
 .blog-chip-list {
   display: flex;
@@ -3210,7 +3236,7 @@ label span,
 }
 .blog-checklist em {
   margin-left: 8px;
-  color: var(--muted);
+  color: #475569;
   font-style: normal;
   font-size: 0.78rem;
 }
@@ -3220,8 +3246,9 @@ label span,
   word-break: break-word;
 }
 .blog-reference-list a {
-  color: var(--blue);
+  color: #0369a1;
   font-size: 0.88rem;
+  font-weight: 750;
 }
 .blog-preview-body {
   white-space: pre-wrap;
