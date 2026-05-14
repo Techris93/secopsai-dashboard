@@ -2,3 +2,5 @@ secopsai-dashboard/.env
 secopsai-dashboard/config.js
 .env
 .wrangler/
+__pycache__/
+*.pyc

@@ -3288,9 +3288,157 @@ label span,
   color: var(--muted);
   background: rgba(255,255,255,0.68);
 }
+
+/* Triage Ops supply-chain control plane */
+.triage-ops-auth-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 520px);
+  gap: 18px;
+  align-items: center;
+}
+
+.triage-ops-auth-controls,
+.triage-ops-filters,
+.triage-ops-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.triage-ops-filters label {
+  min-width: 180px;
+  display: grid;
+  gap: 8px;
+}
+
+.triage-alert-list {
+  display: grid;
+  gap: 12px;
+  max-height: 760px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.triage-alert-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(242,250,247,0.95));
+  padding: 16px;
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.triage-alert-card:hover,
+.triage-alert-card.selected-row {
+  transform: translateY(-1px);
+  border-color: rgba(13, 148, 136, 0.34);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.1);
+}
+
+.triage-alert-card h4 {
+  margin: 12px 0 8px;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.triage-alert-card p,
+.triage-rationale {
+  margin: 0;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.triage-alert-topline,
+.triage-alert-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.triage-alert-meta {
+  margin-top: 12px;
+  justify-content: space-between;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.triage-rec-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  color: #164e63;
+  background: rgba(236, 254, 255, 0.96);
+}
+
+.triage-rec-pill.false-positive,
+.triage-rec-pill.expected-behavior {
+  color: #065f46;
+  background: rgba(209, 250, 229, 0.96);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.triage-rec-pill.true-positive {
+  color: #991b1b;
+  background: rgba(254, 226, 226, 0.96);
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+.triage-rec-pill.needs-review {
+  color: #92400e;
+  background: rgba(254, 243, 199, 0.96);
+  border-color: rgba(245, 158, 11, 0.38);
+}
+
+.triage-output {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(248,250,252,0.94);
+  color: var(--text);
+}
+
+.triage-output.error {
+  border-color: rgba(239,68,68,0.38);
+  background: rgba(254,242,242,0.96);
+}
+
+.triage-output pre,
+.triage-cli-fallback {
+  white-space: pre-wrap;
+  overflow: auto;
+  max-height: 360px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.triage-ops-actions {
+  margin-top: 16px;
+}
+
 @media (max-width: 980px) {
   .blog-auth-card { grid-template-columns: 1fr; }
+  .triage-ops-auth-card { grid-template-columns: 1fr; }
   .blog-actions label { width: 100%; }
+  .triage-ops-filters label { width: 100%; }
   .blog-extracted-grid { grid-template-columns: 1fr; }
 }
 
@@ -3411,7 +3559,8 @@ label span,
   .grid.cols-4,
   .grid.cols-3,
   .grid.cols-2,
-  #page-blog-ops > .grid.cols-2 {
+  #page-blog-ops > .grid.cols-2,
+  #page-triage-ops > .grid.cols-2 {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -3472,6 +3621,7 @@ label span,
   .grid.cols-3,
   .grid.cols-2,
   #page-blog-ops > .grid.cols-2,
+  #page-triage-ops > .grid.cols-2,
   #finding-summary,
   #integration-summary,
   #mission-stats,
@@ -3499,6 +3649,9 @@ label span,
   .blog-auth-controls,
   .blog-actions,
   .blog-preview-actions,
+  .triage-ops-auth-controls,
+  .triage-ops-filters,
+  .triage-ops-actions,
   .task-card-actions {
     align-items: stretch;
     flex-direction: column;
@@ -3509,6 +3662,10 @@ label span,
   .blog-auth-controls input,
   .blog-auth-controls button,
   .blog-preview-actions button,
+  .triage-ops-auth-controls input,
+  .triage-ops-auth-controls button,
+  .triage-ops-filters label,
+  .triage-ops-actions button,
   .task-card-actions button,
   .status-pill,
   .primary-btn,

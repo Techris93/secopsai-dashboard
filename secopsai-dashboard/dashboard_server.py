@@ -20,6 +20,49 @@ ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
 APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
 ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive'}
+ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {'close', 'escalate', 'create-blog-draft'}
+ECOSYSTEM_RE = re.compile(r'^(pypi|npm)$', re.IGNORECASE)
+PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._/-]{1,220}$')
+VERSION_RE = re.compile(r'^[A-Za-z0-9.+:_~!*-]{1,160}$')
+KNOWN_COMPROMISED_VERSIONS = {
+    ('pypi', 'litellm'): {'1.82.7', '1.82.8'},
+}
+MIN_SAFE_VERSION_HINTS = {
+    ('pypi', 'litellm'): '1.83.7',
+}
+KNOWN_IOC_HINTS = {
+    ('pypi', 'litellm'): [
+        'litellm_init.pth',
+        'models.litellm.cloud',
+        'checkmarx.zone',
+        'tpcp.tar.gz',
+        '/tmp/pglog',
+        '/tmp/.pg_state',
+        'sysmon.py',
+    ],
+}
+DEPENDENCY_FILE_NAMES = {
+    'package.json',
+    'package-lock.json',
+    'pnpm-lock.yaml',
+    'yarn.lock',
+    'pyproject.toml',
+    'Pipfile',
+    'poetry.lock',
+    'uv.lock',
+}
+IGNORED_DEP_PATHS = {
+    '.git',
+    '.venv',
+    'venv',
+    'env',
+    'node_modules',
+    'site-packages',
+    'dist',
+    'build',
+    '__pycache__',
+}
+_DEPENDENCY_MANIFEST_CACHE = None
 
 
 def env_truthy(name: str, default: bool = False) -> bool:
@@ -341,6 +384,376 @@ def run_secopsai_cli(args, timeout=120):
     }
 
 
+def parse_cli_json(result):
+    try:
+        return json.loads(result.get('stdout') or '{}')
+    except Exception:
+        return None
+
+
+def triage_ops_expected_token():
+    return (
+        os.environ.get('TRIAGE_OPS_ADMIN_TOKEN', '').strip()
+        or os.environ.get('BLOG_OPS_ADMIN_TOKEN', '').strip()
+    )
+
+
+def require_triage_ops_admin(handler):
+    expected = triage_ops_expected_token()
+    if not expected:
+        json_response(
+            handler,
+            501,
+            {
+                'ok': False,
+                'error': 'Triage Ops admin token is not configured. Set TRIAGE_OPS_ADMIN_TOKEN or BLOG_OPS_ADMIN_TOKEN.',
+                'code': 'not_configured',
+            },
+        )
+        return True
+    supplied = (
+        handler.headers.get('X-Triage-Ops-Admin-Token', '').strip()
+        or handler.headers.get('X-Blog-Ops-Admin-Token', '').strip()
+    )
+    auth = handler.headers.get('Authorization', '').strip()
+    if auth.lower().startswith('bearer '):
+        supplied = supplied or auth[7:].strip()
+    if supplied != expected:
+        json_response(handler, 401, {'ok': False, 'error': 'Unauthorized Triage Ops action'})
+        return True
+    return False
+
+
+def validate_triage_ops_target(payload):
+    finding_id = str(payload.get('finding_id') or '').strip()
+    ecosystem = str(payload.get('ecosystem') or '').strip().lower()
+    package = str(payload.get('package') or '').strip()
+    version = str(payload.get('version') or payload.get('new_version') or '').strip()
+    if finding_id and not FINDING_ID_RE.match(finding_id):
+        raise ValueError('Invalid finding_id')
+    if ecosystem and not ECOSYSTEM_RE.match(ecosystem):
+        raise ValueError('Invalid ecosystem')
+    if package and not PACKAGE_RE.match(package):
+        raise ValueError('Invalid package')
+    if version and not VERSION_RE.match(version):
+        raise ValueError('Invalid version')
+    return finding_id, ecosystem, package, version
+
+
+def run_cli_json(args, timeout=120):
+    result = run_secopsai_cli([*args, '--json'], timeout=timeout)
+    parsed = parse_cli_json(result)
+    return result, parsed
+
+
+def triage_findings_by_status(status, limit=100):
+    result, parsed = run_cli_json(
+        ['triage', 'list', '--status', status, '--category', 'supply_chain', '--limit', str(limit), *secopsai_db_args()],
+        timeout=60,
+    )
+    if not result.get('ok') or not isinstance(parsed, dict):
+        return []
+    rows = parsed.get('findings') or []
+    return rows if isinstance(rows, list) else []
+
+
+def get_triage_ops_finding(finding_id):
+    for status in ('open', 'in_review'):
+        for finding in triage_findings_by_status(status, limit=500):
+            if str(finding.get('finding_id') or '') == finding_id:
+                return finding
+    return None
+
+
+def should_ignore_dependency_path(path):
+    try:
+        rel = path.resolve().relative_to(SECOPSAI_ROOT)
+        return any(part in IGNORED_DEP_PATHS for part in rel.parts)
+    except Exception:
+        return any(part in IGNORED_DEP_PATHS for part in path.parts)
+
+
+def dependency_manifest_paths():
+    global _DEPENDENCY_MANIFEST_CACHE
+    if _DEPENDENCY_MANIFEST_CACHE is not None:
+        return _DEPENDENCY_MANIFEST_CACHE
+    if not SECOPSAI_ROOT.exists():
+        return []
+    rg_args = [
+        'rg',
+        '--files',
+        '-g',
+        'package.json',
+        '-g',
+        'package-lock.json',
+        '-g',
+        'pnpm-lock.yaml',
+        '-g',
+        'yarn.lock',
+        '-g',
+        'pyproject.toml',
+        '-g',
+        'Pipfile',
+        '-g',
+        'poetry.lock',
+        '-g',
+        'uv.lock',
+        '-g',
+        'requirements*.txt',
+        '-g',
+        '!**/.git/**',
+        '-g',
+        '!**/.venv/**',
+        '-g',
+        '!**/venv/**',
+        '-g',
+        '!**/node_modules/**',
+        '-g',
+        '!**/site-packages/**',
+        '-g',
+        '!**/dist/**',
+        '-g',
+        '!**/build/**',
+    ]
+    try:
+        result = subprocess.run(
+            rg_args,
+            cwd=str(SECOPSAI_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+        if result.returncode in {0, 1}:
+            _DEPENDENCY_MANIFEST_CACHE = [
+                (SECOPSAI_ROOT / line.strip()).resolve()
+                for line in result.stdout.splitlines()
+                if line.strip()
+            ]
+            return _DEPENDENCY_MANIFEST_CACHE
+    except Exception:
+        pass
+    paths = []
+    for path in SECOPSAI_ROOT.rglob('*'):
+        if not path.is_file() or should_ignore_dependency_path(path):
+            continue
+        if path.name in DEPENDENCY_FILE_NAMES or (
+            path.name.startswith('requirements') and path.suffix == '.txt'
+        ):
+            paths.append(path)
+    _DEPENDENCY_MANIFEST_CACHE = paths
+    return paths
+
+
+def check_local_dependency_usage(package, version=''):
+    package_name = str(package or '').strip()
+    if not package_name:
+        return {'present': False, 'matches': [], 'searched_files': 0}
+    package_pattern = re.compile(rf'(?<![A-Za-z0-9_.@/-]){re.escape(package_name)}(?![A-Za-z0-9_.@/-])', re.IGNORECASE)
+    version_pattern = re.compile(re.escape(str(version)), re.IGNORECASE) if version else None
+    matches = []
+    searched = 0
+    for path in dependency_manifest_paths():
+        searched += 1
+        try:
+            lines = path.read_text(encoding='utf-8', errors='ignore').splitlines()
+        except Exception:
+            continue
+        for idx, line in enumerate(lines, start=1):
+            if not package_pattern.search(line):
+                continue
+            matches.append(
+                {
+                    'path': str(path),
+                    'line': idx,
+                    'text': line.strip()[:220],
+                    'version_match': bool(version_pattern.search(line)) if version_pattern else False,
+                }
+            )
+            if len(matches) >= 30:
+                return {'present': True, 'matches': matches, 'searched_files': searched}
+    return {'present': bool(matches), 'matches': matches, 'searched_files': searched}
+
+
+def advisory_check(ecosystem, package, version):
+    if not (ecosystem and package and version):
+        return {'matched': False, 'matches': [], 'error': 'Missing ecosystem, package, or version'}
+    result, parsed = run_cli_json(
+        ['supply-chain', 'advisory', 'check', '--ecosystem', ecosystem, '--package', package, '--version', version],
+        timeout=60,
+    )
+    if isinstance(parsed, dict):
+        parsed['ok'] = result.get('ok')
+        return parsed
+    return {'ok': False, 'matched': False, 'matches': [], 'error': result.get('stderr') or result.get('stdout')}
+
+
+def build_triage_ops_recommendation(finding, advisory=None, local_usage=None):
+    ecosystem = str(finding.get('ecosystem') or '').lower()
+    package = str(finding.get('package') or '').strip()
+    version = str(finding.get('new_version') or finding.get('version') or '').strip()
+    key = (ecosystem, package.lower())
+    known_bad_versions = sorted(KNOWN_COMPROMISED_VERSIONS.get(key, set()))
+    min_safe = MIN_SAFE_VERSION_HINTS.get(key)
+    local_present = bool((local_usage or {}).get('present'))
+    advisory_matched = bool((advisory or {}).get('matched') or finding.get('advisory_matches') or finding.get('advisory_ids'))
+    is_known_bad = version in set(known_bad_versions)
+    rules = str(finding.get('analysis') or finding.get('summary') or '')
+    evidence = []
+
+    if advisory_matched:
+        disposition = 'true_positive'
+        confidence = 'high'
+        evidence.append('Emergency advisory matched this exact package/version.')
+    elif is_known_bad:
+        disposition = 'true_positive'
+        confidence = 'high'
+        evidence.append(f'{package}@{version} is in the local known-compromised version list.')
+    elif package.lower() == 'litellm' and version in {'1.84.0', '1.85.0rc2'} and not local_present:
+        disposition = 'false_positive'
+        confidence = 'medium'
+        evidence.append('Known public LiteLLM compromise reporting names 1.82.7/1.82.8, not this exact version.')
+        evidence.append('No local dependency reference was found in this repo.')
+    elif not local_present:
+        disposition = 'expected_behavior'
+        confidence = 'medium'
+        evidence.append('No local dependency reference was found in this repo.')
+    else:
+        disposition = 'needs_review'
+        confidence = 'medium'
+        evidence.append('Package appears locally referenced or needs additional analyst review.')
+
+    if min_safe and package.lower() == 'litellm':
+        evidence.append(f'CVE-2026-42208 mitigation guidance requires {package}>={min_safe}.')
+    if rules:
+        evidence.append(f'Scanner rationale: {rules[:220]}')
+
+    note = ' '.join(evidence[:3])
+    return {
+        'recommended_disposition': disposition,
+        'confidence': confidence,
+        'recommended_note': note,
+        'evidence': evidence,
+        'known_bad_versions': known_bad_versions,
+        'minimum_safe_version': min_safe,
+        'local_dependency_reference': local_present,
+        'advisory_match': advisory_matched,
+        'known_bad_version_match': is_known_bad,
+        'report_path': finding.get('report_path'),
+    }
+
+
+def mitigation_for_finding(finding, recommendation=None, local_usage=None, advisory=None):
+    ecosystem = str(finding.get('ecosystem') or '').lower()
+    package = str(finding.get('package') or '').strip()
+    version = str(finding.get('new_version') or finding.get('version') or '').strip()
+    key = (ecosystem, package.lower())
+    known_bad = sorted(KNOWN_COMPROMISED_VERSIONS.get(key, set()))
+    min_safe = MIN_SAFE_VERSION_HINTS.get(key)
+    iocs = KNOWN_IOC_HINTS.get(key, [])
+    commands = [
+        'secopsai triage summary',
+        f'secopsai triage investigate {finding.get("finding_id")} --json',
+        f'secopsai supply-chain advisory check --ecosystem {ecosystem} --package {package} --version {version}',
+    ]
+    if known_bad:
+        commands.extend(
+            f'secopsai supply-chain advisory check --ecosystem {ecosystem} --package {package} --version {bad}'
+            for bad in known_bad
+        )
+    actions = [
+        f'Review {package}@{version} against advisory and local dependency evidence before closing.',
+        f'Pin {package} to a reviewed version if it is used in production.',
+        'Do not globally allowlist a package with recent compromise or critical CVE history.',
+    ]
+    if known_bad:
+        actions.append(f'Block or denylist known compromised versions: {", ".join(f"{package}=={item}" for item in known_bad)}.')
+    if min_safe:
+        actions.append(f'Require {package}>={min_safe} where this package is deployed.')
+    if iocs:
+        actions.append(f'Search environments for: {", ".join(iocs)}.')
+    if known_bad:
+        actions.append('If any known compromised version was installed, rotate LLM provider keys, cloud keys, CI/CD tokens, SSH keys, registry tokens, and database secrets.')
+    return {
+        'affected': {'ecosystem': ecosystem, 'package': package, 'version': version},
+        'local_usage': local_usage or {'present': False, 'matches': []},
+        'advisory': advisory or {'matched': False, 'matches': []},
+        'recommendation': recommendation or {},
+        'actions': actions,
+        'iocs': iocs,
+        'operator_commands': commands,
+        'blog_summary': f'SecOpsAI reviewed {ecosystem}:{package}@{version}; current recommended disposition is {(recommendation or {}).get("recommended_disposition", "needs_review")}.',
+    }
+
+
+def summarize_triage_ops_alert(finding):
+    ecosystem = str(finding.get('ecosystem') or '').lower()
+    package = str(finding.get('package') or '').strip()
+    version = str(finding.get('new_version') or finding.get('version') or '').strip()
+    local_usage = check_local_dependency_usage(package, version)
+    existing_matches = finding.get('advisory_matches') if isinstance(finding.get('advisory_matches'), list) else []
+    advisory = {
+        'matched': bool(existing_matches or finding.get('advisory_ids') or finding.get('campaign_ids')),
+        'matches': existing_matches,
+        'source': 'finding_snapshot',
+    }
+    recommendation = build_triage_ops_recommendation(finding, advisory=advisory, local_usage=local_usage)
+    return {
+        'finding_id': finding.get('finding_id'),
+        'ecosystem': ecosystem,
+        'package': package,
+        'version': version,
+        'old_version': finding.get('old_version'),
+        'severity': finding.get('severity'),
+        'severity_score': finding.get('severity_score'),
+        'status': finding.get('status'),
+        'title': finding.get('title'),
+        'summary': finding.get('summary') or finding.get('analysis'),
+        'source': finding.get('source'),
+        'first_seen': finding.get('first_seen'),
+        'last_seen': finding.get('last_seen'),
+        'verdict': finding.get('verdict'),
+        'analysis': finding.get('analysis'),
+        'report_path': finding.get('report_path'),
+        'recommendation': recommendation,
+        'local_usage': {'present': local_usage.get('present'), 'match_count': len(local_usage.get('matches') or [])},
+        'advisory': {'matched': advisory.get('matched'), 'match_count': len(advisory.get('matches') or [])},
+    }
+
+
+def collect_triage_ops_alerts():
+    rows = triage_findings_by_status('open', limit=200) + triage_findings_by_status('in_review', limit=200)
+    seen = set()
+    alerts = []
+    for finding in rows:
+        fid = str(finding.get('finding_id') or '')
+        if not fid.startswith('SCM-') or fid in seen:
+            continue
+        seen.add(fid)
+        alerts.append(summarize_triage_ops_alert(finding))
+    counts = {
+        'alerts': len(alerts),
+        'open': sum(1 for item in alerts if str(item.get('status') or '').lower() == 'open'),
+        'in_review': sum(1 for item in alerts if str(item.get('status') or '').lower() == 'in_review'),
+        'critical': sum(1 for item in alerts if str(item.get('severity') or '').lower() == 'critical'),
+        'needs_review': sum(1 for item in alerts if item.get('recommendation', {}).get('recommended_disposition') == 'needs_review'),
+    }
+    return {'ok': True, 'secopsai_root': str(SECOPSAI_ROOT), 'counts': counts, 'alerts': alerts}
+
+
+def raw_report_for_finding(finding):
+    report_path = Path(str(finding.get('report_path') or '')).resolve() if finding.get('report_path') else None
+    if not report_path:
+        return {'ok': False, 'error': 'Finding has no report_path'}
+    allowed_root = (SECOPSAI_ROOT / 'data' / 'supply_chain' / 'reports').resolve()
+    if allowed_root not in report_path.parents and report_path != allowed_root:
+        return {'ok': False, 'error': 'Report path is outside the allowed supply-chain reports directory'}
+    if not report_path.exists() or not report_path.is_file():
+        return {'ok': False, 'error': 'Report file not found', 'path': str(report_path)}
+    text = report_path.read_text(encoding='utf-8', errors='ignore')
+    return {'ok': True, 'path': str(report_path), 'text': text[:12000], 'truncated': len(text) > 12000}
+
+
 class DashboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, directory=None, **kwargs):
         super().__init__(*args, directory=str(DIR), **kwargs)
@@ -369,6 +782,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if parsed.path == '/api/secopsai/triage-state':
             try:
                 return json_response(self, 200, collect_secopsai_triage_state())
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/triage-ops/alerts':
+            try:
+                return json_response(self, 200, collect_triage_ops_alerts())
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
@@ -470,6 +889,162 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         payload = read_request_json(self)
+
+        if parsed.path.startswith('/api/secopsai/triage-ops/'):
+            action = parsed.path.rsplit('/', 1)[-1]
+            if action in ALLOWED_TRIAGE_OPS_WRITE_ACTIONS:
+                if require_triage_ops_admin(self):
+                    return
+            try:
+                finding_id, ecosystem, package, version = validate_triage_ops_target(payload)
+                finding = get_triage_ops_finding(finding_id) if finding_id else None
+                if action not in {'refresh-evidence'} and not finding:
+                    return json_response(self, 404, {'ok': False, 'error': f'Finding not found or not active: {finding_id}'})
+                if finding:
+                    ecosystem = ecosystem or str(finding.get('ecosystem') or '').lower()
+                    package = package or str(finding.get('package') or '').strip()
+                    version = version or str(finding.get('new_version') or finding.get('version') or '').strip()
+
+                if action == 'refresh-evidence':
+                    intel_result = run_secopsai_cli(['intel', 'refresh'], timeout=180)
+                    summary_result, summary_payload = run_cli_json(
+                        ['triage', 'summary', *secopsai_db_args()],
+                        timeout=90,
+                    )
+                    alerts_payload = collect_triage_ops_alerts()
+                    return json_response(
+                        self,
+                        200 if intel_result['ok'] and summary_result['ok'] else 500,
+                        {
+                            'ok': bool(intel_result['ok'] and summary_result['ok']),
+                            'intel': intel_result,
+                            'summary': summary_payload,
+                            'alerts': alerts_payload,
+                        },
+                    )
+
+                if action == 'investigate':
+                    result, parsed_result = run_cli_json(
+                        [
+                            'triage',
+                            'investigate',
+                            finding_id,
+                            '--search-root',
+                            str(SECOPSAI_ROOT),
+                            *secopsai_db_args(),
+                            *secopsai_session_args(),
+                        ],
+                        timeout=180,
+                    )
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {'ok': result['ok'], 'finding_id': finding_id, 'result': parsed_result, **result},
+                    )
+
+                if action == 'explain-verdict':
+                    args = ['supply-chain', 'explain-verdict', '--ecosystem', ecosystem, '--package', package, '--version', version]
+                    if finding.get('report_path'):
+                        args.extend(['--report', str(finding.get('report_path'))])
+                    result, parsed_result = run_cli_json(args, timeout=90)
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {'ok': result['ok'], 'finding_id': finding_id, 'result': parsed_result, **result},
+                    )
+
+                if action == 'raw-report':
+                    report = raw_report_for_finding(finding)
+                    return json_response(self, 200 if report.get('ok') else 404, {'finding_id': finding_id, **report})
+
+                if action == 'check-advisories':
+                    advisory = advisory_check(ecosystem, package, version)
+                    known = sorted(KNOWN_COMPROMISED_VERSIONS.get((ecosystem, package.lower()), set()))
+                    comparison = [
+                        advisory_check(ecosystem, package, candidate)
+                        for candidate in known
+                    ]
+                    return json_response(
+                        self,
+                        200,
+                        {
+                            'ok': True,
+                            'finding_id': finding_id,
+                            'advisory': advisory,
+                            'known_bad_versions': known,
+                            'known_bad_checks': comparison,
+                        },
+                    )
+
+                if action == 'check-local-usage':
+                    usage = check_local_dependency_usage(package, version)
+                    return json_response(self, 200, {'ok': True, 'finding_id': finding_id, 'usage': usage})
+
+                if action == 'generate-mitigation':
+                    usage = check_local_dependency_usage(package, version)
+                    advisory = advisory_check(ecosystem, package, version)
+                    recommendation = build_triage_ops_recommendation(finding, advisory=advisory, local_usage=usage)
+                    mitigation = mitigation_for_finding(finding, recommendation=recommendation, local_usage=usage, advisory=advisory)
+                    return json_response(self, 200, {'ok': True, 'finding_id': finding_id, 'mitigation': mitigation})
+
+                if action == 'close':
+                    disposition = str(payload.get('disposition') or 'false_positive').strip()
+                    note = ' '.join(str(payload.get('note') or '').split())
+                    status = str(payload.get('status') or 'closed').strip() or 'closed'
+                    if disposition not in ALLOWED_CLOSE_DISPOSITIONS:
+                        return json_response(self, 400, {'ok': False, 'error': 'Invalid or unsupported disposition'})
+                    if status not in {'closed', 'triaged'}:
+                        return json_response(self, 400, {'ok': False, 'error': 'Invalid status'})
+                    if len(note) < 20:
+                        return json_response(self, 400, {'ok': False, 'error': 'A source-backed closure note of at least 20 characters is required'})
+                    result, parsed_result = run_cli_json(
+                        [
+                            'triage',
+                            'close',
+                            finding_id,
+                            '--disposition',
+                            disposition,
+                            '--status',
+                            status,
+                            '--note',
+                            note,
+                            *secopsai_db_args(),
+                            *secopsai_session_args(),
+                        ],
+                        timeout=180,
+                    )
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {'ok': result['ok'], 'finding_id': finding_id, 'result': parsed_result, **result},
+                    )
+
+                if action == 'escalate':
+                    note = ' '.join(str(payload.get('note') or 'Escalated from Triage Ops dashboard for analyst review.').split())
+                    result, parsed_result = run_cli_json(
+                        ['triage', 'start', finding_id, '--note', note, *secopsai_db_args()],
+                        timeout=90,
+                    )
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {'ok': result['ok'], 'finding_id': finding_id, 'result': parsed_result, **result},
+                    )
+
+                if action == 'create-blog-draft':
+                    result, parsed_result = run_cli_json(
+                        ['blog', 'draft-finding', finding_id, *secopsai_db_args()],
+                        timeout=120,
+                    )
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {'ok': result['ok'], 'finding_id': finding_id, 'result': parsed_result, **result},
+                    )
+
+                return json_response(self, 404, {'ok': False, 'error': 'Unsupported Triage Ops action'})
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
         if parsed.path == '/api/secopsai/investigate':
             finding_id = str(payload.get('finding_id') or '').strip()

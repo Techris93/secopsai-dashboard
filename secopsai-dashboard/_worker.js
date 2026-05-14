@@ -71,6 +71,7 @@ function buildBrowserConfig(env) {
     integrationStatusEndpoint: "/api/integration-status",
     runOutputEndpoint: DEFAULT_RUN_OUTPUT_PROXY_PATH,
     blogOpsEndpoint: "/api/blog",
+    triageOpsEndpoint: "/api/secopsai/triage-ops",
     aiGuard: buildAiGuard(env),
     departments: DASHBOARD_DEPARTMENTS,
     roleGroups: DASHBOARD_ROLE_GROUPS,
@@ -151,6 +152,38 @@ function requireBlogOpsAdmin(request, env) {
     return jsonResponse({ ok: false, error: "Unauthorized Blog Ops action" }, { status: 401 });
   }
   return null;
+}
+
+function triageOpsExpectedAdminToken(env) {
+  return String(env.TRIAGE_OPS_ADMIN_TOKEN || env.BLOG_OPS_ADMIN_TOKEN || "").trim();
+}
+
+function requireTriageOpsAdmin(request, env) {
+  const expected = triageOpsExpectedAdminToken(env);
+  if (!expected) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Triage Ops admin token is not configured. Set TRIAGE_OPS_ADMIN_TOKEN or BLOG_OPS_ADMIN_TOKEN.",
+        code: "not_configured",
+      },
+      { status: 501 },
+    );
+  }
+  const direct = request.headers.get("x-triage-ops-admin-token") || "";
+  const fallback = request.headers.get("x-blog-ops-admin-token") || "";
+  const auth = request.headers.get("authorization") || "";
+  const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
+  if (![direct, fallback, bearer].includes(expected)) {
+    return jsonResponse({ ok: false, error: "Unauthorized Triage Ops action" }, { status: 401 });
+  }
+  return null;
+}
+
+function isTriageOpsWriteRoute(request, pathname) {
+  if (request.method.toUpperCase() !== "POST") return false;
+  const action = pathname.split("/").filter(Boolean).pop() || "";
+  return ["close", "escalate", "create-blog-draft"].includes(action);
 }
 
 function blogOpsNotConfigured(env) {
@@ -626,6 +659,10 @@ async function proxySecopsaiHelper(request, env) {
   if (authHeader && authToken) {
     headers.set(authHeader, authToken);
   }
+  const triageOpsToken = request.headers.get("x-triage-ops-admin-token") || "";
+  if (triageOpsToken && incomingUrl.pathname.startsWith("/api/secopsai/triage-ops/")) {
+    headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
+  }
 
   const init = {
     method: request.method,
@@ -745,6 +782,10 @@ export default {
     }
 
     if (url.pathname.startsWith("/api/secopsai/")) {
+      if (url.pathname.startsWith("/api/secopsai/triage-ops/") && isTriageOpsWriteRoute(request, url.pathname)) {
+        const authResponse = requireTriageOpsAdmin(request, env);
+        if (authResponse) return authResponse;
+      }
       return proxySecopsaiHelper(request, env);
     }
 

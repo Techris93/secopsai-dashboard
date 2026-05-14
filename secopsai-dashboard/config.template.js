@@ -4,6 +4,7 @@ window.SECOPSAI_CONFIG = {
   appName: "__APP_NAME__",
   integrationStatusEndpoint: "/api/integration-status",
   runOutputEndpoint: "/api/run-output",
+  triageOpsEndpoint: "/api/secopsai/triage-ops",
   aiGuard: {
     hostedEnabled: __HOSTED_AI_ENABLED__,
     defaultModel: "__HOSTED_AI_MODEL__",

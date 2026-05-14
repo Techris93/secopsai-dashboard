@@ -75,7 +75,7 @@ Notes:
   - R2 mode: configure an R2 binding and optionally `RUN_OUTPUT_R2_PREFIX`.
   - Proxy mode: configure `RUN_OUTPUT_BASE_URL` and optionally auth settings.
 - Native triage/session features in hosted mode need a reachable SecOpsAI helper:
-  - Set `SECOPSAI_HELPER_BASE_URL` to a helper that exposes `/api/secopsai/triage-state`, `/api/secopsai/events`, `/api/secopsai/sessions`, `/api/secopsai/session`, `/api/secopsai/research-finding`, and the mutation endpoints used by the dashboard.
+  - Set `SECOPSAI_HELPER_BASE_URL` to a helper that exposes `/api/secopsai/triage-state`, `/api/secopsai/events`, `/api/secopsai/sessions`, `/api/secopsai/session`, `/api/secopsai/research-finding`, `/api/secopsai/triage-ops/alerts`, and the mutation endpoints used by the dashboard.
   - Optionally protect that helper with `SECOPSAI_HELPER_AUTH_HEADER` and `SECOPSAI_HELPER_AUTH_TOKEN`.
 - `HOSTED_AI_*` values are rendered into `window.SECOPSAI_CONFIG.aiGuard` so the hosted dashboard can show model/budget/mutation guardrails without hardcoding them in the bundle.
 
@@ -121,6 +121,34 @@ Safety model:
 - `Fetch news` and `Create drafts` can run safely, but public publishing requires an approved/reviewed draft.
 - Drafts are persisted in the SecOpsAI repo under `blog/drafts/` by the workflow using `git add -f`; this makes the dashboard queue stable across runs.
 - The Worker returns workflow run IDs/status links, never GitHub or Cloudflare tokens.
+
+## Triage Ops Control Plane
+
+The dashboard includes a protected **Triage Ops** tab for supply-chain `SCM-*` alerts. It is helper-backed, not browser-shell-backed. Hosted Cloudflare Pages proxies `/api/secopsai/triage-ops/*` to `SECOPSAI_HELPER_BASE_URL`; local usage is served by `dashboard_server.py`.
+
+Required for hosted Triage Ops:
+
+- `SECOPSAI_HELPER_BASE_URL`
+- Optional `SECOPSAI_HELPER_AUTH_HEADER`
+- Optional `SECOPSAI_HELPER_AUTH_TOKEN`
+
+Required for write actions on the helper:
+
+- `TRIAGE_OPS_ADMIN_TOKEN`
+- Or reuse `BLOG_OPS_ADMIN_TOKEN` if you want the same operator token for Blog Ops and Triage Ops.
+
+Daily use:
+
+1. Open **Triage Ops**.
+2. Click **Refresh evidence**.
+3. Select an `SCM-*` alert.
+4. Run **Investigate**, **Explain verdict**, **Check advisory matches**, and **Check local repo usage**.
+5. Review the generated recommendation, report path, close note, and CLI fallback.
+6. Click **Generate mitigation** for the response plan.
+7. Use **Move to in review** for uncertain alerts, or **Close as false positive** only after confirming the source-backed note.
+8. Use **Create blog draft** to hand off a reviewed finding to Blog Ops. It does not autopublish.
+
+If `SECOPSAI_HELPER_BASE_URL` is missing, hosted mode returns a clear not-configured response and the UI shows copyable CLI fallbacks.
 
 ## R2 key format
 

@@ -25,3 +25,10 @@ BLOG_OPS_WORKFLOW=blog-ops.yml
 BLOG_OPS_REF=main
 BLOG_OPS_GITHUB_TOKEN=
 BLOG_OPS_ADMIN_TOKEN=
+
+# Triage Ops uses the local/private SecOpsAI helper for supply-chain alerts.
+# Hosted Pages can proxy /api/secopsai/* to this helper.
+SECOPSAI_HELPER_BASE_URL=
+SECOPSAI_HELPER_AUTH_HEADER=
+SECOPSAI_HELPER_AUTH_TOKEN=
+TRIAGE_OPS_ADMIN_TOKEN=

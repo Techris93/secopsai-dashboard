@@ -8,6 +8,7 @@ The dashboard is now intentionally narrow:
 - task management
 - native triage queue visibility
 - helper-backed native SecOpsAI actions
+- protected Triage Ops for supply-chain alert review and closure
 - Blog Ops workflow dispatch and review queue
 - Supabase-backed integration status
 
@@ -21,6 +22,7 @@ It now also reads native local SecOpsAI state through the helper server:
 - direct native `triage investigate`
 - direct native `triage apply-action`
 - guarded native `triage close`
+- Triage Ops SCM alert investigation, advisory checks, local usage checks, mitigation, and blog draft handoff
 
 ## Pages
 
@@ -52,6 +54,14 @@ It now also reads native local SecOpsAI state through the helper server:
 - recent orchestrator summaries
 - findings/orchestrator freshness
 - direct native investigate, apply-action, and guarded close controls
+
+### Triage Ops
+- supply-chain `SCM-*` alert queue from native SecOpsAI
+- one-click investigate, explain verdict, advisory check, local dependency usage check, raw report preview, and mitigation generation
+- confirmation-gated close as false positive, move to in review, and create blog draft actions
+- copyable CLI fallback for every selected alert
+
+Triage Ops uses the local/helper-backed `/api/secopsai/triage-ops/*` endpoints. The browser never runs shell commands directly. Read actions can run through the helper; write actions require `TRIAGE_OPS_ADMIN_TOKEN` or `BLOG_OPS_ADMIN_TOKEN`.
 
 ### Blog Ops
 - GitHub Actions-backed security-blog news ingestion
@@ -104,6 +114,8 @@ Optional `.env` values:
   - optional local Pages preview token for dispatching the SecOpsAI `blog-ops.yml` workflow
 - `BLOG_OPS_ADMIN_TOKEN`
   - local operator token required by write endpoints
+- `TRIAGE_OPS_ADMIN_TOKEN`
+  - optional local operator token for Triage Ops write endpoints; if omitted, the helper falls back to `BLOG_OPS_ADMIN_TOKEN`
 
 ## Cloudflare Pages
 

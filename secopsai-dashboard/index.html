@@ -52,6 +52,10 @@
           <span class="nav-icon">NT</span>
           <span class="nav-copy"><span class="title">Native Triage</span><span class="desc">Pending actions, orchestrator history, helper health</span></span>
         </button>
+        <button class="nav-btn" data-page="triage-ops">
+          <span class="nav-icon">TO</span>
+          <span class="nav-copy"><span class="title">Triage Ops</span><span class="desc">Supply-chain alerts, verdicts, closure</span></span>
+        </button>
         <button class="nav-btn" data-page="blog-ops">
           <span class="nav-icon">BO</span>
           <span class="nav-copy"><span class="title">Blog Ops</span><span class="desc">News drafts, approvals, publishing</span></span>
@@ -256,6 +260,53 @@
         <div class="card" style="margin-top:18px;">
           <h3>Recent Blog Ops workflow runs</h3>
           <div id="blog-workflow-runs"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-triage-ops">
+        <div class="page-header">
+          <div>
+            <h2>Triage Ops</h2>
+            <p>Protected supply-chain alert control plane for investigation, advisory checks, local usage review, mitigation, closure, and blog draft handoff.</p>
+          </div>
+          <div class="status-pill" id="triage-ops-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh evidence</div>
+        </div>
+
+        <div class="card triage-ops-auth-card">
+          <div>
+            <h3>Admin action token</h3>
+            <p class="small">Read actions can run without this token. Closing, escalation, and blog draft creation require the helper-side `TRIAGE_OPS_ADMIN_TOKEN` or `BLOG_OPS_ADMIN_TOKEN`.</p>
+          </div>
+          <div class="triage-ops-auth-controls">
+            <input id="triage-ops-admin-token" type="password" placeholder="Paste Triage Ops admin token for this session" autocomplete="off" />
+            <button class="secondary-btn" id="triage-ops-save-token-btn">Use token</button>
+            <button class="mini-btn" id="triage-ops-clear-token-btn">Clear</button>
+          </div>
+        </div>
+
+        <div class="grid cols-5" id="triage-ops-stats" style="margin-top:18px;"></div>
+
+        <div class="card triage-ops-filters" style="margin-top:18px;">
+          <label><span class="small">Status</span><select id="triage-ops-filter-status"><option value="all">All</option><option value="open">Open</option><option value="in_review">In review</option></select></label>
+          <label><span class="small">Ecosystem</span><select id="triage-ops-filter-ecosystem"><option value="all">All</option><option value="pypi">PyPI</option><option value="npm">npm</option></select></label>
+          <label><span class="small">Severity</span><select id="triage-ops-filter-severity"><option value="all">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option></select></label>
+          <label><span class="small">Package/version search</span><input id="triage-ops-filter-search" type="text" placeholder="litellm, 1.84.0, SCM-..." /></label>
+        </div>
+
+        <div class="grid cols-2 triage-ops-layout" style="margin-top:18px;">
+          <div class="card">
+            <div class="page-header compact-header">
+              <div>
+                <h3 style="margin:0;">Supply Chain Alerts</h3>
+                <p class="small" style="margin:6px 0 0;">Open SCM findings loaded from the native SecOpsAI helper or hosted helper proxy.</p>
+              </div>
+            </div>
+            <div id="triage-ops-alert-list"></div>
+          </div>
+          <div class="card">
+            <h3>Alert Review</h3>
+            <div id="triage-ops-detail" class="triage-ops-detail"></div>
+          </div>
         </div>
       </section>
     </main>

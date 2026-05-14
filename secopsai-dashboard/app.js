@@ -73,6 +73,14 @@ const state = {
     lastAction: null,
     adminToken: sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
+  triageOps: {
+    alerts: [],
+    selectedId: null,
+    selectedDetail: null,
+    lastOutput: null,
+    loading: false,
+    adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
+  },
   selectedFindingId: null,
   selectedSessionId: null,
   selectedSessionDetail: null,
@@ -91,12 +99,13 @@ const state = {
 const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
-const pages = ["mission-control", "tasks", "findings", "integrations", "blog-ops"];
+const pages = ["mission-control", "tasks", "findings", "integrations", "triage-ops", "blog-ops"];
 const PAGE_CONTEXT = {
   "mission-control": "Mission Control overview",
   "tasks": "Task queue, ownership, and run visibility",
   "findings": "Detection triage and correlation surface",
   "integrations": "Native triage and helper visibility",
+  "triage-ops": "Supply-chain alert review and closure",
   "blog-ops": "Security blog newsroom control plane"
 };
 
@@ -576,6 +585,10 @@ function renderStatusPill(status, label = null) {
   const raw = String(status || 'unknown').toLowerCase();
   const safeClass = raw.replace(/[^a-z0-9_-]+/g, '-');
   return `<span class="status-pill status-${safeClass}"><span class="dot"></span> ${escapeHtml(label || statusLabel(raw))}</span>`;
+}
+
+function renderSeverityPill(severity) {
+  return renderStatusPill(severity || 'unknown', severity || 'unknown');
 }
 
 function optionalLoadTable(table, options = {}) {
@@ -2973,12 +2986,313 @@ function renderBlogOps() {
   }
 }
 
+function triageOpsEndpoint(path = '') {
+  const base = String(cfg.triageOpsEndpoint || '/api/secopsai/triage-ops').replace(/\/+$/, '');
+  return `${base}${path ? `/${path.replace(/^\/+/, '')}` : ''}`;
+}
+
+function triageOpsHeaders({ write = false } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (write && state.triageOps.adminToken) {
+    headers['X-Triage-Ops-Admin-Token'] = state.triageOps.adminToken;
+  }
+  return headers;
+}
+
+async function fetchTriageOpsJson(path = '', options = {}) {
+  const isWrite = options.method && String(options.method).toUpperCase() !== 'GET';
+  const res = await fetch(triageOpsEndpoint(path), {
+    ...options,
+    headers: {
+      ...triageOpsHeaders({ write: isWrite }),
+      ...(options.headers || {})
+    }
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload?.ok === false) throw new Error(payload.error || `Triage Ops HTTP ${res.status}`);
+  return payload;
+}
+
+function selectedTriageOpsAlert() {
+  const selected = String(state.triageOps.selectedId || '');
+  return (state.triageOps.alerts || []).find(alert => String(alert.finding_id || '') === selected) || null;
+}
+
+function triageOpsFilters() {
+  return {
+    status: el('triage-ops-filter-status')?.value || 'all',
+    ecosystem: el('triage-ops-filter-ecosystem')?.value || 'all',
+    severity: el('triage-ops-filter-severity')?.value || 'all',
+    search: (el('triage-ops-filter-search')?.value || '').trim().toLowerCase()
+  };
+}
+
+function filteredTriageOpsAlerts() {
+  const filters = triageOpsFilters();
+  return (state.triageOps.alerts || []).filter(alert => {
+    if (filters.status !== 'all' && String(alert.status || '').toLowerCase() !== filters.status) return false;
+    if (filters.ecosystem !== 'all' && String(alert.ecosystem || '').toLowerCase() !== filters.ecosystem) return false;
+    if (filters.severity !== 'all' && String(alert.severity || '').toLowerCase() !== filters.severity) return false;
+    if (filters.search) {
+      const haystack = [
+        alert.finding_id,
+        alert.package,
+        alert.version,
+        alert.title,
+        alert.summary,
+        alert.source
+      ].join(' ').toLowerCase();
+      if (!haystack.includes(filters.search)) return false;
+    }
+    return true;
+  });
+}
+
+function triageOpsAdminTokenHint() {
+  return state.triageOps.adminToken ? 'Token ready for write actions' : 'Paste admin token to enable close/escalate/blog-draft actions';
+}
+
+function renderRecommendationPill(recommendation = {}) {
+  const disposition = String(recommendation.recommended_disposition || 'needs_review');
+  const confidence = String(recommendation.confidence || 'medium');
+  return `<span class="triage-rec-pill ${escapeHtml(disposition.replace(/[^a-z0-9_-]/gi, '-').toLowerCase())}">${escapeHtml(statusLabel(disposition))} · ${escapeHtml(confidence)}</span>`;
+}
+
+async function loadTriageOpsAlerts({ render = true } = {}) {
+  try {
+    const payload = await fetchTriageOpsJson('alerts');
+    state.triageOps.alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
+    if (!state.triageOps.selectedId && state.triageOps.alerts[0]) {
+      state.triageOps.selectedId = state.triageOps.alerts[0].finding_id;
+    }
+  } catch (error) {
+    state.triageOps.alerts = [];
+    state.triageOps.lastOutput = {
+      title: 'Triage Ops unavailable',
+      error: error.message,
+      hint: 'Set SECOPSAI_HELPER_BASE_URL for hosted mode, or run the local dashboard helper.'
+    };
+  }
+  if (render) renderTriageOps();
+}
+
+async function runTriageOpsAction(action, { button = null, payload = {}, write = false } = {}) {
+  const selectedAlert = selectedTriageOpsAlert();
+  if (!selectedAlert && action !== 'refresh-evidence') {
+    setStatus('Select a supply-chain alert first.', true);
+    return;
+  }
+  if (write && !state.triageOps.adminToken) {
+    const message = 'Paste your Triage Ops admin token, then click Use token before write actions.';
+    setStatus(message, true);
+    window.alert(message);
+    return;
+  }
+  const body = {
+    finding_id: selectedAlert?.finding_id,
+    ecosystem: selectedAlert?.ecosystem,
+    package: selectedAlert?.package,
+    version: selectedAlert?.version,
+    ...payload
+  };
+  setButtonBusy(button, true, 'Running…');
+  try {
+    const result = await fetchTriageOpsJson(action, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+    state.triageOps.lastOutput = { action, result, at: new Date().toISOString() };
+    if (action === 'refresh-evidence' || ['close', 'escalate'].includes(action)) {
+      await loadTriageOpsAlerts({ render: false });
+      await loadLocalTriageState();
+    }
+    setStatus(`<span class="dot"></span> Triage Ops ${escapeHtml(statusLabel(action))} completed`);
+    renderTriageOps();
+  } catch (error) {
+    const suffix = /not configured/i.test(error.message) ? ' Configure the local helper/admin token, or use the copyable CLI fallback.' : '';
+    state.triageOps.lastOutput = { action, error: `${error.message}${suffix}`, at: new Date().toISOString() };
+    setStatus(`Triage Ops ${action} failed: ${error.message}${suffix}`, true);
+    renderTriageOps();
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function triageOpsCliCommands(alert) {
+  if (!alert) return [];
+  const ecosystem = alert.ecosystem || 'pypi';
+  const pkg = alert.package || '<package>';
+  const version = alert.version || '<version>';
+  const note = alert.recommendation?.recommended_note || 'Reviewed from Triage Ops dashboard.';
+  return [
+    'python3 -m secopsai.cli intel refresh',
+    'python3 -m secopsai.cli triage summary',
+    `python3 -m secopsai.cli triage investigate ${alert.finding_id} --json`,
+    `python3 -m secopsai.cli supply-chain explain-verdict --ecosystem ${ecosystem} --package ${pkg} --version ${version}`,
+    `python3 -m secopsai.cli supply-chain advisory check --ecosystem ${ecosystem} --package ${pkg} --version ${version}`,
+    `python3 -m secopsai.cli triage close ${alert.finding_id} --disposition ${alert.recommendation?.recommended_disposition || 'false_positive'} --status closed --note "${String(note).replace(/"/g, '\\"')}"`
+  ];
+}
+
+function renderTriageOpsStats() {
+  const host = el('triage-ops-stats');
+  if (!host) return;
+  const alerts = state.triageOps.alerts || [];
+  const cards = [
+    ['SCM alerts', alerts.length, 'active supply-chain findings'],
+    ['Open', alerts.filter(item => String(item.status || '').toLowerCase() === 'open').length, 'waiting for triage'],
+    ['In review', alerts.filter(item => String(item.status || '').toLowerCase() === 'in_review').length, 'already started'],
+    ['Critical', alerts.filter(item => String(item.severity || '').toLowerCase() === 'critical').length, 'highest severity'],
+    ['Needs review', alerts.filter(item => item.recommendation?.recommended_disposition === 'needs_review').length, 'manual decision needed']
+  ];
+  host.innerHTML = cards.map(([label, value, sub]) => `
+    <div class="card metric-card">
+      <div class="metric-label">${escapeHtml(label)}</div>
+      <div class="metric">${escapeHtml(String(value))}</div>
+      <div class="metric-label">${escapeHtml(sub)}</div>
+    </div>
+  `).join('');
+}
+
+function renderTriageOpsAlertList() {
+  const host = el('triage-ops-alert-list');
+  if (!host) return;
+  const alerts = filteredTriageOpsAlerts();
+  if (!alerts.length) {
+    host.innerHTML = `<div class="empty-state">No SCM alerts match this filter. Refresh evidence or adjust filters.</div>`;
+    return;
+  }
+  host.innerHTML = `<div class="triage-alert-list">${alerts.map(alert => {
+    const selected = String(alert.finding_id || '') === String(state.triageOps.selectedId || '');
+    return `
+      <button class="triage-alert-card ${selected ? 'selected-row' : ''}" data-triage-alert="${escapeHtml(alert.finding_id || '')}">
+        <div class="triage-alert-topline">
+          ${renderStatusPill(alert.status || 'open')}
+          ${renderSeverityPill(alert.severity || 'critical')}
+          ${renderRecommendationPill(alert.recommendation || {})}
+        </div>
+        <h4>${escapeHtml(alert.title || alert.finding_id || 'Supply-chain alert')}</h4>
+        <p>${escapeHtml(alert.summary || 'No summary available.')}</p>
+        <div class="triage-alert-meta">
+          <span>${escapeHtml(String(alert.ecosystem || '').toUpperCase())}</span>
+          <span>${escapeHtml(alert.package || 'unknown')}@${escapeHtml(alert.version || 'unknown')}</span>
+          <span>${escapeHtml(fmtDate(alert.last_seen || alert.first_seen))}</span>
+        </div>
+      </button>
+    `;
+  }).join('')}</div>`;
+  host.querySelectorAll('.triage-alert-card').forEach(card => {
+    card.addEventListener('click', () => {
+      state.triageOps.selectedId = card.dataset.triageAlert;
+      state.triageOps.selectedDetail = null;
+      renderTriageOps();
+    });
+  });
+}
+
+function renderTriageOpsOutput(output) {
+  if (!output) return '';
+  if (output.error) {
+    return `<div class="triage-output error"><strong>${escapeHtml(output.title || 'Last action failed')}</strong><p>${escapeHtml(output.error)}</p>${output.hint ? `<p>${escapeHtml(output.hint)}</p>` : ''}</div>`;
+  }
+  const result = output.result || {};
+  const primary =
+    result.mitigation ||
+    result.result?.investigation ||
+    result.result ||
+    result.advisory ||
+    result.usage ||
+    result;
+  return `<div class="triage-output"><strong>Last action: ${escapeHtml(statusLabel(output.action || 'status'))}</strong><pre>${escapeHtml(JSON.stringify(primary, null, 2).slice(0, 12000))}</pre></div>`;
+}
+
+function renderTriageOpsDetail() {
+  const host = el('triage-ops-detail');
+  if (!host) return;
+  const alert = selectedTriageOpsAlert();
+  if (!alert) {
+    host.innerHTML = `<div class="empty-state">Select an SCM alert to review its scanner rationale, recommendation, mitigation, and closure options.</div>${renderTriageOpsOutput(state.triageOps.lastOutput)}`;
+    return;
+  }
+  const rec = alert.recommendation || {};
+  const closeNote = rec.recommended_note || `Reviewed ${alert.package}@${alert.version} from Triage Ops dashboard.`;
+  const cliCommands = triageOpsCliCommands(alert);
+  host.innerHTML = `
+    <div class="finding-detail-header">
+      <div>
+        <div class="detail-eyebrow">Supply-chain alert</div>
+        <h4>${escapeHtml(alert.finding_id || '')}</h4>
+        <p class="small">${escapeHtml(alert.package || 'unknown')}@${escapeHtml(alert.version || 'unknown')} • ${escapeHtml(alert.source || 'secopsai')}</p>
+      </div>
+      <div class="blog-preview-status-stack">
+        ${renderStatusPill(alert.status || 'open')}
+        ${renderSeverityPill(alert.severity || 'critical')}
+        ${renderRecommendationPill(rec)}
+      </div>
+    </div>
+    <div class="kv-list">
+      <div class="kv-row"><span class="kv-key">Ecosystem</span><span class="kv-val">${escapeHtml(alert.ecosystem || '—')}</span></div>
+      <div class="kv-row"><span class="kv-key">Package</span><span class="kv-val">${escapeHtml(alert.package || '—')}</span></div>
+      <div class="kv-row"><span class="kv-key">Version</span><span class="kv-val">${escapeHtml(alert.version || '—')}</span></div>
+      <div class="kv-row"><span class="kv-key">Advisory match</span><span class="kv-val">${alert.advisory?.matched ? 'yes' : 'no'}</span></div>
+      <div class="kv-row"><span class="kv-key">Local usage</span><span class="kv-val">${alert.local_usage?.present ? `${alert.local_usage.match_count || 0} match(es)` : 'none found'}</span></div>
+      <div class="kv-row"><span class="kv-key">Report</span><span class="kv-val">${escapeHtml(alert.report_path || '—')}</span></div>
+    </div>
+    <h4 style="margin-top:18px;">Scanner rationale</h4>
+    <p class="triage-rationale">${escapeHtml(alert.analysis || alert.summary || 'No scanner rationale available.')}</p>
+    <h4 style="margin-top:18px;">Recommendation</h4>
+    ${renderBulletList(rec.evidence || [], 'No recommendation evidence loaded yet.')}
+    <label class="blog-review-note"><span class="small">Close / escalation note</span><textarea id="triage-ops-note" rows="4">${escapeHtml(closeNote)}</textarea></label>
+    <div class="triage-ops-actions">
+      <button class="secondary-btn triage-ops-action-btn" data-triage-action="investigate">Investigate</button>
+      <button class="secondary-btn triage-ops-action-btn" data-triage-action="explain-verdict">Explain verdict</button>
+      <button class="secondary-btn triage-ops-action-btn" data-triage-action="check-advisories">Check advisory matches</button>
+      <button class="secondary-btn triage-ops-action-btn" data-triage-action="check-local-usage">Check local repo usage</button>
+      <button class="secondary-btn triage-ops-action-btn" data-triage-action="raw-report">Read raw report</button>
+      <button class="secondary-btn triage-ops-action-btn" data-triage-action="generate-mitigation">Generate mitigation</button>
+      <button class="mini-btn triage-ops-action-btn" data-triage-action="escalate" data-write="true">Move to in review</button>
+      <button class="danger-btn triage-ops-action-btn" data-triage-action="close" data-write="true">Close as false positive</button>
+      <button class="primary-btn triage-ops-action-btn" data-triage-action="create-blog-draft" data-write="true">Create blog draft</button>
+      <button class="mini-btn" id="triage-ops-copy-cli-btn">Copy CLI fallback</button>
+    </div>
+    <h4 style="margin-top:18px;">CLI fallback</h4>
+    <pre class="triage-cli-fallback">${escapeHtml(cliCommands.join('\n'))}</pre>
+    ${renderTriageOpsOutput(state.triageOps.lastOutput)}
+  `;
+  host.querySelectorAll('.triage-ops-action-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.triageAction;
+      const note = el('triage-ops-note')?.value || closeNote;
+      const write = btn.dataset.write === 'true';
+      if (action === 'close' && !confirm(`Close ${alert.finding_id} as false positive? Review the note before confirming.`)) return;
+      const payload = action === 'close'
+        ? { disposition: 'false_positive', status: 'closed', note }
+        : action === 'escalate'
+          ? { note }
+          : {};
+      runTriageOpsAction(action, { button: btn, write, payload });
+    });
+  });
+  el('triage-ops-copy-cli-btn')?.addEventListener('click', () => copyTextWithStatus(cliCommands.join('\n'), 'Triage Ops CLI fallback copied'));
+}
+
+function renderTriageOps() {
+  const tokenInput = el('triage-ops-admin-token');
+  if (tokenInput && tokenInput.value !== state.triageOps.adminToken) tokenInput.value = state.triageOps.adminToken;
+  const authCard = document.querySelector('.triage-ops-auth-card .small');
+  if (authCard) authCard.textContent = `${triageOpsAdminTokenHint()}. The helper runs allowlisted SecOpsAI commands; the browser never runs shell directly.`;
+  renderTriageOpsStats();
+  renderTriageOpsAlertList();
+  renderTriageOpsDetail();
+}
+
 function renderAll() {
   renderMissionControl();
   renderTasks();
   renderFindings();
   renderRunRequests();
   renderIntegrations();
+  renderTriageOps();
   renderBlogOps();
   const triageSummary = localTriageSummary();
   const triageBit = triageSummary
@@ -3252,6 +3566,7 @@ function applyNativeStreamPayload(payload) {
   renderMissionControl();
   renderFindings();
   renderIntegrations();
+  renderTriageOps();
 }
 
 function startNativeEventStream() {
@@ -3546,6 +3861,12 @@ async function boot() {
     console.warn('loadBlogOpsStatus failed during boot', err);
   }
 
+  try {
+    await loadTriageOpsAlerts({ render: false });
+  } catch (err) {
+    console.warn('loadTriageOpsAlerts failed during boot', err);
+  }
+
   renderAll();
   startNativeEventStream();
   startLiveExecutionRefreshLoop();
@@ -3635,6 +3956,31 @@ function bindEvents() {
   });
   ['task-filter-external', 'task-filter-security'].forEach(id => {
     el(id)?.addEventListener('change', renderTasks);
+  });
+  el('triage-ops-save-token-btn')?.addEventListener('click', () => {
+    state.triageOps.adminToken = el('triage-ops-admin-token')?.value || '';
+    if (state.triageOps.adminToken) {
+      sessionStorage.setItem('secopsai_triage_ops_admin_token', state.triageOps.adminToken);
+      setStatus('<span class="dot"></span> Triage Ops admin token stored for this browser session');
+    } else {
+      sessionStorage.removeItem('secopsai_triage_ops_admin_token');
+      setStatus('Triage Ops admin token cleared');
+    }
+    renderTriageOps();
+  });
+  el('triage-ops-clear-token-btn')?.addEventListener('click', () => {
+    state.triageOps.adminToken = '';
+    sessionStorage.removeItem('secopsai_triage_ops_admin_token');
+    if (el('triage-ops-admin-token')) el('triage-ops-admin-token').value = '';
+    renderTriageOps();
+    setStatus('Triage Ops admin token cleared');
+  });
+  el('triage-ops-refresh-btn')?.addEventListener('click', async (event) => {
+    await runTriageOpsAction('refresh-evidence', { button: event.currentTarget });
+  });
+  ['triage-ops-filter-status', 'triage-ops-filter-ecosystem', 'triage-ops-filter-severity', 'triage-ops-filter-search'].forEach(id => {
+    el(id)?.addEventListener('input', renderTriageOps);
+    el(id)?.addEventListener('change', renderTriageOps);
   });
   el('blog-save-token-btn')?.addEventListener('click', () => {
     state.blogOps.adminToken = el('blog-admin-token')?.value || '';

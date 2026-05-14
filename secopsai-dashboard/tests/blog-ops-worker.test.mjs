@@ -15,6 +15,77 @@ async function testStatusWithoutGithubTokenIsSafe() {
   assert.equal("token" in payload.config, false);
 }
 
+async function testConfigExposesTriageOpsEndpoint() {
+  const response = await worker.fetch(new Request("https://dashboard.example/config.js"), {});
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /triageOpsEndpoint/);
+  assert.equal(body.includes("/api/secopsai/triage-ops"), true);
+}
+
+async function testTriageOpsHostedModeFailsClearlyWithoutHelper() {
+  const response = await worker.fetch(new Request("https://dashboard.example/api/secopsai/triage-ops/alerts"), {});
+  assert.equal(response.status, 501);
+  const payload = await jsonFrom(response);
+  assert.equal(payload.ok, false);
+  assert.match(payload.error, /SECOPSAI_HELPER_BASE_URL/);
+  assert.equal(JSON.stringify(payload).includes("secret"), false);
+}
+
+async function testTriageOpsWriteNeedsAdminToken() {
+  const response = await worker.fetch(
+    new Request("https://dashboard.example/api/secopsai/triage-ops/close", {
+      method: "POST",
+      body: JSON.stringify({ finding_id: "SCM-ABC123" }),
+    }),
+    {
+      SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+      TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
+    },
+  );
+  assert.equal(response.status, 401);
+  const payload = await jsonFrom(response);
+  assert.match(payload.error, /Unauthorized/);
+  assert.equal(JSON.stringify(payload).includes("triage-admin"), false);
+}
+
+async function testTriageOpsAuthorizedWriteProxiesToHelper() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ ok: true, proxied: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/triage-ops/close", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Triage-Ops-Admin-Token": "triage-admin",
+        },
+        body: JSON.stringify({ finding_id: "SCM-ABC123", note: "reviewed with source-backed evidence" }),
+      }),
+      {
+        SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+        TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
+      },
+    );
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.ok, true);
+    assert.equal(JSON.stringify(payload).includes("triage-admin"), false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://helper.example/api/secopsai/triage-ops/close");
+    assert.equal(calls[0].init.headers.get("X-Triage-Ops-Admin-Token"), "triage-admin");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/blog/news-run", { method: "POST", body: "{}" }),
@@ -108,6 +179,10 @@ async function testSaveDraftDispatchIncludesEditedFields() {
 }
 
 await testStatusWithoutGithubTokenIsSafe();
+await testConfigExposesTriageOpsEndpoint();
+await testTriageOpsHostedModeFailsClearlyWithoutHelper();
+await testTriageOpsWriteNeedsAdminToken();
+await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
 await testSaveDraftDispatchIncludesEditedFields();
