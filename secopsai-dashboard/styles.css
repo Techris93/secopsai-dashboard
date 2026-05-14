@@ -3138,6 +3138,82 @@ label span,
   margin-top: 12px;
   justify-content: space-between;
 }
+.readiness-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  color: #164e63;
+  background: rgba(236, 254, 255, 0.95);
+}
+.readiness-pill.blocked {
+  color: #991b1b;
+  background: rgba(254, 226, 226, 0.95);
+  border-color: rgba(248, 113, 113, 0.38);
+}
+.readiness-pill.needs-edits {
+  color: #92400e;
+  background: rgba(254, 243, 199, 0.95);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+.readiness-pill.ready-to-review {
+  color: #065f46;
+  background: rgba(209, 250, 229, 0.95);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.blog-preview-status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.blog-extracted-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.blog-extracted-grid > div {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(248,250,252,0.82);
+}
+.blog-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.mini-chip {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.blog-blocker-list,
+.blog-checklist {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text);
+}
+.blog-checklist li {
+  margin: 6px 0;
+}
+.blog-checklist em {
+  margin-left: 8px;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.78rem;
+}
 .blog-reference-list {
   display: grid;
   gap: 8px;
@@ -3178,6 +3254,7 @@ label span,
 @media (max-width: 980px) {
   .blog-auth-card { grid-template-columns: 1fr; }
   .blog-actions label { width: 100%; }
+  .blog-extracted-grid { grid-template-columns: 1fr; }
 }
 
 /* Mobile navigation and responsive dashboard polish */

@@ -2684,6 +2684,29 @@ function filteredBlogDrafts() {
   return blogOpsDrafts().filter(draft => filter === 'all' || String(draft.review_status || '') === filter);
 }
 
+function renderReadinessPill(draft = {}) {
+  const status = String(draft.readiness_status || 'unknown').replace(/_/g, ' ');
+  const score = Number(draft.readiness_score || 0);
+  const statusClass = String(draft.readiness_status || 'unknown').replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
+  return `<span class="readiness-pill ${escapeHtml(statusClass)}">${escapeHtml(status)} · ${escapeHtml(String(score))}</span>`;
+}
+
+function compactValues(values, limit = 6) {
+  return Array.isArray(values) ? values.filter(Boolean).slice(0, limit) : [];
+}
+
+function renderCompactChips(values, empty = 'None found') {
+  const items = compactValues(values);
+  if (!items.length) return `<span class="small">${escapeHtml(empty)}</span>`;
+  return `<div class="blog-chip-list">${items.map(item => `<span class="mini-chip">${escapeHtml(item)}</span>`).join('')}</div>`;
+}
+
+function renderBulletList(values, empty = 'None') {
+  const items = compactValues(values, 10);
+  if (!items.length) return `<p class="small">${escapeHtml(empty)}</p>`;
+  return `<ul class="blog-blocker-list">${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
+}
+
 function blogOpsAdminTokenHint() {
   return state.blogOps.adminToken ? 'Token ready for write actions' : 'Paste admin token to enable write actions';
 }
@@ -2773,6 +2796,7 @@ function renderBlogDraftList() {
       <button class="blog-draft-card ${selected ? 'selected-row' : ''}" data-blog-draft="${escapeHtml(draft.slug || '')}">
         <div class="blog-draft-topline">
           ${renderStatusPill(draft.review_status || 'needs_review')}
+          ${renderReadinessPill(draft)}
           <span class="small">${escapeHtml(draft.severity || 'info')}</span>
         </div>
         <h4>${escapeHtml(draft.title || 'Untitled draft')}</h4>
@@ -2801,8 +2825,14 @@ function renderBlogDraftPreview() {
     return;
   }
   const sources = Array.isArray(draft.sources) ? draft.sources : [];
+  const extracted = draft.extracted && typeof draft.extracted === 'object' ? draft.extracted : {};
+  const sourceMetadata = draft.source_metadata && typeof draft.source_metadata === 'object' ? draft.source_metadata : {};
+  const blockers = Array.isArray(draft.readiness_blockers) ? draft.readiness_blockers : [];
+  const warnings = Array.isArray(draft.readiness_warnings) ? draft.readiness_warnings : [];
+  const checklist = Array.isArray(draft.review_checklist) ? draft.review_checklist : [];
   const body = draft.body_markdown || 'Click a draft card to load the full generated body.';
   const approved = ['approved', 'reviewed'].includes(String(draft.review_status || ''));
+  const ready = !blockers.length && String(draft.readiness_status || '') !== 'blocked';
   host.innerHTML = `
     <div class="finding-detail-header">
       <div>
@@ -2810,13 +2840,30 @@ function renderBlogDraftPreview() {
         <h4>${escapeHtml(draft.title || 'Untitled draft')}</h4>
         <p class="small">${escapeHtml(draft.summary || '')}</p>
       </div>
-      ${renderStatusPill(draft.review_status || 'needs_review')}
+      <div class="blog-preview-status-stack">
+        ${renderStatusPill(draft.review_status || 'needs_review')}
+        ${renderReadinessPill(draft)}
+      </div>
     </div>
     <div class="kv-list">
       <div class="kv-row"><span class="kv-key">Source</span><span class="kv-val">${escapeHtml(draft.source_name || 'SecOpsAI')}</span></div>
       <div class="kv-row"><span class="kv-key">Severity</span><span class="kv-val">${escapeHtml(draft.severity || 'info')}</span></div>
+      <div class="kv-row"><span class="kv-key">Trust</span><span class="kv-val">${escapeHtml(sourceMetadata.source_trust_level || 'unknown')}</span></div>
+      <div class="kv-row"><span class="kv-key">Published</span><span class="kv-val">${escapeHtml(fmtDate(sourceMetadata.published_at))}</span></div>
+      <div class="kv-row"><span class="kv-key">Fetched</span><span class="kv-val">${escapeHtml(fmtDate(sourceMetadata.fetched_at))}</span></div>
       <div class="kv-row"><span class="kv-key">Path</span><span class="kv-val">${escapeHtml(draft.path || draft.slug || '')}</span></div>
     </div>
+    <h4 style="margin-top:18px;">Readiness blockers</h4>
+    ${renderBulletList(blockers, 'No blockers detected. Still review claims before approving.')}
+    ${warnings.length ? `<h4 style="margin-top:18px;">Readiness warnings</h4>${renderBulletList(warnings, 'No warnings')}` : ''}
+    <h4 style="margin-top:18px;">Extracted intelligence</h4>
+    <div class="blog-extracted-grid">
+      <div><span class="small">CVEs</span>${renderCompactChips(extracted.cves)}</div>
+      <div><span class="small">Packages</span>${renderCompactChips(extracted.packages)}</div>
+      <div><span class="small">Products</span>${renderCompactChips(extracted.products)}</div>
+      <div><span class="small">IOCs</span>${renderCompactChips([...(extracted.urls || []), ...(extracted.domains || []), ...(extracted.ips || []), ...(extracted.hashes || [])])}</div>
+    </div>
+    ${checklist.length ? `<h4 style="margin-top:18px;">Review checklist</h4><ul class="blog-checklist">${checklist.map(item => `<li><span>${escapeHtml(item.label || '')}</span><em>${escapeHtml(item.status || 'needs_review')}</em></li>`).join('')}</ul>` : ''}
     <h4 style="margin-top:18px;">References</h4>
     <div class="blog-reference-list">${sources.length ? sources.map(source => `<a href="${escapeHtml(source)}" target="_blank" rel="noreferrer">${escapeHtml(source)}</a>`).join('') : '<span class="small">No references listed.</span>'}</div>
     <h4 style="margin-top:18px;">Generated body</h4>
@@ -2826,7 +2873,7 @@ function renderBlogDraftPreview() {
       <button class="mini-btn" id="blog-approve-btn">Approve</button>
       <button class="mini-btn" id="blog-needs-review-btn">Needs review</button>
       <button class="mini-btn" id="blog-reject-btn">Reject</button>
-      <button class="primary-btn" id="blog-publish-approved-btn" ${approved ? '' : 'disabled'}>Publish approved</button>
+      <button class="primary-btn" id="blog-publish-approved-btn" ${approved && ready ? '' : 'disabled'}>Publish approved</button>
     </div>
   `;
   const noteValue = () => el('blog-review-note')?.value || '';

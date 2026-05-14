@@ -202,6 +202,9 @@ function decodeBase64Content(value) {
 }
 
 function summarizeBlogDraft(path, post) {
+  const readinessBlockers = Array.isArray(post.readiness_blockers) ? post.readiness_blockers.slice(0, 12) : [];
+  const readinessWarnings = Array.isArray(post.readiness_warnings) ? post.readiness_warnings.slice(0, 12) : [];
+  const extracted = post.extracted && typeof post.extracted === "object" ? post.extracted : {};
   return {
     path,
     slug: String(post.slug || path.split("/").pop()?.replace(/\.json$/, "") || ""),
@@ -214,6 +217,20 @@ function summarizeBlogDraft(path, post) {
     sources: Array.isArray(post.sources) ? post.sources.slice(0, 8) : Array.isArray(post.references) ? post.references.slice(0, 8) : [],
     updated_at: String(post.updated_at || post.reviewed_at || post.fetched_at || ""),
     external_news: Boolean(post.external_news),
+    readiness_score: Number(post.readiness_score || 0),
+    readiness_status: String(post.readiness_status || ""),
+    readiness_blockers: readinessBlockers,
+    readiness_warnings: readinessWarnings,
+    extracted,
+    source_metadata: {
+      canonical_url: post.canonical_url || "",
+      source_url: post.source_url || "",
+      source_trust_level: post.source_trust_level || "",
+      source_category: post.source_category || "",
+      fetched_at: post.fetched_at || "",
+      published_at: post.published_at || "",
+    },
+    review_checklist: Array.isArray(post.review_checklist) ? post.review_checklist.slice(0, 12) : [],
   };
 }
 
@@ -269,6 +286,8 @@ async function loadBlogDraft(env, identifier) {
     ...summarizeBlogDraft(match.path, post),
     body_markdown: String(post.body_markdown || ""),
     references: Array.isArray(post.references) ? post.references.slice(0, 12) : [],
+    primary_references: Array.isArray(post.primary_references) ? post.primary_references.slice(0, 8) : [],
+    source_links: Array.isArray(post.source_links) ? post.source_links.slice(0, 12) : [],
     review_note: String(post.review_note || ""),
   };
 }
