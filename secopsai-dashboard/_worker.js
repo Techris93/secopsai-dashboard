@@ -425,6 +425,22 @@ async function handleBlogOps(request, env) {
     return jsonResponse(payload, { status: 202 });
   }
 
+  if (parts[0] === "drafts" && parts[1] && parts[2] === "save") {
+    const payload = await dispatchBlogWorkflow(env, {
+      action: "save-draft",
+      draft: decodeURIComponent(parts.slice(1, -1).join("/")),
+      note,
+      limit,
+      title: trimToLength(body.title || "", 240),
+      summary: trimToLength(body.summary || "", 1600),
+      severity: trimToLength(body.severity || "", 20),
+      categories: trimToLength(Array.isArray(body.categories) ? body.categories.join(", ") : body.categories || "", 1200),
+      references: trimToLength(Array.isArray(body.references) ? body.references.join("\n") : body.references || "", 2400),
+      body_markdown: trimToLength(body.body_markdown || "", 60000),
+    });
+    return jsonResponse(payload, { status: 202 });
+  }
+
   if (parts[0] === "drafts" && parts[1] && ["approve", "reject", "needs-review"].includes(parts[2])) {
     const action = parts[2] === "needs-review" ? "needs-review" : parts[2];
     const payload = await dispatchBlogWorkflow(env, {

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="./styles.css?v=20260429e" />
+  <link rel="stylesheet" href="./styles.css?v=20260514a" />
 </head>
 <body>
   <div class="app-shell">
@@ -329,7 +329,7 @@
     });
   </script>
   <script src="./config.js?v=20260429e" onload="window.__SECOPSAI_DEBUG.configLoaded=true"></script>
-  <script src="./app.js?v=20260429e" onload="window.__SECOPSAI_DEBUG.appLoaded=!!window.__SECOPSAI_APP_LOADED"></script>
+  <script src="./app.js?v=20260514a" onload="window.__SECOPSAI_DEBUG.appLoaded=!!window.__SECOPSAI_APP_LOADED"></script>
 
 
   <div id="prompt-modal" class="modal hidden">
@@ -369,6 +369,40 @@
           <button id="prompt-copy-btn" class="secondary-btn">Copy brief</button>
           <button id="prompt-run-btn" class="primary-btn">Queue run</button>
           <button id="prompt-close-btn" class="secondary-btn">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="blog-edit-modal" class="modal hidden">
+    <div class="modal-card blog-edit-modal-card">
+      <div class="modal-head">
+        <h3>Edit blog draft</h3>
+        <button id="blog-edit-modal-close" class="icon-btn">✕</button>
+      </div>
+      <p class="small" style="margin-top:-6px;">Save dispatches a protected GitHub Actions workflow. The draft returns to needs review after edits.</p>
+      <div class="form-grid">
+        <label class="full"><span>Title</span><input id="blog-edit-title" type="text" /></label>
+        <label class="full"><span>Summary</span><textarea id="blog-edit-summary" rows="3"></textarea></label>
+        <label><span>Severity</span>
+          <select id="blog-edit-severity">
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="info">Info</option>
+          </select>
+        </label>
+        <label><span>Categories / tags</span><textarea id="blog-edit-categories" rows="4" placeholder="Security News&#10;Threat Intelligence"></textarea></label>
+        <label class="full"><span>References</span><textarea id="blog-edit-references" rows="3" placeholder="https://example.com/source"></textarea></label>
+        <label class="full"><span>Article body markdown</span><textarea id="blog-edit-body" class="blog-edit-body" rows="18"></textarea></label>
+        <label class="full"><span>Editor note</span><textarea id="blog-edit-note" rows="2" placeholder="What changed and why?"></textarea></label>
+      </div>
+      <div class="modal-actions">
+        <div class="small">External-news posts still require approval after saving.</div>
+        <div class="modal-actions-right">
+          <button class="secondary-btn" id="blog-edit-cancel-btn">Cancel</button>
+          <button class="primary-btn" id="blog-edit-save-btn">Save draft</button>
         </div>
       </div>
     </div>

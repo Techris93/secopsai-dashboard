@@ -2739,7 +2739,7 @@ async function loadBlogDraft(slug) {
   return state.blogOps.selectedDraft;
 }
 
-async function runBlogOpsAction(action, { draft = null, note = '', button = null } = {}) {
+async function runBlogOpsAction(action, { draft = null, note = '', button = null, payload = {} } = {}) {
   if (!state.blogOps.adminToken) {
     const message = 'Paste your Blog Ops admin token, then click Use token before running write actions.';
     setStatus(message, true);
@@ -2750,12 +2750,12 @@ async function runBlogOpsAction(action, { draft = null, note = '', button = null
   const limit = Number(el('blog-action-limit')?.value || 5) || 5;
   setButtonBusy(button, true, 'Dispatching…');
   try {
-    const payload = await fetchBlogOpsJson(actionPath, {
+    const result = await fetchBlogOpsJson(actionPath, {
       method: 'POST',
-      body: JSON.stringify({ limit, note })
+      body: JSON.stringify({ limit, note, ...payload })
     });
-    state.blogOps.lastAction = { action, draft, payload, at: new Date().toISOString() };
-    setStatus(`<span class="dot"></span> Blog Ops dispatched ${escapeHtml(action)} via ${escapeHtml(payload.workflow || 'workflow')}`);
+    state.blogOps.lastAction = { action, draft, payload: result, at: new Date().toISOString() };
+    setStatus(`<span class="dot"></span> Blog Ops dispatched ${escapeHtml(action)} via ${escapeHtml(result.workflow || 'workflow')}`);
     await loadBlogOpsStatus({ render: false });
     renderBlogOps();
   } catch (error) {
@@ -2765,6 +2765,53 @@ async function runBlogOpsAction(action, { draft = null, note = '', button = null
   } finally {
     setButtonBusy(button, false);
   }
+}
+
+function blogEditListText(values) {
+  return Array.isArray(values) ? values.filter(Boolean).join('\n') : String(values || '');
+}
+
+async function openBlogEditModal(slug) {
+  let draft = state.blogOps.selectedDraft;
+  if (!draft || String(draft.slug || '') !== String(slug || '') || !draft.body_markdown) {
+    draft = await loadBlogDraft(slug || state.blogOps.selectedSlug);
+  }
+  if (!draft) {
+    setStatus('Select a blog draft before editing.', true);
+    return;
+  }
+  state.blogOps.editingSlug = draft.slug;
+  if (el('blog-edit-title')) el('blog-edit-title').value = draft.title || '';
+  if (el('blog-edit-summary')) el('blog-edit-summary').value = draft.summary || '';
+  if (el('blog-edit-severity')) el('blog-edit-severity').value = String(draft.severity || 'info').toLowerCase();
+  if (el('blog-edit-categories')) el('blog-edit-categories').value = blogEditListText(draft.categories || []);
+  if (el('blog-edit-references')) el('blog-edit-references').value = blogEditListText(draft.references || draft.sources || []);
+  if (el('blog-edit-body')) el('blog-edit-body').value = draft.body_markdown || '';
+  if (el('blog-edit-note')) el('blog-edit-note').value = '';
+  el('blog-edit-modal')?.classList.remove('hidden');
+}
+
+function closeBlogEditModal() {
+  el('blog-edit-modal')?.classList.add('hidden');
+}
+
+async function saveBlogDraftEdit(button = null) {
+  const slug = state.blogOps.editingSlug || state.blogOps.selectedSlug;
+  if (!slug) {
+    setStatus('Select a blog draft before saving edits.', true);
+    return;
+  }
+  const payload = {
+    title: el('blog-edit-title')?.value || '',
+    summary: el('blog-edit-summary')?.value || '',
+    severity: el('blog-edit-severity')?.value || 'info',
+    categories: el('blog-edit-categories')?.value || '',
+    references: el('blog-edit-references')?.value || '',
+    body_markdown: el('blog-edit-body')?.value || ''
+  };
+  const note = el('blog-edit-note')?.value || 'Edited from Blog Ops dashboard';
+  await runBlogOpsAction('save', { draft: slug, note, button, payload });
+  closeBlogEditModal();
 }
 
 function renderBlogOpsStats() {
@@ -2879,6 +2926,7 @@ function renderBlogDraftPreview() {
     <pre class="blog-preview-body">${escapeHtml(body)}</pre>
     <label class="blog-review-note"><span class="small">Reviewer note</span><textarea id="blog-review-note" rows="3" placeholder="Why did you approve or reject this draft?"></textarea></label>
     <div class="task-card-actions blog-preview-actions">
+      <button class="secondary-btn" id="blog-edit-btn">Edit draft</button>
       <button class="mini-btn" id="blog-approve-btn">Approve</button>
       <button class="mini-btn" id="blog-needs-review-btn">Needs review</button>
       <button class="mini-btn" id="blog-reject-btn">Reject</button>
@@ -2886,6 +2934,7 @@ function renderBlogDraftPreview() {
     </div>
   `;
   const noteValue = () => el('blog-review-note')?.value || '';
+  el('blog-edit-btn')?.addEventListener('click', () => openBlogEditModal(draft.slug));
   el('blog-approve-btn')?.addEventListener('click', (event) => runBlogOpsAction('approve', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
   el('blog-needs-review-btn')?.addEventListener('click', (event) => runBlogOpsAction('needs-review', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
   el('blog-reject-btn')?.addEventListener('click', (event) => runBlogOpsAction('reject', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
@@ -3577,6 +3626,9 @@ function bindEvents() {
     promptModalState.mode = event?.target?.value || 'smart-local';
     refreshPromptBrief();
   });
+  el('blog-edit-modal-close')?.addEventListener('click', closeBlogEditModal);
+  el('blog-edit-cancel-btn')?.addEventListener('click', closeBlogEditModal);
+  el('blog-edit-save-btn')?.addEventListener('click', (event) => saveBlogDraftEdit(event.currentTarget));
   ['task-search', 'task-filter-domain', 'task-filter-priority', 'task-filter-status', 'task-filter-owner', 'task-filter-reviewer'].forEach(id => {
     el(id)?.addEventListener('input', renderTasks);
     el(id)?.addEventListener('change', renderTasks);

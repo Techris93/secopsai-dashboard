@@ -57,6 +57,7 @@ It now also reads native local SecOpsAI state through the helper server:
 - GitHub Actions-backed security-blog news ingestion
 - review queue for generated external-news drafts
 - preview of draft body, source links, severity, and status
+- edit modal for title, summary, severity, categories, references, and article markdown
 - approval-gated approve/reject/needs-review controls
 - publish-approved, rebuild-feeds, and deploy buttons
 

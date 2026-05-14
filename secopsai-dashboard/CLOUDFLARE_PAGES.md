@@ -110,9 +110,10 @@ Daily use:
 1. Open **Blog Ops**.
 2. Click **Run fetch + draft** to dispatch the workflow.
 3. Refresh the draft queue after the workflow finishes.
-4. Preview drafts and click **Approve**, **Reject**, or **Needs review**.
-5. Click **Publish approved** to publish reviewed drafts and rebuild feeds.
-6. Click **Deploy blog** when you want Cloudflare Pages deployment from the workflow.
+4. Preview drafts, click **Edit draft** when the article needs cleanup, then save title, summary, severity, categories, references, and body changes through the workflow.
+5. Click **Approve**, **Reject**, or **Needs review** after reviewing the saved content.
+6. Click **Publish approved** to publish reviewed drafts and rebuild feeds.
+7. Click **Deploy blog** when you want Cloudflare Pages deployment from the workflow.
 
 Safety model:
 

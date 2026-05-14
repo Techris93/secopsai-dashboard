@@ -3268,6 +3268,16 @@ label span,
   gap: 8px;
   margin-top: 16px;
 }
+.blog-edit-modal-card {
+  max-width: min(1120px, calc(100vw - 28px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+.blog-edit-body {
+  min-height: 360px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.55;
+}
 .blog-metric-card .metric {
   font-size: 1.6rem;
 }

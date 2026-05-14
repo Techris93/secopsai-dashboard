@@ -62,7 +62,53 @@ async function testDispatchPayloadIsWorkflowOnly() {
   }
 }
 
+async function testSaveDraftDispatchIncludesEditedFields() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/blog/drafts/news-abc/save", {
+        method: "POST",
+        headers: { "X-Blog-Ops-Admin-Token": "admin-test" },
+        body: JSON.stringify({
+          title: "Edited title",
+          summary: "Edited summary",
+          severity: "high",
+          categories: "Security News, Threat Intelligence",
+          references: "https://example.com/source",
+          body_markdown: "# Edited title\n\nEnough source-backed body text for a useful editor test.",
+          note: "edited in test",
+        }),
+      }),
+      {
+        BLOG_OPS_GITHUB_TOKEN: "ghp_secret_should_not_return",
+        BLOG_OPS_ADMIN_TOKEN: "admin-test",
+        BLOG_OPS_OWNER: "Techris93",
+        BLOG_OPS_REPO: "secopsai",
+        BLOG_OPS_WORKFLOW: "blog-ops.yml",
+      },
+    );
+    assert.equal(response.status, 202);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.action, "save-draft");
+    assert.equal(JSON.stringify(payload).includes("ghp_secret"), false);
+    const body = JSON.parse(calls[0].init.body);
+    assert.equal(body.inputs.action, "save-draft");
+    assert.equal(body.inputs.draft, "news-abc");
+    assert.equal(body.inputs.title, "Edited title");
+    assert.equal(body.inputs.severity, "high");
+    assert.match(body.inputs.body_markdown, /Enough source-backed/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 await testStatusWithoutGithubTokenIsSafe();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
+await testSaveDraftDispatchIncludesEditedFields();
 console.log("blog ops worker tests passed");
