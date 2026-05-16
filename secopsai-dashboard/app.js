@@ -2754,6 +2754,12 @@ async function loadBlogDraft(slug) {
 }
 
 async function runBlogOpsAction(action, { draft = null, note = '', button = null, payload = {} } = {}) {
+  if (state.blogOps.status?.configured === false) {
+    const message = 'Blog Ops is not connected to GitHub yet. Add BLOG_OPS_GITHUB_TOKEN to the Cloudflare Pages project, then refresh Blog Ops.';
+    setStatus(message, true);
+    alert(message);
+    return;
+  }
   if (!state.blogOps.adminToken) {
     const message = 'Paste your Blog Ops admin token, then click Use token before running write actions.';
     setStatus(message, true);
@@ -2985,6 +2991,16 @@ function renderBlogOps() {
   if (authCard) {
     authCard.textContent = `${blogOpsAdminTokenHint()}. ${status.configured === false ? 'GitHub token is not configured on the Pages project yet.' : 'Write actions dispatch GitHub Actions; no shell commands run in the browser.'}`;
   }
+  document.querySelectorAll('.blog-action-btn, #blog-approve-btn, #blog-needs-review-btn, #blog-reject-btn, #blog-edit-btn, #blog-publish-approved-btn').forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    if (status.configured === false) {
+      button.disabled = true;
+      button.title = 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.';
+    } else if (button.title === 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.') {
+      button.disabled = false;
+      button.title = '';
+    }
+  });
 }
 
 function triageOpsEndpoint(path = '') {

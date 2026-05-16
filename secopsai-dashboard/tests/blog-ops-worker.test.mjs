@@ -165,6 +165,39 @@ async function testDispatchPayloadIsWorkflowOnly() {
   }
 }
 
+async function testGithubWorkflowNotFoundIsActionable() {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ message: "Not Found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/blog/news-run", {
+        method: "POST",
+        headers: { "X-Blog-Ops-Admin-Token": "admin-test" },
+        body: JSON.stringify({ limit: 3 }),
+      }),
+      {
+        BLOG_OPS_GITHUB_TOKEN: "ghp_secret_should_not_return",
+        BLOG_OPS_ADMIN_TOKEN: "admin-test",
+        BLOG_OPS_OWNER: "Techris93",
+        BLOG_OPS_REPO: "secopsai",
+        BLOG_OPS_WORKFLOW: "blog-ops.yml",
+        BLOG_OPS_REF: "main",
+      },
+    );
+    assert.equal(response.status, 502);
+    const payload = await jsonFrom(response);
+    assert.match(payload.error, /BLOG_OPS_WORKFLOW=blog-ops\.yml/);
+    assert.match(payload.error, /Actions read\/write/);
+    assert.equal(JSON.stringify(payload).includes("ghp_secret"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testSaveDraftDispatchIncludesEditedFields() {
   const calls = [];
   const originalFetch = globalThis.fetch;
@@ -218,5 +251,6 @@ await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
+await testGithubWorkflowNotFoundIsActionable();
 await testSaveDraftDispatchIncludesEditedFields();
 console.log("blog ops worker tests passed");

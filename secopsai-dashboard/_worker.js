@@ -223,7 +223,17 @@ async function githubRequest(env, path, init = {}) {
     }
   }
   if (!response.ok) {
-    throw new Error(payload?.message || `GitHub API HTTP ${response.status}`);
+    const message = payload?.message || `GitHub API HTTP ${response.status}`;
+    if (response.status === 404) {
+      const config = blogOpsConfig(env);
+      throw new Error(
+        `${message}. Check BLOG_OPS_OWNER=${config.owner}, BLOG_OPS_REPO=${config.repo}, BLOG_OPS_WORKFLOW=${config.workflow}, BLOG_OPS_REF=${config.ref}, and make sure BLOG_OPS_GITHUB_TOKEN has access to that repository with Actions read/write permission.`,
+      );
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`${message}. Check BLOG_OPS_GITHUB_TOKEN validity and GitHub Actions/Contents permissions.`);
+    }
+    throw new Error(message);
   }
   return payload;
 }
