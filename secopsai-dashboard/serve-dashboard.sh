@@ -14,6 +14,23 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+if python3 - "$HOST" "$PORT" <<'PY'
+import socket
+import sys
+
+host, port = sys.argv[1], int(sys.argv[2])
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.settimeout(0.25)
+    raise SystemExit(0 if sock.connect_ex((host, port)) == 0 else 1)
+PY
+then
+  echo "Port $PORT is already in use on $HOST."
+  echo "Open http://$HOST:$PORT if the dashboard is already running, or stop the listener:"
+  echo "  lsof -nP -iTCP:$PORT -sTCP:LISTEN"
+  echo "  kill <PID>"
+  exit 2
+fi
+
 set -a
 source "$DIR/.env"
 set +a

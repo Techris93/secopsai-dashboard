@@ -14,6 +14,23 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+if python3 - "$HOST" "$PORT" <<'PY'
+import socket
+import sys
+
+host, port = sys.argv[1], int(sys.argv[2])
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.settimeout(0.25)
+    raise SystemExit(0 if sock.connect_ex((host, port)) == 0 else 1)
+PY
+then
+  echo "[secopsai-dashboard] A server is already listening on http://$HOST:$PORT"
+  echo "[secopsai-dashboard] Open that URL, or stop the existing process before starting another:"
+  echo "  lsof -nP -iTCP:$PORT -sTCP:LISTEN"
+  echo "  kill <PID>"
+  exit 0
+fi
+
 cleanup() {
   local code=$?
   trap - EXIT INT TERM
