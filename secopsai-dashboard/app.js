@@ -3304,6 +3304,123 @@ function syncCampaignFormFromDom() {
   }));
 }
 
+const CAMPAIGN_GENERIC_PACKAGE_WORDS = new Set([
+  'overview', 'description', 'impact', 'solution', 'mitigation', 'mitigations', 'separator',
+  'byline-author', 'text-align', 'data-original-height', 'data-original-width', 'front-end',
+  'attacker-controlled', 'hardware-backed', 'short-lived', 'hardware-bound', 'per-session',
+  'cross-site', 'cross-origin', 'sign-on', 'sign-in', 'pre-existing', 'software-based',
+  'high-assurance', 'co-located', 'certificate', 'jailbreaks'
+]);
+
+function analyzeCampaignPackageNoise(row = {}) {
+  const ecosystem = String(row.ecosystem || 'npm').toLowerCase();
+  const name = String(row.package || '').trim().toLowerCase();
+  const reasons = [];
+  if (!name) reasons.push('empty package id');
+  if (CAMPAIGN_GENERIC_PACKAGE_WORDS.has(name)) reasons.push('generic article/CSS word');
+  if (/^\d+(\.\d+)?$/.test(name)) reasons.push('numeric token');
+  if (/\.(png|jpe?g|gif|webp|svg|html?|css|js)$/i.test(name)) reasons.push('file or page name');
+  if (/^(https?:\/\/|www\.)/.test(name)) reasons.push('URL rather than package id');
+  if (/^[a-z0-9.-]+\.(com|org|net|io|dev|gov|edu|life|app|co)(\/|$)/i.test(name)) reasons.push('domain rather than package id');
+  if (name.length > 90 && !name.includes('/')) reasons.push('long encoded-looking token');
+  if (/(^|\/)(issues|pulls|actions|releases|blob|tree)$/.test(name)) reasons.push('repository page path');
+  if (ecosystem === 'npm' && name.includes('/') && !name.startsWith('@') && /^[a-z0-9.-]+\.[a-z]{2,}\//i.test(name)) reasons.push('web path misread as npm package');
+  if (ecosystem === 'go' && /\/(issues|pulls|actions|blob|tree)(\/|$)/.test(name)) reasons.push('repository page URL not module root');
+  return {
+    isNoise: reasons.length > 0,
+    reasons
+  };
+}
+
+function campaignNoiseSummary(packages = []) {
+  const rows = Array.isArray(packages) ? packages : [];
+  const analyses = rows.map(row => ({ row, analysis: analyzeCampaignPackageNoise(row) }));
+  const noise = analyses.filter(item => item.analysis.isNoise);
+  const clean = analyses.filter(item => !item.analysis.isNoise);
+  return { total: rows.length, clean, noise };
+}
+
+function campaignIocValues(campaign = {}) {
+  const iocs = campaign.iocs;
+  if (Array.isArray(iocs)) return iocs.map(String).filter(Boolean);
+  if (iocs && typeof iocs === 'object') return Object.values(iocs).flat().map(String).filter(Boolean);
+  return [];
+}
+
+function campaignWatchlistSuggestions(campaign = {}) {
+  const suggestions = [];
+  const seen = new Set();
+  const add = (kind, value, label = '') => {
+    const clean = String(value || '').trim();
+    if (!clean) return;
+    const key = `${kind}:${clean.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    suggestions.push({ kind, value: clean, label: label || clean });
+  };
+  if (campaign.campaign_id) add('ioc', campaign.campaign_id, `campaign:${campaign.campaign_id}`);
+  (campaign.actors || []).forEach(actor => add('publisher', actor));
+  (campaign.publishers || []).forEach(publisher => add('publisher', publisher));
+  (campaign.packages || []).forEach(row => {
+    if (!analyzeCampaignPackageNoise(row).isNoise && row.package) {
+      add('package', `${row.ecosystem || 'npm'}:${row.package}`);
+    }
+    if (row.publisher) add('publisher', row.publisher);
+  });
+  campaignIocValues(campaign).forEach(ioc => {
+    const value = String(ioc || '').trim();
+    if (!value) return;
+    add('ioc', value);
+  });
+  (campaign.source_urls || []).forEach(url => add('source_url', url));
+  return suggestions.slice(0, 18);
+}
+
+function renderWatchlistSuggestions(campaign = {}) {
+  const suggestions = campaignWatchlistSuggestions(campaign);
+  if (!suggestions.length) return '<div class="empty-state compact">No watchlist suggestions yet. Select or build a campaign with packages, publishers, IOCs, or sources.</div>';
+  return `
+    <div class="campaign-watchlist-suggestions">
+      <div class="small">Watchlist suggestions from reviewed campaign fields</div>
+      <div class="campaign-suggestion-list">
+        ${suggestions.map(item => `
+          <button class="mini-btn campaign-watchlist-suggestion" type="button" data-watchlist-kind="${escapeHtml(item.kind)}" data-watchlist-value="${escapeHtml(item.value)}">
+            ${escapeHtml(statusLabel(item.kind))}: ${escapeHtml(item.label)}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function cleanCampaignPackageNoiseFromState() {
+  const form = state.triageOps.campaign || defaultCampaignForm();
+  const summary = campaignNoiseSummary(form.packages || []);
+  const cleaned = summary.clean.map(item => item.row).filter(row => String(row.package || '').trim());
+  form.packages = cleaned.length ? cleaned : defaultCampaignForm().packages;
+  form.jsonText = JSON.stringify({
+    campaign_id: form.campaign_id || '',
+    title: form.title || '',
+    summary: form.summary || '',
+    source_urls: (form.source_urls || []).filter(Boolean),
+    source_names: (form.source_names || []).filter(Boolean),
+    actors: (form.actors || []).filter(Boolean),
+    publishers: (form.publishers || []).filter(Boolean),
+    iocs: { operator_supplied: (form.iocs || []).filter(Boolean) },
+    behavioral_indicators: (form.behavioral_indicators || []).filter(Boolean),
+    packages: form.packages
+  }, null, 2);
+  state.triageOps.campaign = form;
+  return summary;
+}
+
+function cleanCampaignPackageNoise({ render = true } = {}) {
+  syncCampaignFormFromDom();
+  const summary = cleanCampaignPackageNoiseFromState();
+  setStatus(`<span class="dot"></span> Removed ${summary.noise.length} obvious noisy package extraction${summary.noise.length === 1 ? '' : 's'}`);
+  if (render) renderTriageOps();
+}
+
 function campaignFormToPayload() {
   syncCampaignFormFromDom();
   const form = state.triageOps.campaign || defaultCampaignForm();
@@ -3508,6 +3625,18 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
     }
     if (result.campaign) {
       setCampaignFormFromPayload(result.campaign);
+      if (action === 'campaign-promote') {
+        const summary = cleanCampaignPackageNoiseFromState();
+        state.triageOps.campaignLastOutput = {
+          action,
+          result,
+          review: {
+            removed_noisy_packages: summary.noise.length,
+            retained_packages: summary.clean.length
+          },
+          at: new Date().toISOString()
+        };
+      }
     }
     if (action === 'campaign-autopilot') {
       state.triageOps.campaignResult = result.result || result;
@@ -3540,12 +3669,16 @@ function renderCampaignCandidateList() {
     <div class="campaign-candidate-list">
       ${candidates.slice(0, 20).map(candidate => {
         const campaign = candidate.campaign || {};
-        const packages = (campaign.packages || []).slice(0, 4).map(pkg => `${pkg.ecosystem}:${pkg.package}@${pkg.version || 'unknown'}`).join(', ');
+        const review = campaignNoiseSummary(campaign.packages || []);
+        const packages = review.clean.slice(0, 4).map(item => `${item.row.ecosystem}:${item.row.package}@${item.row.version || 'unknown'}`).join(', ');
+        const noise = review.noise.slice(0, 3).map(item => `${item.row.package} (${item.analysis.reasons[0]})`).join(', ');
         const selected = String(candidate.candidate_id || '') === String(state.triageOps.campaignDiscovery?.selectedCandidateId || '');
         return `
           <button class="campaign-candidate-card ${selected ? 'selected' : ''}" data-campaign-candidate-id="${escapeHtml(candidate.candidate_id || '')}" type="button">
             <span class="triage-row-top"><strong>${escapeHtml(campaign.title || candidate.candidate_id || 'Campaign candidate')}</strong><span class="triage-rec-pill needs_review">score ${escapeHtml(String(candidate.score ?? 0))}</span></span>
-            <span class="small">${escapeHtml(packages || 'No packages extracted yet')}</span>
+            <span class="small">${escapeHtml(packages || 'No likely package identifiers after noise review')}</span>
+            <span class="campaign-noise-summary">${escapeHtml(`${review.clean.length} likely package row(s), ${review.noise.length} likely noisy extraction(s)`)}</span>
+            ${noise ? `<span class="small">Noise examples: ${escapeHtml(noise)}</span>` : ''}
             <span class="small">${escapeHtml((candidate.score_reasons || []).slice(0, 3).join(', ') || 'No score reasons returned')}</span>
           </button>
         `;
@@ -3557,6 +3690,7 @@ function renderCampaignCandidateList() {
 function renderAutonomousDiscoveryPanel() {
   const discovery = state.triageOps.campaignDiscovery || {};
   const selected = selectedCampaignCandidate();
+  const suggestionCampaign = selected?.campaign || state.triageOps.campaign || {};
   return `
     <div class="campaign-discovery-box">
       <div class="page-header compact-header">
@@ -3590,6 +3724,7 @@ function renderAutonomousDiscoveryPanel() {
         <input id="campaign-watchlist-value" value="${escapeHtml(discovery.watchlistValue || '')}" placeholder="npm:node-ipc, deadcode09284814, c2.example" />
         <button class="secondary-btn" id="campaign-watchlist-add-btn" type="button">Add to Watchlist</button>
       </div>
+      ${renderWatchlistSuggestions(suggestionCampaign)}
       ${renderCampaignCandidateList()}
     </div>
   `;
@@ -3615,16 +3750,20 @@ function renderCampaignListInputs(name, label, placeholder) {
 function renderCampaignPackageRows() {
   const rows = state.triageOps.campaign.packages?.length ? state.triageOps.campaign.packages : defaultCampaignForm().packages;
   const options = TRIAGE_CAMPAIGN_ECOSYSTEMS.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
-  return rows.map((row, index) => `
-    <div class="campaign-package-row" data-campaign-package-index="${index}">
+  return rows.map((row, index) => {
+    const noise = analyzeCampaignPackageNoise(row);
+    return `
+    <div class="campaign-package-row ${noise.isNoise ? 'campaign-package-noise' : ''}" data-campaign-package-index="${index}">
       <label><span class="small">Ecosystem</span><select data-campaign-package-field="ecosystem">${options}</select></label>
       <label><span class="small">Package/artifact id</span><input data-campaign-package-field="package" value="${escapeHtml(row.package || '')}" placeholder="@scope/pkg, group:artifact, org/model" /></label>
       <label><span class="small">Version/revision</span><input data-campaign-package-field="version" value="${escapeHtml(row.version || '')}" placeholder="1.2.3, v1.2.3, revision" /></label>
       <label><span class="small">Publisher/maintainer</span><input data-campaign-package-field="publisher" value="${escapeHtml(row.publisher || '')}" placeholder="namespace or owner" /></label>
       <label class="campaign-package-notes"><span class="small">Behavior notes</span><textarea data-campaign-package-field="behavior_notes" rows="2" placeholder="credential theft, C2, persistence">${escapeHtml(row.behavior_notes || '')}</textarea></label>
+      ${noise.isNoise ? `<div class="campaign-noise-note">Likely extraction noise: ${escapeHtml(noise.reasons.join(', '))}</div>` : ''}
       <button class="mini-btn campaign-remove-package-btn" type="button" data-campaign-remove-package="${index}">Remove</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function campaignEvidencePreview(row = {}) {
@@ -3724,7 +3863,10 @@ function renderCampaignResearchPanel() {
           <h4>Packages</h4>
           <p class="small">Add packages from npm, PyPI, crates, Packagist, Go, Hugging Face, Maven, NuGet, Open VSX, RubyGems, or Chrome Web Store local artifact mode.</p>
         </div>
-        <button class="secondary-btn" id="campaign-add-package-btn" type="button">Add Package</button>
+        <div class="campaign-package-actions">
+          <button class="secondary-btn" id="campaign-clean-noise-btn" type="button">Clean Obvious Package Noise</button>
+          <button class="secondary-btn" id="campaign-add-package-btn" type="button">Add Package</button>
+        </div>
       </div>
       <div class="campaign-packages">${renderCampaignPackageRows()}</div>
 
@@ -3782,6 +3924,7 @@ function renderCampaignResearchPanel() {
     state.triageOps.campaign.packages.push({ ecosystem: 'npm', package: '', version: '', publisher: '', behavior_notes: '' });
     renderTriageOps();
   });
+  el('campaign-clean-noise-btn')?.addEventListener('click', () => cleanCampaignPackageNoise());
   host.querySelectorAll('.campaign-remove-package-btn').forEach(btn => btn.addEventListener('click', () => {
     syncCampaignFormFromDom();
     const index = Number(btn.dataset.campaignRemovePackage || 0);
@@ -3875,6 +4018,16 @@ function renderCampaignResearchPanel() {
       body: { [kind]: value }
     });
   });
+  host.querySelectorAll('.campaign-watchlist-suggestion').forEach(btn => btn.addEventListener('click', () => {
+    syncCampaignDiscoveryFromDom();
+    const kind = btn.dataset.watchlistKind || 'package';
+    const value = btn.dataset.watchlistValue || '';
+    state.triageOps.campaignDiscovery.watchlistKind = kind;
+    state.triageOps.campaignDiscovery.watchlistValue = value;
+    if (el('campaign-watchlist-kind')) el('campaign-watchlist-kind').value = kind;
+    if (el('campaign-watchlist-value')) el('campaign-watchlist-value').value = value;
+    setStatus(`<span class="dot"></span> Watchlist suggestion selected: ${escapeHtml(statusLabel(kind))} ${escapeHtml(value)}. Click Add to Watchlist to save it.`);
+  }));
   el('campaign-autopilot-persist-btn')?.addEventListener('click', event => runCampaignDiscoveryAction('campaign-autopilot', {
     button: event.currentTarget,
     write: true,

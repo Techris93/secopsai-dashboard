@@ -4495,6 +4495,12 @@ label span,
   border-top: 1px solid var(--border);
 }
 
+.campaign-package-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .campaign-package-header h4,
 .campaign-result-host h4,
 .campaign-result-section h4 {
@@ -4518,6 +4524,32 @@ label span,
   background: rgba(240,253,250,0.62);
 }
 
+.campaign-package-row.campaign-package-noise {
+  border-color: rgba(245, 158, 11, 0.42);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.12), transparent 52%),
+    rgba(255, 251, 235, 0.72);
+}
+
+.campaign-noise-note,
+.campaign-noise-summary {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid rgba(245, 158, 11, 0.34);
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.11);
+  color: #92400e;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.campaign-noise-note {
+  grid-column: 1 / -1;
+}
+
 .campaign-package-notes textarea {
   min-height: 44px;
 }
@@ -4539,6 +4571,22 @@ label span,
   gap: 10px;
   align-items: center;
   margin-top: 12px;
+}
+
+.campaign-watchlist-suggestions {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(13, 148, 136, 0.16);
+  border-radius: 16px;
+  background: rgba(240, 253, 250, 0.62);
+}
+
+.campaign-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .campaign-candidate-list {

@@ -312,6 +312,8 @@ function testOperatorGuideUiIsPresent() {
   assert.match(html, /Run Daily Refresh/);
   assert.match(html, /Run Selected Alert Evidence Bundle/);
   assert.match(html, /Run Discovery Review/);
+  assert.match(html, /Clean Obvious Package Noise/);
+  assert.match(html, /generated watchlist suggestions/);
   assert.match(html, /Overview daily workflow/);
   assert.match(html, /Tasks daily workflow/);
   assert.match(html, /Findings daily workflow/);
@@ -326,11 +328,17 @@ function testOperatorGuideUiIsPresent() {
   assert.match(app, /runTriageOpsEvidenceBundle/);
   assert.match(app, /runGuideDiscoveryReview/);
   assert.match(app, /evidence-bundle/);
+  assert.match(app, /analyzeCampaignPackageNoise/);
+  assert.match(app, /cleanCampaignPackageNoise/);
+  assert.match(app, /campaignWatchlistSuggestions/);
+  assert.match(app, /campaign-watchlist-suggestion/);
   assert.match(css, /Operator guide/);
   assert.match(css, /\.guide-layout/);
   assert.match(css, /\.guide-step/);
   assert.match(css, /\.guide-toc/);
   assert.match(css, /\.guide-header-actions/);
+  assert.match(css, /\.campaign-package-noise/);
+  assert.match(css, /\.campaign-watchlist-suggestions/);
 }
 
 async function testWriteNeedsAdminToken() {
