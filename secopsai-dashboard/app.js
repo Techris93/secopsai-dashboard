@@ -120,6 +120,16 @@ const state = {
     verdictNotes: {},
     lastOutput: null,
     campaignFixtures: [],
+    campaignCandidates: [],
+    campaignDiscovery: {
+      since: '24h',
+      source: 'all',
+      limit: 10,
+      min_score: 35,
+      selectedCandidateId: '',
+      watchlistValue: '',
+      watchlistKind: 'package'
+    },
     campaign: defaultCampaignForm(),
     campaignResult: null,
     campaignLastOutput: null,
@@ -3341,6 +3351,160 @@ async function runCampaignEndpoint(action, { button = null, write = false, confi
   }
 }
 
+function syncCampaignDiscoveryFromDom() {
+  const discovery = state.triageOps.campaignDiscovery || {};
+  discovery.since = campaignInputValue('#campaign-discovery-since') || discovery.since || '24h';
+  discovery.source = campaignInputValue('#campaign-discovery-source') || discovery.source || 'all';
+  discovery.limit = Number(campaignInputValue('#campaign-discovery-limit') || discovery.limit || 10);
+  discovery.min_score = Number(campaignInputValue('#campaign-discovery-min-score') || discovery.min_score || 35);
+  discovery.watchlistKind = el('campaign-watchlist-kind')?.value || discovery.watchlistKind || 'package';
+  discovery.watchlistValue = campaignInputValue('#campaign-watchlist-value');
+  state.triageOps.campaignDiscovery = discovery;
+}
+
+function discoveryPayload({ persist = false, createDrafts = false } = {}) {
+  syncCampaignDiscoveryFromDom();
+  const discovery = state.triageOps.campaignDiscovery || {};
+  return {
+    since: discovery.since || '24h',
+    source: discovery.source || 'all',
+    limit: Math.max(1, Math.min(Number(discovery.limit || 10), 50)),
+    min_score: Math.max(0, Math.min(Number(discovery.min_score || 35), 100)),
+    search_root: campaignInputValue('#campaign-search-root-input'),
+    persist,
+    create_drafts: createDrafts
+  };
+}
+
+function selectedCampaignCandidate() {
+  const id = state.triageOps.campaignDiscovery?.selectedCandidateId || '';
+  return (state.triageOps.campaignCandidates || []).find(candidate => String(candidate.candidate_id || '') === id) || null;
+}
+
+function campaignDiscoveryCliFallback() {
+  const payload = discoveryPayload();
+  return [
+    'cd /Users/chrixchange/secopsai',
+    `python3 -m secopsai.cli supply-chain discover-campaigns --since ${payload.since} --source ${payload.source || 'all'} --limit ${payload.limit} --json`,
+    `python3 -m secopsai.cli supply-chain campaign-autopilot --since ${payload.since} --limit ${payload.limit} --min-score ${payload.min_score} --dry-run --json`,
+    'python3 -m secopsai.cli supply-chain campaign-watchlist add --package npm:package-name',
+    'python3 -m secopsai.cli supply-chain campaign-candidates list --json',
+    'python3 -m secopsai.cli supply-chain campaign-candidates promote <candidate-id> --json'
+  ].join('\n');
+}
+
+async function runCampaignDiscoveryAction(action, { button = null, write = false, confirmMessage = '', body = null } = {}) {
+  if (write && !state.triageOps.adminToken) {
+    const message = 'Paste your Triage Ops admin token, then click Use token before campaign discovery write actions.';
+    setStatus(message, true);
+    alert(message);
+    return;
+  }
+  if (confirmMessage && !confirm(confirmMessage)) return;
+  setButtonBusy(button, true, 'Running…');
+  try {
+    const payload = body || discoveryPayload();
+    const result = await fetchTriageOpsJson(action, {
+      write,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    state.triageOps.campaignLastOutput = { action, result, at: new Date().toISOString() };
+    if (Array.isArray(result.candidates)) {
+      state.triageOps.campaignCandidates = result.candidates;
+      if (!state.triageOps.campaignDiscovery.selectedCandidateId && result.candidates[0]) {
+        state.triageOps.campaignDiscovery.selectedCandidateId = result.candidates[0].candidate_id || '';
+      }
+    }
+    if (result.campaign) {
+      setCampaignFormFromPayload(result.campaign);
+    }
+    if (action === 'campaign-autopilot') {
+      state.triageOps.campaignResult = result.result || result;
+      if (payload.persist) {
+        await loadTriageOpsAlerts({ render: false });
+        await loadLocalTriageState();
+      }
+    }
+    if (action === 'campaign-blog-draft' || payload.create_drafts) {
+      await loadBlogOpsStatus({ render: false });
+    }
+    setStatus(`<span class="dot"></span> Campaign discovery ${escapeHtml(statusLabel(action))} completed`);
+    renderTriageOps();
+  } catch (error) {
+    const suffix = /not configured/i.test(error.message) ? ' Configure SECOPSAI_HELPER_BASE_URL or run the local helper.' : '';
+    state.triageOps.campaignLastOutput = { action, error: `${error.message}${suffix}`, at: new Date().toISOString() };
+    setStatus(`Campaign discovery ${action} failed: ${error.message}${suffix}`, true);
+    renderTriageOps();
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function renderCampaignCandidateList() {
+  const candidates = state.triageOps.campaignCandidates || [];
+  if (!candidates.length) {
+    return '<div class="empty-state">No campaign candidates loaded yet. Run Discovery or Autopilot Dry Run.</div>';
+  }
+  return `
+    <div class="campaign-candidate-list">
+      ${candidates.slice(0, 20).map(candidate => {
+        const campaign = candidate.campaign || {};
+        const packages = (campaign.packages || []).slice(0, 4).map(pkg => `${pkg.ecosystem}:${pkg.package}@${pkg.version || 'unknown'}`).join(', ');
+        const selected = String(candidate.candidate_id || '') === String(state.triageOps.campaignDiscovery?.selectedCandidateId || '');
+        return `
+          <button class="campaign-candidate-card ${selected ? 'selected' : ''}" data-campaign-candidate-id="${escapeHtml(candidate.candidate_id || '')}" type="button">
+            <span class="triage-row-top"><strong>${escapeHtml(campaign.title || candidate.candidate_id || 'Campaign candidate')}</strong><span class="triage-rec-pill needs_review">score ${escapeHtml(String(candidate.score ?? 0))}</span></span>
+            <span class="small">${escapeHtml(packages || 'No packages extracted yet')}</span>
+            <span class="small">${escapeHtml((candidate.score_reasons || []).slice(0, 3).join(', ') || 'No score reasons returned')}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderAutonomousDiscoveryPanel() {
+  const discovery = state.triageOps.campaignDiscovery || {};
+  const selected = selectedCampaignCandidate();
+  return `
+    <div class="campaign-discovery-box">
+      <div class="page-header compact-header">
+        <div>
+          <h4 style="margin:0;">Autonomous Discovery</h4>
+          <p class="small" style="margin:6px 0 0;">Monitor trusted sources and watchlists, extract campaign leads, then promote a candidate into Campaign Research for analyst review.</p>
+        </div>
+      </div>
+      <div class="campaign-form-grid">
+        <label><span class="small">Since</span><input id="campaign-discovery-since" value="${escapeHtml(discovery.since || '24h')}" placeholder="24h" /></label>
+        <label><span class="small">Source</span><input id="campaign-discovery-source" value="${escapeHtml(discovery.source || 'all')}" placeholder="all, Socket, CISA" /></label>
+        <label><span class="small">Limit</span><input id="campaign-discovery-limit" value="${escapeHtml(String(discovery.limit || 10))}" type="number" min="1" max="50" /></label>
+        <label><span class="small">Min score</span><input id="campaign-discovery-min-score" value="${escapeHtml(String(discovery.min_score || 35))}" type="number" min="0" max="100" /></label>
+      </div>
+      <div class="campaign-actions">
+        <button class="primary-btn" id="campaign-discover-btn" type="button">Run Discovery</button>
+        <button class="secondary-btn" id="campaign-autopilot-dry-run-btn" type="button">Run Autopilot Dry Run</button>
+        <button class="secondary-btn" id="campaign-review-candidates-btn" type="button">Review Candidates</button>
+        <button class="secondary-btn" id="campaign-promote-btn" type="button" ${selected ? '' : 'disabled'}>Promote to Campaign Research</button>
+        <button class="mini-btn" id="campaign-autopilot-persist-btn" type="button">Persist Findings</button>
+        <button class="primary-btn" id="campaign-autopilot-draft-btn" type="button">Create Review-Only Blog Draft</button>
+        <button class="mini-btn" id="campaign-discovery-copy-cli-btn" type="button">Copy CLI Fallback</button>
+      </div>
+      <div class="campaign-watchlist-row">
+        <select id="campaign-watchlist-kind">
+          <option value="package" ${discovery.watchlistKind === 'package' ? 'selected' : ''}>Package</option>
+          <option value="publisher" ${discovery.watchlistKind === 'publisher' ? 'selected' : ''}>Publisher</option>
+          <option value="ioc" ${discovery.watchlistKind === 'ioc' ? 'selected' : ''}>IOC</option>
+          <option value="source_url" ${discovery.watchlistKind === 'source_url' ? 'selected' : ''}>Source URL</option>
+        </select>
+        <input id="campaign-watchlist-value" value="${escapeHtml(discovery.watchlistValue || '')}" placeholder="npm:node-ipc, deadcode09284814, c2.example" />
+        <button class="secondary-btn" id="campaign-watchlist-add-btn" type="button">Add to Watchlist</button>
+      </div>
+      ${renderCampaignCandidateList()}
+    </div>
+  `;
+}
+
 function renderCampaignListInputs(name, label, placeholder) {
   return `
     <div class="campaign-list-field">
@@ -3483,6 +3647,8 @@ function renderCampaignResearchPanel() {
         ${campaign.jsonError ? `<p class="form-error">${escapeHtml(campaign.jsonError)}</p>` : ''}
       </div>
 
+      ${renderAutonomousDiscoveryPanel()}
+
       <div class="campaign-actions">
         <button class="primary-btn" id="campaign-run-btn" type="button">Run Campaign Research</button>
         <button class="secondary-btn" id="campaign-correlate-btn" type="button">Correlate Campaign</button>
@@ -3568,6 +3734,70 @@ function renderCampaignResearchPanel() {
     confirmMessage: 'Create a review-only campaign blog draft? This will not publish it.'
   }));
   el('campaign-copy-cli-btn')?.addEventListener('click', () => copyTextWithStatus(campaignCliFallback(), 'Campaign Research CLI fallback copied'));
+  host.querySelectorAll('[data-campaign-candidate-id]').forEach(btn => btn.addEventListener('click', () => {
+    state.triageOps.campaignDiscovery.selectedCandidateId = btn.dataset.campaignCandidateId || '';
+    renderTriageOps();
+  }));
+  ['campaign-discovery-since', 'campaign-discovery-source', 'campaign-discovery-limit', 'campaign-discovery-min-score', 'campaign-watchlist-kind', 'campaign-watchlist-value'].forEach(id => {
+    el(id)?.addEventListener('input', syncCampaignDiscoveryFromDom);
+    el(id)?.addEventListener('change', syncCampaignDiscoveryFromDom);
+  });
+  el('campaign-discover-btn')?.addEventListener('click', event => runCampaignDiscoveryAction('campaign-discover', { button: event.currentTarget }));
+  el('campaign-autopilot-dry-run-btn')?.addEventListener('click', event => runCampaignDiscoveryAction('campaign-autopilot', { button: event.currentTarget }));
+  el('campaign-review-candidates-btn')?.addEventListener('click', async event => {
+    setButtonBusy(event.currentTarget, true, 'Loading…');
+    try {
+      const payload = await fetchTriageOpsJson('campaign-candidates');
+      state.triageOps.campaignCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+      if (!state.triageOps.campaignDiscovery.selectedCandidateId && state.triageOps.campaignCandidates[0]) {
+        state.triageOps.campaignDiscovery.selectedCandidateId = state.triageOps.campaignCandidates[0].candidate_id || '';
+      }
+      setStatus('<span class="dot"></span> Campaign candidates loaded');
+      renderTriageOps();
+    } catch (error) {
+      setStatus(`Campaign candidates failed: ${error.message}`, true);
+    } finally {
+      setButtonBusy(event.currentTarget, false);
+    }
+  });
+  el('campaign-promote-btn')?.addEventListener('click', event => {
+    const selected = selectedCampaignCandidate();
+    if (!selected) {
+      setStatus('Select a campaign candidate first.', true);
+      return;
+    }
+    runCampaignDiscoveryAction('campaign-promote', {
+      button: event.currentTarget,
+      body: { candidate_id: selected.candidate_id }
+    });
+  });
+  el('campaign-watchlist-add-btn')?.addEventListener('click', event => {
+    syncCampaignDiscoveryFromDom();
+    const kind = state.triageOps.campaignDiscovery.watchlistKind || 'package';
+    const value = state.triageOps.campaignDiscovery.watchlistValue || '';
+    if (!value.trim()) {
+      setStatus('Enter a package, publisher, IOC, or source URL before adding to the watchlist.', true);
+      return;
+    }
+    runCampaignDiscoveryAction('campaign-watchlist', {
+      button: event.currentTarget,
+      write: true,
+      body: { [kind]: value }
+    });
+  });
+  el('campaign-autopilot-persist-btn')?.addEventListener('click', event => runCampaignDiscoveryAction('campaign-autopilot', {
+    button: event.currentTarget,
+    write: true,
+    confirmMessage: 'Persist findings for high-scoring discovery candidates into the SOC store?',
+    body: discoveryPayload({ persist: true })
+  }));
+  el('campaign-autopilot-draft-btn')?.addEventListener('click', event => runCampaignDiscoveryAction('campaign-autopilot', {
+    button: event.currentTarget,
+    write: true,
+    confirmMessage: 'Persist high-scoring candidates and create review-only campaign blog drafts? Nothing will be published.',
+    body: discoveryPayload({ persist: true, createDrafts: true })
+  }));
+  el('campaign-discovery-copy-cli-btn')?.addEventListener('click', () => copyTextWithStatus(campaignDiscoveryCliFallback(), 'Campaign discovery CLI fallback copied'));
 }
 
 function triageOpsCliCommands(alert) {

@@ -151,11 +151,60 @@ async function testCampaignResearchIsReadOnlyProxy() {
   }
 }
 
+async function testCampaignDiscoveryIsReadOnlyProxy() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ ok: true, candidates: [{ candidate_id: "unit-campaign" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/triage-ops/campaign-discover", {
+        method: "POST",
+        body: JSON.stringify({ since: "24h", limit: 10 }),
+      }),
+      {
+        SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+        TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
+      },
+    );
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.candidates[0].candidate_id, "unit-campaign");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://helper.example/api/secopsai/triage-ops/campaign-discover");
+    assert.equal(calls[0].init.headers.has("X-Triage-Ops-Admin-Token"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testCampaignWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/secopsai/triage-ops/campaign-persist-findings", {
       method: "POST",
       body: JSON.stringify({ campaign: { packages: [{ ecosystem: "npm", package: "chalk-tempalte", version: "0.0.1" }] } }),
+    }),
+    {
+      SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+      TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
+    },
+  );
+  assert.equal(response.status, 401);
+  const payload = await jsonFrom(response);
+  assert.match(payload.error, /Unauthorized/);
+  assert.equal(JSON.stringify(payload).includes("triage-admin"), false);
+}
+
+async function testCampaignWatchlistNeedsAdminToken() {
+  const response = await worker.fetch(
+    new Request("https://dashboard.example/api/secopsai/triage-ops/campaign-watchlist", {
+      method: "POST",
+      body: JSON.stringify({ package: "npm:chalk-tempalte" }),
     }),
     {
       SECOPSAI_HELPER_BASE_URL: "https://helper.example",
@@ -176,8 +225,14 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /Import Campaign JSON/);
   assert.match(app, /Persist Findings/);
   assert.match(app, /Create Campaign Blog Draft/);
+  assert.match(app, /Autonomous Discovery/);
+  assert.match(app, /Run Discovery/);
+  assert.match(app, /Run Autopilot Dry Run/);
+  assert.match(app, /Promote to Campaign Research/);
   assert.match(app, /campaign-persist-findings/);
   assert.match(app, /campaign-blog-draft/);
+  assert.match(app, /campaign-discover/);
+  assert.match(app, /campaign-autopilot/);
 }
 
 async function testWriteNeedsAdminToken() {
@@ -312,7 +367,9 @@ await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
 await testCampaignResearchIsReadOnlyProxy();
+await testCampaignDiscoveryIsReadOnlyProxy();
 await testCampaignWriteNeedsAdminToken();
+await testCampaignWatchlistNeedsAdminToken();
 testCampaignResearchUiIsPresent();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();

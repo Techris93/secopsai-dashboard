@@ -102,6 +102,26 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('--search-root', args)
         self.assertNotIn(';', ' '.join(args))
 
+    def test_campaign_discovery_args_are_allowlisted(self):
+        args = server.build_campaign_discover_args({'since': '24h', 'source': 'Socket', 'limit': 12})
+        self.assertEqual(args[:3], ['supply-chain', 'discover-campaigns', '--since'])
+        self.assertIn('Socket', args)
+        self.assertNotIn(';', ' '.join(args))
+
+    def test_campaign_autopilot_args_protect_persist_mode(self):
+        args, needs_admin = server.build_campaign_autopilot_args({'since': '24h', 'limit': 5, 'persist': True, 'create_drafts': True})
+        self.assertTrue(needs_admin)
+        self.assertIn('--persist', args)
+        self.assertIn('--create-drafts', args)
+        self.assertNotIn(';', ' '.join(args))
+
+    def test_campaign_watchlist_args_validate_source_url(self):
+        args = server.build_campaign_watchlist_args({'package': 'npm:chalk-tempalte'})
+        self.assertEqual(args[:3], ['supply-chain', 'campaign-watchlist', 'add'])
+        self.assertIn('--package', args)
+        with self.assertRaises(ValueError):
+            server.build_campaign_watchlist_args({'source_url': 'javascript:alert(1)'})
+
     def test_campaign_fixture_loads_without_temp_paths(self):
         fixtures = server.campaign_fixture_payloads()
         self.assertTrue(fixtures)

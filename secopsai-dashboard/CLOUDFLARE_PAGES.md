@@ -172,10 +172,23 @@ Supported flow:
 6. Click **Persist Findings** only when you are ready to write SOC findings. This requires `TRIAGE_OPS_ADMIN_TOKEN` or `BLOG_OPS_ADMIN_TOKEN` and confirmation.
 7. Click **Create Campaign Blog Draft** to create a review-only campaign draft. Publishing still happens later in Blog Ops and remains approval-gated.
 
+The same card includes **Autonomous Discovery** for source/watchlist-driven intake:
+
+1. Set `Since`, `Source`, `Limit`, and `Min score`.
+2. Click **Run Discovery** to fetch trusted source feeds and score campaign leads.
+3. Select a candidate and click **Promote to Campaign Research** to inspect/edit it.
+4. Click **Run Autopilot Dry Run** to research high-scoring candidates without writing findings.
+5. Add package, publisher, IOC, or source URL watchlist entries with **Add to Watchlist**. This is protected by the admin token.
+6. Use **Persist Findings** or **Create Review-Only Blog Draft** only after review; both are protected and never publish posts.
+
 CLI fallback:
 
 ```bash
 cd /Users/chrixchange/secopsai
+python3 -m secopsai.cli supply-chain discover-campaigns --since 24h --limit 10 --json
+python3 -m secopsai.cli supply-chain campaign-autopilot --since 24h --dry-run --json
+python3 -m secopsai.cli supply-chain campaign-watchlist add --package npm:node-ipc
+python3 -m secopsai.cli supply-chain campaign-candidates list --json
 python3 -m secopsai.cli supply-chain research-campaign --input campaign.json --dry-run --json
 python3 -m secopsai.cli supply-chain research-campaign --input campaign.json --persist --search-root /Users/chrixchange/secopsai
 python3 -m secopsai.cli blog draft-campaign --campaign campaign.json

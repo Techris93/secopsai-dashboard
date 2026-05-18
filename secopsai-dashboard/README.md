@@ -68,6 +68,8 @@ The **Run Evidence Verdict** action is read-only. It scores package-level malici
 
 The **Campaign Research** panel is also read-only by default. Use it when several packages, IOCs, publishers, or source reports belong to the same supply-chain campaign. Paste/import campaign JSON or build the campaign in the form, click **Run Campaign Research**, then review the campaign verdict, package verdicts, local environment impact, correlations, IOCs, mitigation, and references. **Persist Findings** and **Create Campaign Blog Draft** are separate protected actions that require the admin token and confirmation. Campaign blog drafts are created as review-only drafts and are never published automatically.
 
+The same panel now includes **Autonomous Discovery** for low-friction campaign intake. Click **Run Discovery** to poll trusted SecOpsAI news/source registries and cached source metadata, extract supply-chain campaign candidates, and show scored leads. Click **Run Autopilot Dry Run** to research high-scoring candidates without writing findings. Use **Promote to Campaign Research** to load a candidate into the editable campaign form. **Add to Watchlist**, **Persist Findings**, and **Create Review-Only Blog Draft** are protected actions and require the Triage Ops admin token.
+
 ### Blog Ops
 - GitHub Actions-backed security-blog news ingestion
 - review queue for generated external-news drafts

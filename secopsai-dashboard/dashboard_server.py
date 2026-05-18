@@ -27,6 +27,7 @@ ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
     'create-blog-draft',
     'campaign-persist-findings',
     'campaign-blog-draft',
+    'campaign-watchlist',
 }
 ALLOWED_CAMPAIGN_ECOSYSTEMS = {
     'npm',
@@ -630,6 +631,79 @@ def build_campaign_research_args(input_path, *, persist=False, search_root=''):
 
 def build_campaign_blog_args(input_path):
     return ['blog', 'draft-campaign', '--campaign', str(input_path)]
+
+
+def validate_duration(value, default='24h'):
+    raw = _clean_string(value or default, 40)
+    if not re.match(r'^\d{1,4}[smhd]?$', raw):
+        raise ValueError('Invalid duration; use values like 24h, 2h, or 7d')
+    return raw
+
+
+def validate_bounded_int(value, default=10, lower=1, upper=100):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(lower, min(parsed, upper))
+
+
+def validate_source_filter(value):
+    raw = _clean_string(value or 'all', 120)
+    if not re.match(r'^[A-Za-z0-9 ._:/-]{1,120}$', raw):
+        raise ValueError('Invalid source filter')
+    return raw
+
+
+def build_campaign_discover_args(payload):
+    since = validate_duration(payload.get('since') or '24h')
+    source = validate_source_filter(payload.get('source') or 'all')
+    limit = validate_bounded_int(payload.get('limit'), default=10, lower=1, upper=50)
+    return ['supply-chain', 'discover-campaigns', '--since', since, '--source', source, '--limit', str(limit)]
+
+
+def build_campaign_autopilot_args(payload):
+    since = validate_duration(payload.get('since') or '24h')
+    limit = validate_bounded_int(payload.get('limit'), default=10, lower=1, upper=50)
+    min_score = validate_bounded_int(payload.get('min_score'), default=35, lower=0, upper=100)
+    persist = bool(payload.get('persist'))
+    create_drafts = bool(payload.get('create_drafts'))
+    args = [
+        'supply-chain',
+        'campaign-autopilot',
+        '--since',
+        since,
+        '--limit',
+        str(limit),
+        '--min-score',
+        str(min_score),
+    ]
+    if persist:
+        args.append('--persist')
+    else:
+        args.append('--dry-run')
+    if create_drafts:
+        args.append('--create-drafts')
+    search_root = validate_campaign_search_root(payload.get('search_root') or '')
+    if search_root:
+        args.extend(['--search-root', search_root])
+    return args, persist or create_drafts
+
+
+def build_campaign_watchlist_args(payload):
+    args = ['supply-chain', 'campaign-watchlist', 'add']
+    added = False
+    for key in ('package', 'publisher', 'ioc', 'source_url'):
+        value = _clean_string(payload.get(key), 500)
+        if not value:
+            continue
+        if key == 'source_url' and not SAFE_SOURCE_URL_RE.match(value):
+            raise ValueError('Invalid source_url')
+        args.extend([f'--{key.replace("_", "-")}', value])
+        added = True
+    if not added:
+        raise ValueError('Add a package, publisher, IOC, or source URL')
+    return args
 
 
 def run_campaign_with_tempfile(campaign, args_builder, timeout=240, json_output=True):
@@ -1367,6 +1441,22 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/secopsai/triage-ops/campaign-candidates':
+            try:
+                result, parsed_result = run_cli_json(['supply-chain', 'campaign-candidates', 'list'], timeout=60)
+                return json_response(
+                    self,
+                    200 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'candidates': (parsed_result or {}).get('candidates', []),
+                        'result': parsed_result,
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
         if parsed.path == '/api/secopsai/sessions':
             try:
                 qs = urllib.parse.parse_qs(parsed.query or '')
@@ -1472,6 +1562,68 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if require_triage_ops_admin(self):
                     return
             try:
+                if action == 'campaign-discover':
+                    result, parsed_result = run_cli_json(build_campaign_discover_args(payload), timeout=180)
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {
+                            'ok': result['ok'],
+                            'action': action,
+                            'result': parsed_result,
+                            'candidates': (parsed_result or {}).get('candidates', []),
+                            'cli': compact_cli_result(result),
+                        },
+                    )
+
+                if action == 'campaign-autopilot':
+                    args, needs_admin = build_campaign_autopilot_args(payload)
+                    if needs_admin and require_triage_ops_admin(self):
+                        return
+                    result, parsed_result = run_cli_json(args, timeout=300 if needs_admin else 220)
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {
+                            'ok': result['ok'],
+                            'action': action,
+                            'result': parsed_result,
+                            'candidates': ((parsed_result or {}).get('discovery') or {}).get('candidates', []),
+                            'cli': compact_cli_result(result),
+                        },
+                    )
+
+                if action == 'campaign-promote':
+                    candidate_id = _clean_string(payload.get('candidate_id'), 180)
+                    if not candidate_id or not CAMPAIGN_ID_RE.match(candidate_id):
+                        raise ValueError('Invalid candidate_id')
+                    result, parsed_result = run_cli_json(['supply-chain', 'campaign-candidates', 'promote', candidate_id], timeout=60)
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {
+                            'ok': result['ok'],
+                            'action': action,
+                            'result': parsed_result,
+                            'campaign': (parsed_result or {}).get('campaign'),
+                            'candidate': (parsed_result or {}).get('candidate'),
+                            'cli': compact_cli_result(result),
+                        },
+                    )
+
+                if action == 'campaign-watchlist':
+                    result, parsed_result = run_cli_json(build_campaign_watchlist_args(payload), timeout=90)
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {
+                            'ok': result['ok'],
+                            'action': action,
+                            'result': parsed_result,
+                            'cli': compact_cli_result(result),
+                        },
+                    )
+
                 if action in {'research-campaign', 'campaign-persist-findings'}:
                     campaign = validate_campaign_payload(payload)
                     search_root = validate_campaign_search_root(payload.get('search_root') or '')

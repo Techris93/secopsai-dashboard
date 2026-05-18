@@ -3471,6 +3471,7 @@ label span,
 
 .campaign-list-field,
 .campaign-json-box,
+.campaign-discovery-box,
 .campaign-result-section {
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -3528,6 +3529,47 @@ label span,
 
 .campaign-json-box {
   margin-top: 14px;
+}
+
+.campaign-discovery-box {
+  margin-top: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.11), transparent 32%),
+    rgba(255,255,255,0.82);
+}
+
+.campaign-watchlist-row {
+  display: grid;
+  grid-template-columns: 160px minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.campaign-candidate-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.campaign-candidate-card {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  border: 1px solid rgba(13, 148, 136, 0.18);
+  border-radius: 15px;
+  background: rgba(240, 253, 250, 0.7);
+  color: var(--text);
+  padding: 11px 12px;
+  cursor: pointer;
+}
+
+.campaign-candidate-card.selected,
+.campaign-candidate-card:focus-visible {
+  outline: 2px solid rgba(13, 148, 136, 0.35);
+  border-color: rgba(13, 148, 136, 0.58);
+  background: rgba(204, 251, 241, 0.82);
 }
 
 .campaign-json-box textarea {
@@ -3979,7 +4021,8 @@ label span,
   .campaign-form-grid,
   .campaign-list-grid,
   .campaign-result-grid,
-  .campaign-result-columns {
+  .campaign-result-columns,
+  .campaign-watchlist-row {
     grid-template-columns: 1fr;
   }
 
