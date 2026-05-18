@@ -183,7 +183,7 @@ function requireTriageOpsAdmin(request, env) {
 function isTriageOpsWriteRoute(request, pathname) {
   if (request.method.toUpperCase() !== "POST") return false;
   const action = pathname.split("/").filter(Boolean).pop() || "";
-  return ["close", "escalate", "create-blog-draft"].includes(action);
+  return ["close", "escalate", "create-blog-draft", "campaign-persist-findings", "campaign-blog-draft"].includes(action);
 }
 
 function blogOpsNotConfigured(env) {

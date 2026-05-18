@@ -3,6 +3,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import urllib.parse
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -20,10 +21,35 @@ ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
 APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
 ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive'}
-ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {'close', 'escalate', 'create-blog-draft'}
-ECOSYSTEM_RE = re.compile(r'^(pypi|npm)$', re.IGNORECASE)
-PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._/-]{1,220}$')
+ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
+    'close',
+    'escalate',
+    'create-blog-draft',
+    'campaign-persist-findings',
+    'campaign-blog-draft',
+}
+ALLOWED_CAMPAIGN_ECOSYSTEMS = {
+    'npm',
+    'pypi',
+    'crates',
+    'chrome-web-store',
+    'packagist',
+    'go',
+    'huggingface',
+    'maven',
+    'nuget',
+    'open-vsx',
+    'rubygems',
+}
+ECOSYSTEM_RE = re.compile(r'^(npm|pypi|crates|chrome-web-store|packagist|go|huggingface|maven|nuget|open-vsx|rubygems)$', re.IGNORECASE)
+CAMPAIGN_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,140}$')
+PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._:/-]{1,260}$')
 VERSION_RE = re.compile(r'^[A-Za-z0-9.+:_~!*-]{1,160}$')
+SAFE_SOURCE_URL_RE = re.compile(r'^https?://[^\s<>"\']{3,500}$', re.IGNORECASE)
+SECRETISH_RE = re.compile(r'(?i)\b([a-z0-9_ -]*(?:token|secret|api[_ -]?key|password|authorization)[a-z0-9_ -]*)\s*[:=]\s*([^\s,"\']{8,})')
+CAMPAIGN_FIXTURE_PATHS = [
+    SECOPSAI_ROOT / 'tests' / 'fixtures' / 'deadcode09284814-campaign.json',
+]
 KNOWN_COMPROMISED_VERSIONS = {
     ('pypi', 'litellm'): {'1.82.7', '1.82.8'},
     ('pypi', 'mistralai'): {'2.4.6'},
@@ -455,6 +481,190 @@ def run_cli_json(args, timeout=120):
     result = run_secopsai_cli([*args, '--json'], timeout=timeout)
     parsed = parse_cli_json(result)
     return result, parsed
+
+
+def redact_secretish_text(value):
+    text = str(value or '')
+    return SECRETISH_RE.sub(lambda match: f'{match.group(1)}: [redacted]', text)
+
+
+def compact_cli_result(result, limit=12000):
+    return {
+        'ok': bool((result or {}).get('ok')),
+        'returncode': int((result or {}).get('returncode') or 0),
+        'stdout': redact_secretish_text((result or {}).get('stdout', ''))[:limit],
+        'stderr': redact_secretish_text((result or {}).get('stderr', ''))[:limit],
+        'truncated': len(str((result or {}).get('stdout', ''))) > limit or len(str((result or {}).get('stderr', ''))) > limit,
+    }
+
+
+def _clean_string(value, limit=500):
+    return ' '.join(str(value or '').split())[:limit]
+
+
+def _clean_string_list(values, limit=80, item_limit=500):
+    if isinstance(values, str):
+        values = [values]
+    if isinstance(values, dict):
+        flattened = []
+        for item in values.values():
+            if isinstance(item, list):
+                flattened.extend(item)
+            elif item:
+                flattened.append(item)
+        values = flattened
+    if not isinstance(values, list):
+        return []
+    cleaned = []
+    for value in values[:limit]:
+        item = _clean_string(value, item_limit)
+        if item:
+            cleaned.append(item)
+    return cleaned
+
+
+def _clean_iocs(value):
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, values in value.items():
+            safe_key = re.sub(r'[^a-z0-9_ -]', '', str(key or '').lower()).strip().replace(' ', '_')[:80]
+            if safe_key:
+                cleaned[safe_key] = _clean_string_list(values if isinstance(values, list) else [values], limit=60, item_limit=240)
+        return {key: values for key, values in cleaned.items() if values}
+    items = _clean_string_list(value, limit=100, item_limit=240)
+    return {'operator_supplied': items} if items else {}
+
+
+def _is_empty_campaign_value(value):
+    return value == '' or value == [] or value == {}
+
+
+def validate_campaign_payload(payload):
+    if not isinstance(payload, dict):
+        raise ValueError('Campaign payload must be a JSON object')
+    campaign = payload.get('campaign') if isinstance(payload.get('campaign'), dict) else payload
+    campaign_id = _clean_string(campaign.get('campaign_id'), 140)
+    if campaign_id and not CAMPAIGN_ID_RE.match(campaign_id):
+        raise ValueError('Invalid campaign_id')
+    packages = campaign.get('packages') or []
+    if not isinstance(packages, list):
+        raise ValueError('Campaign packages must be an array')
+    if len(packages) > 50:
+        raise ValueError('Campaign package limit is 50')
+
+    normalized_packages = []
+    for row in packages:
+        if not isinstance(row, dict):
+            raise ValueError('Each campaign package must be an object')
+        ecosystem = _clean_string(row.get('ecosystem'), 80).lower()
+        package = _clean_string(row.get('package') or row.get('artifact') or row.get('id'), 260)
+        version = _clean_string(row.get('version') or row.get('revision') or '', 160)
+        if not ecosystem or ecosystem not in ALLOWED_CAMPAIGN_ECOSYSTEMS:
+            raise ValueError(f'Unsupported ecosystem: {ecosystem or "missing"}')
+        if not package or not PACKAGE_RE.match(package):
+            raise ValueError(f'Invalid package for {ecosystem}')
+        if version and not VERSION_RE.match(version):
+            raise ValueError(f'Invalid version for {package}')
+        normalized = {
+            'ecosystem': ecosystem,
+            'package': package,
+            'version': version,
+            'publisher': _clean_string(row.get('publisher') or row.get('maintainer'), 180),
+            'behavioral_indicators': _clean_string_list(row.get('behavioral_indicators') or row.get('behavior_notes'), limit=40),
+        }
+        files = row.get('files')
+        if isinstance(files, dict):
+            normalized['files'] = {
+                _clean_string(name, 180): str(content or '')[:50000]
+                for name, content in list(files.items())[:20]
+                if _clean_string(name, 180)
+            }
+        normalized_packages.append({key: value for key, value in normalized.items() if not _is_empty_campaign_value(value)})
+
+    source_urls = _clean_string_list(campaign.get('source_urls') or campaign.get('source_url'), limit=40)
+    for url in source_urls:
+        if not SAFE_SOURCE_URL_RE.match(url):
+            raise ValueError(f'Invalid source URL: {url[:80]}')
+
+    normalized = {
+        'campaign_id': campaign_id,
+        'title': _clean_string(campaign.get('title') or campaign_id or 'Supply-chain campaign research', 240),
+        'summary': _clean_string(campaign.get('summary'), 1200),
+        'severity': _clean_string(campaign.get('severity') or 'high', 40).lower(),
+        'confidence': _clean_string(campaign.get('confidence') or 'medium', 40).lower(),
+        'source_names': _clean_string_list(campaign.get('source_names'), limit=40),
+        'source_urls': source_urls,
+        'actors': _clean_string_list(campaign.get('actors'), limit=40),
+        'publishers': _clean_string_list(campaign.get('publishers'), limit=40),
+        'iocs': _clean_iocs(campaign.get('iocs')),
+        'behavioral_indicators': _clean_string_list(campaign.get('behavioral_indicators'), limit=100),
+        'packages': normalized_packages,
+    }
+    if not normalized['packages']:
+        raise ValueError('Add at least one campaign package before running research')
+    return {key: value for key, value in normalized.items() if not _is_empty_campaign_value(value)}
+
+
+def validate_campaign_search_root(value):
+    raw = _clean_string(value, 600)
+    if not raw:
+        return ''
+    target = Path(raw).expanduser().resolve()
+    if not target.exists() or not target.is_dir():
+        raise ValueError('search_root must be an existing directory')
+    if str(target) == '/':
+        raise ValueError('search_root cannot be filesystem root')
+    return str(target)
+
+
+def build_campaign_research_args(input_path, *, persist=False, search_root=''):
+    args = ['supply-chain', 'research-campaign', '--input', str(input_path)]
+    if persist:
+        args.append('--persist')
+    else:
+        args.append('--dry-run')
+    if search_root:
+        args.extend(['--search-root', search_root])
+    return args
+
+
+def build_campaign_blog_args(input_path):
+    return ['blog', 'draft-campaign', '--campaign', str(input_path)]
+
+
+def run_campaign_with_tempfile(campaign, args_builder, timeout=240, json_output=True):
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.json', prefix='secopsai-campaign-', delete=False) as handle:
+            json.dump(campaign, handle, ensure_ascii=False, indent=2)
+            temp_path = Path(handle.name)
+        if json_output:
+            result, parsed = run_cli_json(args_builder(temp_path), timeout=timeout)
+        else:
+            result = run_secopsai_cli(args_builder(temp_path), timeout=timeout)
+            parsed = parse_cli_json(result)
+        return result, parsed
+    finally:
+        if temp_path:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+def campaign_fixture_payloads():
+    fixtures = []
+    for path in CAMPAIGN_FIXTURE_PATHS:
+        payload = read_json_file(path, None)
+        if isinstance(payload, dict):
+            fixtures.append(
+                {
+                    'id': payload.get('campaign_id') or path.stem,
+                    'title': payload.get('title') or payload.get('campaign_id') or path.stem,
+                    'campaign': validate_campaign_payload(payload),
+                }
+            )
+    return fixtures
 
 
 def triage_findings_by_status(status, limit=100):
@@ -1143,6 +1353,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/secopsai/triage-ops/campaign-fixtures':
+            try:
+                return json_response(
+                    self,
+                    200,
+                    {
+                        'ok': True,
+                        'fixtures': campaign_fixture_payloads(),
+                        'ecosystems': sorted(ALLOWED_CAMPAIGN_ECOSYSTEMS),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
         if parsed.path == '/api/secopsai/sessions':
             try:
                 qs = urllib.parse.parse_qs(parsed.query or '')
@@ -1248,6 +1472,47 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if require_triage_ops_admin(self):
                     return
             try:
+                if action in {'research-campaign', 'campaign-persist-findings'}:
+                    campaign = validate_campaign_payload(payload)
+                    search_root = validate_campaign_search_root(payload.get('search_root') or '')
+                    persist = action == 'campaign-persist-findings'
+                    result, parsed_result = run_campaign_with_tempfile(
+                        campaign,
+                        lambda path: build_campaign_research_args(path, persist=persist, search_root=search_root),
+                        timeout=300 if persist else 240,
+                    )
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {
+                            'ok': result['ok'],
+                            'action': action,
+                            'campaign_id': campaign.get('campaign_id'),
+                            'result': parsed_result,
+                            'cli': compact_cli_result(result),
+                        },
+                    )
+
+                if action == 'campaign-blog-draft':
+                    campaign = validate_campaign_payload(payload)
+                    result, parsed_result = run_campaign_with_tempfile(
+                        campaign,
+                        build_campaign_blog_args,
+                        timeout=180,
+                        json_output=False,
+                    )
+                    return json_response(
+                        self,
+                        200 if result['ok'] else 500,
+                        {
+                            'ok': result['ok'],
+                            'action': action,
+                            'campaign_id': campaign.get('campaign_id'),
+                            'result': parsed_result,
+                            'cli': compact_cli_result(result),
+                        },
+                    )
+
                 finding_id, ecosystem, package, version = validate_triage_ops_target(payload)
                 finding = get_triage_ops_finding(finding_id) if finding_id else None
                 if action not in {'refresh-evidence'} and not finding:

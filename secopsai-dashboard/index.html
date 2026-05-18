@@ -288,10 +288,12 @@
 
         <div class="card triage-ops-filters" style="margin-top:18px;">
           <label><span class="small">Status</span><select id="triage-ops-filter-status"><option value="all">All</option><option value="open">Open</option><option value="in_review">In review</option></select></label>
-          <label><span class="small">Ecosystem</span><select id="triage-ops-filter-ecosystem"><option value="all">All</option><option value="pypi">PyPI</option><option value="npm">npm</option></select></label>
+          <label><span class="small">Ecosystem</span><select id="triage-ops-filter-ecosystem"><option value="all">All</option><option value="pypi">PyPI</option><option value="npm">npm</option><option value="crates">crates.io</option><option value="chrome-web-store">Chrome Web Store</option><option value="packagist">Packagist</option><option value="go">Go Modules</option><option value="huggingface">Hugging Face</option><option value="maven">Maven</option><option value="nuget">NuGet</option><option value="open-vsx">Open VSX</option><option value="rubygems">RubyGems</option></select></label>
           <label><span class="small">Severity</span><select id="triage-ops-filter-severity"><option value="all">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option></select></label>
           <label><span class="small">Package/version search</span><input id="triage-ops-filter-search" type="text" placeholder="litellm, 1.84.0, SCM-..." /></label>
         </div>
+
+        <div id="triage-ops-campaign-research" style="margin-top:18px;"></div>
 
         <div class="grid cols-2 triage-ops-layout" style="margin-top:18px;">
           <div class="card">

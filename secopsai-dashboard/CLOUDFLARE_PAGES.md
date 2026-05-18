@@ -158,6 +158,31 @@ That distinction matters for advisory-backed ecosystem threats. For example, `mi
 
 If `SECOPSAI_HELPER_BASE_URL` is missing, hosted mode returns a clear not-configured response and the UI shows copyable CLI fallbacks.
 
+### Campaign Research From Triage Ops
+
+Triage Ops also includes a **Campaign Research** panel for cross-ecosystem supply-chain campaigns. It is designed for incidents where multiple packages, publishers, IOCs, C2 domains, or source reports should be correlated before creating SOC findings or blog drafts.
+
+Supported flow:
+
+1. Open **Triage Ops**.
+2. Scroll to **Campaign Research**.
+3. Paste/import campaign JSON, load the `deadcode09284814` fixture, or build a campaign by clicking **Add Package**, **Add IOC**, and **Add Source URL**.
+4. Click **Run Campaign Research**. This is read-only and maps to `secopsai supply-chain research-campaign --dry-run --json`.
+5. Review the campaign verdict, package-level verdicts, environment impact, correlations, IOCs, mitigation guidance, and references.
+6. Click **Persist Findings** only when you are ready to write SOC findings. This requires `TRIAGE_OPS_ADMIN_TOKEN` or `BLOG_OPS_ADMIN_TOKEN` and confirmation.
+7. Click **Create Campaign Blog Draft** to create a review-only campaign draft. Publishing still happens later in Blog Ops and remains approval-gated.
+
+CLI fallback:
+
+```bash
+cd /Users/chrixchange/secopsai
+python3 -m secopsai.cli supply-chain research-campaign --input campaign.json --dry-run --json
+python3 -m secopsai.cli supply-chain research-campaign --input campaign.json --persist --search-root /Users/chrixchange/secopsai
+python3 -m secopsai.cli blog draft-campaign --campaign campaign.json
+```
+
+The dashboard never sends shell strings to the helper. The local helper writes campaign JSON to a temporary file, invokes allowlisted SecOpsAI CLI argument arrays, truncates output, redacts secret-like text, and deletes the temporary file before returning a response.
+
 ## R2 key format
 
 The dashboard asks `/api/run-output` for a path relative to the OpenClaw workspace root.

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import worker from "../_worker.js";
 
 async function jsonFrom(response) {
@@ -116,6 +117,67 @@ async function testTriageOpsEvidenceVerdictIsReadOnlyProxy() {
   } finally {
     globalThis.fetch = originalFetch;
   }
+}
+
+async function testCampaignResearchIsReadOnlyProxy() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ ok: true, result: { campaign_verdict: "confirmed_true_positive" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/triage-ops/research-campaign", {
+        method: "POST",
+        body: JSON.stringify({ campaign: { packages: [{ ecosystem: "npm", package: "chalk-tempalte", version: "0.0.1" }] } }),
+      }),
+      {
+        SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+        TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
+      },
+    );
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.result.campaign_verdict, "confirmed_true_positive");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://helper.example/api/secopsai/triage-ops/research-campaign");
+    assert.equal(calls[0].init.headers.has("X-Triage-Ops-Admin-Token"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function testCampaignWriteNeedsAdminToken() {
+  const response = await worker.fetch(
+    new Request("https://dashboard.example/api/secopsai/triage-ops/campaign-persist-findings", {
+      method: "POST",
+      body: JSON.stringify({ campaign: { packages: [{ ecosystem: "npm", package: "chalk-tempalte", version: "0.0.1" }] } }),
+    }),
+    {
+      SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+      TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
+    },
+  );
+  assert.equal(response.status, 401);
+  const payload = await jsonFrom(response);
+  assert.match(payload.error, /Unauthorized/);
+  assert.equal(JSON.stringify(payload).includes("triage-admin"), false);
+}
+
+function testCampaignResearchUiIsPresent() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(html, /triage-ops-campaign-research/);
+  assert.match(app, /Run Campaign Research/);
+  assert.match(app, /Import Campaign JSON/);
+  assert.match(app, /Persist Findings/);
+  assert.match(app, /Create Campaign Blog Draft/);
+  assert.match(app, /campaign-persist-findings/);
+  assert.match(app, /campaign-blog-draft/);
 }
 
 async function testWriteNeedsAdminToken() {
@@ -249,6 +311,9 @@ await testTriageOpsHostedModeFailsClearlyWithoutHelper();
 await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
+await testCampaignResearchIsReadOnlyProxy();
+await testCampaignWriteNeedsAdminToken();
+testCampaignResearchUiIsPresent();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
 await testGithubWorkflowNotFoundIsActionable();

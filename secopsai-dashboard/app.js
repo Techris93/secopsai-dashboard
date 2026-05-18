@@ -54,6 +54,46 @@ const ROLE_OPTIONS_HTML = (() => {
   return `<option value="">Unassigned</option>${opts}`;
 })();
 
+const TRIAGE_CAMPAIGN_ECOSYSTEMS = [
+  ['npm', 'npm'],
+  ['pypi', 'PyPI'],
+  ['crates', 'crates.io'],
+  ['chrome-web-store', 'Chrome Web Store'],
+  ['packagist', 'Packagist'],
+  ['go', 'Go Modules'],
+  ['huggingface', 'Hugging Face Hub'],
+  ['maven', 'Maven Central'],
+  ['nuget', 'NuGet'],
+  ['open-vsx', 'Open VSX'],
+  ['rubygems', 'RubyGems']
+];
+
+function defaultCampaignForm() {
+  return {
+    campaign_id: '',
+    title: '',
+    summary: '',
+    source_urls: [''],
+    source_names: [''],
+    actors: [''],
+    publishers: [''],
+    iocs: [''],
+    behavioral_indicators: [''],
+    search_root: '',
+    packages: [
+      {
+        ecosystem: 'npm',
+        package: '',
+        version: '',
+        publisher: '',
+        behavior_notes: ''
+      }
+    ],
+    jsonText: '',
+    jsonError: ''
+  };
+}
+
 const state = {
   runs: [],
   runRequests: [],
@@ -79,6 +119,10 @@ const state = {
     selectedDetail: null,
     verdictNotes: {},
     lastOutput: null,
+    campaignFixtures: [],
+    campaign: defaultCampaignForm(),
+    campaignResult: null,
+    campaignLastOutput: null,
     loading: false,
     adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
@@ -3017,12 +3061,13 @@ function triageOpsHeaders({ write = false } = {}) {
 }
 
 async function fetchTriageOpsJson(path = '', options = {}) {
-  const isWrite = options.method && String(options.method).toUpperCase() !== 'GET';
+  const { write: explicitWrite, ...fetchOptions } = options;
+  const isWrite = explicitWrite ?? false;
   const res = await fetch(triageOpsEndpoint(path), {
-    ...options,
+    ...fetchOptions,
     headers: {
       ...triageOpsHeaders({ write: isWrite }),
-      ...(options.headers || {})
+      ...(fetchOptions.headers || {})
     }
   });
   const payload = await res.json().catch(() => ({}));
@@ -3115,6 +3160,7 @@ async function runTriageOpsAction(action, { button = null, payload = {}, write =
   setButtonBusy(button, true, 'Running…');
   try {
     const result = await fetchTriageOpsJson(action, {
+      write,
       method: 'POST',
       body: JSON.stringify(body)
     });
@@ -3138,6 +3184,390 @@ async function runTriageOpsAction(action, { button = null, payload = {}, write =
   } finally {
     setButtonBusy(button, false);
   }
+}
+
+function campaignArray(name) {
+  const values = state.triageOps.campaign?.[name];
+  return Array.isArray(values) && values.length ? values : [''];
+}
+
+function campaignInputValue(selector) {
+  return (document.querySelector(selector)?.value || '').trim();
+}
+
+function syncCampaignFormFromDom() {
+  const form = state.triageOps.campaign;
+  if (!form) return;
+  form.campaign_id = campaignInputValue('#campaign-id-input');
+  form.title = campaignInputValue('#campaign-title-input');
+  form.summary = campaignInputValue('#campaign-summary-input');
+  form.search_root = campaignInputValue('#campaign-search-root-input');
+  form.jsonText = document.querySelector('#campaign-json-input')?.value || form.jsonText || '';
+  ['source_urls', 'source_names', 'actors', 'publishers', 'iocs', 'behavioral_indicators'].forEach(name => {
+    form[name] = [...document.querySelectorAll(`[data-campaign-list="${name}"]`)].map(input => input.value.trim());
+  });
+  form.packages = [...document.querySelectorAll('.campaign-package-row')].map(row => ({
+    ecosystem: row.querySelector('[data-campaign-package-field="ecosystem"]')?.value || 'npm',
+    package: row.querySelector('[data-campaign-package-field="package"]')?.value.trim() || '',
+    version: row.querySelector('[data-campaign-package-field="version"]')?.value.trim() || '',
+    publisher: row.querySelector('[data-campaign-package-field="publisher"]')?.value.trim() || '',
+    behavior_notes: row.querySelector('[data-campaign-package-field="behavior_notes"]')?.value.trim() || ''
+  }));
+}
+
+function campaignFormToPayload() {
+  syncCampaignFormFromDom();
+  const form = state.triageOps.campaign || defaultCampaignForm();
+  const cleanList = (items = []) => items.map(item => String(item || '').trim()).filter(Boolean);
+  return {
+    campaign_id: form.campaign_id.trim(),
+    title: form.title.trim(),
+    summary: form.summary.trim(),
+    source_urls: cleanList(form.source_urls),
+    source_names: cleanList(form.source_names),
+    actors: cleanList(form.actors),
+    publishers: cleanList(form.publishers),
+    iocs: { operator_supplied: cleanList(form.iocs) },
+    behavioral_indicators: cleanList(form.behavioral_indicators),
+    packages: (form.packages || []).map(row => ({
+      ecosystem: row.ecosystem || 'npm',
+      package: String(row.package || '').trim(),
+      version: String(row.version || '').trim(),
+      publisher: String(row.publisher || '').trim(),
+      behavioral_indicators: cleanList(String(row.behavior_notes || '').split(/\n|,/))
+    })).filter(row => row.package)
+  };
+}
+
+function setCampaignFormFromPayload(payload = {}) {
+  const iocs = payload.iocs && typeof payload.iocs === 'object'
+    ? Object.values(payload.iocs).flat().map(String)
+    : [];
+  state.triageOps.campaign = {
+    ...defaultCampaignForm(),
+    campaign_id: payload.campaign_id || '',
+    title: payload.title || '',
+    summary: payload.summary || '',
+    source_urls: Array.isArray(payload.source_urls) && payload.source_urls.length ? payload.source_urls : [''],
+    source_names: Array.isArray(payload.source_names) && payload.source_names.length ? payload.source_names : [''],
+    actors: Array.isArray(payload.actors) && payload.actors.length ? payload.actors : [''],
+    publishers: Array.isArray(payload.publishers) && payload.publishers.length ? payload.publishers : [''],
+    iocs: iocs.length ? iocs : [''],
+    behavioral_indicators: Array.isArray(payload.behavioral_indicators) && payload.behavioral_indicators.length ? payload.behavioral_indicators : [''],
+    packages: Array.isArray(payload.packages) && payload.packages.length
+      ? payload.packages.map(row => ({
+          ecosystem: row.ecosystem || 'npm',
+          package: row.package || '',
+          version: row.version || row.revision || '',
+          publisher: row.publisher || row.maintainer || '',
+          behavior_notes: Array.isArray(row.behavioral_indicators) ? row.behavioral_indicators.join('\n') : ''
+        }))
+      : defaultCampaignForm().packages,
+    jsonText: JSON.stringify(payload, null, 2),
+    jsonError: ''
+  };
+}
+
+async function loadCampaignFixtures({ render = false } = {}) {
+  try {
+    const payload = await fetchTriageOpsJson('campaign-fixtures');
+    state.triageOps.campaignFixtures = Array.isArray(payload.fixtures) ? payload.fixtures : [];
+  } catch (error) {
+    state.triageOps.campaignFixtures = [];
+    state.triageOps.campaignLastOutput = {
+      action: 'campaign-fixtures',
+      error: `${error.message}. Campaign fixtures are optional; paste campaign JSON or build one manually.`
+    };
+  }
+  if (render) renderTriageOps();
+}
+
+function campaignCliFallback() {
+  const payload = campaignFormToPayload();
+  const packages = (payload.packages || [])
+    .map(row => `--package ${row.ecosystem}:${row.package}:${row.version || '<version>'}`)
+    .join(' ');
+  return [
+    'cd /Users/chrixchange/secopsai',
+    `python3 -m secopsai.cli supply-chain research-campaign --campaign-id ${payload.campaign_id || '<campaign-id>'} ${packages} --dry-run --json`,
+    'python3 -m secopsai.cli supply-chain research-campaign --input campaign.json --persist --search-root /Users/chrixchange/secopsai',
+    'python3 -m secopsai.cli blog draft-campaign --campaign campaign.json'
+  ].join('\n');
+}
+
+async function runCampaignEndpoint(action, { button = null, write = false, confirmMessage = '' } = {}) {
+  if (write && !state.triageOps.adminToken) {
+    const message = 'Paste your Triage Ops admin token, then click Use token before campaign write actions.';
+    setStatus(message, true);
+    alert(message);
+    return;
+  }
+  if (confirmMessage && !confirm(confirmMessage)) return;
+  let campaign;
+  try {
+    campaign = campaignFormToPayload();
+    if (!campaign.packages.length) throw new Error('Add at least one package before running campaign research.');
+  } catch (error) {
+    state.triageOps.campaign.jsonError = error.message;
+    renderTriageOps();
+    return;
+  }
+  const searchRoot = campaignInputValue('#campaign-search-root-input');
+  setButtonBusy(button, true, 'Running…');
+  try {
+    const result = await fetchTriageOpsJson(action, {
+      write,
+      method: 'POST',
+      body: JSON.stringify({ campaign, search_root: searchRoot })
+    });
+    state.triageOps.campaignResult = result.result || result;
+    state.triageOps.campaignLastOutput = { action, result, at: new Date().toISOString() };
+    if (action === 'campaign-persist-findings') {
+      await loadTriageOpsAlerts({ render: false });
+      await loadLocalTriageState();
+    }
+    if (action === 'campaign-blog-draft') {
+      await loadBlogOpsStatus({ render: false });
+    }
+    setStatus(`<span class="dot"></span> Campaign ${escapeHtml(statusLabel(action))} completed`);
+    renderTriageOps();
+  } catch (error) {
+    const suffix = /not configured/i.test(error.message) ? ' Configure SECOPSAI_HELPER_BASE_URL or run the local helper.' : '';
+    state.triageOps.campaignLastOutput = { action, error: `${error.message}${suffix}`, at: new Date().toISOString() };
+    setStatus(`Campaign ${action} failed: ${error.message}${suffix}`, true);
+    renderTriageOps();
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function renderCampaignListInputs(name, label, placeholder) {
+  return `
+    <div class="campaign-list-field">
+      <div class="campaign-list-head">
+        <span class="small">${escapeHtml(label)}</span>
+        <button class="mini-btn campaign-add-list-btn" type="button" data-campaign-add-list="${escapeHtml(name)}">Add ${escapeHtml(label.replace(/s$/i, ''))}</button>
+      </div>
+      ${campaignArray(name).map((value, index) => `
+        <div class="campaign-inline-row">
+          <input data-campaign-list="${escapeHtml(name)}" data-campaign-list-index="${index}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" />
+          <button class="mini-btn campaign-remove-list-btn" type="button" data-campaign-remove-list="${escapeHtml(name)}" data-campaign-remove-index="${index}">Remove</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderCampaignPackageRows() {
+  const rows = state.triageOps.campaign.packages?.length ? state.triageOps.campaign.packages : defaultCampaignForm().packages;
+  const options = TRIAGE_CAMPAIGN_ECOSYSTEMS.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
+  return rows.map((row, index) => `
+    <div class="campaign-package-row" data-campaign-package-index="${index}">
+      <label><span class="small">Ecosystem</span><select data-campaign-package-field="ecosystem">${options}</select></label>
+      <label><span class="small">Package/artifact id</span><input data-campaign-package-field="package" value="${escapeHtml(row.package || '')}" placeholder="@scope/pkg, group:artifact, org/model" /></label>
+      <label><span class="small">Version/revision</span><input data-campaign-package-field="version" value="${escapeHtml(row.version || '')}" placeholder="1.2.3, v1.2.3, revision" /></label>
+      <label><span class="small">Publisher/maintainer</span><input data-campaign-package-field="publisher" value="${escapeHtml(row.publisher || '')}" placeholder="namespace or owner" /></label>
+      <label class="campaign-package-notes"><span class="small">Behavior notes</span><textarea data-campaign-package-field="behavior_notes" rows="2" placeholder="credential theft, C2, persistence">${escapeHtml(row.behavior_notes || '')}</textarea></label>
+      <button class="mini-btn campaign-remove-package-btn" type="button" data-campaign-remove-package="${index}">Remove</button>
+    </div>
+  `).join('');
+}
+
+function campaignEvidencePreview(row = {}) {
+  const values = Array.isArray(row.matched_rules)
+    ? row.matched_rules
+    : Array.isArray(row.behavioral_indicators)
+      ? row.behavioral_indicators
+      : [];
+  return values.slice(0, 4).join(', ');
+}
+
+function renderCampaignResult(result = {}) {
+  if (!result || !Object.keys(result).length) {
+    const output = state.triageOps.campaignLastOutput;
+    if (output?.error) return `<div class="triage-output error"><strong>Campaign action failed</strong><p>${escapeHtml(output.error)}</p></div>`;
+    return `<div class="empty-state">Run campaign research to see verdicts, correlations, IOCs, mitigation, and source references here.</div>`;
+  }
+  const packages = Array.isArray(result.packages) ? result.packages : [];
+  const references = Array.isArray(result.references) ? result.references : (Array.isArray(result.source_urls) ? result.source_urls : []);
+  const correlations = Array.isArray(result.correlations) ? result.correlations : [];
+  const mitigation = Array.isArray(result.recommended_mitigation) ? result.recommended_mitigation : (Array.isArray(result.mitigation) ? result.mitigation : []);
+  const iocs = result.iocs && typeof result.iocs === 'object' ? Object.values(result.iocs).flat().map(String) : [];
+  return `
+    <div class="campaign-result">
+      <div class="evidence-score-grid campaign-result-grid">
+        <div class="evidence-score-card"><span>Campaign verdict</span><strong>${escapeHtml(statusLabel(result.campaign_verdict || result.package_verdict || 'needs_review'))}</strong></div>
+        <div class="evidence-score-card"><span>Confidence</span><strong>${escapeHtml(result.confidence || 'unknown')}</strong></div>
+        <div class="evidence-score-card"><span>Score</span><strong>${escapeHtml(String(result.score ?? '—'))}</strong></div>
+        <div class="evidence-score-card"><span>Environment impact</span><strong>${escapeHtml(statusLabel(result.environment_impact?.status || result.environment_impact || 'unknown'))}</strong></div>
+      </div>
+      ${result.blog_ready_summary ? `<div class="evidence-notice">${escapeHtml(result.blog_ready_summary)}</div>` : ''}
+      <div class="campaign-result-section">
+        <h4>Package verdicts</h4>
+        ${packages.length ? `
+          <div class="campaign-table-wrap"><table class="campaign-table"><thead><tr><th>Ecosystem</th><th>Package</th><th>Version</th><th>Verdict</th><th>Evidence</th></tr></thead><tbody>
+            ${packages.slice(0, 20).map(row => `
+              <tr>
+                <td>${escapeHtml(row.ecosystem || '')}</td>
+                <td>${escapeHtml(row.package || '')}</td>
+                <td>${escapeHtml(row.version || '')}</td>
+                <td>${escapeHtml(statusLabel(row.package_verdict || row.verdict || result.package_verdict || 'needs_review'))}</td>
+                <td>${escapeHtml(campaignEvidencePreview(row))}</td>
+              </tr>
+            `).join('')}
+          </tbody></table></div>
+        ` : '<p class="small">No package verdicts returned.</p>'}
+      </div>
+      <div class="campaign-result-columns">
+        <div class="campaign-result-section"><h4>IOCs</h4>${renderCompactChips(iocs, 'No IOCs returned.')}</div>
+        <div class="campaign-result-section"><h4>Correlations</h4>${renderBulletList(correlations.map(item => typeof item === 'string' ? item : item.label || item.reason || JSON.stringify(item)), 'No correlations returned.')}</div>
+        <div class="campaign-result-section"><h4>Mitigation</h4>${renderBulletList(mitigation, 'No mitigation returned.')}</div>
+        <div class="campaign-result-section"><h4>References</h4>${renderBulletList(references, 'No references returned.')}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCampaignResearchPanel() {
+  const host = el('triage-ops-campaign-research');
+  if (!host) return;
+  const campaign = state.triageOps.campaign || defaultCampaignForm();
+  const fixtures = state.triageOps.campaignFixtures || [];
+  host.innerHTML = `
+    <div class="card campaign-research-card">
+      <div class="page-header compact-header">
+        <div>
+          <h3 style="margin:0;">Campaign Research</h3>
+          <p class="small" style="margin:6px 0 0;">Build or import cross-ecosystem campaign JSON, run read-only research, then explicitly persist SOC findings or create a review-only blog draft.</p>
+        </div>
+        <div class="campaign-fixture-actions">
+          <select id="campaign-fixture-select">
+            <option value="">Quick-load fixture…</option>
+            ${fixtures.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.id)}</option>`).join('')}
+          </select>
+          <button class="mini-btn" id="campaign-load-fixture-btn" type="button">Load fixture</button>
+        </div>
+      </div>
+
+      <div class="campaign-form-grid">
+        <label><span class="small">Campaign ID</span><input id="campaign-id-input" value="${escapeHtml(campaign.campaign_id || '')}" placeholder="deadcode09284814-infostealer-botnet-campaign" /></label>
+        <label><span class="small">Title</span><input id="campaign-title-input" value="${escapeHtml(campaign.title || '')}" placeholder="Supply-chain infostealer campaign" /></label>
+        <label><span class="small">Local search root</span><input id="campaign-search-root-input" value="${escapeHtml(campaign.search_root || '')}" placeholder="/Users/chrixchange/secopsai" /></label>
+        <label class="campaign-wide"><span class="small">Summary</span><textarea id="campaign-summary-input" rows="3" placeholder="Brief analyst summary">${escapeHtml(campaign.summary || '')}</textarea></label>
+      </div>
+
+      <div class="campaign-form-grid campaign-list-grid">
+        ${renderCampaignListInputs('source_urls', 'Source URLs', 'https://source.example/report')}
+        ${renderCampaignListInputs('source_names', 'Source names', 'OX Security, The Hacker News')}
+        ${renderCampaignListInputs('actors', 'Actors', 'publisher or actor handle')}
+        ${renderCampaignListInputs('publishers', 'Publishers', 'package publisher/namespace')}
+        ${renderCampaignListInputs('iocs', 'IOCs', 'domain, IP, URL, repository description')}
+        ${renderCampaignListInputs('behavioral_indicators', 'Behavioral indicators', 'credential theft, C2, persistence')}
+      </div>
+
+      <div class="campaign-package-header">
+        <div>
+          <h4>Packages</h4>
+          <p class="small">Add packages from npm, PyPI, crates, Packagist, Go, Hugging Face, Maven, NuGet, Open VSX, RubyGems, or Chrome Web Store local artifact mode.</p>
+        </div>
+        <button class="secondary-btn" id="campaign-add-package-btn" type="button">Add Package</button>
+      </div>
+      <div class="campaign-packages">${renderCampaignPackageRows()}</div>
+
+      <div class="campaign-json-box">
+        <div class="campaign-list-head">
+          <span class="small">Import Campaign JSON</span>
+          <button class="secondary-btn" id="campaign-import-json-btn" type="button">Import Campaign JSON</button>
+        </div>
+        <textarea id="campaign-json-input" rows="7" placeholder='Paste campaign JSON here, then click Import Campaign JSON.'>${escapeHtml(campaign.jsonText || '')}</textarea>
+        ${campaign.jsonError ? `<p class="form-error">${escapeHtml(campaign.jsonError)}</p>` : ''}
+      </div>
+
+      <div class="campaign-actions">
+        <button class="primary-btn" id="campaign-run-btn" type="button">Run Campaign Research</button>
+        <button class="secondary-btn" id="campaign-correlate-btn" type="button">Correlate Campaign</button>
+        <button class="secondary-btn" id="campaign-local-usage-btn" type="button">Check Local Usage</button>
+        <button class="secondary-btn" id="campaign-copy-cli-btn" type="button">Copy CLI Fallback</button>
+        <button class="mini-btn" id="campaign-persist-btn" type="button">Persist Findings</button>
+        <button class="primary-btn" id="campaign-blog-draft-btn" type="button">Create Campaign Blog Draft</button>
+      </div>
+
+      <div class="campaign-result-host">
+        <h4>Campaign result</h4>
+        ${renderCampaignResult(state.triageOps.campaignResult)}
+        ${state.triageOps.campaignLastOutput?.cli ? `<details class="campaign-cli-output"><summary>Helper output</summary><pre>${escapeHtml(JSON.stringify(state.triageOps.campaignLastOutput.cli, null, 2))}</pre></details>` : ''}
+      </div>
+    </div>
+  `;
+  host.querySelectorAll('[data-campaign-package-field="ecosystem"]').forEach(select => {
+    const row = state.triageOps.campaign.packages?.[Number(select.closest('.campaign-package-row')?.dataset.campaignPackageIndex || 0)];
+    if (row?.ecosystem) select.value = row.ecosystem;
+  });
+  host.querySelectorAll('input, textarea, select').forEach(input => {
+    input.addEventListener('input', syncCampaignFormFromDom);
+    input.addEventListener('change', syncCampaignFormFromDom);
+  });
+  host.querySelectorAll('.campaign-add-list-btn').forEach(btn => btn.addEventListener('click', () => {
+    syncCampaignFormFromDom();
+    const name = btn.dataset.campaignAddList;
+    state.triageOps.campaign[name] = campaignArray(name).concat('');
+    renderTriageOps();
+  }));
+  host.querySelectorAll('.campaign-remove-list-btn').forEach(btn => btn.addEventListener('click', () => {
+    syncCampaignFormFromDom();
+    const name = btn.dataset.campaignRemoveList;
+    const index = Number(btn.dataset.campaignRemoveIndex || 0);
+    const next = campaignArray(name).filter((_, idx) => idx !== index);
+    state.triageOps.campaign[name] = next.length ? next : [''];
+    renderTriageOps();
+  }));
+  el('campaign-add-package-btn')?.addEventListener('click', () => {
+    syncCampaignFormFromDom();
+    state.triageOps.campaign.packages.push({ ecosystem: 'npm', package: '', version: '', publisher: '', behavior_notes: '' });
+    renderTriageOps();
+  });
+  host.querySelectorAll('.campaign-remove-package-btn').forEach(btn => btn.addEventListener('click', () => {
+    syncCampaignFormFromDom();
+    const index = Number(btn.dataset.campaignRemovePackage || 0);
+    const next = state.triageOps.campaign.packages.filter((_, idx) => idx !== index);
+    state.triageOps.campaign.packages = next.length ? next : defaultCampaignForm().packages;
+    renderTriageOps();
+  }));
+  el('campaign-import-json-btn')?.addEventListener('click', () => {
+    try {
+      const parsed = JSON.parse(el('campaign-json-input')?.value || '{}');
+      setCampaignFormFromPayload(parsed.campaign || parsed);
+      state.triageOps.campaignResult = null;
+      renderTriageOps();
+      setStatus('<span class="dot"></span> Campaign JSON imported');
+    } catch (error) {
+      state.triageOps.campaign.jsonError = `Invalid JSON: ${error.message}`;
+      renderTriageOps();
+    }
+  });
+  el('campaign-load-fixture-btn')?.addEventListener('click', () => {
+    const selected = el('campaign-fixture-select')?.value || '';
+    const fixture = fixtures.find(item => item.id === selected) || fixtures[0];
+    if (!fixture?.campaign) return;
+    setCampaignFormFromPayload(fixture.campaign);
+    state.triageOps.campaignResult = null;
+    renderTriageOps();
+    setStatus(`<span class="dot"></span> Loaded campaign fixture: ${escapeHtml(fixture.title || fixture.id)}`);
+  });
+  el('campaign-run-btn')?.addEventListener('click', event => runCampaignEndpoint('research-campaign', { button: event.currentTarget }));
+  el('campaign-correlate-btn')?.addEventListener('click', event => runCampaignEndpoint('research-campaign', { button: event.currentTarget }));
+  el('campaign-local-usage-btn')?.addEventListener('click', event => runCampaignEndpoint('research-campaign', { button: event.currentTarget }));
+  el('campaign-persist-btn')?.addEventListener('click', event => runCampaignEndpoint('campaign-persist-findings', {
+    button: event.currentTarget,
+    write: true,
+    confirmMessage: 'Persist campaign findings into the SecOpsAI SOC store? Review the research result before confirming.'
+  }));
+  el('campaign-blog-draft-btn')?.addEventListener('click', event => runCampaignEndpoint('campaign-blog-draft', {
+    button: event.currentTarget,
+    write: true,
+    confirmMessage: 'Create a review-only campaign blog draft? This will not publish it.'
+  }));
+  el('campaign-copy-cli-btn')?.addEventListener('click', () => copyTextWithStatus(campaignCliFallback(), 'Campaign Research CLI fallback copied'));
 }
 
 function triageOpsCliCommands(alert) {
@@ -3384,6 +3814,7 @@ function renderTriageOps() {
   if (authCard) authCard.textContent = `${triageOpsAdminTokenHint()}. The helper runs allowlisted SecOpsAI commands; the browser never runs shell directly.`;
   renderTriageOpsStats();
   renderTriageOpsAlertList();
+  renderCampaignResearchPanel();
   renderTriageOpsDetail();
 }
 
@@ -3966,6 +4397,12 @@ async function boot() {
     await loadTriageOpsAlerts({ render: false });
   } catch (err) {
     console.warn('loadTriageOpsAlerts failed during boot', err);
+  }
+
+  try {
+    await loadCampaignFixtures({ render: false });
+  } catch (err) {
+    console.warn('loadCampaignFixtures failed during boot', err);
   }
 
   renderAll();

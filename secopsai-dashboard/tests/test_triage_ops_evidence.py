@@ -71,6 +71,51 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertTrue(evidence['signals']['suspicious_file_writes'])
         self.assertTrue(evidence['signals']['known_ioc_matches'])
 
+    def test_campaign_payload_accepts_cross_ecosystem_packages(self):
+        payload = server.validate_campaign_payload(
+            {
+                'campaign_id': 'cross-ecosystem-test',
+                'source_urls': ['https://example.test/report'],
+                'packages': [
+                    {'ecosystem': 'npm', 'package': '@scope/pkg', 'version': '1.2.3'},
+                    {'ecosystem': 'maven', 'package': 'com.example:artifact', 'version': '1.2.3'},
+                    {'ecosystem': 'huggingface', 'package': 'org/model', 'version': 'main'},
+                ],
+            }
+        )
+        self.assertEqual(len(payload['packages']), 3)
+        self.assertEqual(payload['packages'][1]['package'], 'com.example:artifact')
+
+    def test_campaign_payload_rejects_unsupported_ecosystem(self):
+        with self.assertRaises(ValueError):
+            server.validate_campaign_payload(
+                {
+                    'campaign_id': 'bad',
+                    'packages': [{'ecosystem': 'apt', 'package': 'curl', 'version': '1.0'}],
+                }
+            )
+
+    def test_campaign_research_args_are_allowlisted(self):
+        args = server.build_campaign_research_args('/tmp/campaign.json', persist=True, search_root='/Users/chrixchange/secopsai')
+        self.assertEqual(args[:3], ['supply-chain', 'research-campaign', '--input'])
+        self.assertIn('--persist', args)
+        self.assertIn('--search-root', args)
+        self.assertNotIn(';', ' '.join(args))
+
+    def test_campaign_fixture_loads_without_temp_paths(self):
+        fixtures = server.campaign_fixture_payloads()
+        self.assertTrue(fixtures)
+        self.assertEqual(fixtures[0]['campaign']['campaign_id'], 'deadcode09284814-infostealer-botnet-campaign')
+        self.assertNotIn('/tmp/secopsai-campaign', str(fixtures[0]))
+        self.assertNotIn('/Users/chrixchange', str(fixtures[0]))
+
+    def test_compact_cli_result_redacts_secret_like_values(self):
+        compact = server.compact_cli_result(
+            {'ok': True, 'returncode': 0, 'stdout': 'GITHUB_TOKEN=ghp_this_should_hide', 'stderr': ''}
+        )
+        self.assertNotIn('ghp_this_should_hide', compact['stdout'])
+        self.assertIn('[redacted]', compact['stdout'])
+
 
 if __name__ == '__main__':
     unittest.main()
