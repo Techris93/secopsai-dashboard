@@ -160,12 +160,14 @@ If `SECOPSAI_HELPER_BASE_URL` is missing, hosted mode returns a clear not-config
 
 ### Campaign Research From Triage Ops
 
-Triage Ops also includes a **Campaign Research** panel for cross-ecosystem supply-chain campaigns. It is designed for incidents where multiple packages, publishers, IOCs, C2 domains, or source reports should be correlated before creating SOC findings or blog drafts.
+Triage Ops is arranged around the alert workflow first: summary metrics, a **Supply Chain Alerts** panel with filters, and an **Alert Review** panel with Overview, Evidence, Analyst note, Evidence actions, Response actions, and CLI fallback. Campaign workflows are still available, but they live in a collapsed advanced dock so daily alert review remains readable.
+
+The **Campaign Research** dock supports cross-ecosystem supply-chain campaigns. It is designed for incidents where multiple packages, publishers, IOCs, C2 domains, or source reports should be correlated before creating SOC findings or blog drafts.
 
 Supported flow:
 
 1. Open **Triage Ops**.
-2. Scroll to **Campaign Research**.
+2. Expand **Campaign Research & Autonomous Discovery**.
 3. Paste/import campaign JSON, load the `deadcode09284814` fixture, or build a campaign by clicking **Add Package**, **Add IOC**, and **Add Source URL**.
 4. Click **Run Campaign Research**. This is read-only and maps to `secopsai supply-chain research-campaign --dry-run --json`.
 5. Review the campaign verdict, package-level verdicts, environment impact, correlations, IOCs, mitigation guidance, and references.

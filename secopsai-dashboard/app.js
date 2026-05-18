@@ -3990,34 +3990,71 @@ function renderTriageOpsDetail() {
         ${renderRecommendationPill(rec)}
       </div>
     </div>
-    <div class="kv-list">
-      <div class="kv-row"><span class="kv-key">Ecosystem</span><span class="kv-val">${escapeHtml(alert.ecosystem || '—')}</span></div>
-      <div class="kv-row"><span class="kv-key">Package</span><span class="kv-val">${escapeHtml(alert.package || '—')}</span></div>
-      <div class="kv-row"><span class="kv-key">Version</span><span class="kv-val">${escapeHtml(alert.version || '—')}</span></div>
-      <div class="kv-row"><span class="kv-key">Advisory match</span><span class="kv-val">${alert.advisory?.matched ? 'yes' : 'no'}</span></div>
-      <div class="kv-row"><span class="kv-key">Local usage</span><span class="kv-val">${alert.local_usage?.present ? `${alert.local_usage.match_count || 0} match(es)` : 'none found'}</span></div>
-      <div class="kv-row"><span class="kv-key">Report</span><span class="kv-val">${escapeHtml(alert.report_path || '—')}</span></div>
-    </div>
-    <h4 style="margin-top:18px;">Scanner rationale</h4>
-    <p class="triage-rationale">${escapeHtml(alert.analysis || alert.summary || 'No scanner rationale available.')}</p>
-    <h4 style="margin-top:18px;">Recommendation</h4>
-    ${renderBulletList(rec.evidence || [], 'No recommendation evidence loaded yet.')}
-    <label class="blog-review-note"><span class="small">Close / escalation note</span><textarea id="triage-ops-note" rows="4">${escapeHtml(closeNote)}</textarea></label>
-    <div class="triage-ops-actions">
-      <button class="primary-btn triage-ops-action-btn" data-triage-action="evidence-verdict">Run Evidence Verdict</button>
-      <button class="secondary-btn triage-ops-action-btn" data-triage-action="investigate">Investigate</button>
-      <button class="secondary-btn triage-ops-action-btn" data-triage-action="explain-verdict">Explain verdict</button>
-      <button class="secondary-btn triage-ops-action-btn" data-triage-action="check-advisories">Check advisory matches</button>
-      <button class="secondary-btn triage-ops-action-btn" data-triage-action="check-local-usage">Check local repo usage</button>
-      <button class="secondary-btn triage-ops-action-btn" data-triage-action="raw-report">Read raw report</button>
-      <button class="secondary-btn triage-ops-action-btn" data-triage-action="generate-mitigation">Generate mitigation</button>
-      <button class="mini-btn triage-ops-action-btn" data-triage-action="escalate" data-write="true">Move to in review</button>
-      <button class="danger-btn triage-ops-action-btn" data-triage-action="close" data-write="true">Close as false positive</button>
-      <button class="primary-btn triage-ops-action-btn" data-triage-action="create-blog-draft" data-write="true">Create blog draft</button>
+    <section class="triage-review-section">
+      <div class="triage-section-heading">
+        <span>Overview</span>
+        <small>Identity, advisory state, local impact, and report path.</small>
+      </div>
+      <div class="kv-list triage-kv-grid">
+        <div class="kv-row"><span class="kv-key">Ecosystem</span><span class="kv-val">${escapeHtml(alert.ecosystem || '—')}</span></div>
+        <div class="kv-row"><span class="kv-key">Package</span><span class="kv-val">${escapeHtml(alert.package || '—')}</span></div>
+        <div class="kv-row"><span class="kv-key">Version</span><span class="kv-val">${escapeHtml(alert.version || '—')}</span></div>
+        <div class="kv-row"><span class="kv-key">Advisory match</span><span class="kv-val">${alert.advisory?.matched ? 'yes' : 'no'}</span></div>
+        <div class="kv-row"><span class="kv-key">Local usage</span><span class="kv-val">${alert.local_usage?.present ? `${alert.local_usage.match_count || 0} match(es)` : 'none found'}</span></div>
+        <div class="kv-row"><span class="kv-key">Report</span><span class="kv-val">${escapeHtml(alert.report_path || '—')}</span></div>
+      </div>
+    </section>
+
+    <section class="triage-review-section">
+      <div class="triage-section-heading">
+        <span>Evidence</span>
+        <small>Scanner rationale and current recommendation evidence.</small>
+      </div>
+      <p class="triage-rationale">${escapeHtml(alert.analysis || alert.summary || 'No scanner rationale available.')}</p>
+      ${renderBulletList(rec.evidence || [], 'No recommendation evidence loaded yet.')}
+    </section>
+
+    <section class="triage-review-section">
+      <div class="triage-section-heading">
+        <span>Analyst note</span>
+        <small>Required before protected closure/escalation actions.</small>
+      </div>
+      <label class="blog-review-note"><span class="small">Close / escalation note</span><textarea id="triage-ops-note" rows="4">${escapeHtml(closeNote)}</textarea></label>
+    </section>
+
+    <section class="triage-review-section">
+      <div class="triage-section-heading">
+        <span>Evidence actions</span>
+        <small>Read-only checks that improve confidence before disposition.</small>
+      </div>
+      <div class="triage-ops-actions grouped">
+        <button class="primary-btn triage-ops-action-btn" data-triage-action="evidence-verdict">Run Evidence Verdict</button>
+        <button class="secondary-btn triage-ops-action-btn" data-triage-action="investigate">Investigate</button>
+        <button class="secondary-btn triage-ops-action-btn" data-triage-action="explain-verdict">Explain verdict</button>
+        <button class="secondary-btn triage-ops-action-btn" data-triage-action="check-advisories">Check advisory matches</button>
+        <button class="secondary-btn triage-ops-action-btn" data-triage-action="check-local-usage">Check local repo usage</button>
+        <button class="secondary-btn triage-ops-action-btn" data-triage-action="raw-report">Read raw report</button>
+      </div>
+    </section>
+
+    <section class="triage-review-section">
+      <div class="triage-section-heading">
+        <span>Response actions</span>
+        <small>Write actions remain token-gated and confirmation-backed.</small>
+      </div>
+      <div class="triage-ops-actions grouped response">
+        <button class="secondary-btn triage-ops-action-btn" data-triage-action="generate-mitigation">Generate mitigation</button>
+        <button class="mini-btn triage-ops-action-btn" data-triage-action="escalate" data-write="true">Move to in review</button>
+        <button class="danger-btn triage-ops-action-btn" data-triage-action="close" data-write="true">Close as false positive</button>
+        <button class="primary-btn triage-ops-action-btn" data-triage-action="create-blog-draft" data-write="true">Create blog draft</button>
+      </div>
+    </section>
+
+    <details class="triage-cli-drawer">
+      <summary>CLI fallback</summary>
+      <pre class="triage-cli-fallback">${escapeHtml(cliCommands.join('\n'))}</pre>
       <button class="mini-btn" id="triage-ops-copy-cli-btn">Copy CLI fallback</button>
-    </div>
-    <h4 style="margin-top:18px;">CLI fallback</h4>
-    <pre class="triage-cli-fallback">${escapeHtml(cliCommands.join('\n'))}</pre>
+    </details>
     ${renderTriageOpsOutput(state.triageOps.lastOutput)}
   `;
   host.querySelectorAll('.triage-ops-action-btn').forEach(btn => {

@@ -221,6 +221,8 @@ function testCampaignResearchUiIsPresent() {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   assert.match(html, /triage-ops-campaign-research/);
+  assert.match(html, /Campaign Research & Autonomous Discovery/);
+  assert.match(html, /triage-filter-drawer/);
   assert.match(app, /Run Campaign Research/);
   assert.match(app, /Import Campaign JSON/);
   assert.match(app, /Persist Findings/);
@@ -229,6 +231,8 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /Run Discovery/);
   assert.match(app, /Run Autopilot Dry Run/);
   assert.match(app, /Promote to Campaign Research/);
+  assert.match(app, /Evidence actions/);
+  assert.match(app, /Response actions/);
   assert.match(app, /campaign-persist-findings/);
   assert.match(app, /campaign-blog-draft/);
   assert.match(app, /campaign-discover/);
