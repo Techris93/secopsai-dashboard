@@ -273,6 +273,20 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /campaign-autopilot/);
 }
 
+function testOkComputerSkinIsPresent() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const audit = readFileSync(new URL("../docs/okcomputer-reference-audit.md", import.meta.url), "utf8");
+  assert.match(html, /class="okcomputer-skin"/);
+  assert.match(html, /<span class="nav-icon" aria-hidden="true"><svg/);
+  assert.match(css, /OKComputer_Sec reference skin/);
+  assert.match(css, /--void-black: #050507/);
+  assert.match(css, /--teal-primary: #00d4c8/);
+  assert.match(audit, /Live reference/);
+  assert.match(audit, /Kimi seed script was not copied/);
+  assert.equal(html.includes("kimi.com/sdk-seed.js"), false);
+}
+
 async function testWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/blog/news-run", { method: "POST", body: "{}" }),
@@ -410,6 +424,7 @@ await testCampaignAutopilotIsReadOnlyProxy();
 await testCampaignWriteNeedsAdminToken();
 await testCampaignWatchlistNeedsAdminToken();
 testCampaignResearchUiIsPresent();
+testOkComputerSkinIsPresent();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
 await testGithubWorkflowNotFoundIsActionable();

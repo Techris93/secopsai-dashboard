@@ -12,6 +12,8 @@ This dashboard is now prepared for **Cloudflare Pages advanced mode** with a roo
 
 The worker falls back to `env.ASSETS.fetch(request)` for normal static files, which is the pattern Cloudflare documents for Pages advanced mode.
 
+The frontend uses an OKComputer_Sec-inspired dark command-plane skin documented in [`docs/okcomputer-reference-audit.md`](docs/okcomputer-reference-audit.md). The deployed dashboard does not import the Kimi seed script, compiled reference bundles, external image assets, or mock data from the reference project.
+
 ## What changed for hosted mode
 
 - `config.js` is generated at the edge from Cloudflare environment variables instead of relying on the local Python helper.

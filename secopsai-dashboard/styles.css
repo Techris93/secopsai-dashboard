@@ -532,6 +532,755 @@ input, select, textarea { width: 100%; max-width: 100%; }
   }
 }
 
+/* OKComputer_Sec reference skin.
+   Translates the local/live Vite reference into this static dashboard without
+   importing the Kimi runtime, external trackers, or generated React bundle. */
+.okcomputer-skin {
+  --void-black: #050507;
+  --surface: #0d0d12;
+  --surface-elevated: #14141a;
+  --surface-soft: #191922;
+  --border-color: #1e1e28;
+  --border-active: #2a2a38;
+  --teal-primary: #00d4c8;
+  --teal-glow: rgba(0, 212, 200, 0.4);
+  --teal-muted: #0a3d3a;
+  --cyan: #38bdf8;
+  --amber: #f59e0b;
+  --rose: #f43f5e;
+  --emerald: #10b981;
+  --violet: #8b5cf6;
+  --text-primary: #f0f0f5;
+  --text-secondary: #a2a2b7;
+  --text-tertiary: #6b6b80;
+  --text-inverse: #050507;
+  --bg: var(--void-black);
+  --bg-soft: var(--surface);
+  --bg-panel: var(--surface);
+  --card: var(--surface);
+  --card-muted: var(--surface-elevated);
+  --border: var(--border-color);
+  --border-strong: var(--border-active);
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --muted-strong: var(--text-primary);
+  --blue: var(--cyan);
+  --green: var(--emerald);
+  --red: var(--rose);
+  --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-strong: 0 8px 32px rgba(0, 0, 0, 0.5);
+  background: var(--void-black);
+  color: var(--text-primary);
+}
+
+.okcomputer-skin,
+.okcomputer-skin input,
+.okcomputer-skin textarea,
+.okcomputer-skin select,
+.okcomputer-skin button {
+  font-family: 'Inter', 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.okcomputer-skin code,
+.okcomputer-skin pre,
+.okcomputer-skin .font-mono-data,
+.okcomputer-skin .brand-overline,
+.okcomputer-skin .small,
+.okcomputer-skin .metric-label,
+.okcomputer-skin .kv-key,
+.okcomputer-skin .top-strip,
+.okcomputer-skin .status-pill,
+.okcomputer-skin .badge,
+.okcomputer-skin .triage-rec-pill,
+.okcomputer-skin .blog-draft-meta,
+.okcomputer-skin .campaign-table,
+.okcomputer-skin .triage-cli-fallback {
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+}
+
+.okcomputer-skin::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(0, 212, 200, 0.12), transparent 26%),
+    radial-gradient(circle at 88% 18%, rgba(56, 189, 248, 0.08), transparent 28%),
+    linear-gradient(180deg, #050507 0%, #07070b 100%);
+}
+
+.okcomputer-skin * {
+  scrollbar-color: rgba(255,255,255,0.18) transparent;
+}
+
+.okcomputer-skin::-webkit-scrollbar,
+.okcomputer-skin *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.okcomputer-skin::-webkit-scrollbar-track,
+.okcomputer-skin *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.okcomputer-skin::-webkit-scrollbar-thumb,
+.okcomputer-skin *::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.16);
+  border-radius: 999px;
+}
+
+.okcomputer-skin .app-shell {
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--void-black);
+}
+
+.okcomputer-skin .sidebar {
+  width: 260px;
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--void-black);
+  border-right: 1px solid var(--border-color);
+  box-shadow: none;
+}
+
+.okcomputer-skin .brand {
+  min-height: 73px;
+  margin: 0;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.okcomputer-skin .brand-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  color: var(--void-black);
+  background: linear-gradient(135deg, var(--teal-primary), var(--cyan));
+  box-shadow: 0 0 24px rgba(0, 212, 200, 0.28);
+}
+
+.okcomputer-skin .brand-badge svg {
+  width: 21px;
+  height: 21px;
+  stroke-width: 2.1;
+}
+
+.okcomputer-skin .brand-overline {
+  color: var(--teal-primary);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.okcomputer-skin .brand h1 {
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.okcomputer-skin .brand p {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.okcomputer-skin .nav-list {
+  gap: 4px;
+  padding: 12px 8px;
+}
+
+.okcomputer-skin .nav-btn {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.okcomputer-skin .nav-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.035);
+  border-left-color: rgba(255,255,255,0.08);
+}
+
+.okcomputer-skin .nav-btn.active {
+  color: var(--teal-primary);
+  background: rgba(0, 212, 200, 0.055);
+  border-left-color: var(--teal-primary);
+  box-shadow: none;
+}
+
+.okcomputer-skin .nav-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+  background: var(--surface-elevated);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+
+.okcomputer-skin .nav-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.okcomputer-skin .nav-btn.active .nav-icon {
+  color: var(--teal-primary);
+  background: rgba(0, 212, 200, 0.14);
+  border-color: rgba(0, 212, 200, 0.2);
+}
+
+.okcomputer-skin .nav-btn .title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.okcomputer-skin .nav-btn .desc {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 0.66rem;
+  line-height: 1.25;
+}
+
+.okcomputer-skin .sidebar-footer {
+  margin: auto 12px 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.okcomputer-skin .sidebar-footer-label {
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.okcomputer-skin #global-status {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.okcomputer-skin .main {
+  min-width: 0;
+  padding: 0;
+  background: var(--void-black);
+}
+
+.okcomputer-skin .top-strip {
+  height: 48px;
+  padding: 0 20px;
+  color: var(--text-secondary);
+  background: var(--void-black);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.okcomputer-skin .top-strip-live {
+  color: var(--teal-primary);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.okcomputer-skin .dot {
+  width: 8px;
+  height: 8px;
+  background: var(--teal-primary);
+  box-shadow: 0 0 0 5px rgba(0, 212, 200, 0.12), 0 0 18px rgba(0, 212, 200, 0.35);
+}
+
+.okcomputer-skin .top-strip-meta {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.okcomputer-skin #top-strip-time {
+  color: var(--text-tertiary);
+}
+
+.okcomputer-skin .page {
+  padding: 32px;
+}
+
+.okcomputer-skin .page.active {
+  animation: okc-page-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes okc-page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.okcomputer-skin .page-header {
+  margin-bottom: 20px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.okcomputer-skin .page-header h2 {
+  color: var(--text-primary);
+  font-size: clamp(1.65rem, 2.4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.okcomputer-skin .page-header p {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.okcomputer-skin .card,
+.okcomputer-skin .column,
+.okcomputer-skin .modal-card,
+.okcomputer-skin .blog-auth-card,
+.okcomputer-skin .triage-ops-auth-card,
+.okcomputer-skin .campaign-research-card,
+.okcomputer-skin .campaign-discovery-box,
+.okcomputer-skin .campaign-result-section,
+.okcomputer-skin .triage-review-section,
+.okcomputer-skin .triage-campaign-dock {
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: none;
+}
+
+.okcomputer-skin .card h3,
+.okcomputer-skin .card h4,
+.okcomputer-skin .modal-card h3,
+.okcomputer-skin .triage-review-panel h3,
+.okcomputer-skin .campaign-result-section h4 {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.okcomputer-skin .small,
+.okcomputer-skin .card-subtle,
+.okcomputer-skin .metric-label,
+.okcomputer-skin .feed-item .meta,
+.okcomputer-skin .task-card-desc,
+.okcomputer-skin .blog-draft-summary,
+.okcomputer-skin .triage-rationale {
+  color: var(--text-secondary);
+}
+
+.okcomputer-skin .metric-card {
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
+  border-color: var(--border-color);
+  background: var(--surface);
+}
+
+.okcomputer-skin .metric-card::before {
+  inset: 16px auto 16px 0;
+  width: 3px;
+  height: auto;
+  border-radius: 999px;
+  background: var(--teal-primary);
+}
+
+.okcomputer-skin .metric-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-active);
+  box-shadow: 0 0 24px rgba(0, 212, 200, 0.08), var(--shadow-soft);
+}
+
+.okcomputer-skin .metric {
+  color: var(--text-primary);
+  font-size: clamp(2rem, 3.2vw, 2.55rem);
+  font-weight: 760;
+}
+
+.okcomputer-skin input,
+.okcomputer-skin textarea,
+.okcomputer-skin select {
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.okcomputer-skin input::placeholder,
+.okcomputer-skin textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.okcomputer-skin input:focus,
+.okcomputer-skin textarea:focus,
+.okcomputer-skin select:focus,
+.okcomputer-skin button:focus-visible,
+.okcomputer-skin summary:focus-visible {
+  outline: 0;
+  border-color: var(--teal-primary);
+  box-shadow: 0 0 0 3px rgba(0, 212, 200, 0.14);
+}
+
+.okcomputer-skin .primary-btn {
+  color: var(--void-black);
+  background: var(--teal-primary);
+  border: 1px solid rgba(0, 212, 200, 0.78);
+  box-shadow: 0 0 20px rgba(0, 212, 200, 0.12);
+}
+
+.okcomputer-skin .primary-btn:hover {
+  color: var(--void-black);
+  background: #00e5d9;
+  box-shadow: 0 0 24px rgba(0, 212, 200, 0.2);
+}
+
+.okcomputer-skin .secondary-btn,
+.okcomputer-skin .mini-btn,
+.okcomputer-skin .status-pill {
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  box-shadow: none;
+}
+
+.okcomputer-skin .secondary-btn:hover,
+.okcomputer-skin .mini-btn:hover,
+.okcomputer-skin .status-pill:hover {
+  color: var(--teal-primary);
+  border-color: var(--teal-primary);
+  background: rgba(0, 212, 200, 0.05);
+}
+
+.okcomputer-skin .danger-btn {
+  color: var(--rose);
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.28);
+}
+
+.okcomputer-skin .danger-btn:hover {
+  color: #ff6b85;
+  border-color: rgba(244, 63, 94, 0.46);
+  background: rgba(244, 63, 94, 0.12);
+}
+
+.okcomputer-skin .badge,
+.okcomputer-skin .triage-rec-pill,
+.okcomputer-skin .blog-readiness-pill,
+.okcomputer-skin .finding-status {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.045);
+  color: var(--text-secondary);
+}
+
+.okcomputer-skin .badge.priority-urgent,
+.okcomputer-skin .badge.status-critical,
+.okcomputer-skin .triage-rec-pill.critical,
+.okcomputer-skin .triage-rec-pill.false_positive,
+.okcomputer-skin .triage-rec-pill.false-positive,
+.okcomputer-skin .triage-rec-pill.failed {
+  color: var(--rose);
+  background: rgba(244, 63, 94, 0.09);
+  border-color: rgba(244, 63, 94, 0.28);
+}
+
+.okcomputer-skin .badge.priority-high,
+.okcomputer-skin .triage-rec-pill.open,
+.okcomputer-skin .triage-rec-pill.high,
+.okcomputer-skin .triage-rec-pill.needs_review,
+.okcomputer-skin .triage-rec-pill.needs-review {
+  color: var(--amber);
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.okcomputer-skin .triage-rec-pill.expected_behavior,
+.okcomputer-skin .triage-rec-pill.expected-behavior,
+.okcomputer-skin .triage-rec-pill.completed,
+.okcomputer-skin .badge.status-completed,
+.okcomputer-skin .blog-readiness-pill.ready_to_review {
+  color: var(--emerald);
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.24);
+}
+
+.okcomputer-skin .kv-row,
+.okcomputer-skin .feed-item,
+.okcomputer-skin .blog-draft-item,
+.okcomputer-skin .triage-alert-card,
+.okcomputer-skin .campaign-package-row,
+.okcomputer-skin .campaign-inline-row,
+.okcomputer-skin .evidence-score-card,
+.okcomputer-skin .blog-meta-grid > div,
+.okcomputer-skin .blog-review-checklist,
+.okcomputer-skin .finding-detail-card {
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  border-color: var(--border-color);
+}
+
+.okcomputer-skin .feed-item {
+  border-left-color: var(--teal-primary);
+}
+
+.okcomputer-skin .task-card {
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-soft);
+}
+
+.okcomputer-skin .task-card:hover,
+.okcomputer-skin .blog-draft-item:hover,
+.okcomputer-skin .triage-alert-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-1px);
+}
+
+.okcomputer-skin .task-card .title,
+.okcomputer-skin .blog-draft-title,
+.okcomputer-skin .triage-alert-title {
+  color: var(--text-primary);
+}
+
+.okcomputer-skin .kv-key {
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+
+.okcomputer-skin .kv-val {
+  color: var(--text-secondary);
+}
+
+.okcomputer-skin table {
+  color: var(--text-primary);
+}
+
+.okcomputer-skin th {
+  color: var(--text-tertiary);
+  background: var(--surface-elevated);
+  border-color: var(--border-color);
+}
+
+.okcomputer-skin td {
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+.okcomputer-skin tr:hover td {
+  background: rgba(255,255,255,0.025);
+  color: var(--text-primary);
+}
+
+.okcomputer-skin pre,
+.okcomputer-skin .triage-cli-fallback,
+.okcomputer-skin .campaign-cli-output pre,
+.okcomputer-skin .blog-preview-body,
+.okcomputer-skin .run-output,
+.okcomputer-skin .prompt-output {
+  color: var(--text-secondary);
+  background: var(--void-black);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.okcomputer-skin .modal-backdrop {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.okcomputer-skin .modal-card {
+  box-shadow: var(--shadow-strong);
+}
+
+.okcomputer-skin .empty-state {
+  color: var(--text-secondary);
+  background: var(--surface-elevated);
+  border: 1px dashed var(--border-active);
+  border-radius: 12px;
+}
+
+.okcomputer-skin .form-error,
+.okcomputer-skin .error,
+.okcomputer-skin .last-action-failed {
+  color: var(--rose);
+}
+
+.okcomputer-skin .success,
+.okcomputer-skin .ok,
+.okcomputer-skin .approved {
+  color: var(--emerald);
+}
+
+.okcomputer-skin #page-triage-ops {
+  --triage-panel: var(--surface);
+  --triage-panel-2: var(--surface-elevated);
+  --triage-panel-3: var(--surface-soft);
+  --triage-line: var(--border-color);
+  --triage-line-strong: var(--border-active);
+  --triage-text: var(--text-primary);
+  --triage-muted: var(--text-secondary);
+  --triage-subtle: var(--text-tertiary);
+}
+
+.okcomputer-skin .triage-alert-card.selected,
+.okcomputer-skin .blog-draft-item.selected,
+.okcomputer-skin .campaign-candidate-card.selected {
+  border-color: rgba(0, 212, 200, 0.5);
+  box-shadow: 0 0 24px rgba(0, 212, 200, 0.12);
+}
+
+.okcomputer-skin .triage-section-heading span,
+.okcomputer-skin .campaign-list-head strong,
+.okcomputer-skin .campaign-package-header h4 {
+  color: var(--text-primary);
+}
+
+.okcomputer-skin .triage-section-heading small,
+.okcomputer-skin .campaign-list-head small {
+  color: var(--text-tertiary);
+}
+
+.okcomputer-skin .triage-filter-drawer,
+.okcomputer-skin .triage-cli-drawer,
+.okcomputer-skin .campaign-json-box {
+  background: var(--surface-elevated);
+  border-color: var(--border-color);
+}
+
+.okcomputer-skin .triage-campaign-dock > summary {
+  color: var(--text-primary);
+}
+
+.okcomputer-skin .triage-campaign-dock > summary small {
+  color: var(--text-secondary);
+}
+
+.okcomputer-skin .blog-review-note textarea,
+.okcomputer-skin #campaign-json-input {
+  min-height: 118px;
+}
+
+.okcomputer-skin .blog-preview-actions,
+.okcomputer-skin .triage-ops-actions,
+.okcomputer-skin .campaign-actions,
+.okcomputer-skin .blog-actions {
+  gap: 10px;
+}
+
+.okcomputer-skin .toast,
+.okcomputer-skin .toast-container > * {
+  background: var(--surface);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .okcomputer-skin *,
+  .okcomputer-skin *::before,
+  .okcomputer-skin *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .okcomputer-skin .app-shell {
+    display: block;
+  }
+
+  .okcomputer-skin .sidebar {
+    position: sticky;
+    top: 0;
+    width: 100%;
+    height: auto;
+    z-index: 80;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .okcomputer-skin .brand {
+    min-height: 64px;
+  }
+
+  .okcomputer-skin .mobile-menu-btn {
+    display: inline-flex;
+    border-color: var(--border-color);
+    background: var(--surface-elevated);
+  }
+
+  .okcomputer-skin .mobile-menu-btn span:not(.sr-only) {
+    background: var(--teal-primary);
+  }
+
+  .okcomputer-skin .nav-list {
+    padding: 0 12px;
+  }
+
+  .okcomputer-skin.mobile-nav-open .nav-list {
+    padding-bottom: 12px;
+  }
+
+  .okcomputer-skin .top-strip {
+    top: 65px;
+  }
+
+  .okcomputer-skin .page {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 720px) {
+  .okcomputer-skin .page {
+    padding: 12px;
+  }
+
+  .okcomputer-skin .page-header {
+    padding: 18px;
+  }
+
+  .okcomputer-skin .nav-btn {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .okcomputer-skin .card,
+  .okcomputer-skin .column,
+  .okcomputer-skin .modal-card,
+  .okcomputer-skin .page-header {
+    border-radius: 14px;
+  }
+
+  .okcomputer-skin .top-strip {
+    top: 62px;
+  }
+}
+
 @media (max-width: 720px) {
   .main { padding: 16px; }
   .page-header h2 { font-size: 1.45rem; }
@@ -4312,4 +5061,191 @@ label span,
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
+}
+
+/* OKComputer final pass.
+   This sits at the true end of the bundle so older section-specific rules cannot
+   reintroduce low-contrast cards, fields, or action groups. */
+.okcomputer-skin {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(0, 212, 200, 0.1), transparent 28rem),
+    radial-gradient(circle at 85% 8%, rgba(139, 92, 246, 0.1), transparent 30rem),
+    var(--void-black);
+  color: var(--text-primary);
+}
+
+.okcomputer-skin .app-shell,
+.okcomputer-skin .page,
+.okcomputer-skin .page.active {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.okcomputer-skin .sidebar {
+  background: rgba(5, 5, 7, 0.97);
+  border-right: 1px solid var(--border-color);
+}
+
+.okcomputer-skin .card,
+.okcomputer-skin .column,
+.okcomputer-skin .modal-card,
+.okcomputer-skin .blog-draft-card,
+.okcomputer-skin .triage-alert-card,
+.okcomputer-skin .campaign-panel,
+.okcomputer-skin .campaign-result-panel,
+.okcomputer-skin .task-card,
+.okcomputer-skin .toast {
+  background: linear-gradient(180deg, rgba(20, 20, 26, 0.96), rgba(13, 13, 18, 0.98));
+  border: 1px solid var(--border-color);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.26);
+  color: var(--text-primary);
+}
+
+.okcomputer-skin .top-strip,
+.okcomputer-skin .page-header {
+  background: rgba(5, 5, 7, 0.78);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.okcomputer-skin h1,
+.okcomputer-skin h2,
+.okcomputer-skin h3,
+.okcomputer-skin h4,
+.okcomputer-skin .card-title,
+.okcomputer-skin .column-title,
+.okcomputer-skin .metric,
+.okcomputer-skin .task-title,
+.okcomputer-skin .finding-title,
+.okcomputer-skin .blog-draft-title,
+.okcomputer-skin .triage-alert-title,
+.okcomputer-skin .triage-detail-title,
+.okcomputer-skin .campaign-title {
+  color: var(--text-primary);
+}
+
+.okcomputer-skin p,
+.okcomputer-skin label,
+.okcomputer-skin .muted,
+.okcomputer-skin .small,
+.okcomputer-skin .hint,
+.okcomputer-skin .task-meta,
+.okcomputer-skin .finding-meta,
+.okcomputer-skin .blog-draft-meta,
+.okcomputer-skin .triage-alert-summary,
+.okcomputer-skin .triage-detail-copy,
+.okcomputer-skin .campaign-help,
+.okcomputer-skin .campaign-empty,
+.okcomputer-skin .section-subtitle {
+  color: var(--text-secondary);
+}
+
+.okcomputer-skin input,
+.okcomputer-skin select,
+.okcomputer-skin textarea {
+  background: rgba(5, 5, 7, 0.78);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.okcomputer-skin input::placeholder,
+.okcomputer-skin textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.okcomputer-skin input:focus,
+.okcomputer-skin select:focus,
+.okcomputer-skin textarea:focus,
+.okcomputer-skin button:focus-visible,
+.okcomputer-skin a:focus-visible,
+.okcomputer-skin .nav-btn:focus-visible {
+  border-color: rgba(0, 212, 200, 0.72);
+  box-shadow: 0 0 0 3px rgba(0, 212, 200, 0.17);
+  outline: none;
+}
+
+.okcomputer-skin .primary-btn,
+.okcomputer-skin button.primary-btn {
+  background: var(--teal-primary);
+  border-color: transparent;
+  color: #041011;
+}
+
+.okcomputer-skin .secondary-btn,
+.okcomputer-skin .mini-btn,
+.okcomputer-skin button.secondary-btn,
+.okcomputer-skin button.mini-btn {
+  background: rgba(20, 20, 26, 0.95);
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.okcomputer-skin .danger-btn,
+.okcomputer-skin button.danger-btn {
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(244, 63, 94, 0.36);
+  color: #fecdd3;
+}
+
+.okcomputer-skin .status-pill,
+.okcomputer-skin .badge,
+.okcomputer-skin .pill,
+.okcomputer-skin .severity-pill,
+.okcomputer-skin .triage-status-pill,
+.okcomputer-skin .blog-status-pill {
+  background: rgba(20, 20, 26, 0.95);
+  border: 1px solid var(--border-active);
+  color: var(--text-secondary);
+}
+
+.okcomputer-skin .status-pill.critical,
+.okcomputer-skin .severity-critical,
+.okcomputer-skin .badge.critical {
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(244, 63, 94, 0.36);
+  color: #fecdd3;
+}
+
+.okcomputer-skin .status-pill.open,
+.okcomputer-skin .badge.open,
+.okcomputer-skin .badge.needs_review {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.36);
+  color: #fde68a;
+}
+
+.okcomputer-skin .status-pill.success,
+.okcomputer-skin .badge.success,
+.okcomputer-skin .badge.approved {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.36);
+  color: #a7f3d0;
+}
+
+.okcomputer-skin pre,
+.okcomputer-skin code,
+.okcomputer-skin .cli-block,
+.okcomputer-skin .output-block,
+.okcomputer-skin .json-output {
+  background: rgba(5, 5, 7, 0.86);
+  border-color: var(--border-color);
+  color: #d8fff9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.okcomputer-skin .nav-btn {
+  color: var(--text-secondary);
+}
+
+.okcomputer-skin .nav-btn:hover,
+.okcomputer-skin .nav-btn.active {
+  background: rgba(0, 212, 200, 0.1);
+  border-color: rgba(0, 212, 200, 0.2);
+  color: var(--text-primary);
+}
+
+.okcomputer-skin .nav-btn.active .nav-icon {
+  background: rgba(0, 212, 200, 0.18);
+  color: var(--teal-primary);
 }

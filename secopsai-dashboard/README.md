@@ -14,6 +14,10 @@ The dashboard is now intentionally narrow:
 
 It is not a Discord control plane and not a generic multi-agent org shell.
 
+## Visual System
+
+The dashboard uses an OKComputer_Sec-inspired dark command-plane skin: void-black shell, elevated dark panels, teal/cyan live-state accents, Lucide-style inline SVG navigation icons, compact mono metadata, and high-contrast status badges. The reference audit is tracked in [`docs/okcomputer-reference-audit.md`](docs/okcomputer-reference-audit.md). No Kimi runtime, compiled reference bundle, external image assets, or mock data are imported into production.
+
 It now also reads native local SecOpsAI state through the helper server:
 - triage summary
 - pending/applyable triage actions
