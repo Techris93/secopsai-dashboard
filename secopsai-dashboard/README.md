@@ -10,6 +10,7 @@ The dashboard is now intentionally narrow:
 - helper-backed native SecOpsAI actions
 - protected Triage Ops for supply-chain alert review and closure
 - Blog Ops workflow dispatch and review queue
+- built-in operator guide for dashboard click paths and safety rules
 - Supabase-backed integration status
 
 It is not a Discord control plane and not a generic multi-agent org shell.
@@ -85,6 +86,10 @@ Campaign Research and **Autonomous Discovery** live in a collapsed advanced dock
 - publish-approved, rebuild-feeds, and deploy buttons
 
 Blog Ops is intentionally protected. The browser calls `/api/blog/*` Worker endpoints, and the Worker dispatches the SecOpsAI `blog-ops.yml` workflow. Operators paste `BLOG_OPS_ADMIN_TOKEN` into the page for write actions; GitHub tokens stay server-side in Cloudflare Pages secrets.
+
+### Guide
+
+The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, Native Triage, Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, when to use CLI fallback, and why discovery candidates must be cleaned before persistence or blog drafting.
 
 ## Runtime split
 

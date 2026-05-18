@@ -60,6 +60,10 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"></path><path d="M8 8h8"></path><path d="M8 12h8"></path><path d="M8 16h5"></path></svg></span>
           <span class="nav-copy"><span class="title">Blog Ops</span><span class="desc">News drafts, approvals, publishing</span></span>
         </button>
+        <button class="nav-btn" data-page="operator-guide">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg></span>
+          <span class="nav-copy"><span class="title">Guide</span><span class="desc">Section walkthroughs, click paths, safety</span></span>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -320,6 +324,183 @@
           </summary>
           <div id="triage-ops-campaign-research"></div>
         </details>
+      </section>
+
+      <section class="page" id="page-operator-guide">
+        <div class="page-header">
+          <div>
+            <h2>Operator Guide</h2>
+            <p>Step-by-step dashboard playbook for daily triage, campaign research, blog review, and protected actions.</p>
+          </div>
+          <a class="status-pill guide-start-pill" href="#guide-triage-ops"><span class="dot"></span> Start with Triage Ops</a>
+        </div>
+
+        <div class="guide-layout">
+          <aside class="card guide-toc" aria-label="Operator guide table of contents">
+            <h3>Guide sections</h3>
+            <a href="#guide-overview">Overview</a>
+            <a href="#guide-tasks">Tasks</a>
+            <a href="#guide-findings">Findings</a>
+            <a href="#guide-native-triage">Native Triage</a>
+            <a href="#guide-triage-ops">Triage Ops</a>
+            <a href="#guide-campaigns">Campaign Research</a>
+            <a href="#guide-discovery">Autonomous Discovery</a>
+            <a href="#guide-blog-ops">Blog Ops</a>
+            <a href="#guide-safe-actions">Safety rules</a>
+          </aside>
+
+          <div class="guide-main">
+            <section class="card guide-section" id="guide-overview">
+              <div class="guide-section-head">
+                <span class="guide-pill">Overview</span>
+                <h3>Overview daily workflow</h3>
+                <p>Use Overview as the morning command scan. It answers: what changed, what is blocked, what needs review, and which runs or findings deserve attention first.</p>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Click <strong>Overview</strong>, then click <strong>Refresh data</strong> if the timestamp looks stale.</p></div>
+                <div class="guide-step"><span>2</span><p>Read the top metrics first: active runs, blockers, in-review work, and security-review count.</p></div>
+                <div class="guide-step"><span>3</span><p>Use recent events and recent runs to spot failed automation, stuck reviews, or unexpected spikes.</p></div>
+                <div class="guide-step"><span>4</span><p>If a metric is concerning, jump to <strong>Tasks</strong>, <strong>Findings</strong>, or <strong>Triage Ops</strong> instead of acting from memory.</p></div>
+              </div>
+              <div class="guide-callout guide-good">Best use: situational awareness. Overview is not where you close security issues; it tells you where to go next.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-tasks">
+              <div class="guide-section-head">
+                <span class="guide-pill">Tasks</span>
+                <h3>Tasks daily workflow</h3>
+                <p>Tasks is the work queue for ownership, deadlines, blockers, and run visibility. Use it to turn findings into tracked work.</p>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Click <strong>Tasks</strong> and scan each column: Inbox, Planned, In Progress, Review, Blocked, and Done.</p></div>
+                <div class="guide-step"><span>2</span><p>Open a task card to edit owner, reviewer, priority, due date, security-review flag, and description.</p></div>
+                <div class="guide-step"><span>3</span><p>Use <strong>Open work brief</strong> when you need a copyable implementation or investigation brief.</p></div>
+                <div class="guide-step"><span>4</span><p>Use <strong>Save and queue</strong> only when the task is ready to become a run request. Otherwise use <strong>Save task</strong>.</p></div>
+              </div>
+              <div class="guide-callout">Tip: if the task came from a finding, keep the original finding ID in the description so review can trace the evidence.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-findings">
+              <div class="guide-section-head">
+                <span class="guide-pill">Findings</span>
+                <h3>Findings daily workflow</h3>
+                <p>Findings is the detection backlog. It is best for reading detection details, linking work, and deciding whether a finding needs deeper triage.</p>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Click <strong>Findings</strong>, then filter or select a finding from the backlog.</p></div>
+                <div class="guide-step"><span>2</span><p>Read the evidence, source, severity, status, and any linked task or run context.</p></div>
+                <div class="guide-step"><span>3</span><p>Click <strong>Create task</strong> when the finding needs remediation, research, or review ownership.</p></div>
+                <div class="guide-step"><span>4</span><p>For supply-chain <strong>SCM-*</strong> findings, switch to <strong>Triage Ops</strong> for advisory checks, evidence verdicts, mitigation, closure, and blog draft handoff.</p></div>
+              </div>
+              <div class="guide-callout guide-warning">Important: absence of local usage means lower environment impact, not that the package itself is benign.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-native-triage">
+              <div class="guide-section-head">
+                <span class="guide-pill">Native Triage</span>
+                <h3>Native Triage daily workflow</h3>
+                <p>Native Triage shows helper health, pending triage actions, orchestrator history, and local SecOpsAI state freshness.</p>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Click <strong>Native Triage</strong> and check helper readiness before relying on dashboard actions.</p></div>
+                <div class="guide-step"><span>2</span><p>Review pending actions. Apply or close only when the evidence and analyst note are ready.</p></div>
+                <div class="guide-step"><span>3</span><p>Use recent orchestrator summaries to see what was queued, completed, failed, or needs human review.</p></div>
+                <div class="guide-step"><span>4</span><p>If helper health is degraded, use the copyable CLI fallback from the relevant section and restart/update the helper before retrying buttons.</p></div>
+              </div>
+              <div class="guide-callout">Hosted dashboard mode needs a reachable helper URL. Local mode needs the helper server running on the configured port.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-triage-ops">
+              <div class="guide-section-head">
+                <span class="guide-pill">Triage Ops</span>
+                <h3>Triage Ops daily workflow</h3>
+                <p>Triage Ops is the supply-chain alert review and closure plane. Start here when you see malicious or suspicious package releases.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Read-only actions</strong><span>Refresh evidence, Run Evidence Verdict, Investigate, Explain verdict, advisory check, local usage check, raw report.</span></div>
+                <div class="guide-mini-card"><strong>Protected actions</strong><span>Generate mitigation, Move to in review, Close as false positive, Create blog draft.</span></div>
+                <div class="guide-mini-card"><strong>Core decision</strong><span>Separate package maliciousness from local environment impact.</span></div>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Click <strong>Triage Ops</strong>, then click <strong>Refresh evidence</strong>.</p></div>
+                <div class="guide-step"><span>2</span><p>Select an alert in <strong>Supply Chain Alerts</strong>. The right panel becomes the working record.</p></div>
+                <div class="guide-step"><span>3</span><p>Run <strong>Run Evidence Verdict</strong> first. It summarizes package verdict, confidence, advisory evidence, scanner rules, local impact, mitigation, and operator commands.</p></div>
+                <div class="guide-step"><span>4</span><p>Click <strong>Explain verdict</strong> and <strong>Check advisory matches</strong> when you need source-backed evidence beyond the scanner rationale.</p></div>
+                <div class="guide-step"><span>5</span><p>Click <strong>Check local repo usage</strong>. If local usage is none, record that as environment impact only. Do not downgrade a malicious package because this repo does not use it.</p></div>
+                <div class="guide-step"><span>6</span><p>Click <strong>Read raw report</strong> when you need the exact diff/rule evidence before writing an analyst note.</p></div>
+                <div class="guide-step"><span>7</span><p>Update the <strong>Close / escalation note</strong> with a source-backed summary before any protected response action.</p></div>
+                <div class="guide-step"><span>8</span><p>Use <strong>Generate mitigation</strong> for block, audit, hunt, cache cleanup, and secret-rotation guidance. Use <strong>Create blog draft</strong> only for review-only external communication.</p></div>
+              </div>
+              <div class="guide-callout guide-danger">Do not close as false positive just because local usage is none. First verify advisory state, behavior evidence, and whether the package is malicious independently.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-campaigns">
+              <div class="guide-section-head">
+                <span class="guide-pill">Campaign Research</span>
+                <h3>Campaign Research workflow</h3>
+                <p>Use Campaign Research when multiple packages, IOCs, sources, publishers, or ecosystems appear related to one supply-chain attack.</p>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Open the <strong>Campaign Research & Autonomous Discovery</strong> dock inside Triage Ops.</p></div>
+                <div class="guide-step"><span>2</span><p>Either quick-load a fixture, paste campaign JSON, or manually add campaign ID, title, source URLs, actors, publishers, IOCs, behavior indicators, and package rows.</p></div>
+                <div class="guide-step"><span>3</span><p>Click <strong>Run Campaign Research</strong>. This is read-only by default and should return campaign verdict, package verdicts, correlations, local impact, mitigation, and references.</p></div>
+                <div class="guide-step"><span>4</span><p>Click <strong>Correlate Campaign</strong> when the campaign includes shared publishers, C2s, source reports, or overlapping strings.</p></div>
+                <div class="guide-step"><span>5</span><p>Click <strong>Check Local Usage</strong> before persistence so SOC findings distinguish malicious package evidence from local exposure.</p></div>
+                <div class="guide-step"><span>6</span><p>Click <strong>Persist Findings</strong> only after reviewing the campaign JSON and removing false package extractions. This action is token-gated.</p></div>
+                <div class="guide-step"><span>7</span><p>Click <strong>Create Campaign Blog Draft</strong> only when the campaign has references, affected package table, IOCs or an explicit none-found statement, mitigation, and SecOpsAI detection logic.</p></div>
+              </div>
+              <div class="guide-callout">If a source page produces unrelated package names, clean the form before persisting. Campaign Research is strongest when inputs are curated.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-discovery">
+              <div class="guide-section-head">
+                <span class="guide-pill">Autonomous Discovery</span>
+                <h3>Autonomous Discovery workflow</h3>
+                <p>Autonomous Discovery is a lead generator. It monitors trusted sources and watchlists, extracts possible supply-chain campaign candidates, then lets you promote a candidate into Campaign Research.</p>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Set <strong>Since</strong>, <strong>Source</strong>, <strong>Limit</strong>, and <strong>Min score</strong>. Start with 24h, all, 10, and 35 for daily review.</p></div>
+                <div class="guide-step"><span>2</span><p>Click <strong>Run Discovery</strong> to fetch candidates without writing SOC findings or blog drafts.</p></div>
+                <div class="guide-step"><span>3</span><p>Review candidate titles, scores, package rows, IOCs, and behavior signals. Treat high score as "worth checking", not proof.</p></div>
+                <div class="guide-step"><span>4</span><p>Click <strong>Promote to Campaign Research</strong> only for candidates that are actually supply-chain related.</p></div>
+                <div class="guide-step"><span>5</span><p>Remove obvious extraction noise before research, such as byline CSS classes, ordinary websites, image filenames, random numbers, or generic article words misread as npm packages.</p></div>
+                <div class="guide-step"><span>6</span><p>Use <strong>Run Autopilot Dry Run</strong> to test the end-to-end campaign path without persistence.</p></div>
+                <div class="guide-step"><span>7</span><p>Use <strong>Add to Watchlist</strong> for real package names, publishers, C2 domains, campaign IDs, or IOCs you want SecOpsAI to keep tracking.</p></div>
+              </div>
+              <div class="guide-callout guide-warning">Do not click Persist Findings from discovery output until the promoted campaign has been cleaned and reviewed. Discovery can over-extract from general security articles.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-blog-ops">
+              <div class="guide-section-head">
+                <span class="guide-pill">Blog Ops</span>
+                <h3>Blog Ops daily workflow</h3>
+                <p>Blog Ops is the protected newsroom for source-backed drafts, approvals, feed rebuilds, and deployment. It never should be used as an autopublish shortcut.</p>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Click <strong>Blog Ops</strong>, then click <strong>Refresh Blog Ops</strong> to load workflow status, sources, and draft queue.</p></div>
+                <div class="guide-step"><span>2</span><p>Use <strong>Fetch news</strong> to ingest sources, <strong>Create drafts</strong> to generate review-only drafts, or <strong>Run fetch + draft</strong> for both.</p></div>
+                <div class="guide-step"><span>3</span><p>Select a draft in the review queue. Check title, summary, severity, body, references, IOCs, affected artifacts, and recommended actions.</p></div>
+                <div class="guide-step"><span>4</span><p>Use edit/save if the article needs cleanup. Approve only when claims are source-backed and no internal checklist, local path, secret, or copied external article text appears.</p></div>
+                <div class="guide-step"><span>5</span><p>Click <strong>Publish approved</strong> only after approval. Then use <strong>Rebuild feeds</strong> and <strong>Deploy blog</strong> as needed.</p></div>
+              </div>
+              <div class="guide-callout guide-danger">External-news and campaign drafts must remain human-reviewed. Publishing stays approval-gated even when a draft was created from Triage Ops.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-safe-actions">
+              <div class="guide-section-head">
+                <span class="guide-pill">Safety rules</span>
+                <h3>Protected action rules</h3>
+                <p>The dashboard is an operator console, not a shell. Browser actions call protected helper endpoints; write actions require an admin token and should leave an evidence trail.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Safe to click early</strong><span>Refresh, read-only verdicts, investigate, explain, advisory check, local usage check, raw report, copy CLI fallback.</span></div>
+                <div class="guide-mini-card"><strong>Review before clicking</strong><span>Generate mitigation, move to in review, persist findings, create blog draft, publish approved.</span></div>
+                <div class="guide-mini-card"><strong>Do not click until proven</strong><span>Close as false positive, persist noisy discovery candidates, publish external-news drafts.</span></div>
+              </div>
+              <div class="guide-callout">If a button returns "older helper route" or "not configured", restart or update the local helper, refresh the dashboard, and use the CLI fallback while hosted helper configuration is being fixed.</div>
+            </section>
+          </div>
+        </div>
       </section>
     </main>
   </div>

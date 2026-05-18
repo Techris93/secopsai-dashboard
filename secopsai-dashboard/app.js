@@ -154,14 +154,15 @@ const state = {
 const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
-const pages = ["mission-control", "tasks", "findings", "integrations", "triage-ops", "blog-ops"];
+const pages = ["mission-control", "tasks", "findings", "integrations", "triage-ops", "blog-ops", "operator-guide"];
 const PAGE_CONTEXT = {
   "mission-control": "Mission Control overview",
   "tasks": "Task queue, ownership, and run visibility",
   "findings": "Detection triage and correlation surface",
   "integrations": "Native triage and helper visibility",
   "triage-ops": "Supply-chain alert review and closure",
-  "blog-ops": "Security blog newsroom control plane"
+  "blog-ops": "Security blog newsroom control plane",
+  "operator-guide": "Dashboard operator guide"
 };
 
 function el(id) { return document.getElementById(id); }

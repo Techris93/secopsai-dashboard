@@ -5249,3 +5249,219 @@ label span,
   background: rgba(0, 212, 200, 0.18);
   color: var(--teal-primary);
 }
+
+/* Operator guide */
+.guide-start-pill {
+  text-decoration: none;
+}
+
+.guide-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.guide-toc {
+  position: sticky;
+  top: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guide-toc h3 {
+  margin: 0 0 8px;
+}
+
+.guide-toc a {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary, rgba(226, 232, 240, 0.78));
+  text-decoration: none;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.guide-toc a:hover,
+.guide-toc a:focus-visible {
+  background: rgba(0, 212, 200, 0.1);
+  border-color: rgba(0, 212, 200, 0.32);
+  color: var(--text-primary, #f8fafc);
+}
+
+.guide-main {
+  display: grid;
+  gap: 18px;
+}
+
+.guide-section {
+  scroll-margin-top: 90px;
+}
+
+.guide-section-head {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.guide-section-head h3 {
+  margin: 0;
+  font-size: clamp(1.15rem, 1.7vw, 1.55rem);
+}
+
+.guide-section-head p {
+  margin: 0;
+  max-width: 78ch;
+}
+
+.guide-pill {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 212, 200, 0.28);
+  border-radius: 999px;
+  background: rgba(0, 212, 200, 0.1);
+  color: #98fff6;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.guide-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.guide-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.guide-step > span {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: rgba(0, 212, 200, 0.14);
+  border: 1px solid rgba(0, 212, 200, 0.26);
+  color: #98fff6;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.guide-step p {
+  margin: 2px 0 0;
+  color: var(--text-secondary, rgba(226, 232, 240, 0.78));
+  line-height: 1.58;
+  overflow-wrap: anywhere;
+}
+
+.guide-step strong {
+  color: var(--text-primary, #f8fafc);
+}
+
+.guide-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.guide-mini-card {
+  display: grid;
+  gap: 6px;
+  min-height: 112px;
+  padding: 14px;
+  border: 1px solid rgba(0, 212, 200, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(0, 212, 200, 0.08), transparent 52%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.guide-mini-card strong {
+  color: var(--text-primary, #f8fafc);
+}
+
+.guide-mini-card span {
+  color: var(--text-secondary, rgba(226, 232, 240, 0.78));
+  line-height: 1.5;
+}
+
+.guide-callout {
+  margin-top: 14px;
+  padding: 13px 14px;
+  border: 1px solid rgba(0, 212, 200, 0.2);
+  border-radius: 16px;
+  background: rgba(0, 212, 200, 0.08);
+  color: #d8fff9;
+  line-height: 1.55;
+}
+
+.guide-callout.guide-good {
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(16, 185, 129, 0.1);
+  color: #d1fae5;
+}
+
+.guide-callout.guide-warning {
+  border-color: rgba(245, 158, 11, 0.34);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fde68a;
+}
+
+.guide-callout.guide-danger {
+  border-color: rgba(244, 63, 94, 0.36);
+  background: rgba(244, 63, 94, 0.1);
+  color: #fecdd3;
+}
+
+@media (max-width: 1100px) {
+  .guide-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-toc {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .guide-toc h3 {
+    grid-column: 1 / -1;
+  }
+
+  .guide-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .guide-toc {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-step {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-step > span {
+    width: 32px;
+    height: 32px;
+  }
+}

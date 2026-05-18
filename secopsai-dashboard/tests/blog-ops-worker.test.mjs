@@ -301,6 +301,29 @@ function testOkComputerSkinIsPresent() {
   assert.equal(html.includes("kimi.com/sdk-seed.js"), false);
 }
 
+function testOperatorGuideUiIsPresent() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(html, /data-page="operator-guide"/);
+  assert.match(html, /id="page-operator-guide"/);
+  assert.match(html, /Operator Guide/);
+  assert.match(html, /Overview daily workflow/);
+  assert.match(html, /Tasks daily workflow/);
+  assert.match(html, /Findings daily workflow/);
+  assert.match(html, /Native Triage daily workflow/);
+  assert.match(html, /Triage Ops daily workflow/);
+  assert.match(html, /Blog Ops daily workflow/);
+  assert.match(html, /Autonomous Discovery is a lead generator/);
+  assert.match(html, /Do not click Persist Findings/);
+  assert.match(app, /"operator-guide"/);
+  assert.match(app, /Dashboard operator guide/);
+  assert.match(css, /Operator guide/);
+  assert.match(css, /\.guide-layout/);
+  assert.match(css, /\.guide-step/);
+  assert.match(css, /\.guide-toc/);
+}
+
 async function testWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/blog/news-run", { method: "POST", body: "{}" }),
@@ -440,6 +463,7 @@ await testCampaignWriteNeedsAdminToken();
 await testCampaignWatchlistNeedsAdminToken();
 testCampaignResearchUiIsPresent();
 testOkComputerSkinIsPresent();
+testOperatorGuideUiIsPresent();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
 await testGithubWorkflowNotFoundIsActionable();
