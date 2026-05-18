@@ -183,6 +183,38 @@ async function testCampaignDiscoveryIsReadOnlyProxy() {
   }
 }
 
+async function testCampaignAutopilotIsReadOnlyProxy() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ ok: true, result: { selected_candidates: 1 }, candidates: [{ candidate_id: "unit-campaign" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/triage-ops/campaign-autopilot", {
+        method: "POST",
+        body: JSON.stringify({ since: "24h", limit: 10, min_score: 35, persist: false }),
+      }),
+      {
+        SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+        TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
+      },
+    );
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.result.selected_candidates, 1);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://helper.example/api/secopsai/triage-ops/campaign-autopilot");
+    assert.equal(calls[0].init.headers.has("X-Triage-Ops-Admin-Token"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testCampaignWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/secopsai/triage-ops/campaign-persist-findings", {
@@ -231,6 +263,8 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /Run Discovery/);
   assert.match(app, /Run Autopilot Dry Run/);
   assert.match(app, /Promote to Campaign Research/);
+  assert.match(app, /older helper route/);
+  assert.match(app, /Restart or update the local SecOpsAI dashboard helper/);
   assert.match(app, /Evidence actions/);
   assert.match(app, /Response actions/);
   assert.match(app, /campaign-persist-findings/);
@@ -372,6 +406,7 @@ await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
 await testCampaignResearchIsReadOnlyProxy();
 await testCampaignDiscoveryIsReadOnlyProxy();
+await testCampaignAutopilotIsReadOnlyProxy();
 await testCampaignWriteNeedsAdminToken();
 await testCampaignWatchlistNeedsAdminToken();
 testCampaignResearchUiIsPresent();

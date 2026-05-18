@@ -29,6 +29,15 @@ ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
     'campaign-blog-draft',
     'campaign-watchlist',
 }
+CAMPAIGN_TRIAGE_OPS_ACTIONS = {
+    'campaign-discover',
+    'campaign-autopilot',
+    'campaign-promote',
+    'campaign-watchlist',
+    'research-campaign',
+    'campaign-persist-findings',
+    'campaign-blog-draft',
+}
 ALLOWED_CAMPAIGN_ECOSYSTEMS = {
     'npm',
     'pypi',
@@ -1662,6 +1671,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                             'campaign_id': campaign.get('campaign_id'),
                             'result': parsed_result,
                             'cli': compact_cli_result(result),
+                        },
+                    )
+
+                if action.startswith('campaign-') or action in CAMPAIGN_TRIAGE_OPS_ACTIONS:
+                    return json_response(
+                        self,
+                        404,
+                        {
+                            'ok': False,
+                            'error': (
+                                f'Campaign action not available on this helper: {action}. '
+                                'Restart or update the local SecOpsAI dashboard helper, then refresh Triage Ops.'
+                            ),
                         },
                     )
 

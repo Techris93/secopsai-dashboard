@@ -115,6 +115,11 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('--create-drafts', args)
         self.assertNotIn(';', ' '.join(args))
 
+    def test_campaign_actions_are_not_finding_actions(self):
+        self.assertIn('campaign-autopilot', server.CAMPAIGN_TRIAGE_OPS_ACTIONS)
+        self.assertIn('campaign-discover', server.CAMPAIGN_TRIAGE_OPS_ACTIONS)
+        self.assertIn('research-campaign', server.CAMPAIGN_TRIAGE_OPS_ACTIONS)
+
     def test_campaign_watchlist_args_validate_source_url(self):
         args = server.build_campaign_watchlist_args({'package': 'npm:chalk-tempalte'})
         self.assertEqual(args[:3], ['supply-chain', 'campaign-watchlist', 'add'])

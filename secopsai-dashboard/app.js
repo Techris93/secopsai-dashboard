@@ -3342,9 +3342,9 @@ async function runCampaignEndpoint(action, { button = null, write = false, confi
     setStatus(`<span class="dot"></span> Campaign ${escapeHtml(statusLabel(action))} completed`);
     renderTriageOps();
   } catch (error) {
-    const suffix = /not configured/i.test(error.message) ? ' Configure SECOPSAI_HELPER_BASE_URL or run the local helper.' : '';
-    state.triageOps.campaignLastOutput = { action, error: `${error.message}${suffix}`, at: new Date().toISOString() };
-    setStatus(`Campaign ${action} failed: ${error.message}${suffix}`, true);
+    const message = campaignActionErrorMessage(action, error);
+    state.triageOps.campaignLastOutput = { action, error: message, at: new Date().toISOString() };
+    setStatus(`Campaign ${action} failed: ${message}`, true);
     renderTriageOps();
   } finally {
     setButtonBusy(button, false);
@@ -3393,6 +3393,17 @@ function campaignDiscoveryCliFallback() {
   ].join('\n');
 }
 
+function campaignActionErrorMessage(action, error) {
+  const raw = error?.message || String(error || 'Campaign action failed');
+  if (/Finding not found or not active/i.test(raw)) {
+    return `${raw} This campaign action reached an older helper route that only understands single-finding actions. Restart or update the local SecOpsAI dashboard helper, then refresh Triage Ops and retry ${statusLabel(action)}.`;
+  }
+  if (/not configured/i.test(raw)) {
+    return `${raw} Configure SECOPSAI_HELPER_BASE_URL or run the local helper.`;
+  }
+  return raw;
+}
+
 async function runCampaignDiscoveryAction(action, { button = null, write = false, confirmMessage = '', body = null } = {}) {
   if (write && !state.triageOps.adminToken) {
     const message = 'Paste your Triage Ops admin token, then click Use token before campaign discovery write actions.';
@@ -3432,9 +3443,9 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
     setStatus(`<span class="dot"></span> Campaign discovery ${escapeHtml(statusLabel(action))} completed`);
     renderTriageOps();
   } catch (error) {
-    const suffix = /not configured/i.test(error.message) ? ' Configure SECOPSAI_HELPER_BASE_URL or run the local helper.' : '';
-    state.triageOps.campaignLastOutput = { action, error: `${error.message}${suffix}`, at: new Date().toISOString() };
-    setStatus(`Campaign discovery ${action} failed: ${error.message}${suffix}`, true);
+    const message = campaignActionErrorMessage(action, error);
+    state.triageOps.campaignLastOutput = { action, error: message, at: new Date().toISOString() };
+    setStatus(`Campaign discovery ${action} failed: ${message}`, true);
     renderTriageOps();
   } finally {
     setButtonBusy(button, false);
