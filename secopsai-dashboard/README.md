@@ -118,6 +118,12 @@ python3 generate-config.py
 ./start-local-dashboard-stack.sh
 ```
 
+The launcher replaces an older `dashboard_server.py` process only when it is
+listening from this dashboard directory on the requested local port. That keeps
+Triage Ops Campaign Discovery from accidentally hitting a stale helper route
+that only understands single-finding actions. If you intentionally want to keep
+an existing helper, run with `SECOPSAI_DASHBOARD_REPLACE_STALE_HELPER=0`.
+
 Optional `.env` values:
 - `SECOPSAI_ROOT`
   - local repo root used by the helper server for native triage/orchestrator state and helper-backed native actions

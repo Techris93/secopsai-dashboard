@@ -637,6 +637,7 @@ async function handleIntegrationStatus(env) {
       secopsai_triage_api: Boolean(secopsaiHelperBase),
       secopsai_sessions_api: Boolean(secopsaiHelperBase),
       secopsai_research_api: Boolean(secopsaiHelperBase),
+      secopsai_campaign_api: Boolean(secopsaiHelperBase),
       secopsai_events_api: Boolean(secopsaiHelperBase),
     },
     ai_guard: aiGuard,

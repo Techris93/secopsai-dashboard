@@ -200,6 +200,12 @@ python3 -m secopsai.cli blog draft-campaign --campaign campaign.json
 
 The dashboard never sends shell strings to the helper. The local helper writes campaign JSON to a temporary file, invokes allowlisted SecOpsAI CLI argument arrays, truncates output, redacts secret-like text, and deletes the temporary file before returning a response.
 
+If Campaign Discovery reports `Finding not found or not active`, the dashboard
+is talking to an older helper that predates campaign routes. Restart the local
+stack with `./start-local-dashboard-stack.sh`; the launcher now replaces stale
+helpers that are listening from the dashboard directory. For hosted Pages, make
+sure `SECOPSAI_HELPER_BASE_URL` points at the refreshed helper URL.
+
 ## R2 key format
 
 The dashboard asks `/api/run-output` for a path relative to the OpenClaw workspace root.

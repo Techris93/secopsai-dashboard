@@ -24,6 +24,15 @@ async function testConfigExposesTriageOpsEndpoint() {
   assert.equal(body.includes("/api/secopsai/triage-ops"), true);
 }
 
+async function testIntegrationStatusExposesCampaignApi() {
+  const response = await worker.fetch(new Request("https://dashboard.example/api/integration-status"), {
+    SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+  });
+  assert.equal(response.status, 200);
+  const payload = await jsonFrom(response);
+  assert.equal(payload.helper.secopsai_campaign_api, true);
+}
+
 async function testTriageOpsHostedModeFailsClearlyWithoutHelper() {
   const response = await worker.fetch(new Request("https://dashboard.example/api/secopsai/triage-ops/alerts"), {});
   assert.equal(response.status, 501);
@@ -252,9 +261,12 @@ async function testCampaignWatchlistNeedsAdminToken() {
 function testCampaignResearchUiIsPresent() {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const startScript = readFileSync(new URL("../start-local-dashboard-stack.sh", import.meta.url), "utf8");
+  const serveScript = readFileSync(new URL("../serve-dashboard.sh", import.meta.url), "utf8");
   assert.match(html, /triage-ops-campaign-research/);
   assert.match(html, /Campaign Research & Autonomous Discovery/);
   assert.match(html, /triage-filter-drawer/);
+  assert.match(app, /Campaign API/);
   assert.match(app, /Run Campaign Research/);
   assert.match(app, /Import Campaign JSON/);
   assert.match(app, /Persist Findings/);
@@ -271,6 +283,8 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /campaign-blog-draft/);
   assert.match(app, /campaign-discover/);
   assert.match(app, /campaign-autopilot/);
+  assert.match(startScript, /Replacing stale local dashboard helper/);
+  assert.match(serveScript, /Replacing stale local dashboard helper/);
 }
 
 function testOkComputerSkinIsPresent() {
@@ -414,6 +428,7 @@ async function testSaveDraftDispatchIncludesEditedFields() {
 
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
+await testIntegrationStatusExposesCampaignApi();
 await testTriageOpsHostedModeFailsClearlyWithoutHelper();
 await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();

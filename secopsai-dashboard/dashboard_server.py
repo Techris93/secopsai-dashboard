@@ -1419,6 +1419,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'secopsai_sessions_api': True,
                     'secopsai_research_api': True,
                     'secopsai_events_api': True,
+                    'secopsai_campaign_api': True,
                 },
                 'ai_guard': build_ai_guard(),
             }

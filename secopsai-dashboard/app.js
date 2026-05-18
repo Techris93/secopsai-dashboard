@@ -2569,6 +2569,7 @@ function renderIntegrations() {
           <div class="kv-row"><div class="kv-key">Native triage API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_triage_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Sessions API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_sessions_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Research API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_research_api ? 'Ready' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Campaign API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_campaign_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Event stream</div><div class="kv-val">${escapeHtml(humanizeSnake(state.nativeStreamStatus || 'disconnected'))}${state.nativeStreamLastEventAt ? ` • ${escapeHtml(fmtDate(state.nativeStreamLastEventAt))}` : ''}</div></div>
           <div class="kv-row"><div class="kv-key">Latest findings artifact</div><div class="kv-val">${escapeHtml(localFindingsArtifact()?.generated_at ? fmtDate(localFindingsArtifact().generated_at) : 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Latest orchestrator run</div><div class="kv-val">${escapeHtml(localTriageLatestRun()?.generated_at ? fmtDate(localTriageLatestRun().generated_at) : 'Unavailable')}</div></div>
@@ -4341,6 +4342,7 @@ async function loadIntegrationStatus() {
         secopsai_triage_api: false,
         secopsai_sessions_api: false,
         secopsai_research_api: false,
+        secopsai_campaign_api: false,
         secopsai_events_api: false
       },
       ai_guard: aiGuardConfig()
