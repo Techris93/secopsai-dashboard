@@ -377,6 +377,10 @@
                   <span>Runs read-only campaign discovery and opens the Triage Ops campaign dock for candidate review.</span>
                   <button class="secondary-btn guide-automation-btn" id="guide-discovery-review-btn" type="button">Run Discovery Review</button>
                 </div>
+                <div class="guide-mini-card">
+                  <strong>Assisted Candidate Cleanup</strong>
+                  <span>Flags likely extraction noise, cleans obvious junk from promoted campaigns, and suggests watchlist entries from reviewed campaign fields.</span>
+                </div>
               </div>
               <div class="guide-callout guide-warning">Automation stops at evidence collection and candidate generation. Protected response work still requires an admin token, confirmation, and a reviewed analyst note.</div>
             </section>
@@ -492,13 +496,13 @@
               <div class="guide-steps">
                 <div class="guide-step"><span>1</span><p>Set <strong>Since</strong>, <strong>Source</strong>, <strong>Limit</strong>, and <strong>Min score</strong>. Start with 24h, all, 10, and 35 for daily review.</p></div>
                 <div class="guide-step"><span>2</span><p>Click <strong>Run Discovery</strong> to fetch candidates without writing SOC findings or blog drafts.</p></div>
-                <div class="guide-step"><span>3</span><p>Review candidate titles, scores, package rows, IOCs, and behavior signals. Treat high score as "worth checking", not proof.</p></div>
+                <div class="guide-step"><span>3</span><p>Review candidate titles, scores, behavior signals, and the package-noise summary. Treat high score as "worth checking", not proof. The dashboard now separates likely package rows from likely noisy extractions so general security articles do not become fake npm campaigns.</p></div>
                 <div class="guide-step"><span>4</span><p>Click <strong>Promote to Campaign Research</strong> only for candidates that are actually supply-chain related.</p></div>
-                <div class="guide-step"><span>5</span><p>Use the automated package-noise labels and <strong>Clean Obvious Package Noise</strong> before research. It removes common junk such as byline CSS classes, ordinary websites, image filenames, random numbers, or generic article words misread as npm packages.</p></div>
+                <div class="guide-step"><span>5</span><p>After promotion, inspect highlighted package rows. Use <strong>Clean Obvious Package Noise</strong> before research. It removes common junk such as byline CSS classes, ordinary websites, image filenames, random numbers, repository issue paths, long encoded image slugs, or generic article words misread as package IDs.</p></div>
                 <div class="guide-step"><span>6</span><p>Use <strong>Run Autopilot Dry Run</strong> to test the end-to-end campaign path without persistence.</p></div>
-                <div class="guide-step"><span>7</span><p>Use generated watchlist suggestions for real package names, publishers, C2 domains, campaign IDs, or IOCs you want SecOpsAI to keep tracking. Click a suggestion to fill the form, then click <strong>Add to Watchlist</strong> to save it.</p></div>
+                <div class="guide-step"><span>7</span><p>Use generated watchlist suggestions for real package names, publishers, actors, C2 domains, campaign IDs, source URLs, or IOCs you want SecOpsAI to keep tracking. Click a suggestion to fill the form, verify it is real, then click <strong>Add to Watchlist</strong> to save it with the admin token.</p></div>
               </div>
-              <div class="guide-callout guide-warning">Do not click Persist Findings from discovery output until the promoted campaign has been cleaned and reviewed. Discovery can over-extract from general security articles.</div>
+              <div class="guide-callout guide-warning">Do not click Persist Findings from discovery output until the promoted campaign has been cleaned and reviewed. Discovery can over-extract from general security articles; the noise labels reduce that risk, but they are still a deterministic aid rather than a final analyst decision.</div>
             </section>
 
             <section class="card guide-section" id="guide-blog-ops">

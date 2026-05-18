@@ -312,8 +312,11 @@ function testOperatorGuideUiIsPresent() {
   assert.match(html, /Run Daily Refresh/);
   assert.match(html, /Run Selected Alert Evidence Bundle/);
   assert.match(html, /Run Discovery Review/);
+  assert.match(html, /Assisted Candidate Cleanup/);
   assert.match(html, /Clean Obvious Package Noise/);
   assert.match(html, /generated watchlist suggestions/);
+  assert.match(html, /package-noise summary/);
+  assert.match(html, /verify it is real/);
   assert.match(html, /Overview daily workflow/);
   assert.match(html, /Tasks daily workflow/);
   assert.match(html, /Findings daily workflow/);

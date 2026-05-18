@@ -95,8 +95,9 @@ The guide includes safe automation buttons for repetitive read-only work:
 - **Run Daily Refresh** reloads dashboard data, helper state, Blog Ops status, Triage Ops alerts, and campaign fixtures.
 - **Run Selected Alert Evidence Bundle** runs evidence verdict, investigate, explain verdict, advisory check, local usage check, and raw report for the selected SCM alert.
 - **Run Discovery Review** runs read-only campaign discovery and opens the Triage Ops campaign dock for candidate review.
-- Discovery candidates are automatically annotated with likely package rows vs obvious extraction noise, and promoted campaign forms include **Clean Obvious Package Noise**.
-- Watchlist suggestions are generated from clean packages, publishers, actors, campaign IDs, IOCs, and source URLs; selecting one fills the token-gated **Add to Watchlist** form.
+- Discovery candidates are automatically annotated with likely package rows vs obvious extraction noise so high scores are treated as "worth checking," not proof.
+- Promoted campaign forms include **Clean Obvious Package Noise** for common false package extractions such as byline CSS classes, generic article words, ordinary websites, image filenames, numeric tokens, repository issue paths, and long encoded-looking slugs.
+- Watchlist suggestions are generated from clean packages, publishers, actors, campaign IDs, IOCs, and source URLs. Selecting one fills the token-gated **Add to Watchlist** form, but operators still verify the suggestion before saving it.
 
 These guide automations intentionally do not close findings, persist SOC findings, create blog drafts, approve drafts, publish posts, or bypass admin-token gates.
 
