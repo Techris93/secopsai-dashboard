@@ -3198,6 +3198,83 @@ async function runTriageOpsAction(action, { button = null, payload = {}, write =
   }
 }
 
+async function runDailyGuideRefresh(button = null) {
+  if (bootError) {
+    setStatus(bootError, true);
+    return;
+  }
+  setButtonBusy(button, true, 'Refreshing…');
+  setStatus('<span class="dot"></span> Running read-only daily dashboard refresh…');
+  try {
+    await boot();
+    setStatus('<span class="dot"></span> Daily dashboard refresh completed');
+  } catch (error) {
+    setStatus(`Daily dashboard refresh failed: ${error.message || error}`, true);
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function runTriageOpsEvidenceBundle(button = null) {
+  const selectedAlert = selectedTriageOpsAlert();
+  if (!selectedAlert) {
+    setPage('triage-ops');
+    setStatus('Select a supply-chain alert before running the evidence bundle.', true);
+    return;
+  }
+  const actions = ['evidence-verdict', 'investigate', 'explain-verdict', 'check-advisories', 'check-local-usage', 'raw-report'];
+  const body = {
+    finding_id: selectedAlert.finding_id,
+    ecosystem: selectedAlert.ecosystem,
+    package: selectedAlert.package,
+    version: selectedAlert.version
+  };
+  const results = {};
+  setButtonBusy(button, true, 'Bundling…');
+  setStatus(`<span class="dot"></span> Running read-only evidence bundle for ${escapeHtml(selectedAlert.finding_id || selectedAlert.package || 'selected alert')}…`);
+  try {
+    for (const action of actions) {
+      results[action] = await fetchTriageOpsJson(action, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+      if (action === 'evidence-verdict' && results[action]?.recommended_note) {
+        state.triageOps.verdictNotes[selectedAlert.finding_id] = results[action].recommended_note;
+      }
+    }
+    state.triageOps.lastOutput = {
+      action: 'evidence-bundle',
+      result: {
+        finding_id: selectedAlert.finding_id,
+        package: selectedAlert.package,
+        version: selectedAlert.version,
+        ecosystem: selectedAlert.ecosystem,
+        actions,
+        results
+      },
+      at: new Date().toISOString()
+    };
+    setPage('triage-ops');
+    setStatus('<span class="dot"></span> Selected alert evidence bundle completed');
+    renderTriageOps();
+  } catch (error) {
+    const suffix = /not configured/i.test(error.message) ? ' Configure the local helper/admin token, or use the copyable CLI fallback.' : '';
+    state.triageOps.lastOutput = { action: 'evidence-bundle', error: `${error.message}${suffix}`, at: new Date().toISOString() };
+    setPage('triage-ops');
+    setStatus(`Evidence bundle failed: ${error.message}${suffix}`, true);
+    renderTriageOps();
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function runGuideDiscoveryReview(button = null) {
+  setPage('triage-ops');
+  const dock = document.querySelector('.triage-campaign-dock');
+  if (dock) dock.open = true;
+  await runCampaignDiscoveryAction('campaign-discover', { button });
+}
+
 function campaignArray(name) {
   const values = state.triageOps.campaign?.[name];
   return Array.isArray(values) && values.length ? values : [''];
@@ -3893,6 +3970,9 @@ function renderTriageOpsOutput(output) {
   if (output.action === 'evidence-verdict') {
     return renderEvidenceVerdict(output.result || {});
   }
+  if (output.action === 'evidence-bundle') {
+    return renderEvidenceBundle(output.result || {});
+  }
   const result = output.result || {};
   const primary =
     result.mitigation ||
@@ -3979,6 +4059,46 @@ function renderEvidenceVerdict(verdict = {}) {
   `;
 }
 
+function renderEvidenceBundle(bundle = {}) {
+  const results = bundle.results || {};
+  const actionRows = (bundle.actions || Object.keys(results)).map(action => {
+    const value = results[action];
+    const failed = value && value.ok === false;
+    return `
+      <div class="evidence-row ${failed ? 'negative' : 'positive'}">
+        <strong>${escapeHtml(statusLabel(action))}</strong>
+        <span>${failed ? 'failed or unavailable' : 'completed'}</span>
+      </div>
+    `;
+  }).join('');
+  const verdict = results['evidence-verdict'] || {};
+  const summary = {
+    investigate: results.investigate?.result?.investigation || results.investigate?.result || results.investigate,
+    explain_verdict: results['explain-verdict']?.result || results['explain-verdict'],
+    advisory_check: results['check-advisories']?.advisory || results['check-advisories'],
+    local_usage: results['check-local-usage']?.usage || results['check-local-usage'],
+    raw_report: results['raw-report']?.report || results['raw-report']
+  };
+  return `
+    <div class="triage-output evidence-bundle-panel">
+      <strong>Automated Evidence Bundle</strong>
+      <p class="small">${escapeHtml(bundle.ecosystem || 'ecosystem')}:${escapeHtml(bundle.package || 'package')}@${escapeHtml(bundle.version || 'version')} • ${escapeHtml(bundle.finding_id || 'selected alert')}</p>
+      <div class="evidence-section">
+        <h4>Completed read-only checks</h4>
+        <div class="evidence-list">${actionRows}</div>
+      </div>
+      <div class="evidence-section">
+        <h4>Evidence verdict</h4>
+        ${renderEvidenceVerdict(verdict)}
+      </div>
+      <div class="evidence-section">
+        <h4>Supporting outputs</h4>
+        <pre class="triage-cli-fallback">${escapeHtml(JSON.stringify(summary, null, 2).slice(0, 16000))}</pre>
+      </div>
+    </div>
+  `;
+}
+
 function renderTriageOpsDetail() {
   const host = el('triage-ops-detail');
   if (!host) return;
@@ -4041,6 +4161,7 @@ function renderTriageOpsDetail() {
         <small>Read-only checks that improve confidence before disposition.</small>
       </div>
       <div class="triage-ops-actions grouped">
+        <button class="primary-btn" id="triage-ops-evidence-bundle-btn" type="button">Run Evidence Bundle</button>
         <button class="primary-btn triage-ops-action-btn" data-triage-action="evidence-verdict">Run Evidence Verdict</button>
         <button class="secondary-btn triage-ops-action-btn" data-triage-action="investigate">Investigate</button>
         <button class="secondary-btn triage-ops-action-btn" data-triage-action="explain-verdict">Explain verdict</button>
@@ -4084,6 +4205,7 @@ function renderTriageOpsDetail() {
       runTriageOpsAction(action, { button: btn, write, payload });
     });
   });
+  el('triage-ops-evidence-bundle-btn')?.addEventListener('click', event => runTriageOpsEvidenceBundle(event.currentTarget));
   el('triage-ops-copy-cli-btn')?.addEventListener('click', () => copyTextWithStatus(cliCommands.join('\n'), 'Triage Ops CLI fallback copied'));
 }
 
@@ -4797,6 +4919,13 @@ function bindEvents() {
   el('triage-ops-refresh-btn')?.addEventListener('click', async (event) => {
     await runTriageOpsAction('refresh-evidence', { button: event.currentTarget });
   });
+  ['guide-daily-refresh-btn', 'guide-daily-refresh-card-btn'].forEach(id => {
+    el(id)?.addEventListener('click', event => runDailyGuideRefresh(event.currentTarget));
+  });
+  ['guide-evidence-bundle-btn', 'guide-evidence-bundle-card-btn'].forEach(id => {
+    el(id)?.addEventListener('click', event => runTriageOpsEvidenceBundle(event.currentTarget));
+  });
+  el('guide-discovery-review-btn')?.addEventListener('click', event => runGuideDiscoveryReview(event.currentTarget));
   ['triage-ops-filter-status', 'triage-ops-filter-ecosystem', 'triage-ops-filter-severity', 'triage-ops-filter-search'].forEach(id => {
     el(id)?.addEventListener('input', renderTriageOps);
     el(id)?.addEventListener('change', renderTriageOps);

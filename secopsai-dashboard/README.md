@@ -91,6 +91,13 @@ Blog Ops is intentionally protected. The browser calls `/api/blog/*` Worker endp
 
 The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, Native Triage, Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, when to use CLI fallback, and why discovery candidates must be cleaned before persistence or blog drafting.
 
+The guide includes safe automation buttons for repetitive read-only work:
+- **Run Daily Refresh** reloads dashboard data, helper state, Blog Ops status, Triage Ops alerts, and campaign fixtures.
+- **Run Selected Alert Evidence Bundle** runs evidence verdict, investigate, explain verdict, advisory check, local usage check, and raw report for the selected SCM alert.
+- **Run Discovery Review** runs read-only campaign discovery and opens the Triage Ops campaign dock for candidate review.
+
+These guide automations intentionally do not close findings, persist SOC findings, create blog drafts, approve drafts, publish posts, or bypass admin-token gates.
+
 ## Runtime split
 
 - `secopsai` owns detection, triage, orchestrator logic, and policy decisions

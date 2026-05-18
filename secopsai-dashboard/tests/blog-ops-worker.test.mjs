@@ -308,6 +308,10 @@ function testOperatorGuideUiIsPresent() {
   assert.match(html, /data-page="operator-guide"/);
   assert.match(html, /id="page-operator-guide"/);
   assert.match(html, /Operator Guide/);
+  assert.match(html, /Automated guide steps/);
+  assert.match(html, /Run Daily Refresh/);
+  assert.match(html, /Run Selected Alert Evidence Bundle/);
+  assert.match(html, /Run Discovery Review/);
   assert.match(html, /Overview daily workflow/);
   assert.match(html, /Tasks daily workflow/);
   assert.match(html, /Findings daily workflow/);
@@ -318,10 +322,15 @@ function testOperatorGuideUiIsPresent() {
   assert.match(html, /Do not click Persist Findings/);
   assert.match(app, /"operator-guide"/);
   assert.match(app, /Dashboard operator guide/);
+  assert.match(app, /runDailyGuideRefresh/);
+  assert.match(app, /runTriageOpsEvidenceBundle/);
+  assert.match(app, /runGuideDiscoveryReview/);
+  assert.match(app, /evidence-bundle/);
   assert.match(css, /Operator guide/);
   assert.match(css, /\.guide-layout/);
   assert.match(css, /\.guide-step/);
   assert.match(css, /\.guide-toc/);
+  assert.match(css, /\.guide-header-actions/);
 }
 
 async function testWriteNeedsAdminToken() {

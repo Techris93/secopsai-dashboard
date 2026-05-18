@@ -332,12 +332,17 @@
             <h2>Operator Guide</h2>
             <p>Step-by-step dashboard playbook for daily triage, campaign research, blog review, and protected actions.</p>
           </div>
-          <a class="status-pill guide-start-pill" href="#guide-triage-ops"><span class="dot"></span> Start with Triage Ops</a>
+          <div class="guide-header-actions">
+            <button class="secondary-btn" id="guide-daily-refresh-btn" type="button">Run Daily Refresh</button>
+            <button class="primary-btn" id="guide-evidence-bundle-btn" type="button">Run Selected Alert Evidence Bundle</button>
+            <a class="status-pill guide-start-pill" href="#guide-triage-ops"><span class="dot"></span> Start with Triage Ops</a>
+          </div>
         </div>
 
         <div class="guide-layout">
           <aside class="card guide-toc" aria-label="Operator guide table of contents">
             <h3>Guide sections</h3>
+            <a href="#guide-automations">Safe automations</a>
             <a href="#guide-overview">Overview</a>
             <a href="#guide-tasks">Tasks</a>
             <a href="#guide-findings">Findings</a>
@@ -350,6 +355,32 @@
           </aside>
 
           <div class="guide-main">
+            <section class="card guide-section" id="guide-automations">
+              <div class="guide-section-head">
+                <span class="guide-pill">Safe automations</span>
+                <h3>Automated guide steps</h3>
+                <p>These shortcuts automate repetitive read-only steps from the guide. They never close findings, persist campaign findings, create blog drafts, approve drafts, or publish posts.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card">
+                  <strong>Daily Refresh</strong>
+                  <span>Refreshes dashboard data, helper state, Blog Ops status, Triage Ops alerts, and campaign fixtures.</span>
+                  <button class="secondary-btn guide-automation-btn" id="guide-daily-refresh-card-btn" type="button">Run Daily Refresh</button>
+                </div>
+                <div class="guide-mini-card">
+                  <strong>Selected Alert Evidence Bundle</strong>
+                  <span>Runs evidence verdict, investigate, explain verdict, advisory check, local usage check, and raw report for the selected SCM alert.</span>
+                  <button class="primary-btn guide-automation-btn" id="guide-evidence-bundle-card-btn" type="button">Run Evidence Bundle</button>
+                </div>
+                <div class="guide-mini-card">
+                  <strong>Discovery Review</strong>
+                  <span>Runs read-only campaign discovery and opens the Triage Ops campaign dock for candidate review.</span>
+                  <button class="secondary-btn guide-automation-btn" id="guide-discovery-review-btn" type="button">Run Discovery Review</button>
+                </div>
+              </div>
+              <div class="guide-callout guide-warning">Automation stops at evidence collection and candidate generation. Protected response work still requires an admin token, confirmation, and a reviewed analyst note.</div>
+            </section>
+
             <section class="card guide-section" id="guide-overview">
               <div class="guide-section-head">
                 <span class="guide-pill">Overview</span>

@@ -5255,6 +5255,13 @@ label span,
   text-decoration: none;
 }
 
+.guide-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .guide-layout {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -5394,6 +5401,11 @@ label span,
     rgba(255, 255, 255, 0.035);
 }
 
+.guide-mini-card .guide-automation-btn {
+  width: fit-content;
+  margin-top: 8px;
+}
+
 .guide-mini-card strong {
   color: var(--text-primary, #f8fafc);
 }
@@ -5452,6 +5464,15 @@ label span,
 }
 
 @media (max-width: 640px) {
+  .guide-header-actions {
+    justify-content: stretch;
+  }
+
+  .guide-header-actions > * {
+    width: 100%;
+    justify-content: center;
+  }
+
   .guide-toc {
     grid-template-columns: 1fr;
   }
