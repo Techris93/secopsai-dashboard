@@ -3317,7 +3317,13 @@ const CAMPAIGN_GENERIC_PACKAGE_WORDS = new Set([
   'high-assurance', 'co-located', 'certificate', 'jailbreaks', 'push', 'acknowledgement',
   'acknowledgements', 'acknowledgment', 'acknowledgments', 'open-source', 'out-of-bounds',
   'gpt-generated', 'user-supplied', 'ai-assisted', 'web-based', 'content-serving',
-  'unsafe.slice', 'denial-of-service', 'remote-code-execution'
+  'unsafe.slice', 'denial-of-service', 'remote-code-execution', 'ltr', 'presentation',
+  'font-family', 'sans-serif', 'font-size', 'font-weight', 'font-variant-alternates',
+  'font-variant-east-asian', 'font-variant-emoji', 'font-variant-numeric',
+  'font-variant-position', 'vertical-align', 'white-space-collapse', 'line-height',
+  'margin-bottom', 'margin-top', 'margin-left', 'padding-inline-start',
+  'text-decoration-line', 'text-decoration-skip-ink', 'all-time', 'inline-block',
+  'aria-level', 'list-style-type', 'white-space', 'text-wrap-mode', 'chrome-friends'
 ]);
 
 function analyzeCampaignPackageNoise(row = {}) {
@@ -3326,12 +3332,14 @@ function analyzeCampaignPackageNoise(row = {}) {
   const reasons = [];
   if (!name) reasons.push('empty package id');
   if (CAMPAIGN_GENERIC_PACKAGE_WORDS.has(name)) reasons.push('generic article/CSS word');
+  if (/^docs-internal-guid-[a-f0-9-]{20,}$/i.test(name)) reasons.push('Google Docs editor artifact');
   if (/^\d+(\.\d+)?$/.test(name)) reasons.push('numeric token');
-  if (/^cve-\d{4}-\d{4,}$/i.test(name)) reasons.push('CVE identifier, not package id');
+  if (/^cve-\d{4}-\d{4,}\.?$/i.test(name)) reasons.push('CVE identifier, not package id');
   if (/\.(png|jpe?g|gif|webp|svg|html?|css|js)$/i.test(name)) reasons.push('file or page name');
   if (/^(https?:\/\/|www\.)/.test(name)) reasons.push('URL rather than package id');
   if (/^[a-z0-9.-]+\.(com|org|net|io|dev|gov|edu|life|app|co)(\/|$)/i.test(name)) reasons.push('domain rather than package id');
   if (name.length > 90 && !name.includes('/')) reasons.push('long encoded-looking token');
+  if (name.length > 55 && name.split('-').length > 6 && !name.startsWith('@')) reasons.push('article slug, not package id');
   if (/(^|\/)(issues|pulls|actions|releases|blob|tree)$/.test(name)) reasons.push('repository page path');
   if (ecosystem === 'npm' && name.includes('/') && !name.startsWith('@') && /^[a-z0-9.-]+\.[a-z]{2,}\//i.test(name)) reasons.push('web path misread as npm package');
   if (ecosystem === 'go' && /\/(issues|pulls|actions|blob|tree)(\/|$)/.test(name)) reasons.push('repository page URL not module root');
@@ -3486,6 +3494,20 @@ function campaignFormToPayload() {
   };
 }
 
+function sanitizeCampaignSummary(summary = '') {
+  return String(summary || '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 700);
+}
+
 function setCampaignFormFromPayload(payload = {}) {
   const iocs = payload.iocs && typeof payload.iocs === 'object'
     ? Object.values(payload.iocs).flat().map(String)
@@ -3494,7 +3516,7 @@ function setCampaignFormFromPayload(payload = {}) {
     ...defaultCampaignForm(),
     campaign_id: payload.campaign_id || '',
     title: payload.title || '',
-    summary: payload.summary || '',
+    summary: sanitizeCampaignSummary(payload.summary || ''),
     source_urls: Array.isArray(payload.source_urls) && payload.source_urls.length ? payload.source_urls : [''],
     source_names: Array.isArray(payload.source_names) && payload.source_names.length ? payload.source_names : [''],
     actors: Array.isArray(payload.actors) && payload.actors.length ? payload.actors : [''],
@@ -3890,14 +3912,17 @@ function renderCampaignResearchPanel() {
         <label class="campaign-wide"><span class="small">Summary</span><textarea id="campaign-summary-input" rows="3" placeholder="Brief analyst summary">${escapeHtml(campaign.summary || '')}</textarea></label>
       </div>
 
-      <div class="campaign-form-grid campaign-list-grid">
-        ${renderCampaignListInputs('source_urls', 'Source URLs', 'https://source.example/report')}
-        ${renderCampaignListInputs('source_names', 'Source names', 'OX Security, The Hacker News')}
-        ${renderCampaignListInputs('actors', 'Actors', 'publisher or actor handle')}
-        ${renderCampaignListInputs('publishers', 'Publishers', 'package publisher/namespace')}
-        ${renderCampaignListInputs('iocs', 'IOCs', 'domain, IP, URL, repository description')}
-        ${renderCampaignListInputs('behavioral_indicators', 'Behavioral indicators', 'credential theft, C2, persistence')}
-      </div>
+      <details class="campaign-review-drawer">
+        <summary>Sources, IOCs, actors, and behavior indicators</summary>
+        <div class="campaign-form-grid campaign-list-grid">
+          ${renderCampaignListInputs('source_urls', 'Source URLs', 'https://source.example/report')}
+          ${renderCampaignListInputs('source_names', 'Source names', 'OX Security, The Hacker News')}
+          ${renderCampaignListInputs('actors', 'Actors', 'publisher or actor handle')}
+          ${renderCampaignListInputs('publishers', 'Publishers', 'package publisher/namespace')}
+          ${renderCampaignListInputs('iocs', 'IOCs', 'domain, IP, URL, repository description')}
+          ${renderCampaignListInputs('behavioral_indicators', 'Behavioral indicators', 'credential theft, C2, persistence')}
+        </div>
+      </details>
 
       <div class="campaign-package-header">
         <div>
@@ -3911,14 +3936,15 @@ function renderCampaignResearchPanel() {
       </div>
       <div class="campaign-packages">${renderCampaignPackageRows()}</div>
 
-      <div class="campaign-json-box">
+      <details class="campaign-json-box campaign-review-drawer">
+        <summary>Import or inspect Campaign JSON</summary>
         <div class="campaign-list-head">
           <span class="small">Import Campaign JSON</span>
           <button class="secondary-btn" id="campaign-import-json-btn" type="button">Import Campaign JSON</button>
         </div>
         <textarea id="campaign-json-input" rows="7" placeholder='Paste campaign JSON here, then click Import Campaign JSON.'>${escapeHtml(campaign.jsonText || '')}</textarea>
         ${campaign.jsonError ? `<p class="form-error">${escapeHtml(campaign.jsonError)}</p>` : ''}
-      </div>
+      </details>
 
       ${renderAutonomousDiscoveryPanel()}
 

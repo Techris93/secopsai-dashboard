@@ -4510,6 +4510,7 @@ label span,
 
 .campaign-list-field,
 .campaign-json-box,
+.campaign-review-drawer,
 .campaign-discovery-box,
 .campaign-result-section {
   border: 1px solid var(--border);
@@ -4600,6 +4601,16 @@ label span,
 
 .campaign-json-box {
   margin-top: 14px;
+}
+
+.campaign-review-drawer {
+  margin-top: 14px;
+}
+
+.campaign-review-drawer summary {
+  cursor: pointer;
+  color: var(--triage-text);
+  font-weight: 900;
 }
 
 .campaign-discovery-box {
