@@ -4405,6 +4405,50 @@ label span,
   border-radius: 16px;
 }
 
+.triage-output-compact {
+  display: grid;
+  gap: 12px;
+}
+
+.triage-output-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.triage-output-summary span {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid rgba(13, 148, 136, 0.22);
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.1);
+  color: var(--triage-text);
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+
+.triage-raw-drawer {
+  border: 1px solid var(--triage-line);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.38);
+  overflow: hidden;
+}
+
+.triage-raw-drawer summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  color: var(--triage-muted);
+  font-weight: 800;
+}
+
+.triage-raw-drawer pre {
+  margin: 0;
+  border-radius: 0;
+  max-height: 260px;
+}
+
 .triage-output.error {
   border-color: rgba(239,68,68,0.38);
   background: rgba(80, 16, 16, 0.42);

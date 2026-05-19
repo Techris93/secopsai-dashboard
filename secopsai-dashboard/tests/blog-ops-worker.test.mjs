@@ -366,6 +366,9 @@ function testOperatorGuideUiIsPresent() {
   assert.match(app, /cleanCampaignPackageNoise/);
   assert.match(app, /campaignWatchlistSuggestions/);
   assert.match(app, /campaign-watchlist-suggestion/);
+  assert.match(app, /Show raw helper output/);
+  assert.match(app, /Refresh evidence completed/);
+  assert.match(app, /cve-\\d\{4\}-\\d\{4,\}/);
   assert.match(css, /Operator guide/);
   assert.match(css, /\.guide-layout/);
   assert.match(css, /\.guide-step/);
@@ -373,6 +376,8 @@ function testOperatorGuideUiIsPresent() {
   assert.match(css, /\.guide-header-actions/);
   assert.match(css, /\.campaign-package-noise/);
   assert.match(css, /\.campaign-watchlist-suggestions/);
+  assert.match(css, /\.triage-output-compact/);
+  assert.match(css, /\.triage-raw-drawer/);
 }
 
 async function testWriteNeedsAdminToken() {

@@ -3314,7 +3314,10 @@ const CAMPAIGN_GENERIC_PACKAGE_WORDS = new Set([
   'byline-author', 'text-align', 'data-original-height', 'data-original-width', 'front-end',
   'attacker-controlled', 'hardware-backed', 'short-lived', 'hardware-bound', 'per-session',
   'cross-site', 'cross-origin', 'sign-on', 'sign-in', 'pre-existing', 'software-based',
-  'high-assurance', 'co-located', 'certificate', 'jailbreaks'
+  'high-assurance', 'co-located', 'certificate', 'jailbreaks', 'push', 'acknowledgement',
+  'acknowledgements', 'acknowledgment', 'acknowledgments', 'open-source', 'out-of-bounds',
+  'gpt-generated', 'user-supplied', 'ai-assisted', 'web-based', 'content-serving',
+  'unsafe.slice', 'denial-of-service', 'remote-code-execution'
 ]);
 
 function analyzeCampaignPackageNoise(row = {}) {
@@ -3324,6 +3327,7 @@ function analyzeCampaignPackageNoise(row = {}) {
   if (!name) reasons.push('empty package id');
   if (CAMPAIGN_GENERIC_PACKAGE_WORDS.has(name)) reasons.push('generic article/CSS word');
   if (/^\d+(\.\d+)?$/.test(name)) reasons.push('numeric token');
+  if (/^cve-\d{4}-\d{4,}$/i.test(name)) reasons.push('CVE identifier, not package id');
   if (/\.(png|jpe?g|gif|webp|svg|html?|css|js)$/i.test(name)) reasons.push('file or page name');
   if (/^(https?:\/\/|www\.)/.test(name)) reasons.push('URL rather than package id');
   if (/^[a-z0-9.-]+\.(com|org|net|io|dev|gov|edu|life|app|co)(\/|$)/i.test(name)) reasons.push('domain rather than package id');
@@ -3395,6 +3399,38 @@ function renderWatchlistSuggestions(campaign = {}) {
         `).join('')}
       </div>
     </div>
+  `;
+}
+
+function summarizeTriageActionOutput(output = {}, primary = {}) {
+  const action = statusLabel(output.action || 'status');
+  const result = output.result || {};
+  if (output.action === 'refresh-evidence') {
+    const summary = result.summary || {};
+    const intel = result.intel || {};
+    return [
+      `Refresh evidence completed`,
+      `${summary.open_findings ?? '—'} open finding(s)`,
+      `${summary.in_review_findings ?? '—'} in review`,
+      `${summary.pending_actions ?? '—'} pending action(s)`,
+      intel.stdout ? String(intel.stdout).trim() : ''
+    ].filter(Boolean);
+  }
+  if (primary && typeof primary === 'object' && !Array.isArray(primary)) {
+    const keys = Object.keys(primary).slice(0, 5);
+    return [`${action} completed`, keys.length ? `Returned: ${keys.join(', ')}` : 'No structured fields returned'];
+  }
+  return [`${action} completed`];
+}
+
+function renderRawActionDetails(primary = {}) {
+  const raw = JSON.stringify(primary, null, 2);
+  if (!raw || raw === '{}') return '';
+  return `
+    <details class="triage-raw-drawer">
+      <summary>Show raw helper output</summary>
+      <pre>${escapeHtml(raw.slice(0, 12000))}</pre>
+    </details>
   `;
 }
 
@@ -4139,7 +4175,16 @@ function renderTriageOpsOutput(output) {
     result.advisory ||
     result.usage ||
     result;
-  return `<div class="triage-output"><strong>Last action: ${escapeHtml(statusLabel(output.action || 'status'))}</strong><pre>${escapeHtml(JSON.stringify(primary, null, 2).slice(0, 12000))}</pre></div>`;
+  const summary = summarizeTriageActionOutput(output, primary);
+  return `
+    <div class="triage-output triage-output-compact">
+      <strong>Last action: ${escapeHtml(statusLabel(output.action || 'status'))}</strong>
+      <div class="triage-output-summary">
+        ${summary.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
+      </div>
+      ${renderRawActionDetails(primary)}
+    </div>
+  `;
 }
 
 function renderEvidenceRows(items = [], empty = 'None found') {
