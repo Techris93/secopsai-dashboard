@@ -3083,7 +3083,12 @@ async function fetchTriageOpsJson(path = '', options = {}) {
     }
   });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok || payload?.ok === false) throw new Error(payload.error || `Triage Ops HTTP ${res.status}`);
+  if (!res.ok || payload?.ok === false) {
+    const parts = [payload.error || `Triage Ops HTTP ${res.status}`];
+    if (payload.hint) parts.push(payload.hint);
+    if (payload.code && !String(parts[0]).includes(payload.code)) parts.push(`code=${payload.code}`);
+    throw new Error(parts.filter(Boolean).join(' '));
+  }
   return payload;
 }
 

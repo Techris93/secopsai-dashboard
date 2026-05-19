@@ -89,6 +89,14 @@ function trimToLength(value, maxLength = 1800) {
   return `${text.slice(0, maxLength - 1)}…`;
 }
 
+function sanitizeHelperErrorDetail(value, maxLength = 900) {
+  return trimToLength(String(value || "")
+    .replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]")
+    .replace(/(token|secret|password|key)(["':=\s]+)[^"'\s,}]+/gi, "$1$2[redacted]")
+    .replace(/\s+/g, " ")
+    .trim(), maxLength);
+}
+
 function parseJsonBody(request) {
   return request.json().catch(() => null);
 }
@@ -684,7 +692,42 @@ async function proxySecopsaiHelper(request, env) {
     init.body = await request.text();
   }
 
-  const response = await fetch(upstreamUrl.toString(), init);
+  let response;
+  try {
+    response = await fetch(upstreamUrl.toString(), init);
+  } catch (error) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "SecOpsAI helper is unreachable. Start or restart the local dashboard helper, verify the Cloudflare Tunnel origin, then refresh Triage Ops.",
+        code: "helper_unreachable",
+        detail: sanitizeHelperErrorDetail(error?.message || error),
+      },
+      { status: 502 },
+    );
+  }
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => "");
+    let upstreamPayload = null;
+    try {
+      upstreamPayload = bodyText ? JSON.parse(bodyText) : null;
+    } catch {
+      upstreamPayload = null;
+    }
+    const upstreamError = upstreamPayload?.error || upstreamPayload?.message || bodyText || response.statusText || "helper request failed";
+    return jsonResponse(
+      {
+        ok: false,
+        error: `SecOpsAI helper upstream HTTP ${response.status}: ${sanitizeHelperErrorDetail(upstreamError)}`,
+        code: "helper_upstream_error",
+        upstream_status: response.status,
+        hint: "If this is hosted mode, confirm SECOPSAI_HELPER_BASE_URL points to a live helper/tunnel. If this is local mode, restart ./start-local-dashboard-stack.sh and retry Refresh evidence.",
+      },
+      { status: response.status },
+    );
+  }
+
   const responseHeaders = new Headers(response.headers);
   responseHeaders.set("Cache-Control", "no-store");
   return new Response(response.body, {

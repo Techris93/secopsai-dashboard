@@ -128,6 +128,37 @@ async function testTriageOpsEvidenceVerdictIsReadOnlyProxy() {
   }
 }
 
+async function testTriageOpsHelperUpstream502IsActionableJson() {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response("Unable to reach the origin service: dial tcp 127.0.0.1:45680: connect: connection refused token=super-secret", {
+      status: 502,
+      headers: { "Content-Type": "text/plain" },
+    });
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/triage-ops/refresh-evidence", {
+        method: "POST",
+        body: "{}",
+      }),
+      {
+        SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+      },
+    );
+    assert.equal(response.status, 502);
+    assert.match(response.headers.get("Content-Type") || "", /application\/json/);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.ok, false);
+    assert.equal(payload.code, "helper_upstream_error");
+    assert.equal(payload.upstream_status, 502);
+    assert.match(payload.error, /SecOpsAI helper upstream HTTP 502/);
+    assert.match(payload.hint, /SECOPSAI_HELPER_BASE_URL/);
+    assert.equal(JSON.stringify(payload).includes("super-secret"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testCampaignResearchIsReadOnlyProxy() {
   const calls = [];
   const originalFetch = globalThis.fetch;
@@ -476,6 +507,7 @@ await testTriageOpsHostedModeFailsClearlyWithoutHelper();
 await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
+await testTriageOpsHelperUpstream502IsActionableJson();
 await testCampaignResearchIsReadOnlyProxy();
 await testCampaignDiscoveryIsReadOnlyProxy();
 await testCampaignAutopilotIsReadOnlyProxy();
