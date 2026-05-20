@@ -85,6 +85,8 @@ Notes:
 
 The dashboard includes a protected **Blog Ops** tab for SecOpsAI security-blog operations. The browser never runs shell commands. Buttons call same-origin Pages Worker endpoints under `/api/blog/*`, and the Worker dispatches the SecOpsAI GitHub Actions workflow `blog-ops.yml`.
 
+For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`; local deploy intentionally returns a clear limitation instead of running a deployment from the browser.
+
 Set these values in Cloudflare Pages:
 
 ### Variables

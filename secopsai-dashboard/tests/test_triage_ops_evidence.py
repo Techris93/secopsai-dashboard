@@ -141,6 +141,18 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertNotIn('ghp_this_should_hide', compact['stdout'])
         self.assertIn('[redacted]', compact['stdout'])
 
+    def test_local_blog_ops_action_args_are_allowlisted(self):
+        args = server.build_blog_ops_action_args('publish-approved', {'limit': 5})
+        self.assertEqual(args, ['blog', 'news-publish-approved', '--rebuild'])
+        args = server.build_blog_ops_action_args('approve', {'note': 'Reviewed source-backed draft'}, draft='news-example')
+        self.assertEqual(args[:3], ['blog', 'news-review', 'approve'])
+        self.assertIn('news-example', args)
+        self.assertNotIn(';', ' '.join(args))
+
+    def test_local_blog_ops_rejects_deploy_action(self):
+        with self.assertRaises(ValueError):
+            server.build_blog_ops_action_args('deploy', {'limit': 5})
+
 
 if __name__ == '__main__':
     unittest.main()

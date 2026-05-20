@@ -85,7 +85,7 @@ Campaign Research and **Autonomous Discovery** live in a collapsed advanced dock
 - approval-gated approve/reject/needs-review controls
 - publish-approved, rebuild-feeds, and deploy buttons
 
-Blog Ops is intentionally protected. The browser calls `/api/blog/*` Worker endpoints, and the Worker dispatches the SecOpsAI `blog-ops.yml` workflow. Operators paste `BLOG_OPS_ADMIN_TOKEN` into the page for write actions; GitHub tokens stay server-side in Cloudflare Pages secrets.
+Blog Ops is intentionally protected. In hosted mode, the browser calls `/api/blog/*` Worker endpoints and the Worker dispatches the SecOpsAI `blog-ops.yml` workflow. In local helper mode, the same `/api/blog/*` contract is served by `dashboard_server.py` and mapped to allowlisted `secopsai blog ...` CLI argument arrays. Operators paste `BLOG_OPS_ADMIN_TOKEN` into the page for write actions; GitHub tokens stay server-side in Cloudflare Pages secrets and are not needed for local read-only draft/status review.
 
 ### Guide
 

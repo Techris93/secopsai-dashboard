@@ -29,6 +29,18 @@ ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
     'campaign-blog-draft',
     'campaign-watchlist',
 }
+BLOG_OPS_WRITE_ACTIONS = {
+    'news-run',
+    'news-fetch',
+    'news-draft',
+    'publish-approved',
+    'rebuild-feeds',
+    'deploy',
+    'approve',
+    'reject',
+    'needs-review',
+    'save',
+}
 CAMPAIGN_TRIAGE_OPS_ACTIONS = {
     'campaign-discover',
     'campaign-autopilot',
@@ -445,6 +457,33 @@ def triage_ops_expected_token():
     )
 
 
+def blog_ops_expected_token():
+    return os.environ.get('BLOG_OPS_ADMIN_TOKEN', '').strip()
+
+
+def require_blog_ops_admin(handler):
+    expected = blog_ops_expected_token()
+    if not expected:
+        json_response(
+            handler,
+            501,
+            {
+                'ok': False,
+                'error': 'Blog Ops admin token is not configured. Set BLOG_OPS_ADMIN_TOKEN.',
+                'code': 'not_configured',
+            },
+        )
+        return True
+    supplied = handler.headers.get('X-Blog-Ops-Admin-Token', '').strip()
+    auth = handler.headers.get('Authorization', '').strip()
+    if auth.lower().startswith('bearer '):
+        supplied = supplied or auth[7:].strip()
+    if supplied != expected:
+        json_response(handler, 401, {'ok': False, 'error': 'Unauthorized Blog Ops action'})
+        return True
+    return False
+
+
 def require_triage_ops_admin(handler):
     expected = triage_ops_expected_token()
     if not expected:
@@ -491,6 +530,104 @@ def run_cli_json(args, timeout=120):
     result = run_secopsai_cli([*args, '--json'], timeout=timeout)
     parsed = parse_cli_json(result)
     return result, parsed
+
+
+def _bounded_blog_limit(value, default=5):
+    return str(validate_bounded_int(value, default=default, lower=1, upper=50))
+
+
+def _blog_review_drafts_payload():
+    result, parsed = run_cli_json(['blog', 'news-review', 'list'], timeout=90)
+    if not result['ok']:
+        return result, parsed
+    drafts = (parsed or {}).get('drafts', [])
+    sources_result, sources_parsed = run_cli_json(['blog', 'news-sources', 'list'], timeout=60)
+    sources = (sources_parsed or {}).get('sources', []) if sources_result['ok'] else []
+    counts = {
+        'sources': len([source for source in sources if source.get('enabled') is not False]) if isinstance(sources, list) else None,
+        'drafts': len(drafts),
+        'needs_review': len([draft for draft in drafts if draft.get('review_status') == 'needs_review']),
+        'approved': len([draft for draft in drafts if draft.get('review_status') in {'approved', 'reviewed'}]),
+        'rejected': len([draft for draft in drafts if draft.get('review_status') == 'rejected']),
+    }
+    payload = {
+        'ok': True,
+        'configured': True,
+        'local_helper': True,
+        'config': {
+            'owner': 'local',
+            'repo': str(SECOPSAI_ROOT),
+            'workflow': 'secopsai.cli blog',
+            'ref': 'local',
+            'github_configured': False,
+            'admin_token_configured': bool(blog_ops_expected_token()),
+        },
+        'drafts': drafts,
+        'runs': [],
+        'errors': {
+            'drafts': None,
+            'runs': 'Local helper mode does not read GitHub Actions workflow history.',
+            'sources': None if sources_result['ok'] else (sources_result.get('stderr') or sources_result.get('stdout') or 'Unable to load sources'),
+        },
+        'counts': counts,
+    }
+    return {'ok': True, 'returncode': 0, 'stdout': json.dumps(payload), 'stderr': ''}, payload
+
+
+def build_blog_ops_action_args(action, payload=None, draft=None):
+    payload = payload or {}
+    limit = _bounded_blog_limit(payload.get('limit'), default=5)
+    note = _clean_string(payload.get('note') or '', 500)
+    if action == 'news-run':
+        return ['blog', 'news-run', '--limit', limit]
+    if action == 'news-fetch':
+        return ['blog', 'news-fetch', '--limit', limit]
+    if action == 'news-draft':
+        return ['blog', 'news-draft', '--limit', limit]
+    if action == 'publish-approved':
+        return ['blog', 'news-publish-approved', '--rebuild']
+    if action == 'rebuild-feeds':
+        return ['blog', 'rebuild-feeds']
+    if action == 'deploy':
+        raise ValueError('Local Blog Ops helper cannot deploy. Use hosted Blog Ops or the Cloudflare deployment workflow.')
+    if action in {'approve', 'reject', 'needs-review'}:
+        safe_draft = _clean_string(draft, 260)
+        if not safe_draft or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', safe_draft):
+            raise ValueError('Invalid draft')
+        args = ['blog', 'news-review', action, safe_draft]
+        if note:
+            args.extend(['--note', note])
+        return args
+    if action == 'save':
+        safe_draft = _clean_string(draft, 260)
+        if not safe_draft or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', safe_draft):
+            raise ValueError('Invalid draft')
+        args = ['blog', 'news-review', 'edit', safe_draft]
+        field_map = {
+            'title': '--title',
+            'summary': '--summary',
+            'severity': '--severity',
+            'categories': '--categories',
+            'references': '--references',
+            'body_markdown': '--body',
+        }
+        for key, flag in field_map.items():
+            value = payload.get(key)
+            if value is None:
+                continue
+            cleaned = str(value)
+            if key == 'severity':
+                cleaned = _clean_string(cleaned, 20).lower()
+            elif key == 'body_markdown':
+                cleaned = cleaned[:60000]
+            else:
+                cleaned = _clean_string(cleaned, 2400)
+            if cleaned:
+                args.extend([flag, cleaned])
+        if note:
+            args.extend(['--note', note])
+        return args
+    raise ValueError('Unsupported Blog Ops action')
 
 
 def redact_secretish_text(value):
@@ -1431,6 +1568,31 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/blog' or parsed.path == '/api/blog/status':
+            try:
+                result, payload = _blog_review_drafts_payload()
+                return json_response(self, 200 if result['ok'] else 500, payload or {'ok': False, 'error': result.get('stderr') or result.get('stdout') or 'Unable to load Blog Ops'})
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/blog/drafts':
+            try:
+                result, payload = _blog_review_drafts_payload()
+                drafts = (payload or {}).get('drafts', [])
+                return json_response(self, 200 if result['ok'] else 500, {'ok': result['ok'], 'drafts': drafts})
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path.startswith('/api/blog/drafts/'):
+            try:
+                slug = urllib.parse.unquote(parsed.path.replace('/api/blog/drafts/', '', 1)).strip('/')
+                if not slug or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', slug):
+                    return json_response(self, 400, {'ok': False, 'error': 'Invalid draft'})
+                result, draft = run_cli_json(['blog', 'news-review', 'show', slug], timeout=90)
+                return json_response(self, 200 if result['ok'] else 404, {'ok': result['ok'], 'draft': draft, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
         if parsed.path == '/api/secopsai/triage-ops/alerts':
             try:
                 return json_response(self, 200, collect_triage_ops_alerts())
@@ -1565,6 +1727,35 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         payload = read_request_json(self)
+
+        if parsed.path == '/api/blog' or parsed.path.startswith('/api/blog/'):
+            action = parsed.path.rsplit('/', 1)[-1]
+            parts = parsed.path.replace('/api/blog/', '', 1).split('/')
+            draft = None
+            if parts and parts[0] == 'drafts' and len(parts) >= 3:
+                action = parts[-1]
+                draft = urllib.parse.unquote('/'.join(parts[1:-1]))
+            if action in BLOG_OPS_WRITE_ACTIONS and require_blog_ops_admin(self):
+                return
+            try:
+                args = build_blog_ops_action_args(action, payload=payload, draft=draft)
+                timeout = 240 if action in {'news-run', 'publish-approved'} else 120
+                result, parsed_result = run_cli_json(args, timeout=timeout)
+                return json_response(
+                    self,
+                    202 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'action': action,
+                        'workflow': 'secopsai.cli blog',
+                        'local_helper': True,
+                        'result': parsed_result,
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                status = 501 if 'cannot deploy' in str(exc).lower() else 400
+                return json_response(self, status, {'ok': False, 'error': str(exc)})
 
         if parsed.path.startswith('/api/secopsai/triage-ops/'):
             action = parsed.path.rsplit('/', 1)[-1]
