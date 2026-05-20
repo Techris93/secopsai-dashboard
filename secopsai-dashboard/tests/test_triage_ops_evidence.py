@@ -120,6 +120,7 @@ class TriageOpsEvidenceTests(unittest.TestCase):
     def test_campaign_actions_are_not_finding_actions(self):
         self.assertIn('campaign-autopilot', server.CAMPAIGN_TRIAGE_OPS_ACTIONS)
         self.assertIn('campaign-discover', server.CAMPAIGN_TRIAGE_OPS_ACTIONS)
+        self.assertIn('campaign-orchestrate', server.CAMPAIGN_TRIAGE_OPS_ACTIONS)
         self.assertIn('research-campaign', server.CAMPAIGN_TRIAGE_OPS_ACTIONS)
 
     def test_campaign_watchlist_args_validate_source_url(self):
@@ -150,6 +151,9 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertEqual(args[:3], ['blog', 'news-review', 'approve'])
         self.assertIn('news-example', args)
         self.assertNotIn(';', ' '.join(args))
+
+    def test_local_blog_ops_deploy_is_disabled(self):
+        self.assertFalse(server.local_blog_deploy_available())
 
     def test_local_blog_ops_deploy_is_separate_allowlist(self):
         with self.assertRaises(ValueError):

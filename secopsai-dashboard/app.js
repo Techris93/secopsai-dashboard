@@ -3410,37 +3410,41 @@ function campaignIocValues(campaign = {}) {
   return [];
 }
 
-function campaignWatchlistSuggestions(campaign = {}) {
+function campaignWatchlistSuggestions(campaign = {}, orchestrator = null) {
   const suggestions = [];
   const seen = new Set();
   const add = (kind, value, label = '') => {
     const clean = String(value || '').trim();
     if (!clean) return;
+    if (/^(known|unknown|publisher|maintainer|actor)$/i.test(clean)) return;
     const key = `${kind}:${clean.toLowerCase()}`;
     if (seen.has(key)) return;
     seen.add(key);
     suggestions.push({ kind, value: clean, label: label || clean });
   };
-  if (campaign.campaign_id) add('ioc', campaign.campaign_id, `campaign:${campaign.campaign_id}`);
-  (campaign.actors || []).forEach(actor => add('publisher', actor));
-  (campaign.publishers || []).forEach(publisher => add('publisher', publisher));
-  (campaign.packages || []).forEach(row => {
+  if (campaign.campaign_id) add('ioc', `campaign:${campaign.campaign_id}`, `campaign:${campaign.campaign_id}`);
+  const validatedPackages = Array.isArray(orchestrator?.validated_packages) ? orchestrator.validated_packages : (campaign.packages || []);
+  const validatedIocs = orchestrator?.validated_iocs && typeof orchestrator.validated_iocs === 'object'
+    ? Object.values(orchestrator.validated_iocs).flat().map(String).filter(Boolean)
+    : campaignIocValues(campaign);
+  (orchestrator?.actors || campaign.actors || []).forEach(actor => add('publisher', actor));
+  (orchestrator?.publishers || campaign.publishers || []).forEach(publisher => add('publisher', publisher));
+  validatedPackages.forEach(row => {
     if (!analyzeCampaignPackageNoise(row).isNoise && row.package) {
       add('package', `${row.ecosystem || 'npm'}:${row.package}`);
     }
     if (row.publisher) add('publisher', row.publisher);
   });
-  campaignIocValues(campaign).forEach(ioc => {
+  validatedIocs.forEach(ioc => {
     const value = String(ioc || '').trim();
     if (!value) return;
     add('ioc', value);
   });
-  (campaign.source_urls || []).forEach(url => add('source_url', url));
   return suggestions.slice(0, 18);
 }
 
-function renderWatchlistSuggestions(campaign = {}) {
-  const suggestions = campaignWatchlistSuggestions(campaign);
+function renderWatchlistSuggestions(campaign = {}, orchestrator = null) {
+  const suggestions = campaignWatchlistSuggestions(campaign, orchestrator);
   if (!suggestions.length) return '<div class="empty-state compact">No watchlist suggestions yet. Select or build a campaign with packages, publishers, IOCs, or sources.</div>';
   return `
     <div class="campaign-watchlist-suggestions">
@@ -3690,8 +3694,9 @@ function campaignDiscoveryCliFallback() {
   const payload = discoveryPayload();
   return [
     'cd /Users/chrixchange/secopsai',
-    `python3 -m secopsai.cli supply-chain discover-campaigns --since ${payload.since} --source ${payload.source || 'all'} --limit ${payload.limit} --json`,
-    `python3 -m secopsai.cli supply-chain campaign-autopilot --since ${payload.since} --limit ${payload.limit} --min-score ${payload.min_score} --dry-run --json`,
+    `python3 -m secopsai.cli supply-chain discover-campaigns --since ${payload.since} --source ${payload.source || 'all'} --limit ${payload.limit} --orchestrate --json`,
+    `python3 -m secopsai.cli supply-chain campaign-autopilot --since ${payload.since} --limit ${payload.limit} --min-score ${payload.min_score} --dry-run --orchestrate --json`,
+    'python3 -m secopsai.cli supply-chain orchestrate-candidate --input candidate.json --json',
     'python3 -m secopsai.cli supply-chain campaign-watchlist add --package npm:package-name',
     'python3 -m secopsai.cli supply-chain campaign-candidates list --json',
     'python3 -m secopsai.cli supply-chain campaign-candidates promote <candidate-id> --json'
@@ -3704,7 +3709,7 @@ function campaignActionErrorMessage(action, error) {
     return `${raw} This campaign action reached an older helper route that only understands single-finding actions. Restart or update the local SecOpsAI dashboard helper, then refresh Triage Ops and retry ${statusLabel(action)}.`;
   }
   if (/not configured/i.test(raw)) {
-    return `${raw} Configure SECOPSAI_HELPER_BASE_URL or run the local helper.`;
+    return `${raw} Hosted helper-backed actions are intentionally not configured unless SECOPSAI_HELPER_BASE_URL points to a live private helper. Use local helper mode at http://127.0.0.1:45680 for Triage Ops actions.`;
   }
   return raw;
 }
@@ -3796,10 +3801,56 @@ function renderCampaignCandidateList() {
   `;
 }
 
+function renderOrchestratorReview(candidate = null) {
+  if (!candidate) {
+    return '<div class="empty-state compact">Select a discovery candidate to see the Orchestrator Review before promotion.</div>';
+  }
+  const review = candidate.orchestrator || {};
+  const blockers = Array.isArray(review.route_blockers) ? review.route_blockers : [];
+  const validatedPackages = Array.isArray(review.validated_packages) ? review.validated_packages : [];
+  const rejectedPackages = Array.isArray(review.rejected_package_candidates) ? review.rejected_package_candidates : [];
+  const validatedIocs = review.validated_iocs && typeof review.validated_iocs === 'object'
+    ? Object.values(review.validated_iocs).flat().map(String).filter(Boolean)
+    : [];
+  const rejectedIocs = Array.isArray(review.rejected_iocs) ? review.rejected_iocs : [];
+  const blockedActions = review.blocked_actions && typeof review.blocked_actions === 'object' ? Object.entries(review.blocked_actions) : [];
+  return `
+    <div class="campaign-orchestrator-review">
+      <div class="triage-row-top">
+        <strong>Orchestrator Review</strong>
+        <span class="triage-rec-pill ${blockers.length ? 'needs_review' : 'expected_behavior'}">${escapeHtml(statusLabel(review.recommended_route || 'needs_human_review'))}</span>
+      </div>
+      <p class="small">${escapeHtml(review.explanation || 'Deterministic review classifies, cleans, and routes the candidate before campaign promotion.')}</p>
+      <div class="campaign-result-columns">
+        <div class="campaign-result-section"><h4>Candidate type</h4><p class="small">${escapeHtml(statusLabel(review.campaign_type || 'unknown'))}</p></div>
+        <div class="campaign-result-section"><h4>Supply-chain relevance</h4><p class="small">${escapeHtml(review.supply_chain_relevance || 'unknown')}</p></div>
+        <div class="campaign-result-section"><h4>Confidence</h4><p class="small">${escapeHtml(review.confidence || 'unknown')}</p></div>
+        <div class="campaign-result-section"><h4>Next action</h4><p class="small">${escapeHtml(review.recommended_next_action || 'Review candidate evidence before taking write actions.')}</p></div>
+      </div>
+      ${blockers.length ? `<div class="evidence-notice warning"><strong>Blocked:</strong> ${escapeHtml(blockers.join('; '))}</div>` : ''}
+      <div class="campaign-result-columns">
+        <div class="campaign-result-section"><h4>Validated packages</h4>${renderCompactChips(validatedPackages.map(row => `${row.ecosystem}:${row.package}@${row.version || 'unknown'}`), 'No package artifacts validated.')}</div>
+        <div class="campaign-result-section"><h4>Rejected package noise</h4>${renderBulletList(rejectedPackages.slice(0, 8).map(row => `${row.ecosystem || 'unknown'}:${row.package || '(empty)'} — ${row.reason || 'rejected'}`), 'No rejected package candidates.')}</div>
+        <div class="campaign-result-section"><h4>Validated IOCs</h4>${renderCompactChips(validatedIocs, 'No attacker IOCs validated.')}</div>
+        <div class="campaign-result-section"><h4>Rejected IOCs</h4>${renderBulletList(rejectedIocs.slice(0, 8).map(row => `${row.value || ''} — ${row.reason || 'rejected'}`), 'No rejected IOCs.')}</div>
+      </div>
+      <div class="campaign-result-columns">
+        <div class="campaign-result-section"><h4>Source references</h4>${renderBulletList(review.source_references || [], 'No source references returned.')}</div>
+        <div class="campaign-result-section"><h4>Missing evidence</h4>${renderBulletList(review.missing_evidence || [], 'No missing evidence called out.')}</div>
+        <div class="campaign-result-section"><h4>Allowed actions</h4>${renderBulletList(review.allowed_actions || [], 'No actions allowed.')}</div>
+        <div class="campaign-result-section"><h4>Blocked actions</h4>${renderBulletList(blockedActions.map(([action, reason]) => `${statusLabel(action)}: ${reason}`), 'No actions blocked.')}</div>
+      </div>
+    </div>
+  `;
+}
+
 function renderAutonomousDiscoveryPanel() {
   const discovery = state.triageOps.campaignDiscovery || {};
   const selected = selectedCampaignCandidate();
   const suggestionCampaign = selected?.campaign || state.triageOps.campaign || {};
+  const selectedReview = selected?.orchestrator || {};
+  const selectedBlockers = Array.isArray(selectedReview.route_blockers) ? selectedReview.route_blockers : [];
+  const canPromote = selected && selectedReview.recommended_route === 'campaign_research' && !selectedBlockers.length;
   return `
     <div class="campaign-discovery-box">
       <div class="page-header compact-header">
@@ -3818,7 +3869,7 @@ function renderAutonomousDiscoveryPanel() {
         <button class="primary-btn" id="campaign-discover-btn" type="button">Run Discovery</button>
         <button class="secondary-btn" id="campaign-autopilot-dry-run-btn" type="button">Run Autopilot Dry Run</button>
         <button class="secondary-btn" id="campaign-review-candidates-btn" type="button">Review Candidates</button>
-        <button class="secondary-btn" id="campaign-promote-btn" type="button" ${selected ? '' : 'disabled'}>Promote to Campaign Research</button>
+        <button class="secondary-btn" id="campaign-promote-btn" type="button" ${canPromote ? '' : 'disabled'} title="${canPromote ? '' : 'Select a candidate routed to package Campaign Research with no blockers.'}">Promote to Campaign Research</button>
         <button class="mini-btn" id="campaign-autopilot-persist-btn" type="button">Persist Findings</button>
         <button class="primary-btn" id="campaign-autopilot-draft-btn" type="button">Create Review-Only Blog Draft</button>
         <button class="mini-btn" id="campaign-discovery-copy-cli-btn" type="button">Copy CLI Fallback</button>
@@ -3833,7 +3884,8 @@ function renderAutonomousDiscoveryPanel() {
         <input id="campaign-watchlist-value" value="${escapeHtml(discovery.watchlistValue || '')}" placeholder="npm:node-ipc, deadcode09284814, c2.example" />
         <button class="secondary-btn" id="campaign-watchlist-add-btn" type="button">Add to Watchlist</button>
       </div>
-      ${renderWatchlistSuggestions(suggestionCampaign)}
+      ${renderOrchestratorReview(selected)}
+      ${renderWatchlistSuggestions(suggestionCampaign, selectedReview)}
       ${renderCampaignCandidateList()}
     </div>
   `;

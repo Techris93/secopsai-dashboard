@@ -482,10 +482,10 @@
                 <div class="guide-step"><span>3</span><p>Click <strong>Run Campaign Research</strong>. This is read-only by default and should return campaign verdict, package verdicts, correlations, local impact, mitigation, and references.</p></div>
                 <div class="guide-step"><span>4</span><p>Click <strong>Correlate Campaign</strong> when the campaign includes shared publishers, C2s, source reports, or overlapping strings.</p></div>
                 <div class="guide-step"><span>5</span><p>Click <strong>Check Local Usage</strong> before persistence so SOC findings distinguish malicious package evidence from local exposure.</p></div>
-                <div class="guide-step"><span>6</span><p>Click <strong>Persist Findings</strong> only after reviewing the campaign JSON and removing false package extractions. This action is token-gated.</p></div>
+                <div class="guide-step"><span>6</span><p>Click <strong>Persist Findings</strong> only after reviewing the campaign JSON, confirming the Orchestrator Review has no route blockers, and removing false package extractions. This action is token-gated.</p></div>
                 <div class="guide-step"><span>7</span><p>Click <strong>Create Campaign Blog Draft</strong> only when the campaign has references, affected package table, IOCs or an explicit none-found statement, mitigation, and SecOpsAI detection logic.</p></div>
               </div>
-              <div class="guide-callout">If a source page produces unrelated package names, clean the form before persisting. Campaign Research is strongest when inputs are curated.</div>
+              <div class="guide-callout">If a source page produces unrelated package names, use the Orchestrator Review and cleanup controls before persisting. Campaign Research is strongest when inputs are curated and source references are not mixed with attacker IOCs.</div>
             </section>
 
             <section class="card guide-section" id="guide-discovery">
@@ -497,13 +497,13 @@
               <div class="guide-steps">
                 <div class="guide-step"><span>1</span><p>Set <strong>Since</strong>, <strong>Source</strong>, <strong>Limit</strong>, and <strong>Min score</strong>. Start with 24h, all, 10, and 35 for daily review.</p></div>
                 <div class="guide-step"><span>2</span><p>Click <strong>Run Discovery</strong> to fetch candidates without writing SOC findings or blog drafts.</p></div>
-                <div class="guide-step"><span>3</span><p>Review candidate titles, scores, behavior signals, and the package-noise summary. Treat high score as "worth checking", not proof. The dashboard now separates likely package rows from likely noisy extractions so general security articles do not become fake npm campaigns.</p></div>
-                <div class="guide-step"><span>4</span><p>Click <strong>Promote to Campaign Research</strong> only for candidates that are actually supply-chain related.</p></div>
-                <div class="guide-step"><span>5</span><p>After promotion, inspect highlighted package rows. Use <strong>Clean Obvious Package Noise</strong> before research. It removes common junk such as byline CSS classes, ordinary websites, image filenames, random numbers, repository issue paths, long encoded image slugs, or generic article words misread as package IDs.</p></div>
+                <div class="guide-step"><span>3</span><p>Review candidate titles, scores, behavior signals, the package-noise summary, and <strong>Orchestrator Review</strong>. Treat high score as "worth checking", not proof. The orchestrator classifies the report, validates real packages/extensions, separates source references from attacker IOCs, and shows rejected noise.</p></div>
+                <div class="guide-step"><span>4</span><p>Click <strong>Promote to Campaign Research</strong> only when the recommended route is Campaign Research and there are no route blockers. Malware/APT, CVE-only, GitHub-token breach, or general threat-intel leads should stay review-only unless package evidence exists.</p></div>
+                <div class="guide-step"><span>5</span><p>After promotion, inspect highlighted package rows. Use <strong>Clean Obvious Package Noise</strong> before research. It removes common junk such as byline CSS classes, ordinary websites, image filenames, random numbers, repository issue paths, long encoded image slugs, placeholders, or generic article words misread as package IDs.</p></div>
                 <div class="guide-step"><span>6</span><p>Use <strong>Run Autopilot Dry Run</strong> to test the end-to-end campaign path without persistence.</p></div>
-                <div class="guide-step"><span>7</span><p>Use generated watchlist suggestions for real package names, publishers, actors, C2 domains, campaign IDs, source URLs, or IOCs you want SecOpsAI to keep tracking. Click a suggestion to fill the form, verify it is real, then click <strong>Add to Watchlist</strong> to save it with the admin token.</p></div>
+                <div class="guide-step"><span>7</span><p>Use generated watchlist suggestions only for validated packages, publishers, actors, malware names, extension IDs, GitHub repos, campaign IDs, or attacker IOCs. Source domains such as news sites are references, not attacker IOCs. Click a suggestion to fill the form, verify it is real, then click <strong>Add to Watchlist</strong> to save it with the admin token.</p></div>
               </div>
-              <div class="guide-callout guide-warning">Do not click Persist Findings from discovery output until the promoted campaign has been cleaned and reviewed. Discovery can over-extract from general security articles; the noise labels reduce that risk, but they are still a deterministic aid rather than a final analyst decision.</div>
+              <div class="guide-callout guide-warning">Do not click Persist Findings from discovery output until the promoted campaign has been cleaned and reviewed. Discovery can surface broad security stories; the orchestrator blocks unsupported routes, but it is still a deterministic aid rather than a final analyst decision.</div>
             </section>
 
             <section class="card guide-section" id="guide-blog-ops">
@@ -517,7 +517,7 @@
                 <div class="guide-step"><span>2</span><p>Use <strong>Fetch news</strong> to ingest sources, <strong>Create drafts</strong> to generate review-only drafts, or <strong>Run fetch + draft</strong> for both.</p></div>
                 <div class="guide-step"><span>3</span><p>Select a draft in the review queue. Check title, summary, severity, body, references, IOCs, affected artifacts, and recommended actions.</p></div>
                 <div class="guide-step"><span>4</span><p>Use edit/save if the article needs cleanup. Approve only when claims are source-backed and no internal checklist, local path, secret, or copied external article text appears.</p></div>
-                <div class="guide-step"><span>5</span><p>Click <strong>Publish approved</strong> only after approval. Then use <strong>Rebuild feeds</strong> and <strong>Deploy blog</strong> as needed.</p></div>
+                <div class="guide-step"><span>5</span><p>Click <strong>Publish approved</strong> only after approval. Then use <strong>Rebuild feeds</strong>. Blog deployment should happen through hosted Blog Ops or the GitHub Actions / Cloudflare deployment workflow; local helper mode does not deploy when deploy capability is false.</p></div>
               </div>
               <div class="guide-callout guide-danger">External-news and campaign drafts must remain human-reviewed. Publishing stays approval-gated even when a draft was created from Triage Ops.</div>
             </section>
@@ -533,7 +533,7 @@
                 <div class="guide-mini-card"><strong>Review before clicking</strong><span>Generate mitigation, move to in review, persist findings, create blog draft, publish approved.</span></div>
                 <div class="guide-mini-card"><strong>Do not click until proven</strong><span>Close as false positive, persist noisy discovery candidates, publish external-news drafts.</span></div>
               </div>
-              <div class="guide-callout">If a button returns "older helper route" or "not configured", restart or update the local helper, refresh the dashboard, and use the CLI fallback while hosted helper configuration is being fixed.</div>
+              <div class="guide-callout">If a button returns "older helper route" or "not configured", use local helper mode at <code>http://127.0.0.1:45680</code> for helper-backed actions. Hosted production intentionally does not call the retired <code>secopsai-helper.secopsai.dev</code> tunnel unless a live <code>SECOPSAI_HELPER_BASE_URL</code> is explicitly configured.</div>
             </section>
           </div>
         </div>

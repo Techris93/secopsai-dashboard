@@ -335,6 +335,10 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /Autonomous Discovery/);
   assert.match(app, /Run Discovery/);
   assert.match(app, /Run Autopilot Dry Run/);
+  assert.match(app, /Orchestrator Review/);
+  assert.match(app, /Candidate type/);
+  assert.match(app, /Supply-chain relevance/);
+  assert.match(app, /No package artifacts validated/);
   assert.match(app, /Promote to Campaign Research/);
   assert.match(app, /older helper route/);
   assert.match(app, /Restart or update the local SecOpsAI dashboard helper/);
@@ -344,6 +348,7 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /campaign-blog-draft/);
   assert.match(app, /campaign-discover/);
   assert.match(app, /campaign-autopilot/);
+  assert.match(app, /orchestrate-candidate/);
   assert.match(startScript, /Replacing stale local dashboard helper/);
   assert.match(serveScript, /Replacing stale local dashboard helper/);
 }
@@ -412,6 +417,7 @@ function testOperatorGuideUiIsPresent() {
   assert.match(css, /\.guide-header-actions/);
   assert.match(css, /\.campaign-package-noise/);
   assert.match(css, /\.campaign-watchlist-suggestions/);
+  assert.match(css, /\.campaign-orchestrator-review/);
   assert.match(css, /\.triage-output-compact/);
   assert.match(css, /\.triage-raw-drawer/);
   assert.match(css, /\.campaign-review-drawer/);

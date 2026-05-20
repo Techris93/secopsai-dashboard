@@ -75,7 +75,7 @@ The **Run Evidence Verdict** action is read-only. It scores package-level malici
 
 The **Campaign Research** panel is also read-only by default. Use it when several packages, IOCs, publishers, or source reports belong to the same supply-chain campaign. Paste/import campaign JSON or build the campaign in the form, click **Run Campaign Research**, then review the campaign verdict, package verdicts, local environment impact, correlations, IOCs, mitigation, and references. **Persist Findings** and **Create Campaign Blog Draft** are separate protected actions that require the admin token and confirmation. Campaign blog drafts are created as review-only drafts and are never published automatically.
 
-Campaign Research and **Autonomous Discovery** live in a collapsed advanced dock so the alert-review workflow stays readable. Click the dock to expand campaign intake. **Run Discovery** polls trusted SecOpsAI news/source registries and cached source metadata, extracts supply-chain campaign candidates, and shows scored leads. **Run Autopilot Dry Run** researches high-scoring candidates without writing findings. **Promote to Campaign Research** loads a candidate into the editable campaign form. **Add to Watchlist**, **Persist Findings**, and **Create Review-Only Blog Draft** are protected actions and require the Triage Ops admin token.
+Campaign Research and **Autonomous Discovery** live in a collapsed advanced dock so the alert-review workflow stays readable. Click the dock to expand campaign intake. **Run Discovery** polls trusted SecOpsAI news/source registries and cached source metadata, extracts campaign leads, and shows scored candidates. Each candidate now includes an **Orchestrator Review** that classifies the report, separates source references from attacker IOCs, validates real packages/extensions, rejects extraction noise, and recommends the right route. **Promote to Campaign Research** is available only for candidates routed to package Campaign Research without blockers. **Run Autopilot Dry Run** researches high-scoring orchestrator-approved package candidates without writing findings. **Add to Watchlist**, **Persist Findings**, and **Create Review-Only Blog Draft** remain protected actions and require the Triage Ops admin token.
 
 ### Blog Ops
 - GitHub Actions-backed security-blog news ingestion
@@ -89,7 +89,7 @@ Blog Ops is intentionally protected. In hosted mode, the browser calls `/api/blo
 
 ### Guide
 
-The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, Native Triage, Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, when to use CLI fallback, and why discovery candidates must be cleaned before persistence or blog drafting.
+The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, Native Triage, Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, when to use CLI fallback, why discovery candidates must pass Orchestrator Review before persistence or blog drafting, and why source domains are references rather than attacker IOCs.
 
 The guide includes safe automation buttons for repetitive read-only work:
 - **Run Daily Refresh** reloads dashboard data, helper state, Blog Ops status, Triage Ops alerts, and campaign fixtures.

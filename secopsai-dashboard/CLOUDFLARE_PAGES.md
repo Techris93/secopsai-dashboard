@@ -53,7 +53,10 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `RUN_OUTPUT_R2_PREFIX`
 - `RUN_OUTPUT_BASE_URL`
 - `RUN_OUTPUT_AUTH_HEADER`
-- `SECOPSAI_HELPER_BASE_URL`
+- `SECOPSAI_HELPER_BASE_URL` is optional. Leave it unset in production unless
+  you intentionally operate a live private helper. Hosted production currently
+  uses local helper mode for SecOpsAI helper-backed actions instead of the
+  retired `secopsai-helper.secopsai.dev` tunnel.
 - `SECOPSAI_HELPER_AUTH_HEADER`
 - `BLOG_OPS_OWNER`
 - `BLOG_OPS_REPO`
@@ -85,15 +88,11 @@ Notes:
 
 The dashboard includes a protected **Blog Ops** tab for SecOpsAI security-blog operations. The browser never runs shell commands. Buttons call same-origin Pages Worker endpoints under `/api/blog/*`, and the Worker dispatches the SecOpsAI GitHub Actions workflow `blog-ops.yml`.
 
-For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`. Local deploy is also token-gated and runs a fixed Wrangler Pages deploy command for the SecOpsAI blog directory; the browser cannot supply arbitrary shell commands.
+For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`. Local helper mode does not deploy the blog when deploy capability is false; use hosted Blog Ops or the GitHub Actions / Cloudflare deployment workflow for deployment. The browser cannot supply arbitrary shell commands.
 
-Local Blog Ops deploy prerequisites:
-
-- `SECOPSAI_ROOT` points to the SecOpsAI repo, defaulting to `/Users/chrixchange/secopsai`.
-- The local machine must be authenticated with Cloudflare Wrangler, or have `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the helper environment.
-- `wrangler` or `npx` must be available on `PATH`.
-- The default local deploy target is `BLOG_OPS_LOCAL_DEPLOY_PROJECT=secopsai-blog` and `BLOG_OPS_LOCAL_DEPLOY_BRANCH=main`.
-- The deploy source is always `${SECOPSAI_ROOT}/blog`.
+Blog deployment is handled outside local helper mode. Use hosted Blog Ops or
+the `blog-ops.yml` GitHub Actions / Cloudflare Pages workflow when a reviewed
+blog change is ready to publish.
 
 Set these values in Cloudflare Pages:
 
@@ -136,7 +135,7 @@ Safety model:
 
 ## Triage Ops Control Plane
 
-The dashboard includes a protected **Triage Ops** tab for supply-chain `SCM-*` alerts. It is helper-backed, not browser-shell-backed. Hosted Cloudflare Pages proxies `/api/secopsai/triage-ops/*` to `SECOPSAI_HELPER_BASE_URL`; local usage is served by `dashboard_server.py`.
+The dashboard includes a protected **Triage Ops** tab for supply-chain `SCM-*` alerts. It is helper-backed, not browser-shell-backed. Hosted Cloudflare Pages proxies `/api/secopsai/triage-ops/*` only when `SECOPSAI_HELPER_BASE_URL` is intentionally configured. With that variable absent, hosted mode returns clear `not_configured` guidance and local usage is served by `dashboard_server.py`.
 
 Required for hosted Triage Ops:
 
@@ -168,7 +167,7 @@ Evidence-Based Verdict uses internal evidence tiers instead of relying only on p
 
 That distinction matters for advisory-backed ecosystem threats. For example, `mistralai@2.4.6` can be `likely_true_positive` as package intelligence while `environment_impact` is `not_observed` if no local dependency reference is found. In that case, keep the ecosystem finding actionable, block the version, and rotate credentials only if installation or execution is confirmed.
 
-If `SECOPSAI_HELPER_BASE_URL` is missing, hosted mode returns a clear not-configured response and the UI shows copyable CLI fallbacks.
+If `SECOPSAI_HELPER_BASE_URL` is missing, hosted mode returns a clear not-configured response and the UI shows copyable CLI fallbacks. This is expected for the current production dashboard; run `./start-local-dashboard-stack.sh` and open `http://127.0.0.1:45680` for helper-backed Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops draft/review actions.
 
 If hosted Triage Ops returns Cloudflare HTTP `530` with `error code: 1033`, the dashboard Worker reached Cloudflare but the configured helper origin or tunnel is not live. Update `SECOPSAI_HELPER_BASE_URL` to the current helper/tunnel URL, restart the tunnel/helper, or clear that variable and use local helper mode until the hosted helper is restored.
 
@@ -192,17 +191,19 @@ The same card includes **Autonomous Discovery** for source/watchlist-driven inta
 
 1. Set `Since`, `Source`, `Limit`, and `Min score`.
 2. Click **Run Discovery** to fetch trusted source feeds and score campaign leads.
-3. Select a candidate and click **Promote to Campaign Research** to inspect/edit it.
-4. Click **Run Autopilot Dry Run** to research high-scoring candidates without writing findings.
-5. Add package, publisher, IOC, or source URL watchlist entries with **Add to Watchlist**. This is protected by the admin token.
-6. Use **Persist Findings** or **Create Review-Only Blog Draft** only after review; both are protected and never publish posts.
+3. Select a candidate and review **Orchestrator Review**. It shows candidate type, recommended route, validated packages, rejected package noise, validated IOCs, rejected source references, blockers, and next action.
+4. Click **Promote to Campaign Research** only when the orchestrator routes the candidate to package Campaign Research without blockers.
+5. Click **Run Autopilot Dry Run** to research high-scoring orchestrator-approved candidates without writing findings.
+6. Add only validated package, publisher, malware, extension, GitHub repo, or attacker IOC watchlist entries with **Add to Watchlist**. This is protected by the admin token. Do not add source domains such as news sites as attacker IOCs.
+7. Use **Persist Findings** or **Create Review-Only Blog Draft** only after review; both are protected and never publish posts.
 
 CLI fallback:
 
 ```bash
 cd /Users/chrixchange/secopsai
-python3 -m secopsai.cli supply-chain discover-campaigns --since 24h --limit 10 --json
-python3 -m secopsai.cli supply-chain campaign-autopilot --since 24h --dry-run --json
+python3 -m secopsai.cli supply-chain discover-campaigns --since 24h --limit 10 --orchestrate --json
+python3 -m secopsai.cli supply-chain orchestrate-candidate --input candidate.json --json
+python3 -m secopsai.cli supply-chain campaign-autopilot --since 24h --dry-run --orchestrate --json
 python3 -m secopsai.cli supply-chain campaign-watchlist add --package npm:node-ipc
 python3 -m secopsai.cli supply-chain campaign-candidates list --json
 python3 -m secopsai.cli supply-chain research-campaign --input campaign.json --dry-run --json

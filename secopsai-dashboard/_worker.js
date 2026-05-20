@@ -686,7 +686,9 @@ async function proxySecopsaiHelper(request, env) {
     return jsonResponse(
       {
         ok: false,
-        error: "SecOpsAI helper is not configured for hosted mode. Set SECOPSAI_HELPER_BASE_URL.",
+        error: "SecOpsAI helper is not configured for hosted mode. Use local helper mode for helper-backed actions, or configure a live SECOPSAI_HELPER_BASE_URL intentionally.",
+        code: "not_configured",
+        hint: "Local helper mode runs at http://127.0.0.1:45680 after ./start-local-dashboard-stack.sh. Hosted dashboard no longer calls the retired secopsai-helper.secopsai.dev tunnel.",
       },
       { status: 501 },
     );
