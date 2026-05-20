@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import urllib.parse
@@ -68,6 +69,8 @@ CAMPAIGN_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,140}$')
 PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._:/-]{1,260}$')
 VERSION_RE = re.compile(r'^[A-Za-z0-9.+:_~!*-]{1,160}$')
 SAFE_SOURCE_URL_RE = re.compile(r'^https?://[^\s<>"\']{3,500}$', re.IGNORECASE)
+PAGES_PROJECT_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$')
+BRANCH_RE = re.compile(r'^[A-Za-z0-9._/-]{1,120}$')
 SECRETISH_RE = re.compile(r'(?i)\b([a-z0-9_ -]*(?:token|secret|api[_ -]?key|password|authorization)[a-z0-9_ -]*)\s*[:=]\s*([^\s,"\']{8,})')
 CAMPAIGN_FIXTURE_PATHS = [
     SECOPSAI_ROOT / 'tests' / 'fixtures' / 'deadcode09284814-campaign.json',
@@ -566,7 +569,7 @@ def _blog_review_drafts_payload():
                 'github_actions': False,
                 'workflow_history': False,
                 'local_cli': True,
-                'deploy': False,
+                'deploy': local_blog_deploy_available(),
             },
         },
         'mode': 'local-helper-cli',
@@ -574,7 +577,7 @@ def _blog_review_drafts_payload():
             'github_actions': False,
             'workflow_history': False,
             'local_cli': True,
-            'deploy': False,
+            'deploy': local_blog_deploy_available(),
         },
         'drafts': drafts,
         'runs': [],
@@ -586,6 +589,58 @@ def _blog_review_drafts_payload():
         'counts': counts,
     }
     return {'ok': True, 'returncode': 0, 'stdout': json.dumps(payload), 'stderr': ''}, payload
+
+
+def local_blog_deploy_project():
+    project = os.environ.get('BLOG_OPS_LOCAL_DEPLOY_PROJECT', 'secopsai-blog').strip()
+    if not project or not PAGES_PROJECT_RE.match(project):
+        raise ValueError('Invalid BLOG_OPS_LOCAL_DEPLOY_PROJECT')
+    return project
+
+
+def local_blog_deploy_branch():
+    branch = os.environ.get('BLOG_OPS_LOCAL_DEPLOY_BRANCH', 'main').strip()
+    if not branch or not BRANCH_RE.match(branch) or '..' in branch:
+        raise ValueError('Invalid BLOG_OPS_LOCAL_DEPLOY_BRANCH')
+    return branch
+
+
+def local_blog_deploy_command():
+    blog_dir = (SECOPSAI_ROOT / 'blog').resolve()
+    if not blog_dir.exists() or not blog_dir.is_dir():
+        raise RuntimeError(f'Blog directory not found: {blog_dir}')
+    project = local_blog_deploy_project()
+    branch = local_blog_deploy_branch()
+    wrangler = shutil.which('wrangler')
+    if wrangler:
+        return [wrangler, 'pages', 'deploy', str(blog_dir), '--project-name', project, '--branch', branch]
+    npx = shutil.which('npx')
+    if npx:
+        return [npx, '--yes', 'wrangler@latest', 'pages', 'deploy', str(blog_dir), '--project-name', project, '--branch', branch]
+    raise RuntimeError('Wrangler is not available. Install wrangler or Node/npm so npx can run wrangler@latest.')
+
+
+def local_blog_deploy_available():
+    return bool((SECOPSAI_ROOT / 'blog').is_dir() and (shutil.which('wrangler') or shutil.which('npx')))
+
+
+def run_local_blog_deploy(timeout=600):
+    command = local_blog_deploy_command()
+    result = subprocess.run(
+        command,
+        cwd=str(SECOPSAI_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    return {
+        'ok': result.returncode == 0,
+        'returncode': result.returncode,
+        'stdout': result.stdout,
+        'stderr': result.stderr,
+        'command': ['[wrangler]' if index == 0 else part for index, part in enumerate(command)],
+    }
 
 
 def build_blog_ops_action_args(action, payload=None, draft=None):
@@ -603,7 +658,7 @@ def build_blog_ops_action_args(action, payload=None, draft=None):
     if action == 'rebuild-feeds':
         return ['blog', 'rebuild-feeds']
     if action == 'deploy':
-        raise ValueError('Local Blog Ops helper cannot deploy. Use hosted Blog Ops or the Cloudflare deployment workflow.')
+        raise ValueError('Deploy is handled by the local Wrangler deploy allowlist, not the SecOpsAI blog CLI allowlist.')
     if action in {'approve', 'reject', 'needs-review'}:
         safe_draft = _clean_string(draft, 260)
         if not safe_draft or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', safe_draft):
@@ -1579,7 +1634,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         'github_actions': False,
                         'workflow_history': False,
                         'local_cli': True,
-                        'deploy': False,
+                        'deploy': local_blog_deploy_available(),
                     },
                 },
                 'ai_guard': build_ai_guard(),
@@ -1762,6 +1817,24 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if action in BLOG_OPS_WRITE_ACTIONS and require_blog_ops_admin(self):
                 return
             try:
+                if action == 'deploy':
+                    result = run_local_blog_deploy(timeout=600)
+                    return json_response(
+                        self,
+                        202 if result['ok'] else 500,
+                        {
+                            'ok': result['ok'],
+                            'action': action,
+                            'workflow': 'wrangler pages deploy',
+                            'local_helper': True,
+                            'deploy': {
+                                'project': local_blog_deploy_project(),
+                                'branch': local_blog_deploy_branch(),
+                                'source': str((SECOPSAI_ROOT / 'blog').resolve()),
+                            },
+                            'cli': compact_cli_result(result, limit=20000),
+                        },
+                    )
                 args = build_blog_ops_action_args(action, payload=payload, draft=draft)
                 timeout = 240 if action in {'news-run', 'publish-approved'} else 120
                 result, parsed_result = run_cli_json(args, timeout=timeout)
@@ -1778,7 +1851,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     },
                 )
             except Exception as exc:
-                status = 501 if 'cannot deploy' in str(exc).lower() else 400
+                status = 501 if 'wrangler is not available' in str(exc).lower() else 400
                 return json_response(self, status, {'ok': False, 'error': str(exc)})
 
         if parsed.path.startswith('/api/secopsai/triage-ops/'):

@@ -2804,6 +2804,9 @@ function blogOpsWriteActionCopy(status = state.blogOps.status || {}) {
     return 'Hosted Blog Ops needs BLOG_OPS_GITHUB_TOKEN before write actions can dispatch GitHub Actions.';
   }
   if (isLocalBlogOpsMode()) {
+    if (canDeployFromBlogOps()) {
+      return 'Local helper mode runs allowlisted SecOpsAI blog CLI actions. Deploy runs the allowlisted Wrangler Pages deploy for the blog project.';
+    }
     return 'Local helper mode runs allowlisted SecOpsAI blog CLI actions. Deploy is hosted-only; use hosted Blog Ops or the Cloudflare workflow for deployment.';
   }
   return 'Buttons dispatch the protected GitHub Actions runner. External news still requires explicit approval before publishing.';
