@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -149,9 +151,23 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('news-example', args)
         self.assertNotIn(';', ' '.join(args))
 
-    def test_local_blog_ops_rejects_deploy_action(self):
+    def test_local_blog_ops_deploy_is_separate_allowlist(self):
         with self.assertRaises(ValueError):
             server.build_blog_ops_action_args('deploy', {'limit': 5})
+
+    def test_local_blog_ops_deploy_command_is_allowlisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'blog').mkdir()
+            with mock.patch.object(server, 'SECOPSAI_ROOT', root), mock.patch.object(server.shutil, 'which') as which:
+                which.side_effect = lambda name: f'/usr/bin/{name}' if name == 'wrangler' else None
+                command = server.local_blog_deploy_command()
+        self.assertEqual(command[:4], ['/usr/bin/wrangler', 'pages', 'deploy', str((root / 'blog').resolve())])
+        self.assertIn('--project-name', command)
+        self.assertIn('secopsai-blog', command)
+        self.assertIn('--branch', command)
+        self.assertIn('main', command)
+        self.assertNotIn(';', ' '.join(command))
 
 
 if __name__ == '__main__':
