@@ -27,10 +27,13 @@ async function testConfigExposesTriageOpsEndpoint() {
 async function testIntegrationStatusExposesCampaignApi() {
   const response = await worker.fetch(new Request("https://dashboard.example/api/integration-status"), {
     SECOPSAI_HELPER_BASE_URL: "https://helper.example",
+    BLOG_OPS_GITHUB_TOKEN: "ghp_test_value",
   });
   assert.equal(response.status, 200);
   const payload = await jsonFrom(response);
   assert.equal(payload.helper.secopsai_campaign_api, true);
+  assert.equal(payload.blog_ops.mode, "hosted-github-actions");
+  assert.equal(payload.blog_ops.capabilities.deploy, true);
 }
 
 async function testTriageOpsHostedModeFailsClearlyWithoutHelper() {
@@ -153,6 +156,33 @@ async function testTriageOpsHelperUpstream502IsActionableJson() {
     assert.equal(payload.upstream_status, 502);
     assert.match(payload.error, /SecOpsAI helper upstream HTTP 502/);
     assert.match(payload.hint, /SECOPSAI_HELPER_BASE_URL/);
+    assert.equal(JSON.stringify(payload).includes("super-secret"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function testTriageOpsCloudflare1033HasTunnelHint() {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response("error code: 1033 token=super-secret", {
+      status: 530,
+      headers: { "Content-Type": "text/plain" },
+    });
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/triage-ops/refresh-evidence", {
+        method: "POST",
+        body: "{}",
+      }),
+      {
+        SECOPSAI_HELPER_BASE_URL: "https://stale-tunnel.example",
+      },
+    );
+    assert.equal(response.status, 530);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.code, "helper_tunnel_unreachable");
+    assert.match(payload.hint, /live helper\/tunnel URL/);
     assert.equal(JSON.stringify(payload).includes("super-secret"), false);
   } finally {
     globalThis.fetch = originalFetch;
@@ -368,6 +398,8 @@ function testOperatorGuideUiIsPresent() {
   assert.match(app, /campaign-watchlist-suggestion/);
   assert.match(app, /Show raw helper output/);
   assert.match(app, /Refresh evidence completed/);
+  assert.match(app, /Local helper mode runs allowlisted SecOpsAI blog CLI actions/);
+  assert.match(app, /Deploy blog is hosted-only/);
   assert.match(app, /cve-\\d\{4\}-\\d\{4,\}/);
   assert.match(app, /docs-internal-guid/);
   assert.match(app, /sanitizeCampaignSummary/);
@@ -518,6 +550,7 @@ await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
 await testTriageOpsHelperUpstream502IsActionableJson();
+await testTriageOpsCloudflare1033HasTunnelHint();
 await testCampaignResearchIsReadOnlyProxy();
 await testCampaignDiscoveryIsReadOnlyProxy();
 await testCampaignAutopilotIsReadOnlyProxy();

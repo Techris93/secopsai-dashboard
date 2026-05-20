@@ -85,7 +85,7 @@ Notes:
 
 The dashboard includes a protected **Blog Ops** tab for SecOpsAI security-blog operations. The browser never runs shell commands. Buttons call same-origin Pages Worker endpoints under `/api/blog/*`, and the Worker dispatches the SecOpsAI GitHub Actions workflow `blog-ops.yml`.
 
-For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`; local deploy intentionally returns a clear limitation instead of running a deployment from the browser.
+For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`; deploy is shown as hosted-only in local helper mode because Cloudflare deployment should run through hosted Blog Ops or the protected GitHub Actions workflow.
 
 Set these values in Cloudflare Pages:
 
@@ -161,6 +161,8 @@ Evidence-Based Verdict uses internal evidence tiers instead of relying only on p
 That distinction matters for advisory-backed ecosystem threats. For example, `mistralai@2.4.6` can be `likely_true_positive` as package intelligence while `environment_impact` is `not_observed` if no local dependency reference is found. In that case, keep the ecosystem finding actionable, block the version, and rotate credentials only if installation or execution is confirmed.
 
 If `SECOPSAI_HELPER_BASE_URL` is missing, hosted mode returns a clear not-configured response and the UI shows copyable CLI fallbacks.
+
+If hosted Triage Ops returns Cloudflare HTTP `530` with `error code: 1033`, the dashboard Worker reached Cloudflare but the configured helper origin or tunnel is not live. Update `SECOPSAI_HELPER_BASE_URL` to the current helper/tunnel URL, restart the tunnel/helper, or clear that variable and use local helper mode until the hosted helper is restored.
 
 ### Campaign Research From Triage Ops
 

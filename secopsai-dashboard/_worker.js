@@ -130,8 +130,15 @@ function blogOpsPublicStatus(env) {
     repo: config.repo,
     workflow: config.workflow,
     ref: config.ref,
+    mode: "hosted-github-actions",
     github_configured: Boolean(config.token),
     admin_token_configured: Boolean(config.adminToken),
+    capabilities: {
+      github_actions: Boolean(config.token),
+      workflow_history: Boolean(config.token),
+      local_cli: false,
+      deploy: Boolean(config.token),
+    },
   };
 }
 
@@ -629,6 +636,7 @@ async function handleIntegrationStatus(env) {
   const runOutputProxy = String(env.RUN_OUTPUT_BASE_URL || "").trim();
   const secopsaiHelperBase = String(env.SECOPSAI_HELPER_BASE_URL || "").trim();
   const aiGuard = buildAiGuard(env);
+  const blogOpsStatus = blogOpsPublicStatus(env);
   return jsonResponse({
     ok: true,
     discord: {
@@ -648,8 +656,27 @@ async function handleIntegrationStatus(env) {
       secopsai_campaign_api: Boolean(secopsaiHelperBase),
       secopsai_events_api: Boolean(secopsaiHelperBase),
     },
+    blog_ops: {
+      mode: blogOpsStatus.mode,
+      configured: Boolean(blogOpsStatus.github_configured),
+      capabilities: blogOpsStatus.capabilities,
+    },
     ai_guard: aiGuard,
   });
+}
+
+function helperUpstreamFailureCode(status, detail) {
+  if (Number(status) === 530 && /(?:error code:\s*)?1033\b/i.test(String(detail || ""))) {
+    return "helper_tunnel_unreachable";
+  }
+  return "helper_upstream_error";
+}
+
+function helperUpstreamFailureHint(status, detail) {
+  if (Number(status) === 530 && /(?:error code:\s*)?1033\b/i.test(String(detail || ""))) {
+    return "Cloudflare returned 1033 for the helper origin. Update SECOPSAI_HELPER_BASE_URL to a live helper/tunnel URL, or clear it and use local helper mode until the tunnel is restored.";
+  }
+  return "If this is hosted mode, confirm SECOPSAI_HELPER_BASE_URL points to a live helper/tunnel. If this is local mode, restart ./start-local-dashboard-stack.sh and retry Refresh evidence.";
 }
 
 async function proxySecopsaiHelper(request, env) {
@@ -716,13 +743,14 @@ async function proxySecopsaiHelper(request, env) {
       upstreamPayload = null;
     }
     const upstreamError = upstreamPayload?.error || upstreamPayload?.message || bodyText || response.statusText || "helper request failed";
+    const failureCode = helperUpstreamFailureCode(response.status, upstreamError);
     return jsonResponse(
       {
         ok: false,
         error: `SecOpsAI helper upstream HTTP ${response.status}: ${sanitizeHelperErrorDetail(upstreamError)}`,
-        code: "helper_upstream_error",
+        code: failureCode,
         upstream_status: response.status,
-        hint: "If this is hosted mode, confirm SECOPSAI_HELPER_BASE_URL points to a live helper/tunnel. If this is local mode, restart ./start-local-dashboard-stack.sh and retry Refresh evidence.",
+        hint: helperUpstreamFailureHint(response.status, upstreamError),
       },
       { status: response.status },
     );
