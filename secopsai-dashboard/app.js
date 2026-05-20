@@ -2783,6 +2783,32 @@ function blogOpsAdminTokenHint() {
   return state.blogOps.adminToken ? 'Token ready for write actions' : 'Paste admin token to enable write actions';
 }
 
+function blogOpsCapabilities() {
+  const status = state.blogOps.status || {};
+  return status.capabilities || status.config?.capabilities || {};
+}
+
+function isLocalBlogOpsMode() {
+  const status = state.blogOps.status || {};
+  const mode = String(status.mode || status.config?.mode || '').toLowerCase();
+  return Boolean(status.local_helper || blogOpsCapabilities().local_cli || mode.includes('local'));
+}
+
+function canDeployFromBlogOps() {
+  const caps = blogOpsCapabilities();
+  return caps.deploy !== false;
+}
+
+function blogOpsWriteActionCopy(status = state.blogOps.status || {}) {
+  if (status.configured === false) {
+    return 'Hosted Blog Ops needs BLOG_OPS_GITHUB_TOKEN before write actions can dispatch GitHub Actions.';
+  }
+  if (isLocalBlogOpsMode()) {
+    return 'Local helper mode runs allowlisted SecOpsAI blog CLI actions. Deploy is hosted-only; use hosted Blog Ops or the Cloudflare workflow for deployment.';
+  }
+  return 'Buttons dispatch the protected GitHub Actions runner. External news still requires explicit approval before publishing.';
+}
+
 async function loadBlogOpsStatus({ render = true } = {}) {
   try {
     const payload = await fetchBlogOpsJson('status');
@@ -2810,6 +2836,12 @@ async function loadBlogDraft(slug) {
 }
 
 async function runBlogOpsAction(action, { draft = null, note = '', button = null, payload = {} } = {}) {
+  if (action === 'deploy' && !canDeployFromBlogOps()) {
+    const message = 'Deploy blog is hosted-only in this dashboard mode. Open hosted Blog Ops or run the Cloudflare deployment workflow from GitHub Actions.';
+    setStatus(message, true);
+    alert(message);
+    return;
+  }
   if (state.blogOps.status?.configured === false) {
     const message = 'Blog Ops is not connected to GitHub yet. Add BLOG_OPS_GITHUB_TOKEN to the Cloudflare Pages project, then refresh Blog Ops.';
     setStatus(message, true);
@@ -2898,11 +2930,11 @@ function renderBlogOpsStats() {
   const runs = state.blogOps.runs || [];
   const latestRun = runs[0] || null;
   const cards = [
-    ['Sources', counts.sources ?? '—', status.configured ? 'GitHub backed registry' : 'GitHub token needed'],
+    ['Sources', counts.sources ?? '—', isLocalBlogOpsMode() ? 'Local SecOpsAI registry' : status.configured ? 'GitHub backed registry' : 'GitHub token needed'],
     ['Drafts', counts.drafts ?? blogOpsDrafts().length, 'review records in repo'],
     ['Needs review', counts.needs_review ?? 0, 'external news waits here'],
     ['Approved', counts.approved ?? 0, 'ready for Publish approved'],
-    ['Latest run', latestRun ? statusLabel(latestRun.status || latestRun.conclusion || 'queued') : '—', latestRun ? fmtDate(latestRun.updated_at) : 'No workflow run loaded']
+    ['Latest run', latestRun ? statusLabel(latestRun.status || latestRun.conclusion || 'queued') : '—', latestRun ? fmtDate(latestRun.updated_at) : isLocalBlogOpsMode() ? 'Local helper does not read workflow runs' : 'No workflow run loaded']
   ];
   host.innerHTML = cards.map(([label, value, sub]) => `
     <div class="card metric-card blog-metric-card">
@@ -3045,14 +3077,24 @@ function renderBlogOps() {
   renderBlogWorkflowRuns();
   const authCard = document.querySelector('.blog-auth-card .small');
   if (authCard) {
-    authCard.textContent = `${blogOpsAdminTokenHint()}. ${status.configured === false ? 'GitHub token is not configured on the Pages project yet.' : 'Write actions dispatch GitHub Actions; no shell commands run in the browser.'}`;
+    authCard.textContent = `${blogOpsAdminTokenHint()}. ${blogOpsWriteActionCopy(status)}`;
+  }
+  const actionsCopy = el('blog-actions-copy');
+  if (actionsCopy) {
+    actionsCopy.textContent = blogOpsWriteActionCopy(status);
   }
   document.querySelectorAll('.blog-action-btn, #blog-approve-btn, #blog-needs-review-btn, #blog-reject-btn, #blog-edit-btn, #blog-publish-approved-btn').forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) return;
-    if (status.configured === false) {
+    if (button.dataset.blogAction === 'deploy' && !canDeployFromBlogOps()) {
+      button.disabled = true;
+      button.title = 'Deploy is hosted-only in local helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.';
+    } else if (status.configured === false) {
       button.disabled = true;
       button.title = 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.';
-    } else if (button.title === 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.') {
+    } else if (
+      button.title === 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.' ||
+      button.title === 'Deploy is hosted-only in local helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.'
+    ) {
       button.disabled = false;
       button.title = '';
     }
