@@ -401,10 +401,12 @@ function testOperatorGuideUiIsPresent() {
   assert.match(app, /cleanCampaignPackageNoise/);
   assert.match(app, /campaignWatchlistSuggestions/);
   assert.match(app, /campaign-watchlist-suggestion/);
+  assert.match(app, /Run Orchestrator Review/);
+  assert.match(app, /campaign-orchestrate/);
   assert.match(app, /Show raw helper output/);
   assert.match(app, /Refresh evidence completed/);
   assert.match(app, /Local helper mode runs allowlisted SecOpsAI blog CLI actions/);
-  assert.match(app, /Deploy blog is hosted-only/);
+  assert.match(app, /allowlisted Wrangler Pages deploy/);
   assert.match(app, /cve-\\d\{4\}-\\d\{4,\}/);
   assert.match(app, /docs-internal-guid/);
   assert.match(app, /sanitizeCampaignSummary/);

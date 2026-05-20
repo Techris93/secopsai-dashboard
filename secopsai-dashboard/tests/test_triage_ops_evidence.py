@@ -152,8 +152,13 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('news-example', args)
         self.assertNotIn(';', ' '.join(args))
 
-    def test_local_blog_ops_deploy_is_disabled(self):
-        self.assertFalse(server.local_blog_deploy_available())
+    def test_local_blog_ops_deploy_availability_uses_allowlisted_tools(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'blog').mkdir()
+            with mock.patch.object(server, 'SECOPSAI_ROOT', root), mock.patch.object(server.shutil, 'which') as which:
+                which.side_effect = lambda name: f'/usr/bin/{name}' if name == 'wrangler' else None
+                self.assertTrue(server.local_blog_deploy_available())
 
     def test_local_blog_ops_deploy_is_separate_allowlist(self):
         with self.assertRaises(ValueError):

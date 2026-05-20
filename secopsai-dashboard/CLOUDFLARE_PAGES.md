@@ -88,11 +88,18 @@ Notes:
 
 The dashboard includes a protected **Blog Ops** tab for SecOpsAI security-blog operations. The browser never runs shell commands. Buttons call same-origin Pages Worker endpoints under `/api/blog/*`, and the Worker dispatches the SecOpsAI GitHub Actions workflow `blog-ops.yml`.
 
-For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`. Local helper mode does not deploy the blog when deploy capability is false; use hosted Blog Ops or the GitHub Actions / Cloudflare deployment workflow for deployment. The browser cannot supply arbitrary shell commands.
+For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`. When local deploy capability is available, **Deploy blog** runs one fixed allowlisted command: `wrangler pages deploy ${SECOPSAI_ROOT}/blog --project-name secopsai-blog --branch main`, or the equivalent `npx --yes wrangler@latest ...` fallback. The browser cannot supply arbitrary shell commands.
 
-Blog deployment is handled outside local helper mode. Use hosted Blog Ops or
-the `blog-ops.yml` GitHub Actions / Cloudflare Pages workflow when a reviewed
-blog change is ready to publish.
+If local deploy capability is unavailable, use hosted Blog Ops or the
+`blog-ops.yml` GitHub Actions / Cloudflare Pages workflow when a reviewed blog
+change is ready to publish.
+
+Local Blog Ops deploy prerequisites:
+
+- `SECOPSAI_ROOT` points at the SecOpsAI repo and `${SECOPSAI_ROOT}/blog` exists.
+- Wrangler is installed and authenticated, or Node/npm is available so `npx --yes wrangler@latest` can run.
+- Optional overrides are valid if set: `BLOG_OPS_LOCAL_DEPLOY_PROJECT` and `BLOG_OPS_LOCAL_DEPLOY_BRANCH`.
+- The deploy source is always `${SECOPSAI_ROOT}/blog`; operators cannot submit arbitrary shell commands or alternate source paths from the browser.
 
 Set these values in Cloudflare Pages:
 

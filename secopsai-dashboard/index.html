@@ -517,7 +517,7 @@
                 <div class="guide-step"><span>2</span><p>Use <strong>Fetch news</strong> to ingest sources, <strong>Create drafts</strong> to generate review-only drafts, or <strong>Run fetch + draft</strong> for both.</p></div>
                 <div class="guide-step"><span>3</span><p>Select a draft in the review queue. Check title, summary, severity, body, references, IOCs, affected artifacts, and recommended actions.</p></div>
                 <div class="guide-step"><span>4</span><p>Use edit/save if the article needs cleanup. Approve only when claims are source-backed and no internal checklist, local path, secret, or copied external article text appears.</p></div>
-                <div class="guide-step"><span>5</span><p>Click <strong>Publish approved</strong> only after approval. Then use <strong>Rebuild feeds</strong>. Blog deployment should happen through hosted Blog Ops or the GitHub Actions / Cloudflare deployment workflow; local helper mode does not deploy when deploy capability is false.</p></div>
+                <div class="guide-step"><span>5</span><p>Click <strong>Publish approved</strong> only after approval. Then use <strong>Rebuild feeds</strong>. Click <strong>Deploy blog</strong> when Blog Ops shows deploy capability. Local deploy is a protected allowlisted Wrangler Pages action; if it is unavailable, use hosted Blog Ops or the GitHub Actions / Cloudflare deployment workflow.</p></div>
               </div>
               <div class="guide-callout guide-danger">External-news and campaign drafts must remain human-reviewed. Publishing stays approval-gated even when a draft was created from Triage Ops.</div>
             </section>

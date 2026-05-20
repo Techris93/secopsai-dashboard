@@ -2807,7 +2807,7 @@ function blogOpsWriteActionCopy(status = state.blogOps.status || {}) {
     if (canDeployFromBlogOps()) {
       return 'Local helper mode runs allowlisted SecOpsAI blog CLI actions. Deploy runs the allowlisted Wrangler Pages deploy for the blog project.';
     }
-    return 'Local helper mode runs allowlisted SecOpsAI blog CLI actions. Deploy is hosted-only; use hosted Blog Ops or the Cloudflare workflow for deployment.';
+    return 'Local helper mode runs allowlisted SecOpsAI blog CLI actions. Deploy is unavailable in this helper session; use hosted Blog Ops or the Cloudflare workflow for deployment.';
   }
   return 'Buttons dispatch the protected GitHub Actions runner. External news still requires explicit approval before publishing.';
 }
@@ -2840,7 +2840,7 @@ async function loadBlogDraft(slug) {
 
 async function runBlogOpsAction(action, { draft = null, note = '', button = null, payload = {} } = {}) {
   if (action === 'deploy' && !canDeployFromBlogOps()) {
-    const message = 'Deploy blog is hosted-only in this dashboard mode. Open hosted Blog Ops or run the Cloudflare deployment workflow from GitHub Actions.';
+    const message = 'Deploy blog is unavailable in this dashboard mode. Open hosted Blog Ops or run the Cloudflare deployment workflow from GitHub Actions.';
     setStatus(message, true);
     alert(message);
     return;
@@ -3091,13 +3091,13 @@ function renderBlogOps() {
     if (!(button instanceof HTMLButtonElement)) return;
     if (button.dataset.blogAction === 'deploy' && !canDeployFromBlogOps()) {
       button.disabled = true;
-      button.title = 'Deploy is hosted-only in local helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.';
+      button.title = 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.';
     } else if (status.configured === false) {
       button.disabled = true;
       button.title = 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.';
     } else if (
       button.title === 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.' ||
-      button.title === 'Deploy is hosted-only in local helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.'
+      button.title === 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.'
     ) {
       button.disabled = false;
       button.title = '';
@@ -3737,6 +3737,19 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
         state.triageOps.campaignDiscovery.selectedCandidateId = result.candidates[0].candidate_id || '';
       }
     }
+    if (action === 'campaign-orchestrate' && result.candidate) {
+      const reviewed = result.candidate;
+      const reviewedId = reviewed.candidate_id || selectedCampaignCandidate()?.candidate_id || '';
+      const candidates = [...(state.triageOps.campaignCandidates || [])];
+      const index = candidates.findIndex(candidate => String(candidate.candidate_id || '') === String(reviewedId));
+      if (index >= 0) {
+        candidates[index] = { ...candidates[index], ...reviewed, candidate_id: reviewedId };
+      } else {
+        candidates.unshift({ ...reviewed, candidate_id: reviewedId });
+      }
+      state.triageOps.campaignCandidates = candidates;
+      state.triageOps.campaignDiscovery.selectedCandidateId = reviewedId;
+    }
     if (result.campaign) {
       setCampaignFormFromPayload(result.campaign);
       if (action === 'campaign-promote') {
@@ -3869,6 +3882,7 @@ function renderAutonomousDiscoveryPanel() {
         <button class="primary-btn" id="campaign-discover-btn" type="button">Run Discovery</button>
         <button class="secondary-btn" id="campaign-autopilot-dry-run-btn" type="button">Run Autopilot Dry Run</button>
         <button class="secondary-btn" id="campaign-review-candidates-btn" type="button">Review Candidates</button>
+        <button class="secondary-btn" id="campaign-orchestrate-btn" type="button" ${selected ? '' : 'disabled'} title="${selected ? '' : 'Select a candidate before running Orchestrator Review.'}">Run Orchestrator Review</button>
         <button class="secondary-btn" id="campaign-promote-btn" type="button" ${canPromote ? '' : 'disabled'} title="${canPromote ? '' : 'Select a candidate routed to package Campaign Research with no blockers.'}">Promote to Campaign Research</button>
         <button class="mini-btn" id="campaign-autopilot-persist-btn" type="button">Persist Findings</button>
         <button class="primary-btn" id="campaign-autopilot-draft-btn" type="button">Create Review-Only Blog Draft</button>
@@ -4157,6 +4171,17 @@ function renderCampaignResearchPanel() {
     } finally {
       setButtonBusy(event.currentTarget, false);
     }
+  });
+  el('campaign-orchestrate-btn')?.addEventListener('click', event => {
+    const selected = selectedCampaignCandidate();
+    if (!selected) {
+      setStatus('Select a campaign candidate first.', true);
+      return;
+    }
+    runCampaignDiscoveryAction('campaign-orchestrate', {
+      button: event.currentTarget,
+      body: { candidate: selected }
+    });
   });
   el('campaign-promote-btn')?.addEventListener('click', event => {
     const selected = selectedCampaignCandidate();

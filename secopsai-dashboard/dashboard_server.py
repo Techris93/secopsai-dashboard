@@ -623,7 +623,8 @@ def local_blog_deploy_command():
 
 
 def local_blog_deploy_available():
-    return False
+    blog_dir = (SECOPSAI_ROOT / 'blog').resolve()
+    return bool(blog_dir.exists() and blog_dir.is_dir() and (shutil.which('wrangler') or shutil.which('npx')))
 
 
 def run_local_blog_deploy(timeout=600):
@@ -1820,17 +1821,21 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 if action == 'deploy':
+                    result = run_local_blog_deploy(timeout=600)
                     return json_response(
                         self,
-                        501,
+                        202 if result['ok'] else 500,
                         {
-                            'ok': False,
+                            'ok': result['ok'],
                             'action': action,
-                            'error': 'Local Blog Ops helper cannot deploy. Use hosted Blog Ops or the GitHub Actions / Cloudflare deployment workflow.',
-                            'code': 'not_configured',
-                            'workflow': 'hosted Blog Ops or blog-ops.yml',
+                            'workflow': 'wrangler pages deploy',
                             'local_helper': True,
-                            'capabilities': {'deploy': False},
+                            'deploy': {
+                                'project': local_blog_deploy_project(),
+                                'branch': local_blog_deploy_branch(),
+                                'source': str((SECOPSAI_ROOT / 'blog').resolve()),
+                            },
+                            'cli': compact_cli_result(result, limit=20000),
                         },
                     )
                 args = build_blog_ops_action_args(action, payload=payload, draft=draft)

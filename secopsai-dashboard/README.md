@@ -87,6 +87,8 @@ Campaign Research and **Autonomous Discovery** live in a collapsed advanced dock
 
 Blog Ops is intentionally protected. In hosted mode, the browser calls `/api/blog/*` Worker endpoints and the Worker dispatches the SecOpsAI `blog-ops.yml` workflow. In local helper mode, the same `/api/blog/*` contract is served by `dashboard_server.py` and mapped to allowlisted `secopsai blog ...` CLI argument arrays. Operators paste `BLOG_OPS_ADMIN_TOKEN` into the page for write actions; GitHub tokens stay server-side in Cloudflare Pages secrets and are not needed for local read-only draft/status review.
 
+Local Blog Ops deploy is available when the helper can see `${SECOPSAI_ROOT}/blog` and either `wrangler` or `npx` is on `PATH`. The deploy button remains admin-token gated and runs only the fixed Wrangler Pages deploy for the SecOpsAI blog project; if that capability is unavailable, use hosted Blog Ops or the GitHub Actions / Cloudflare workflow.
+
 ### Guide
 
 The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, Native Triage, Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, when to use CLI fallback, why discovery candidates must pass Orchestrator Review before persistence or blog drafting, and why source domains are references rather than attacker IOCs.
