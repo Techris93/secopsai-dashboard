@@ -2937,6 +2937,7 @@ function renderBlogOpsStats() {
     ['Drafts', counts.drafts ?? blogOpsDrafts().length, 'review records in repo'],
     ['Needs review', counts.needs_review ?? 0, 'external news waits here'],
     ['Approved', counts.approved ?? 0, 'ready for Publish approved'],
+    ['Deployed', counts.deployed ?? 0, 'already published and skipped'],
     ['Latest run', latestRun ? statusLabel(latestRun.status || latestRun.conclusion || 'queued') : '—', latestRun ? fmtDate(latestRun.updated_at) : isLocalBlogOpsMode() ? 'Local helper does not read workflow runs' : 'No workflow run loaded']
   ];
   host.innerHTML = cards.map(([label, value, sub]) => `
