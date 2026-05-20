@@ -89,6 +89,7 @@ For local operator testing, `dashboard_server.py` now serves the same `/api/blog
 
 Local Blog Ops deploy prerequisites:
 
+- `SECOPSAI_ROOT` points to the SecOpsAI repo, defaulting to `/Users/chrixchange/secopsai`.
 - The local machine must be authenticated with Cloudflare Wrangler, or have `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the helper environment.
 - `wrangler` or `npx` must be available on `PATH`.
 - The default local deploy target is `BLOG_OPS_LOCAL_DEPLOY_PROJECT=secopsai-blog` and `BLOG_OPS_LOCAL_DEPLOY_BRANCH=main`.
