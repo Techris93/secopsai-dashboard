@@ -551,6 +551,7 @@ def _blog_review_drafts_payload():
         'drafts': len(drafts),
         'needs_review': len([draft for draft in drafts if draft.get('review_status') == 'needs_review']),
         'approved': len([draft for draft in drafts if draft.get('review_status') in {'approved', 'reviewed'}]),
+        'deployed': len([draft for draft in drafts if draft.get('review_status') in {'deployed', 'published'}]),
         'rejected': len([draft for draft in drafts if draft.get('review_status') == 'rejected']),
     }
     payload = {

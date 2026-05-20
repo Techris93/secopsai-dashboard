@@ -441,6 +441,7 @@ async function handleBlogOps(request, env) {
         drafts: draftItems.length,
         needs_review: draftItems.filter((draft) => draft.review_status === "needs_review").length,
         approved: draftItems.filter((draft) => ["approved", "reviewed"].includes(draft.review_status)).length,
+        deployed: draftItems.filter((draft) => ["deployed", "published"].includes(draft.review_status)).length,
         rejected: draftItems.filter((draft) => draft.review_status === "rejected").length,
       },
     });
