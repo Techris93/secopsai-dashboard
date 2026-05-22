@@ -4,10 +4,20 @@ window.SECOPSAI_CONFIG = {
   appName: "SecOpsAI Triage Dashboard",
   integrationStatusEndpoint: "/api/integration-status",
   runOutputEndpoint: "/api/run-output",
+  triageOpsEndpoint: "/api/secopsai/triage-ops",
+  aiGuard: {
+    hostedEnabled: false,
+    defaultModel: "gpt-5.4-mini",
+    maxCostUsd: 3.0,
+    allowMutations: false
+  },
   departments: {
     exec: "#06B6D4",
     platform: "#3B82F6",
-    security: "#8B5CF6"
+    security: "#8B5CF6",
+    product: "#6366F1",
+    revenue: "#F59E0B",
+    support: "#10B981"
   },
   roleGroups: {
     exec: ["exec/agents-orchestrator"],
@@ -20,6 +30,16 @@ window.SECOPSAI_CONFIG = {
     security: [
       "security/security-engineer",
       "security/threat-detection-engineer"
-    ]
+    ],
+    product: [
+      "product/product-manager",
+      "product/ui-designer"
+    ],
+    revenue: [
+      "revenue/content-creator",
+      "revenue/outbound-strategist",
+      "revenue/sales-engineer"
+    ],
+    support: ["support/support-responder"]
   }
 };

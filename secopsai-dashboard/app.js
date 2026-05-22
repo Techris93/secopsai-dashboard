@@ -1460,16 +1460,7 @@ async function runPromptNow() {
     }
   }, 2000);
 
-  if (!result.ok && !result.skipped) {
-    // Non-fatal: the run request is already queued in Supabase. Treat Discord notify as best-effort.
-    await createDashboardEvent('run_now_notify_failed', `Run notify failed: ${role}`, result.reason || 'Unknown notify failure', 'warning', { related_work_item_id: item?.id || null, related_run_id: run?.id || null });
-    setStatus(`Run queued, but notify failed: ${escapeHtml(result.reason || 'unknown error')}`, true);
-    setButtonBusy(runBtn, false);
-    setTimeout(() => closePromptModal(), 1400);
-    return;
-  }
-
-  setStatus(`<span class="dot"></span> Run request queued for ${escapeHtml(shortRoleLabel(role))} (notified #${notifyChannel})`);
+  setStatus(`<span class="dot"></span> Run request queued for ${escapeHtml(shortRoleLabel(role))}`);
   setButtonBusy(runBtn, false);
   setTimeout(() => closePromptModal(), 1400);
   await boot();
