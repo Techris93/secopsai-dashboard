@@ -1128,7 +1128,7 @@ def build_triage_ops_recommendation(finding, advisory=None, local_usage=None):
         evidence.append('Known public LiteLLM compromise reporting names 1.82.7/1.82.8, not this exact version.')
         evidence.append('No local dependency reference was found in this repo.')
     elif not local_present:
-        disposition = 'expected_behavior'
+        disposition = 'false_positive'
         confidence = 'medium'
         evidence.append('No local dependency reference was found in this repo.')
     else:

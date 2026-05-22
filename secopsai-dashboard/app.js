@@ -3158,7 +3158,10 @@ function filteredTriageOpsAlerts() {
         alert.summary,
         alert.source
       ].join(' ').toLowerCase();
-      if (!haystack.includes(filters.search)) return false;
+      const terms = filters.search.split(',').map(t => t.trim()).filter(Boolean);
+      if (terms.length > 0) {
+        if (!terms.every(term => haystack.includes(term))) return false;
+      }
     }
     return true;
   });
@@ -3223,10 +3226,38 @@ async function runTriageOpsAction(action, { button = null, payload = {}, write =
       await loadTriageOpsAlerts({ render: false });
       await loadLocalTriageState();
     }
-    if (action === 'evidence-verdict' && result?.recommended_note) {
-      if (selectedAlert?.finding_id) state.triageOps.verdictNotes[selectedAlert.finding_id] = result.recommended_note;
-      const noteBox = el('triage-ops-note');
-      if (noteBox) noteBox.value = result.recommended_note;
+    if (selectedAlert) {
+      if (action === 'evidence-verdict' && result) {
+        if (result.recommended_note) {
+          state.triageOps.verdictNotes[selectedAlert.finding_id] = result.recommended_note;
+          const noteBox = el('triage-ops-note');
+          if (noteBox) noteBox.value = result.recommended_note;
+        }
+        if (result.recommended_disposition) {
+          const dispSelect = el('triage-ops-disposition');
+          if (dispSelect) dispSelect.value = result.recommended_disposition;
+        }
+        selectedAlert.recommendation = {
+          recommended_disposition: result.recommended_disposition || selectedAlert.recommendation?.recommended_disposition,
+          confidence: result.confidence || selectedAlert.recommendation?.confidence,
+          evidence: [
+            ...(result.true_positive_evidence || []),
+            ...(result.false_positive_evidence || []),
+            ...(result.missing_evidence || [])
+          ].map(item => typeof item === 'string' ? item : item.label || item.reason || JSON.stringify(item))
+        };
+        selectedAlert.severity_score = result.score || selectedAlert.severity_score;
+      } else if (action === 'check-advisories' && result?.advisory) {
+        selectedAlert.advisory = {
+          matched: result.advisory.matched,
+          match_count: Array.isArray(result.advisory.matches) ? result.advisory.matches.length : (result.advisory.matched ? 1 : 0)
+        };
+      } else if (action === 'check-local-usage' && result?.usage) {
+        selectedAlert.local_usage = {
+          present: result.usage.present,
+          match_count: Array.isArray(result.usage.matches) ? result.usage.matches.length : (result.usage.present ? 1 : 0)
+        };
+      }
     }
     setStatus(`<span class="dot"></span> Triage Ops ${escapeHtml(statusLabel(action))} completed`);
     renderTriageOps();
@@ -3280,9 +3311,42 @@ async function runTriageOpsEvidenceBundle(button = null) {
         method: 'POST',
         body: JSON.stringify(body)
       });
-      if (action === 'evidence-verdict' && results[action]?.recommended_note) {
-        state.triageOps.verdictNotes[selectedAlert.finding_id] = results[action].recommended_note;
+    }
+    const verdictResult = results['evidence-verdict'];
+    if (verdictResult) {
+      selectedAlert.recommendation = {
+        recommended_disposition: verdictResult.recommended_disposition || selectedAlert.recommendation?.recommended_disposition,
+        confidence: verdictResult.confidence || selectedAlert.recommendation?.confidence,
+        evidence: [
+          ...(verdictResult.true_positive_evidence || []),
+          ...(verdictResult.false_positive_evidence || []),
+          ...(verdictResult.missing_evidence || [])
+        ].map(item => typeof item === 'string' ? item : item.label || item.reason || JSON.stringify(item))
+      };
+      selectedAlert.severity_score = verdictResult.score || selectedAlert.severity_score;
+      if (verdictResult.recommended_note) {
+        state.triageOps.verdictNotes[selectedAlert.finding_id] = verdictResult.recommended_note;
+        const noteBox = el('triage-ops-note');
+        if (noteBox) noteBox.value = verdictResult.recommended_note;
       }
+      const dispSelect = el('triage-ops-disposition');
+      if (dispSelect && verdictResult.recommended_disposition) {
+        dispSelect.value = verdictResult.recommended_disposition;
+      }
+    }
+    const advisoryResult = results['check-advisories'];
+    if (advisoryResult?.advisory) {
+      selectedAlert.advisory = {
+        matched: advisoryResult.advisory.matched,
+        match_count: Array.isArray(advisoryResult.advisory.matches) ? advisoryResult.advisory.matches.length : (advisoryResult.advisory.matched ? 1 : 0)
+      };
+    }
+    const usageResult = results['check-local-usage'];
+    if (usageResult?.usage) {
+      selectedAlert.local_usage = {
+        present: usageResult.usage.present,
+        match_count: Array.isArray(usageResult.usage.matches) ? usageResult.usage.matches.length : (usageResult.usage.present ? 1 : 0)
+      };
     }
     state.triageOps.lastOutput = {
       action: 'evidence-bundle',
@@ -3366,8 +3430,13 @@ const CAMPAIGN_GENERIC_PACKAGE_WORDS = new Set([
 function analyzeCampaignPackageNoise(row = {}) {
   const ecosystem = String(row.ecosystem || 'npm').toLowerCase();
   const name = String(row.package || '').trim().toLowerCase();
+  if (!name) {
+    return {
+      isNoise: false,
+      reasons: []
+    };
+  }
   const reasons = [];
-  if (!name) reasons.push('empty package id');
   if (CAMPAIGN_GENERIC_PACKAGE_WORDS.has(name)) reasons.push('generic article/CSS word');
   if (/^docs-internal-guid-[a-f0-9-]{20,}$/i.test(name)) reasons.push('Google Docs editor artifact');
   if (/^\d+(\.\d+)?$/.test(name)) reasons.push('numeric token');
@@ -4308,6 +4377,114 @@ function renderTriageOpsOutput(output) {
     return renderEvidenceBundle(output.result || {});
   }
   const result = output.result || {};
+
+  if (output.action === 'check-advisories') {
+    const advisory = result.advisory || {};
+    const matches = Array.isArray(advisory.matches) ? advisory.matches : [];
+    const knownBad = Array.isArray(result.known_bad_versions) ? result.known_bad_versions : [];
+    return `
+      <div class="triage-output">
+        <strong>Advisory Check Results</strong>
+        <p class="small">Finding: ${escapeHtml(result.finding_id || '')}</p>
+        <div class="evidence-section" style="margin-top: 10px;">
+          <h4>Match Status: ${advisory.matched ? '<span style="color:#ff6b6b;font-weight:bold;">Matched</span>' : '<span style="color:#51cf66;">No matches</span>'}</h4>
+          ${matches.length ? `
+            <div class="evidence-list" style="margin-top: 8px;">
+              ${matches.map(m => `
+                <div class="evidence-row negative">
+                  <strong>${escapeHtml(m.id || 'Advisory')}</strong>
+                  <span>${escapeHtml(m.summary || '')}</span>
+                  ${Array.isArray(m.source_urls) && m.source_urls.length ? `
+                    <div style="margin-top: 4px; font-size: 0.85em;">
+                      References: ${m.source_urls.map(url => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color, #58a6ff); text-decoration:underline;">${escapeHtml(url)}</a>`).join(', ')}
+                    </div>
+                  ` : ''}
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="small">No advisory database matches found for this package version.</p>'}
+        </div>
+        ${knownBad.length ? `
+          <div class="evidence-section" style="margin-top: 10px;">
+            <h4>Local Known-Bad Versions list</h4>
+            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+              ${knownBad.map(v => `<span class="triage-rec-pill true_positive">${escapeHtml(v)}</span>`).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  if (output.action === 'check-local-usage') {
+    const usage = result.usage || {};
+    const matches = Array.isArray(usage.matches) ? usage.matches : [];
+    return `
+      <div class="triage-output">
+        <strong>Local Repo Dependency Usage Check</strong>
+        <p class="small">Finding: ${escapeHtml(result.finding_id || '')} • searched ${escapeHtml(String(usage.searched_files || 0))} files</p>
+        <div class="evidence-section" style="margin-top: 10px;">
+          <h4>Usage Status: ${usage.present ? '<span style="color:#ff6b6b;font-weight:bold;">Referenced locally</span>' : '<span style="color:#868e96;">Not referenced in manifests</span>'}</h4>
+          ${matches.length ? `
+            <div class="evidence-list" style="margin-top: 8px;">
+              ${matches.map(m => `
+                <div class="evidence-row ${m.version_match ? 'negative' : ''}">
+                  <strong>Line ${m.line} in ${escapeHtml(m.path.split('/').pop())}</strong>
+                  <code style="display:block; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-top:4px; font-family:monospace; font-size:0.9em; overflow-x:auto; white-space:pre; border: 1px solid rgba(255,255,255,0.05); color:#c9d1d9;">${escapeHtml(m.text)}</code>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="small">No reference to this package was found in pyproject.toml, requirements.txt, packagist, package.json, etc.</p>'}
+        </div>
+      </div>
+    `;
+  }
+
+  if (output.action === 'generate-mitigation') {
+    const mitigation = result.mitigation || {};
+    const actions = Array.isArray(mitigation.actions) ? mitigation.actions : [];
+    const commands = Array.isArray(mitigation.operator_commands) ? mitigation.operator_commands : [];
+    return `
+      <div class="triage-output">
+        <strong>Recommended Mitigation Plan</strong>
+        <p class="small">Finding: ${escapeHtml(result.finding_id || '')} • ${escapeHtml(mitigation.affected?.package || '')}@${escapeHtml(mitigation.affected?.version || '')}</p>
+        <div class="evidence-section" style="margin-top: 10px;">
+          <h4>Actions</h4>
+          ${renderBulletList(actions, 'No mitigation actions returned.')}
+        </div>
+        ${commands.length ? `
+          <div class="evidence-section" style="margin-top: 10px;">
+            <h4>Operator Commands</h4>
+            <pre class="triage-cli-fallback">${escapeHtml(commands.join('\n'))}</pre>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  if (output.action === 'raw-report') {
+    const reportText = result.text || '';
+    return `
+      <div class="triage-output">
+        <strong>Raw Security Analysis Report</strong>
+        <p class="small">Report path: <code>${escapeHtml(result.path || '')}</code> ${result.truncated ? '(truncated to 12KB)' : ''}</p>
+        <pre style="background: var(--bg-card-dark, #161b22); padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color, #30363d); color: var(--text-color, #c9d1d9);">${escapeHtml(reportText)}</pre>
+      </div>
+    `;
+  }
+
+  if (output.action === 'investigate' || output.action === 'explain-verdict') {
+    const detail = result.result || result;
+    const stdout = output.result?.stdout || (typeof detail === 'string' ? detail : JSON.stringify(detail, null, 2));
+    return `
+      <div class="triage-output">
+        <strong>Analysis Output: ${escapeHtml(statusLabel(output.action))}</strong>
+        <p class="small">Finding: ${escapeHtml(result.finding_id || '')}</p>
+        <pre style="background: var(--bg-card-dark, #161b22); padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color, #30363d); color: var(--text-color, #c9d1d9);">${escapeHtml(stdout)}</pre>
+      </div>
+    `;
+  }
+
   const primary =
     result.mitigation ||
     result.result?.investigation ||
@@ -4492,8 +4669,17 @@ function renderTriageOpsDetail() {
 
     <section class="triage-review-section">
       <div class="triage-section-heading">
-        <span>Analyst note</span>
-        <small>Required before protected closure/escalation actions.</small>
+        <span>Analyst note & disposition</span>
+        <small>Select close disposition and write note before protected actions.</small>
+      </div>
+      <div class="triage-ops-disposition-wrap" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px;">
+        <span class="small" style="font-weight: 500;">Close disposition</span>
+        <select id="triage-ops-disposition" style="background: var(--bg-input, #0d1117); color: var(--text-color, #c9d1d9); border: 1px solid var(--border-color, #30363d); border-radius: 6px; padding: 8px 12px; font-size: 0.9em; width: 100%;">
+          <option value="false_positive" ${rec.recommended_disposition === 'false_positive' ? 'selected' : ''}>False positive</option>
+          <option value="expected_behavior" ${rec.recommended_disposition === 'expected_behavior' ? 'selected' : ''}>Expected behavior</option>
+          <option value="tune_policy" ${rec.recommended_disposition === 'tune_policy' ? 'selected' : ''}>Tune policy</option>
+          <option value="needs_review" ${rec.recommended_disposition === 'needs_review' ? 'selected' : ''}>Needs review</option>
+        </select>
       </div>
       <label class="blog-review-note"><span class="small">Close / escalation note</span><textarea id="triage-ops-note" rows="4">${escapeHtml(closeNote)}</textarea></label>
     </section>
@@ -4522,7 +4708,7 @@ function renderTriageOpsDetail() {
       <div class="triage-ops-actions grouped response">
         <button class="secondary-btn triage-ops-action-btn" data-triage-action="generate-mitigation">Generate mitigation</button>
         <button class="mini-btn triage-ops-action-btn" data-triage-action="escalate" data-write="true">Move to in review</button>
-        <button class="danger-btn triage-ops-action-btn" data-triage-action="close" data-write="true">Close as false positive</button>
+        <button class="danger-btn triage-ops-action-btn" data-triage-action="close" data-write="true">Close finding</button>
         <button class="primary-btn triage-ops-action-btn" data-triage-action="create-blog-draft" data-write="true">Create blog draft</button>
       </div>
     </section>
@@ -4539,9 +4725,10 @@ function renderTriageOpsDetail() {
       const action = btn.dataset.triageAction;
       const note = el('triage-ops-note')?.value || closeNote;
       const write = btn.dataset.write === 'true';
-      if (action === 'close' && !confirm(`Close ${alert.finding_id} as false positive? Review the note before confirming.`)) return;
+      const disposition = el('triage-ops-disposition')?.value || 'false_positive';
+      if (action === 'close' && !confirm(`Close ${alert.finding_id} with disposition "${disposition}"? Review the note before confirming.`)) return;
       const payload = action === 'close'
-        ? { disposition: 'false_positive', status: 'closed', note }
+        ? { disposition, status: 'closed', note }
         : action === 'escalate'
           ? { note }
           : {};
