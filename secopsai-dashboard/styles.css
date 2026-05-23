@@ -1025,6 +1025,13 @@ input, select, textarea { width: 100%; max-width: 100%; }
   border-color: rgba(16, 185, 129, 0.24);
 }
 
+.okcomputer-skin .triage-rec-pill.not_applicable,
+.okcomputer-skin .triage-rec-pill.not-applicable {
+  color: var(--text-secondary);
+  background: rgba(134, 142, 150, 0.1);
+  border-color: rgba(134, 142, 150, 0.28);
+}
+
 .okcomputer-skin .kv-row,
 .okcomputer-skin .feed-item,
 .okcomputer-skin .blog-draft-item,
@@ -4309,6 +4316,13 @@ label span,
   border-color: rgba(16, 185, 129, 0.35);
 }
 
+.triage-rec-pill.not-applicable,
+.triage-rec-pill.not_applicable {
+  color: #4b5563;
+  background: rgba(243, 244, 246, 0.96);
+  border-color: rgba(156, 163, 175, 0.35);
+}
+
 .triage-rec-pill.true-positive {
   color: #991b1b;
   background: rgba(254, 226, 226, 0.96);
@@ -4355,6 +4369,13 @@ label span,
   color: #bff7dc;
   background: rgba(54, 179, 126, 0.15);
   border-color: rgba(54, 179, 126, 0.42);
+}
+
+#page-triage-ops .triage-rec-pill.not-applicable,
+#page-triage-ops .triage-rec-pill.not_applicable {
+  color: #868e96;
+  background: rgba(134, 142, 150, 0.15);
+  border-color: rgba(134, 142, 150, 0.42);
 }
 
 .triage-review-section {

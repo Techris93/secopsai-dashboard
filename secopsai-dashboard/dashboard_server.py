@@ -21,7 +21,7 @@ FINDING_ID_RE = re.compile(r'^[A-Z]{3}-[A-Z0-9]+$')
 ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
 APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
-ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive'}
+ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive', 'not_applicable'}
 ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
     'close',
     'escalate',
@@ -1128,7 +1128,7 @@ def build_triage_ops_recommendation(finding, advisory=None, local_usage=None):
         evidence.append('Known public LiteLLM compromise reporting names 1.82.7/1.82.8, not this exact version.')
         evidence.append('No local dependency reference was found in this repo.')
     elif not local_present:
-        disposition = 'false_positive'
+        disposition = 'not_applicable'
         confidence = 'medium'
         evidence.append('No local dependency reference was found in this repo.')
     else:

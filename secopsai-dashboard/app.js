@@ -4677,6 +4677,7 @@ function renderTriageOpsDetail() {
         <select id="triage-ops-disposition" style="background: var(--bg-input, #0d1117); color: var(--text-color, #c9d1d9); border: 1px solid var(--border-color, #30363d); border-radius: 6px; padding: 8px 12px; font-size: 0.9em; width: 100%;">
           <option value="false_positive" ${rec.recommended_disposition === 'false_positive' ? 'selected' : ''}>False positive</option>
           <option value="expected_behavior" ${rec.recommended_disposition === 'expected_behavior' ? 'selected' : ''}>Expected behavior</option>
+          <option value="not_applicable" ${rec.recommended_disposition === 'not_applicable' ? 'selected' : ''}>Not applicable (No local usage)</option>
           <option value="tune_policy" ${rec.recommended_disposition === 'tune_policy' ? 'selected' : ''}>Tune policy</option>
           <option value="needs_review" ${rec.recommended_disposition === 'needs_review' ? 'selected' : ''}>Needs review</option>
         </select>
