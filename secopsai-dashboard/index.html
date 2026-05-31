@@ -229,10 +229,9 @@
             <button class="secondary-btn blog-action-btn" data-blog-action="news-fetch">Fetch news</button>
             <button class="secondary-btn blog-action-btn" data-blog-action="news-draft">Create drafts</button>
             <button class="primary-btn blog-action-btn" data-blog-action="news-run">Run fetch + draft</button>
-            <button class="secondary-btn" id="blog-refresh-drafts-btn">Refresh draft queue</button>
-            <button class="secondary-btn blog-action-btn" data-blog-action="publish-approved">Publish approved</button>
-            <button class="secondary-btn blog-action-btn" data-blog-action="rebuild-feeds">Rebuild feeds</button>
-            <button class="secondary-btn blog-action-btn" data-blog-action="deploy">Deploy blog</button>
+            <button class="secondary-btn blog-action-btn" data-blog-action="publish-approved" title="Publish approved drafts into blog/posts and rebuild feeds. Drafts stay Approved until Deploy blog succeeds.">Publish approved to blog</button>
+            <button class="secondary-btn blog-action-btn" data-blog-action="rebuild-feeds" title="Repair/regenerate blog index, RSS, and JSON feeds from existing posts. Publish approved already does this automatically.">Rebuild feeds</button>
+            <button class="secondary-btn blog-action-btn" data-blog-action="deploy" title="Deploy the current blog directory to Cloudflare Pages with Wrangler. After success, staged approved drafts move to Deployed.">Deploy blog to Cloudflare</button>
           </div>
         </div>
 
@@ -479,7 +478,7 @@
               <div class="guide-steps">
                 <div class="guide-step"><span>1</span><p>Open the <strong>Campaign Research & Autonomous Discovery</strong> dock inside Triage Ops.</p></div>
                 <div class="guide-step"><span>2</span><p>Either quick-load a fixture, paste campaign JSON, or manually add campaign ID, title, source URLs, actors, publishers, IOCs, behavior indicators, and package rows.</p></div>
-                <div class="guide-step"><span>3</span><p>Click <strong>Run Campaign Research</strong>. This is read-only by default and should return campaign verdict, package verdicts, correlations, local impact, mitigation, and references.</p></div>
+                <div class="guide-step"><span>3</span><p>Click <strong>Run Campaign Research</strong>. This single read-only action returns campaign verdict, package verdicts, correlations, local impact, mitigation, and references.</p></div>
                 <div class="guide-step"><span>4</span><p>Click <strong>Correlate Campaign</strong> when the campaign includes shared publishers, C2s, source reports, or overlapping strings.</p></div>
                 <div class="guide-step"><span>5</span><p>Click <strong>Check Local Usage</strong> before persistence so SOC findings distinguish malicious package evidence from local exposure.</p></div>
                 <div class="guide-step"><span>6</span><p>Click <strong>Persist Findings</strong> only after reviewing the campaign JSON, confirming the Orchestrator Review has no route blockers, and removing false package extractions. This action is token-gated.</p></div>
@@ -498,9 +497,9 @@
                 <div class="guide-step"><span>1</span><p>Set <strong>Since</strong>, <strong>Source</strong>, <strong>Limit</strong>, and <strong>Min score</strong>. Start with 24h, all, 10, and 35 for daily review.</p></div>
                 <div class="guide-step"><span>2</span><p>Click <strong>Run Discovery</strong> to fetch candidates without writing SOC findings or blog drafts.</p></div>
                 <div class="guide-step"><span>3</span><p>Review candidate titles, scores, behavior signals, the package-noise summary, and <strong>Orchestrator Review</strong>. Treat high score as "worth checking", not proof. The orchestrator classifies the report, validates real packages/extensions, separates source references from attacker IOCs, and shows rejected noise.</p></div>
-                <div class="guide-step"><span>4</span><p>Click <strong>Promote to Campaign Research</strong> only when the recommended route is Campaign Research and there are no route blockers. Malware/APT, CVE-only, GitHub-token breach, or general threat-intel leads should stay review-only unless package evidence exists.</p></div>
+                <div class="guide-step"><span>4</span><p>Click <strong>Use in Campaign Research</strong> only when the recommended route is Campaign Research and there are no route blockers. Malware/APT, CVE-only, GitHub-token breach, or general threat-intel leads should stay in the routed review lane unless package evidence exists.</p></div>
                 <div class="guide-step"><span>5</span><p>After promotion, inspect highlighted package rows. Use <strong>Clean Obvious Package Noise</strong> before research. It removes common junk such as byline CSS classes, ordinary websites, image filenames, random numbers, repository issue paths, long encoded image slugs, placeholders, or generic article words misread as package IDs.</p></div>
-                <div class="guide-step"><span>6</span><p>Use <strong>Run Autopilot Dry Run</strong> to test the end-to-end campaign path without persistence.</p></div>
+                <div class="guide-step"><span>6</span><p>Use <strong>Run Autopilot Dry Run</strong> to preview the end-to-end campaign path without persistence. Discovery write actions are intentionally not shown here; persist findings or create a blog draft only from reviewed Campaign Research output.</p></div>
                 <div class="guide-step"><span>7</span><p>Use generated watchlist suggestions only for validated packages, publishers, actors, malware names, extension IDs, GitHub repos, campaign IDs, or attacker IOCs. Source domains such as news sites are references, not attacker IOCs. Click a suggestion to fill the form, verify it is real, then click <strong>Add to Watchlist</strong> to save it with the admin token.</p></div>
               </div>
               <div class="guide-callout guide-warning">Do not click Persist Findings from discovery output until the promoted campaign has been cleaned and reviewed. Discovery can surface broad security stories; the orchestrator blocks unsupported routes, but it is still a deterministic aid rather than a final analyst decision.</div>
@@ -517,7 +516,7 @@
                 <div class="guide-step"><span>2</span><p>Use <strong>Fetch news</strong> to ingest sources, <strong>Create drafts</strong> to generate review-only drafts, or <strong>Run fetch + draft</strong> for both.</p></div>
                 <div class="guide-step"><span>3</span><p>Select a draft in the review queue. Check title, summary, severity, body, references, IOCs, affected artifacts, and recommended actions.</p></div>
                 <div class="guide-step"><span>4</span><p>Use edit/save if the article needs cleanup. Approve only when claims are source-backed and no internal checklist, local path, secret, or copied external article text appears.</p></div>
-                <div class="guide-step"><span>5</span><p>Click <strong>Publish approved</strong> only after approval. Then use <strong>Rebuild feeds</strong>. Click <strong>Deploy blog</strong> when Blog Ops shows deploy capability. Local deploy is a protected allowlisted Wrangler Pages action; if it is unavailable, use hosted Blog Ops or the GitHub Actions / Cloudflare deployment workflow.</p></div>
+                <div class="guide-step"><span>5</span><p>Click <strong>Publish approved to blog</strong> only after approval. This writes approved drafts into the blog posts directory and rebuilds feeds, but drafts remain under <strong>Approved</strong>. Use <strong>Rebuild feeds</strong> only as a repair/regeneration action. Click <strong>Deploy blog to Cloudflare</strong> when ready; after a successful deploy, those staged approved drafts move to <strong>Deployed</strong>.</p></div>
               </div>
               <div class="guide-callout guide-danger">External-news and campaign drafts must remain human-reviewed. Publishing stays approval-gated even when a draft was created from Triage Ops.</div>
             </section>

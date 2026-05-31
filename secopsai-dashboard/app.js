@@ -2736,6 +2736,17 @@ function selectedBlogDraftSummary() {
   return blogOpsDrafts().find(draft => String(draft.slug || '') === slug) || null;
 }
 
+function syncSelectedBlogDraftAfterStatusLoad() {
+  const summary = selectedBlogDraftSummary();
+  if (!summary) {
+    state.blogOps.selectedDraft = null;
+    return;
+  }
+  if (state.blogOps.selectedDraft && String(state.blogOps.selectedDraft.slug || '') === String(summary.slug || '')) {
+    state.blogOps.selectedDraft = { ...state.blogOps.selectedDraft, ...summary };
+  }
+}
+
 function blogDraftFilterValue() {
   return el('blog-draft-filter')?.value || 'all';
 }
@@ -2796,11 +2807,11 @@ function blogOpsWriteActionCopy(status = state.blogOps.status || {}) {
   }
   if (isLocalBlogOpsMode()) {
     if (canDeployFromBlogOps()) {
-      return 'Local helper mode runs allowlisted SecOpsAI blog CLI actions. Deploy runs the allowlisted Wrangler Pages deploy for the blog project.';
+      return 'Publish approved writes approved drafts into blog/posts and rebuilds feeds while keeping them Approved. Deploy blog pushes the current blog directory to Cloudflare Pages and then moves staged approved drafts to Deployed.';
     }
-    return 'Local helper mode runs allowlisted SecOpsAI blog CLI actions. Deploy is unavailable in this helper session; use hosted Blog Ops or the Cloudflare workflow for deployment.';
+    return 'Publish approved writes approved drafts into blog/posts and rebuilds feeds while keeping them Approved. Deploy is unavailable in this helper session, so use hosted Blog Ops or the Cloudflare workflow to deploy and move staged drafts to Deployed.';
   }
-  return 'Buttons dispatch the protected GitHub Actions runner. External news still requires explicit approval before publishing.';
+  return 'Publish approved dispatches the protected workflow to write approved drafts into blog/posts and rebuild feeds while keeping them Approved. Deploy blog is the separate Cloudflare deployment action that moves staged drafts to Deployed after success.';
 }
 
 async function loadBlogOpsStatus({ render = true } = {}) {
@@ -2812,6 +2823,7 @@ async function loadBlogOpsStatus({ render = true } = {}) {
     if (!state.blogOps.selectedSlug && state.blogOps.drafts[0]) {
       state.blogOps.selectedSlug = state.blogOps.drafts[0].slug;
     }
+    syncSelectedBlogDraftAfterStatusLoad();
   } catch (error) {
     state.blogOps.status = { ok: false, error: error.message, drafts: [], runs: [] };
     state.blogOps.drafts = [];
@@ -2927,8 +2939,8 @@ function renderBlogOpsStats() {
     ['Sources', counts.sources ?? '—', isLocalBlogOpsMode() ? 'Local SecOpsAI registry' : status.configured ? 'GitHub backed registry' : 'GitHub token needed'],
     ['Drafts', counts.drafts ?? blogOpsDrafts().length, 'review records in repo'],
     ['Needs review', counts.needs_review ?? 0, 'external news waits here'],
-    ['Approved', counts.approved ?? 0, 'ready for Publish approved'],
-    ['Deployed', counts.deployed ?? 0, 'already published and skipped'],
+    ['Approved', counts.approved ?? 0, 'approved or staged before deploy'],
+    ['Deployed', counts.deployed ?? 0, 'deployed to Cloudflare'],
     ['Latest run', latestRun ? statusLabel(latestRun.status || latestRun.conclusion || 'queued') : '—', latestRun ? fmtDate(latestRun.updated_at) : isLocalBlogOpsMode() ? 'Local helper does not read workflow runs' : 'No workflow run loaded']
   ];
   host.innerHTML = cards.map(([label, value, sub]) => `
@@ -2992,6 +3004,9 @@ function renderBlogDraftPreview() {
   const body = draft.body_markdown || 'Click a draft card to load the full generated body.';
   const approved = ['approved', 'reviewed'].includes(String(draft.review_status || ''));
   const ready = !blockers.length && String(draft.readiness_status || '') !== 'blocked';
+  const publishHint = approved && ready
+    ? 'This draft is approved. Use the Actions card Publish approved to blog button to stage all approved drafts in one protected batch. It stays Approved until Deploy blog to Cloudflare succeeds.'
+    : 'Publish approved to blog is a batch action in the Actions card. Approve this draft first; Deploy blog is the separate action that moves staged drafts to Deployed after Cloudflare succeeds.';
   host.innerHTML = `
     <div class="finding-detail-header">
       <div>
@@ -3028,12 +3043,12 @@ function renderBlogDraftPreview() {
     <h4 style="margin-top:18px;">Generated body</h4>
     <pre class="blog-preview-body">${escapeHtml(body)}</pre>
     <label class="blog-review-note"><span class="small">Reviewer note</span><textarea id="blog-review-note" rows="3" placeholder="Why did you approve or reject this draft?"></textarea></label>
+    <div class="blog-publish-ready-callout ${approved && ready ? 'ready' : ''}">${escapeHtml(publishHint)}</div>
     <div class="task-card-actions blog-preview-actions">
       <button class="secondary-btn" id="blog-edit-btn">Edit draft</button>
       <button class="mini-btn" id="blog-approve-btn">Approve</button>
       <button class="mini-btn" id="blog-needs-review-btn">Needs review</button>
       <button class="mini-btn" id="blog-reject-btn">Reject</button>
-      <button class="primary-btn" id="blog-publish-approved-btn" ${approved && ready ? '' : 'disabled'}>Publish approved</button>
     </div>
   `;
   const noteValue = () => el('blog-review-note')?.value || '';
@@ -3041,7 +3056,6 @@ function renderBlogDraftPreview() {
   el('blog-approve-btn')?.addEventListener('click', (event) => runBlogOpsAction('approve', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
   el('blog-needs-review-btn')?.addEventListener('click', (event) => runBlogOpsAction('needs-review', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
   el('blog-reject-btn')?.addEventListener('click', (event) => runBlogOpsAction('reject', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
-  el('blog-publish-approved-btn')?.addEventListener('click', (event) => runBlogOpsAction('publish-approved', { button: event.currentTarget }));
 }
 
 function renderBlogWorkflowRuns() {
@@ -3078,17 +3092,28 @@ function renderBlogOps() {
   if (actionsCopy) {
     actionsCopy.textContent = blogOpsWriteActionCopy(status);
   }
-  document.querySelectorAll('.blog-action-btn, #blog-approve-btn, #blog-needs-review-btn, #blog-reject-btn, #blog-edit-btn, #blog-publish-approved-btn').forEach((button) => {
+  const approvedCount = Number(status.counts?.approved ?? 0);
+  document.querySelectorAll('.blog-action-btn, #blog-approve-btn, #blog-needs-review-btn, #blog-reject-btn, #blog-edit-btn').forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) return;
-    if (button.dataset.blogAction === 'deploy' && !canDeployFromBlogOps()) {
-      button.disabled = true;
-      button.title = 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.';
-    } else if (status.configured === false) {
+    const action = button.dataset.blogAction || '';
+    const draftWriteAction = ['blog-approve-btn', 'blog-needs-review-btn', 'blog-reject-btn'].includes(button.id);
+    if (status.configured === false) {
       button.disabled = true;
       button.title = 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.';
+    } else if (action === 'deploy' && !canDeployFromBlogOps()) {
+      button.disabled = true;
+      button.title = 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.';
+    } else if ((action || draftWriteAction) && !state.blogOps.adminToken) {
+      button.disabled = true;
+      button.title = 'Paste the Blog Ops admin token and click Use token before running this protected action.';
+    } else if (action === 'publish-approved' && approvedCount <= 0) {
+      button.disabled = true;
+      button.title = 'No approved drafts are ready to publish.';
     } else if (
       button.title === 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.' ||
-      button.title === 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.'
+      button.title === 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.' ||
+      button.title === 'Paste the Blog Ops admin token and click Use token before running this protected action.' ||
+      button.title === 'No approved drafts are ready to publish.'
     ) {
       button.disabled = false;
       button.title = '';
@@ -3850,21 +3875,28 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
 function renderCampaignCandidateList() {
   const candidates = state.triageOps.campaignCandidates || [];
   if (!candidates.length) {
-    return '<div class="empty-state">No campaign candidates loaded yet. Run Discovery or Autopilot Dry Run.</div>';
+    return '<div class="empty-state">No discovery candidates loaded yet. Run Discovery to fill the inbox, or load saved candidates if a previous run already found leads.</div>';
   }
   return `
     <div class="campaign-candidate-list">
       ${candidates.slice(0, 20).map(candidate => {
         const campaign = candidate.campaign || {};
-        const review = campaignNoiseSummary(campaign.packages || []);
-        const packages = review.clean.slice(0, 4).map(item => `${item.row.ecosystem}:${item.row.package}@${item.row.version || 'unknown'}`).join(', ');
+        const orchestrator = candidate.orchestrator || {};
+        const route = orchestrator.recommended_route || 'needs_human_review';
+        const routeBlocked = Array.isArray(orchestrator.route_blockers) && orchestrator.route_blockers.length;
+        const packagesForReview = Array.isArray(orchestrator.validated_packages) ? orchestrator.validated_packages : (campaign.packages || []);
+        const review = campaignNoiseSummary(packagesForReview);
+        const packageArtifacts = review.clean.filter(item => String(item.row.ecosystem || '') !== 'github');
+        const repos = Array.isArray(orchestrator.github_repos) ? orchestrator.github_repos : review.clean.filter(item => String(item.row.ecosystem || '') === 'github').map(item => item.row.package);
+        const packages = packageArtifacts.slice(0, 4).map(item => `${item.row.ecosystem}:${item.row.package}@${item.row.version || 'unknown'}`).join(', ');
+        const repoText = repos.slice(0, 3).join(', ');
         const noise = review.noise.slice(0, 3).map(item => `${item.row.package} (${item.analysis.reasons[0]})`).join(', ');
         const selected = String(candidate.candidate_id || '') === String(state.triageOps.campaignDiscovery?.selectedCandidateId || '');
         return `
           <button class="campaign-candidate-card ${selected ? 'selected' : ''}" data-campaign-candidate-id="${escapeHtml(candidate.candidate_id || '')}" type="button">
-            <span class="triage-row-top"><strong>${escapeHtml(campaign.title || candidate.candidate_id || 'Campaign candidate')}</strong><span class="triage-rec-pill needs_review">score ${escapeHtml(String(candidate.score ?? 0))}</span></span>
-            <span class="small">${escapeHtml(packages || 'No likely package identifiers after noise review')}</span>
-            <span class="campaign-noise-summary">${escapeHtml(`${review.clean.length} likely package row(s), ${review.noise.length} likely noisy extraction(s)`)}</span>
+            <span class="triage-row-top"><strong>${escapeHtml(campaign.title || candidate.candidate_id || 'Discovery lead')}</strong><span class="triage-rec-pill ${routeBlocked ? 'needs_review' : 'expected_behavior'}">${escapeHtml(statusLabel(route))}</span></span>
+            <span class="small">${escapeHtml(packages || repoText || 'No validated package artifacts')}</span>
+            <span class="campaign-noise-summary">${escapeHtml(`${packageArtifacts.length} package artifact(s), ${repos.length} repo/project reference(s), ${review.noise.length} rejected noise item(s)`)}</span>
             ${noise ? `<span class="small">Noise examples: ${escapeHtml(noise)}</span>` : ''}
             <span class="small">${escapeHtml((candidate.score_reasons || []).slice(0, 3).join(', ') || 'No score reasons returned')}</span>
           </button>
@@ -3881,6 +3913,8 @@ function renderOrchestratorReview(candidate = null) {
   const review = candidate.orchestrator || {};
   const blockers = Array.isArray(review.route_blockers) ? review.route_blockers : [];
   const validatedPackages = Array.isArray(review.validated_packages) ? review.validated_packages : [];
+  const packageArtifacts = validatedPackages.filter(row => String(row.ecosystem || '') !== 'github');
+  const githubRepos = Array.isArray(review.github_repos) ? review.github_repos : validatedPackages.filter(row => String(row.ecosystem || '') === 'github').map(row => row.package);
   const rejectedPackages = Array.isArray(review.rejected_package_candidates) ? review.rejected_package_candidates : [];
   const validatedIocs = review.validated_iocs && typeof review.validated_iocs === 'object'
     ? Object.values(review.validated_iocs).flat().map(String).filter(Boolean)
@@ -3902,12 +3936,13 @@ function renderOrchestratorReview(candidate = null) {
       </div>
       ${blockers.length ? `<div class="evidence-notice warning"><strong>Blocked:</strong> ${escapeHtml(blockers.join('; '))}</div>` : ''}
       <div class="campaign-result-columns">
-        <div class="campaign-result-section"><h4>Validated packages</h4>${renderCompactChips(validatedPackages.map(row => `${row.ecosystem}:${row.package}@${row.version || 'unknown'}`), 'No package artifacts validated.')}</div>
+        <div class="campaign-result-section"><h4>Package artifacts</h4>${renderCompactChips(packageArtifacts.map(row => `${row.ecosystem}:${row.package}@${row.version || 'unknown'}`), 'No package artifacts validated.')}</div>
+        <div class="campaign-result-section"><h4>Projects / repos</h4>${renderCompactChips(githubRepos.map(repo => `github:${repo}`), 'No project repositories identified.')}</div>
         <div class="campaign-result-section"><h4>Rejected package noise</h4>${renderBulletList(rejectedPackages.slice(0, 8).map(row => `${row.ecosystem || 'unknown'}:${row.package || '(empty)'} — ${row.reason || 'rejected'}`), 'No rejected package candidates.')}</div>
         <div class="campaign-result-section"><h4>Validated IOCs</h4>${renderCompactChips(validatedIocs, 'No attacker IOCs validated.')}</div>
-        <div class="campaign-result-section"><h4>Rejected IOCs</h4>${renderBulletList(rejectedIocs.slice(0, 8).map(row => `${row.value || ''} — ${row.reason || 'rejected'}`), 'No rejected IOCs.')}</div>
       </div>
       <div class="campaign-result-columns">
+        <div class="campaign-result-section"><h4>Rejected IOCs</h4>${renderBulletList(rejectedIocs.slice(0, 8).map(row => `${row.value || ''} — ${row.reason || 'rejected'}`), 'No rejected IOCs.')}</div>
         <div class="campaign-result-section"><h4>Source references</h4>${renderBulletList(review.source_references || [], 'No source references returned.')}</div>
         <div class="campaign-result-section"><h4>Missing evidence</h4>${renderBulletList(review.missing_evidence || [], 'No missing evidence called out.')}</div>
         <div class="campaign-result-section"><h4>Allowed actions</h4>${renderBulletList(review.allowed_actions || [], 'No actions allowed.')}</div>
@@ -3929,7 +3964,7 @@ function renderAutonomousDiscoveryPanel() {
       <div class="page-header compact-header">
         <div>
           <h4 style="margin:0;">Autonomous Discovery</h4>
-          <p class="small" style="margin:6px 0 0;">Monitor trusted sources and watchlists, extract campaign leads, then promote a candidate into Campaign Research for analyst review.</p>
+          <p class="small" style="margin:6px 0 0;">Discovery is an inbox. It classifies leads, separates source references from attacker IOCs, and routes only validated package/extension campaigns into Campaign Research.</p>
         </div>
       </div>
       <div class="campaign-form-grid">
@@ -3941,13 +3976,12 @@ function renderAutonomousDiscoveryPanel() {
       <div class="campaign-actions">
         <button class="primary-btn" id="campaign-discover-btn" type="button">Run Discovery</button>
         <button class="secondary-btn" id="campaign-autopilot-dry-run-btn" type="button">Run Autopilot Dry Run</button>
-        <button class="secondary-btn" id="campaign-review-candidates-btn" type="button">Review Candidates</button>
-        <button class="secondary-btn" id="campaign-orchestrate-btn" type="button" ${selected ? '' : 'disabled'} title="${selected ? '' : 'Select a candidate before running Orchestrator Review.'}">Run Orchestrator Review</button>
-        <button class="secondary-btn" id="campaign-promote-btn" type="button" ${canPromote ? '' : 'disabled'} title="${canPromote ? '' : 'Select a candidate routed to package Campaign Research with no blockers.'}">Promote to Campaign Research</button>
-        <button class="mini-btn" id="campaign-autopilot-persist-btn" type="button">Persist Findings</button>
-        <button class="primary-btn" id="campaign-autopilot-draft-btn" type="button">Create Review-Only Blog Draft</button>
+        <button class="secondary-btn" id="campaign-review-candidates-btn" type="button">Load Saved Candidates</button>
+        <button class="secondary-btn" id="campaign-orchestrate-btn" type="button" ${selected ? '' : 'disabled'} title="${selected ? '' : 'Select a candidate before reviewing route and evidence.'}">Review Selected Lead</button>
+        <button class="secondary-btn" id="campaign-promote-btn" type="button" ${canPromote ? '' : 'disabled'} title="${canPromote ? '' : 'Only package/extension campaigns with no route blockers can move into Campaign Research.'}">Use in Campaign Research</button>
         <button class="mini-btn" id="campaign-discovery-copy-cli-btn" type="button">Copy CLI Fallback</button>
       </div>
+      <p class="small campaign-action-hint">Discovery does not persist findings or create blog drafts. Use Campaign Research write actions only after a candidate has been routed, promoted, researched, and reviewed.</p>
       <div class="campaign-watchlist-row">
         <select id="campaign-watchlist-kind">
           <option value="package" ${discovery.watchlistKind === 'package' ? 'selected' : ''}>Package</option>
@@ -3959,7 +3993,10 @@ function renderAutonomousDiscoveryPanel() {
         <button class="secondary-btn" id="campaign-watchlist-add-btn" type="button">Add to Watchlist</button>
       </div>
       ${renderOrchestratorReview(selected)}
-      ${renderWatchlistSuggestions(suggestionCampaign, selectedReview)}
+      <details class="campaign-review-drawer">
+        <summary>Watchlist suggestions from validated evidence</summary>
+        ${renderWatchlistSuggestions(suggestionCampaign, selectedReview)}
+      </details>
       ${renderCampaignCandidateList()}
     </div>
   `;
@@ -4044,7 +4081,7 @@ function renderCampaignResult(result = {}) {
               </tr>
             `).join('')}
           </tbody></table></div>
-        ` : '<p class="small">No package verdicts returned.</p>'}
+        ` : '<p class="small">No package verdicts returned. If this lead is a CVE, malware/APT story, GitHub breach, or general news item, keep it in the routed review lane instead of forcing Campaign Research.</p>'}
       </div>
       <div class="campaign-result-columns">
         <div class="campaign-result-section"><h4>IOCs</h4>${renderCompactChips(iocs, 'No IOCs returned.')}</div>
@@ -4066,7 +4103,7 @@ function renderCampaignResearchPanel() {
       <div class="page-header compact-header">
         <div>
           <h3 style="margin:0;">Campaign Research</h3>
-          <p class="small" style="margin:6px 0 0;">Build or import cross-ecosystem campaign JSON, run read-only research, then explicitly persist SOC findings or create a review-only blog draft.</p>
+          <p class="small" style="margin:6px 0 0;">Use this only for validated package, extension, or supply-chain campaigns. Run Campaign Research once to get verdicts, correlations, local usage, mitigation, and references before any write action.</p>
         </div>
         <div class="campaign-fixture-actions">
           <select id="campaign-fixture-select">
@@ -4122,17 +4159,16 @@ function renderCampaignResearchPanel() {
 
       <div class="campaign-actions">
         <button class="primary-btn" id="campaign-run-btn" type="button">Run Campaign Research</button>
-        <button class="secondary-btn" id="campaign-correlate-btn" type="button">Correlate Campaign</button>
-        <button class="secondary-btn" id="campaign-local-usage-btn" type="button">Check Local Usage</button>
         <button class="secondary-btn" id="campaign-copy-cli-btn" type="button">Copy CLI Fallback</button>
         <button class="mini-btn" id="campaign-persist-btn" type="button">Persist Findings</button>
         <button class="primary-btn" id="campaign-blog-draft-btn" type="button">Create Campaign Blog Draft</button>
       </div>
+      <p class="small campaign-action-hint">Run Campaign Research includes correlation and local usage review. Persist and blog draft actions stay token-gated and should only be used after the result is reviewed.</p>
 
       <div class="campaign-result-host">
         <h4>Campaign result</h4>
         ${renderCampaignResult(state.triageOps.campaignResult)}
-        ${state.triageOps.campaignLastOutput?.cli ? `<details class="campaign-cli-output"><summary>Helper output</summary><pre>${escapeHtml(JSON.stringify(state.triageOps.campaignLastOutput.cli, null, 2))}</pre></details>` : ''}
+        ${state.triageOps.campaignLastOutput?.cli ? `<details class="campaign-cli-output"><summary>Raw helper output (debug)</summary><pre>${escapeHtml(JSON.stringify(state.triageOps.campaignLastOutput.cli, null, 2))}</pre></details>` : ''}
       </div>
     </div>
   `;
@@ -4193,8 +4229,6 @@ function renderCampaignResearchPanel() {
     setStatus(`<span class="dot"></span> Loaded campaign fixture: ${escapeHtml(fixture.title || fixture.id)}`);
   });
   el('campaign-run-btn')?.addEventListener('click', event => runCampaignEndpoint('research-campaign', { button: event.currentTarget }));
-  el('campaign-correlate-btn')?.addEventListener('click', event => runCampaignEndpoint('research-campaign', { button: event.currentTarget }));
-  el('campaign-local-usage-btn')?.addEventListener('click', event => runCampaignEndpoint('research-campaign', { button: event.currentTarget }));
   el('campaign-persist-btn')?.addEventListener('click', event => runCampaignEndpoint('campaign-persist-findings', {
     button: event.currentTarget,
     write: true,
@@ -4277,18 +4311,6 @@ function renderCampaignResearchPanel() {
     if (el('campaign-watchlist-kind')) el('campaign-watchlist-kind').value = kind;
     if (el('campaign-watchlist-value')) el('campaign-watchlist-value').value = value;
     setStatus(`<span class="dot"></span> Watchlist suggestion selected: ${escapeHtml(statusLabel(kind))} ${escapeHtml(value)}. Click Add to Watchlist to save it.`);
-  }));
-  el('campaign-autopilot-persist-btn')?.addEventListener('click', event => runCampaignDiscoveryAction('campaign-autopilot', {
-    button: event.currentTarget,
-    write: true,
-    confirmMessage: 'Persist findings for high-scoring discovery candidates into the SOC store?',
-    body: discoveryPayload({ persist: true })
-  }));
-  el('campaign-autopilot-draft-btn')?.addEventListener('click', event => runCampaignDiscoveryAction('campaign-autopilot', {
-    button: event.currentTarget,
-    write: true,
-    confirmMessage: 'Persist high-scoring candidates and create review-only campaign blog drafts? Nothing will be published.',
-    body: discoveryPayload({ persist: true, createDrafts: true })
   }));
   el('campaign-discovery-copy-cli-btn')?.addEventListener('click', () => copyTextWithStatus(campaignDiscoveryCliFallback(), 'Campaign discovery CLI fallback copied'));
 }
@@ -5484,9 +5506,6 @@ function bindEvents() {
     setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
     await loadBlogOpsStatus();
     setButtonBusy(btn, false);
-  });
-  el('blog-refresh-drafts-btn')?.addEventListener('click', async () => {
-    await loadBlogOpsStatus();
   });
   el('blog-draft-filter')?.addEventListener('change', renderBlogOps);
   document.querySelectorAll('.blog-action-btn').forEach(btn => {

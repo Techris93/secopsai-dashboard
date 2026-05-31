@@ -190,7 +190,7 @@ Supported flow:
 2. Expand **Campaign Research & Autonomous Discovery**.
 3. Paste/import campaign JSON, load the `deadcode09284814` fixture, or build a campaign by clicking **Add Package**, **Add IOC**, and **Add Source URL**.
 4. Click **Run Campaign Research**. This is read-only and maps to `secopsai supply-chain research-campaign --dry-run --json`.
-5. Review the campaign verdict, package-level verdicts, environment impact, correlations, IOCs, mitigation guidance, and references.
+5. Review the campaign verdict, package-level verdicts, environment impact, correlations, local usage, IOCs, mitigation guidance, and references.
 6. Click **Persist Findings** only when you are ready to write SOC findings. This requires `TRIAGE_OPS_ADMIN_TOKEN` or `BLOG_OPS_ADMIN_TOKEN` and confirmation.
 7. Click **Create Campaign Blog Draft** to create a review-only campaign draft. Publishing still happens later in Blog Ops and remains approval-gated.
 
@@ -198,11 +198,11 @@ The same card includes **Autonomous Discovery** for source/watchlist-driven inta
 
 1. Set `Since`, `Source`, `Limit`, and `Min score`.
 2. Click **Run Discovery** to fetch trusted source feeds and score campaign leads.
-3. Select a candidate and review **Orchestrator Review**. It shows candidate type, recommended route, validated packages, rejected package noise, validated IOCs, rejected source references, blockers, and next action.
-4. Click **Promote to Campaign Research** only when the orchestrator routes the candidate to package Campaign Research without blockers.
+3. Select a candidate and review **Orchestrator Review**. It shows candidate type, recommended route, package artifacts, project repositories, rejected package noise, validated IOCs, rejected source references, blockers, and next action.
+4. Click **Use in Campaign Research** only when the orchestrator routes the candidate to package Campaign Research without blockers.
 5. Click **Run Autopilot Dry Run** to research high-scoring orchestrator-approved candidates without writing findings.
 6. Add only validated package, publisher, malware, extension, GitHub repo, or attacker IOC watchlist entries with **Add to Watchlist**. This is protected by the admin token. Do not add source domains such as news sites as attacker IOCs.
-7. Use **Persist Findings** or **Create Review-Only Blog Draft** only after review; both are protected and never publish posts.
+7. Use **Persist Findings** or **Create Campaign Blog Draft** only from reviewed Campaign Research output; both are protected and never publish posts.
 
 CLI fallback:
 

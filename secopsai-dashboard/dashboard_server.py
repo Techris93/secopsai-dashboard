@@ -1837,11 +1837,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             try:
                 if action == 'deploy':
                     result = run_local_blog_deploy(timeout=600)
+                    mark_result = None
+                    mark_payload = None
+                    if result['ok']:
+                        mark_result, mark_payload = run_cli_json(['blog', 'news-mark-deployed'], timeout=120)
+                    ok = result['ok'] and (mark_result is None or mark_result['ok'])
                     return json_response(
                         self,
-                        202 if result['ok'] else 500,
+                        202 if ok else 500,
                         {
-                            'ok': result['ok'],
+                            'ok': ok,
                             'action': action,
                             'workflow': 'wrangler pages deploy',
                             'local_helper': True,
@@ -1851,6 +1856,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                 'source': str((SECOPSAI_ROOT / 'blog').resolve()),
                             },
                             'cli': compact_cli_result(result, limit=20000),
+                            'deployed_state': mark_payload,
+                            'deployed_state_cli': compact_cli_result(mark_result) if mark_result else None,
                         },
                     )
                 args = build_blog_ops_action_args(action, payload=payload, draft=draft)

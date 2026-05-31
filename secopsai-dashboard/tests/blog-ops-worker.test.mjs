@@ -339,7 +339,8 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /Candidate type/);
   assert.match(app, /Supply-chain relevance/);
   assert.match(app, /No package artifacts validated/);
-  assert.match(app, /Promote to Campaign Research/);
+  assert.match(app, /Use in Campaign Research/);
+  assert.match(app, /Run Campaign Research includes correlation and local usage review/);
   assert.match(app, /older helper route/);
   assert.match(app, /Restart or update the local SecOpsAI dashboard helper/);
   assert.match(app, /Evidence actions/);
@@ -390,7 +391,7 @@ function testOperatorGuideUiIsPresent() {
   assert.match(html, /Triage Ops daily workflow/);
   assert.match(html, /Blog Ops daily workflow/);
   assert.match(html, /Autonomous Discovery is a lead generator/);
-  assert.match(html, /Do not click Persist Findings/);
+  assert.match(html, /Discovery write actions are intentionally not shown/);
   assert.match(app, /"operator-guide"/);
   assert.match(app, /Dashboard operator guide/);
   assert.match(app, /runDailyGuideRefresh/);
@@ -401,12 +402,12 @@ function testOperatorGuideUiIsPresent() {
   assert.match(app, /cleanCampaignPackageNoise/);
   assert.match(app, /campaignWatchlistSuggestions/);
   assert.match(app, /campaign-watchlist-suggestion/);
-  assert.match(app, /Run Orchestrator Review/);
+  assert.match(app, /Review Selected Lead/);
   assert.match(app, /campaign-orchestrate/);
   assert.match(app, /Show raw helper output/);
   assert.match(app, /Refresh evidence completed/);
-  assert.match(app, /Local helper mode runs allowlisted SecOpsAI blog CLI actions/);
-  assert.match(app, /allowlisted Wrangler Pages deploy/);
+  assert.match(app, /Publish approved writes approved drafts into blog\/posts and rebuilds feeds while keeping them Approved/);
+  assert.match(app, /moves staged approved drafts to Deployed/);
   assert.match(app, /cve-\\d\{4\}-\\d\{4,\}/);
   assert.match(app, /docs-internal-guid/);
   assert.match(app, /sanitizeCampaignSummary/);
@@ -423,6 +424,7 @@ function testOperatorGuideUiIsPresent() {
   assert.match(css, /\.triage-output-compact/);
   assert.match(css, /\.triage-raw-drawer/);
   assert.match(css, /\.campaign-review-drawer/);
+  assert.match(css, /\.campaign-action-hint/);
 }
 
 async function testWriteNeedsAdminToken() {
@@ -467,6 +469,43 @@ async function testDispatchPayloadIsWorkflowOnly() {
     assert.equal(calls.length, 1);
     const body = JSON.parse(calls[0].init.body);
     assert.deepEqual(body.inputs, { action: "news-run", limit: "3" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function testHostedBlogOpsGlobalActionsMapToWorkflowInputs() {
+  const expectedActions = ["news-fetch", "news-draft", "news-run", "publish-approved", "rebuild-feeds", "deploy"];
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(null, { status: 204 });
+  };
+  try {
+    for (const action of expectedActions) {
+      const response = await worker.fetch(
+        new Request(`https://dashboard.example/api/blog/${action}`, {
+          method: "POST",
+          headers: { "X-Blog-Ops-Admin-Token": "admin-test" },
+          body: JSON.stringify({ limit: 4 }),
+        }),
+        {
+          BLOG_OPS_GITHUB_TOKEN: "ghp_secret_should_not_return",
+          BLOG_OPS_ADMIN_TOKEN: "admin-test",
+          BLOG_OPS_OWNER: "Techris93",
+          BLOG_OPS_REPO: "secopsai",
+          BLOG_OPS_WORKFLOW: "blog-ops.yml",
+        },
+      );
+      assert.equal(response.status, 202);
+      const payload = await jsonFrom(response);
+      assert.equal(payload.action, action);
+      assert.equal(JSON.stringify(payload).includes("ghp_secret"), false);
+    }
+    assert.equal(calls.length, expectedActions.length);
+    const dispatched = calls.map((call) => JSON.parse(call.init.body).inputs);
+    assert.deepEqual(dispatched, expectedActions.map((action) => ({ action, limit: "4" })));
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -591,6 +630,47 @@ async function testDraftListHonorsLimitAndAvoidsUnboundedFetches() {
   }
 }
 
+function testBlogOpsActionControlsAreNotDuplicated() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const actions = [...html.matchAll(/data-blog-action="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(actions.sort(), [
+    "deploy",
+    "news-draft",
+    "news-fetch",
+    "news-run",
+    "publish-approved",
+    "rebuild-feeds",
+  ].sort());
+  assert.equal((html.match(/data-blog-action="publish-approved"/g) || []).length, 1);
+  assert.equal(html.includes("blog-refresh-drafts-btn"), false);
+  assert.equal(html.includes("id=\"blog-publish-approved-btn\""), false);
+  assert.equal(app.includes("blog-publish-approved-btn"), false);
+  assert.match(app, /blog-publish-ready-callout/);
+  assert.match(app, /No approved drafts are ready to publish/);
+  assert.match(html, /Publish approved to blog/);
+  assert.match(html, /Deploy blog to Cloudflare/);
+  assert.match(app, /Publish approved writes approved drafts into blog\/posts and rebuilds feeds while keeping them Approved/);
+  assert.match(app, /moves staged approved drafts to Deployed/);
+  assert.match(html, /drafts remain under <strong>Approved<\/strong>/);
+  assert.match(html, /move to <strong>Deployed<\/strong>/);
+}
+
+function testCampaignDiscoveryActionsAreNotDuplicated() {
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(app, /Load Saved Candidates/);
+  assert.match(app, /Review Selected Lead/);
+  assert.match(app, /Use in Campaign Research/);
+  assert.match(app, /Discovery does not persist findings or create blog drafts/);
+  assert.equal(app.includes("campaign-autopilot-persist-btn"), false);
+  assert.equal(app.includes("campaign-autopilot-draft-btn"), false);
+  assert.equal(app.includes("campaign-correlate-btn"), false);
+  assert.equal(app.includes("campaign-local-usage-btn"), false);
+  assert.match(app, /Package artifacts/);
+  assert.match(app, /Projects \/ repos/);
+  assert.match(app, /Raw helper output \(debug\)/);
+}
+
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
 await testIntegrationStatusExposesCampaignApi();
@@ -610,7 +690,10 @@ testOkComputerSkinIsPresent();
 testOperatorGuideUiIsPresent();
 await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
+await testHostedBlogOpsGlobalActionsMapToWorkflowInputs();
 await testGithubWorkflowNotFoundIsActionable();
 await testSaveDraftDispatchIncludesEditedFields();
 await testDraftListHonorsLimitAndAvoidsUnboundedFetches();
+testBlogOpsActionControlsAreNotDuplicated();
+testCampaignDiscoveryActionsAreNotDuplicated();
 console.log("blog ops worker tests passed");

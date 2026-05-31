@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import inspect
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,6 +153,20 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('news-example', args)
         self.assertNotIn(';', ' '.join(args))
 
+    def test_local_blog_ops_global_action_buttons_map_to_expected_cli(self):
+        expected = {
+            'news-fetch': ['blog', 'news-fetch', '--limit', '7'],
+            'news-draft': ['blog', 'news-draft', '--limit', '7'],
+            'news-run': ['blog', 'news-run', '--limit', '7'],
+            'publish-approved': ['blog', 'news-publish-approved', '--rebuild'],
+            'rebuild-feeds': ['blog', 'rebuild-feeds'],
+        }
+        for action, cli in expected.items():
+            with self.subTest(action=action):
+                self.assertEqual(server.build_blog_ops_action_args(action, {'limit': 7}), cli)
+        with self.assertRaises(ValueError):
+            server.build_blog_ops_action_args('deploy', {'limit': 7})
+
     def test_local_blog_ops_deploy_availability_uses_allowlisted_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -163,6 +178,13 @@ class TriageOpsEvidenceTests(unittest.TestCase):
     def test_local_blog_ops_deploy_is_separate_allowlist(self):
         with self.assertRaises(ValueError):
             server.build_blog_ops_action_args('deploy', {'limit': 5})
+
+    def test_local_blog_ops_deploy_marks_staged_drafts_deployed_after_wrangler(self):
+        source = inspect.getsource(server.DashboardHandler.do_POST)
+        deploy_index = source.index("run_local_blog_deploy")
+        mark_index = source.index("news-mark-deployed")
+        self.assertGreater(mark_index, deploy_index)
+        self.assertIn("'deployed_state'", source)
 
     def test_local_blog_ops_deploy_command_is_allowlisted(self):
         with tempfile.TemporaryDirectory() as tmp:
