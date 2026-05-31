@@ -178,6 +178,21 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('main', command)
         self.assertNotIn(';', ' '.join(command))
 
+    def test_dependency_usage_reuses_manifest_text_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / 'package.json'
+            manifest.write_text('{"dependencies":{"demo-package":"1.2.3"}}', encoding='utf-8')
+            server._DEPENDENCY_TEXT_CACHE.clear()
+            with mock.patch.object(server, 'dependency_manifest_paths', return_value=[manifest]):
+                first = server.check_local_dependency_usage('demo-package', '1.2.3')
+            with mock.patch.object(server, 'dependency_manifest_paths', return_value=[manifest]), \
+                 mock.patch.object(Path, 'read_text', side_effect=AssertionError('cache miss')):
+                second = server.check_local_dependency_usage('demo-package', '1.2.3')
+
+            self.assertTrue(first['present'])
+            self.assertTrue(second['present'])
+
 
 if __name__ == '__main__':
     unittest.main()

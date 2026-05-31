@@ -292,8 +292,24 @@ function summarizeBlogDraft(path, post) {
   };
 }
 
-async function loadBlogDrafts(env) {
+function clampLimit(value, fallback = 50, max = 50) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, max);
+}
+
+async function mapInBatches(items, batchSize, mapper) {
+  const results = [];
+  for (let index = 0; index < items.length; index += batchSize) {
+    const batch = items.slice(index, index + batchSize);
+    results.push(...(await Promise.all(batch.map(mapper))));
+  }
+  return results;
+}
+
+async function loadBlogDrafts(env, options = {}) {
   const config = blogOpsConfig(env);
+  const limit = clampLimit(options.limit, 50, 50);
   let entries = [];
   try {
     entries = await githubRequest(env, `/repos/${config.owner}/${config.repo}/contents/blog/drafts?ref=${encodeURIComponent(config.ref)}`);
@@ -303,14 +319,13 @@ async function loadBlogDrafts(env) {
   }
   if (!Array.isArray(entries)) return [];
   const jsonFiles = entries.filter((entry) => entry?.type === "file" && String(entry.name || "").endsWith(".json"));
-  const drafts = [];
-  for (const entry of jsonFiles.slice(0, 50)) {
+  const drafts = await mapInBatches(jsonFiles.slice(0, limit), 8, async (entry) => {
     try {
       const file = await githubRequest(env, `/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(entry.path).replaceAll("%2F", "/")}?ref=${encodeURIComponent(config.ref)}`);
       const post = JSON.parse(decodeBase64Content(file.content));
-      drafts.push(summarizeBlogDraft(entry.path, post));
+      return summarizeBlogDraft(entry.path, post);
     } catch (error) {
-      drafts.push({
+      return {
         path: entry.path,
         slug: String(entry.name || "").replace(/\.json$/, ""),
         title: String(entry.name || "Unreadable draft"),
@@ -321,9 +336,9 @@ async function loadBlogDrafts(env) {
         categories: [],
         sources: [],
         external_news: true,
-      });
+      };
     }
-  }
+  });
   return drafts.sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
 }
 
@@ -416,11 +431,12 @@ async function handleBlogOps(request, env) {
   const parts = path.split("/").filter(Boolean);
 
   if (request.method === "GET" && (!path || path === "status")) {
+    const draftLimit = clampLimit(url.searchParams.get("limit"), 50, 50);
     if (notConfigured) {
       return jsonResponse({ ok: true, configured: false, config: configStatus, drafts: [], runs: [] });
     }
     const [drafts, runs, sources] = await Promise.all([
-      loadBlogDrafts(env).catch((error) => ({ error: error.message, items: [] })),
+      loadBlogDrafts(env, { limit: draftLimit }).catch((error) => ({ error: error.message, items: [] })),
       loadBlogWorkflowRuns(env).catch((error) => ({ error: error.message, items: [] })),
       loadBlogSourceCount(env),
     ]);
@@ -450,7 +466,7 @@ async function handleBlogOps(request, env) {
   if (notConfigured) return notConfigured;
 
   if (request.method === "GET" && path === "drafts") {
-    return jsonResponse({ ok: true, drafts: await loadBlogDrafts(env) });
+    return jsonResponse({ ok: true, drafts: await loadBlogDrafts(env, { limit: url.searchParams.get("limit") }) });
   }
 
   if (request.method === "GET" && parts[0] === "drafts" && parts[1]) {

@@ -550,6 +550,47 @@ async function testSaveDraftDispatchIncludesEditedFields() {
   }
 }
 
+async function testDraftListHonorsLimitAndAvoidsUnboundedFetches() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes("/contents/blog/drafts?")) {
+      return new Response(
+        JSON.stringify([
+          { type: "file", name: "one.json", path: "blog/drafts/one.json" },
+          { type: "file", name: "two.json", path: "blog/drafts/two.json" },
+          { type: "file", name: "three.json", path: "blog/drafts/three.json" },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        content: btoa(JSON.stringify({ title: "Draft", slug: "draft", updated_at: "2026-05-31T00:00:00Z" })),
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/blog/drafts?limit=2"),
+      {
+        BLOG_OPS_GITHUB_TOKEN: "ghp_secret_should_not_return",
+        BLOG_OPS_OWNER: "Techris93",
+        BLOG_OPS_REPO: "secopsai",
+      },
+    );
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.drafts.length, 2);
+    assert.equal(calls.filter((url) => url.includes("/contents/blog/drafts/")).length, 2);
+    assert.equal(JSON.stringify(payload).includes("ghp_secret"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
 await testIntegrationStatusExposesCampaignApi();
@@ -571,4 +612,5 @@ await testWriteNeedsAdminToken();
 await testDispatchPayloadIsWorkflowOnly();
 await testGithubWorkflowNotFoundIsActionable();
 await testSaveDraftDispatchIncludesEditedFields();
+await testDraftListHonorsLimitAndAvoidsUnboundedFetches();
 console.log("blog ops worker tests passed");

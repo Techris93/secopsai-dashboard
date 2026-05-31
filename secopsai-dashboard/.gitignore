@@ -2,3 +2,7 @@
 .dev.vars.*
 !.dev.vars.example
 .wrangler/
+.env
+__pycache__/
+.pytest_cache/
+*.pyc

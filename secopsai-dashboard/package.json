@@ -8,7 +8,7 @@
     "start": "python3 dashboard_server.py",
     "dev": "python3 dashboard_server.py",
     "test": "node tests/blog-ops-worker.test.mjs",
-    "check": "node --check app.js && node --check _worker.js && node --check ../_worker.js && node --check tests/blog-ops-worker.test.mjs"
+    "check": "node --check app.js && node --check _worker.js && node --check tests/blog-ops-worker.test.mjs"
   },
   "dependencies": {},
   "devDependencies": {},

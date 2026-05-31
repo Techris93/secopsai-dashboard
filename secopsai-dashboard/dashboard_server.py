@@ -126,6 +126,7 @@ IGNORED_DEP_PATHS = {
     '__pycache__',
 }
 _DEPENDENCY_MANIFEST_CACHE = None
+_DEPENDENCY_TEXT_CACHE = {}
 
 
 def env_truthy(name: str, default: bool = False) -> bool:
@@ -1058,6 +1059,21 @@ def dependency_manifest_paths():
     return paths
 
 
+def dependency_manifest_text(path):
+    try:
+        stat = path.stat()
+        cache_key = str(path)
+        cached = _DEPENDENCY_TEXT_CACHE.get(cache_key)
+        fingerprint = (stat.st_mtime_ns, stat.st_size)
+        if cached and cached.get('fingerprint') == fingerprint:
+            return cached.get('text', '')
+        text = path.read_text(encoding='utf-8', errors='ignore')
+        _DEPENDENCY_TEXT_CACHE[cache_key] = {'fingerprint': fingerprint, 'text': text}
+        return text
+    except Exception:
+        return ''
+
+
 def check_local_dependency_usage(package, version=''):
     package_name = str(package or '').strip()
     if not package_name:
@@ -1068,9 +1084,8 @@ def check_local_dependency_usage(package, version=''):
     searched = 0
     for path in dependency_manifest_paths():
         searched += 1
-        try:
-            lines = path.read_text(encoding='utf-8', errors='ignore').splitlines()
-        except Exception:
+        lines = dependency_manifest_text(path).splitlines()
+        if not lines:
             continue
         for idx, line in enumerate(lines, start=1):
             if not package_pattern.search(line):
