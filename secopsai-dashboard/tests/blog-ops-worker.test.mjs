@@ -671,6 +671,20 @@ function testCampaignDiscoveryActionsAreNotDuplicated() {
   assert.match(app, /Raw helper output \(debug\)/);
 }
 
+function testDashboardListsUseLatestFirstOrdering() {
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(app, /function sortLatestFirst\(/);
+  assert.match(app, /function latestFirstDateValue\(/);
+  assert.match(app, /function sortedFindings\(/);
+  assert.match(app, /const findings = sortedFindings\(\)/);
+  assert.match(app, /state\.blogOps\.drafts = sortLatestFirst\(payload\.drafts \|\| \[\], BLOG_DRAFT_LATEST_FIELDS\)/);
+  assert.match(app, /state\.blogOps\.runs = sortLatestFirst\(payload\.runs \|\| \[\], BLOG_RUN_LATEST_FIELDS\)/);
+  assert.match(app, /sortLatestFirst\(\(state\.triageOps\.alerts \|\| \[\]\)\.filter/);
+  assert.match(app, /state\.triageOps\.alerts = sortLatestFirst\(payload\.alerts \|\| \[\], FINDING_LATEST_FIELDS\)/);
+  assert.match(app, /function campaignCandidates\(\)/);
+  assert.match(app, /state\.triageOps\.campaignCandidates = sortLatestFirst\(result\.candidates, CAMPAIGN_CANDIDATE_LATEST_FIELDS\)/);
+}
+
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
 await testIntegrationStatusExposesCampaignApi();
@@ -696,4 +710,5 @@ await testSaveDraftDispatchIncludesEditedFields();
 await testDraftListHonorsLimitAndAvoidsUnboundedFetches();
 testBlogOpsActionControlsAreNotDuplicated();
 testCampaignDiscoveryActionsAreNotDuplicated();
+testDashboardListsUseLatestFirstOrdering();
 console.log("blog ops worker tests passed");

@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import urllib.parse
+from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
@@ -161,6 +162,104 @@ def read_json_file(path: Path, default=None):
         return default
 
 
+DEFAULT_LATEST_FIRST_FIELDS = (
+    'last_seen',
+    'last_seen_at',
+    'updated_at',
+    'detected_at',
+    'observed_at',
+    'created_at',
+    'first_seen',
+    'first_seen_at',
+    'published_at',
+    'fetched_at',
+    'generated_at',
+    'completed_at',
+    'started_at',
+    'queued_at',
+)
+TRIAGE_FINDING_DATE_FIELDS = (
+    'last_seen',
+    'last_seen_at',
+    'updated_at',
+    'detected_at',
+    'observed_at',
+    'created_at',
+    'first_seen',
+    'first_seen_at',
+)
+BLOG_DRAFT_DATE_FIELDS = (
+    'source_metadata.published_at',
+    'published_at',
+    'updated_at',
+    'created_at',
+    'source_metadata.fetched_at',
+    'fetched_at',
+)
+BLOG_RUN_DATE_FIELDS = ('updated_at', 'created_at', 'completed_at', 'started_at', 'run_started_at')
+
+
+def _nested_value(item, dotted_path):
+    current = item
+    for key in str(dotted_path).split('.'):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def sort_timestamp(value):
+    if value is None or isinstance(value, bool):
+        return 0.0
+    if isinstance(value, (int, float)):
+        raw = float(value)
+        return raw / 1000.0 if raw > 10_000_000_000 else raw
+    text = str(value).strip()
+    if not text:
+        return 0.0
+    if re.fullmatch(r'\d+(\.\d+)?', text):
+        raw = float(text)
+        return raw / 1000.0 if raw > 10_000_000_000 else raw
+    normalized = text.replace('Z', '+00:00')
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+    except Exception:
+        pass
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d/%m/%Y, %H:%M:%S', '%d/%m/%Y %H:%M:%S'):
+        try:
+            parsed = datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+            return parsed.timestamp()
+        except Exception:
+            continue
+    return 0.0
+
+
+def latest_sort_timestamp(item, fields=DEFAULT_LATEST_FIRST_FIELDS):
+    if not isinstance(item, dict):
+        return 0.0
+    for field in fields:
+        timestamp = sort_timestamp(_nested_value(item, field))
+        if timestamp:
+            return timestamp
+    return 0.0
+
+
+def sort_latest_first(items, fields=DEFAULT_LATEST_FIRST_FIELDS):
+    if not isinstance(items, list):
+        return []
+    indexed = [(index, item) for index, item in enumerate(items)]
+    return [
+        item
+        for index, item in sorted(
+            indexed,
+            key=lambda pair: (-latest_sort_timestamp(pair[1], fields), pair[0]),
+        )
+    ]
+
+
 def latest_json_files(directory: Path, pattern: str, limit: int = 5):
     if not directory.exists():
         return []
@@ -292,10 +391,12 @@ def collect_secopsai_triage_state():
     active_findings = active_list_payload.get('findings', []) if isinstance(active_list_payload, dict) else []
     if not isinstance(active_findings, list):
         active_findings = []
+    active_findings = sort_latest_first(active_findings, TRIAGE_FINDING_DATE_FIELDS)
 
     raw_summary_findings = summary.get('findings', []) if isinstance(summary, dict) else []
     if not isinstance(raw_summary_findings, list):
         raw_summary_findings = []
+    raw_summary_findings = sort_latest_first(raw_summary_findings, TRIAGE_FINDING_DATE_FIELDS)
 
     active_severity_counts = {}
     for item in active_findings:
@@ -316,6 +417,8 @@ def collect_secopsai_triage_state():
         queue_actions = []
     pending = [item for item in queue_actions if str(item.get('status') or '').lower() == 'pending']
     applied = [item for item in queue_actions if str(item.get('status') or '').lower() == 'applied']
+    pending = sort_latest_first(pending)
+    applied = sort_latest_first(applied)
 
     recent_orchestrator = []
     for path in latest_json_files(SECOPSAI_ROOT / 'reports' / 'triage' / 'orchestrator', '*.json', limit=5):
@@ -333,12 +436,13 @@ def collect_secopsai_triage_state():
                 'open_findings': payload.get('open_findings'),
                 'pending_actions': payload.get('pending_actions'),
                 'applied_actions': payload.get('applied_actions'),
-                'findings': [
+                'findings': sort_latest_first([
                     item for item in (payload.get('findings', []) if isinstance(payload.get('findings', []), list) else [])
                     if str((item or {}).get('status') or '').lower() in {'open', 'in_review'}
-                ][:10],
+                ], TRIAGE_FINDING_DATE_FIELDS)[:10],
             }
         )
+    recent_orchestrator = sort_latest_first(recent_orchestrator, ('generated_at',))
 
     findings_artifact = None
     latest_artifacts = latest_json_files(SECOPSAI_ROOT / 'data' / 'openclaw' / 'findings', 'openclaw-findings-*.json', limit=1)
@@ -368,7 +472,7 @@ def collect_secopsai_triage_state():
             'pending_count': len(pending),
             'applied_count': len(applied),
             'pending': pending[:20],
-            'applied_recent': applied[-10:],
+            'applied_recent': applied[:10],
         },
         'orchestrator': {
             'latest': recent_orchestrator[0] if recent_orchestrator else None,
@@ -546,6 +650,7 @@ def _blog_review_drafts_payload():
     if not result['ok']:
         return result, parsed
     drafts = (parsed or {}).get('drafts', [])
+    drafts = sort_latest_first(drafts, BLOG_DRAFT_DATE_FIELDS)
     sources_result, sources_parsed = run_cli_json(['blog', 'news-sources', 'list'], timeout=60)
     sources = (sources_parsed or {}).get('sources', []) if sources_result['ok'] else []
     counts = {
@@ -968,7 +1073,7 @@ def triage_findings_by_status(status, limit=100):
     if not result.get('ok') or not isinstance(parsed, dict):
         return []
     rows = parsed.get('findings') or []
-    return rows if isinstance(rows, list) else []
+    return sort_latest_first(rows, TRIAGE_FINDING_DATE_FIELDS)[:limit] if isinstance(rows, list) else []
 
 
 def get_triage_ops_finding(finding_id):
@@ -1259,6 +1364,7 @@ def collect_triage_ops_alerts():
             continue
         seen.add(fid)
         alerts.append(summarize_triage_ops_alert(finding))
+    alerts = sort_latest_first(alerts, TRIAGE_FINDING_DATE_FIELDS)
     counts = {
         'alerts': len(alerts),
         'open': sum(1 for item in alerts if str(item.get('status') or '').lower() == 'open'),

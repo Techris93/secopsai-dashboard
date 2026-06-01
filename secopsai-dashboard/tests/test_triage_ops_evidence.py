@@ -200,6 +200,37 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('main', command)
         self.assertNotIn(';', ' '.join(command))
 
+    def test_latest_first_sort_handles_common_dashboard_dates(self):
+        rows = [
+            {'id': 'old', 'created_at': '2026-05-20T10:00:00Z'},
+            {'id': 'new', 'updated_at': '2026-06-01T08:00:00Z'},
+            {'id': 'middle', 'detected_at': '31/05/2026, 18:30:00'},
+            {'id': 'undated'},
+        ]
+        ordered = server.sort_latest_first(rows)
+        self.assertEqual([item['id'] for item in ordered], ['new', 'middle', 'old', 'undated'])
+
+    def test_blog_review_drafts_payload_sorts_newest_source_first(self):
+        with mock.patch.object(server, 'run_cli_json') as run_cli_json:
+            run_cli_json.side_effect = [
+                (
+                    {'ok': True, 'returncode': 0, 'stdout': '{}', 'stderr': ''},
+                    {
+                        'drafts': [
+                            {'slug': 'old', 'review_status': 'needs_review', 'source_metadata': {'published_at': '2026-05-20T10:00:00Z'}},
+                            {'slug': 'new', 'review_status': 'needs_review', 'source_metadata': {'published_at': '2026-06-01T09:00:00Z'}},
+                            {'slug': 'fallback', 'review_status': 'approved', 'updated_at': '2026-05-31T23:00:00Z'},
+                        ]
+                    },
+                ),
+                ({'ok': True, 'returncode': 0, 'stdout': '{}', 'stderr': ''}, {'sources': []}),
+            ]
+            result, payload = server._blog_review_drafts_payload()
+
+        self.assertTrue(result['ok'])
+        self.assertEqual([draft['slug'] for draft in payload['drafts']], ['new', 'fallback', 'old'])
+        self.assertEqual(payload['counts']['drafts'], 3)
+
     def test_dependency_usage_reuses_manifest_text_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

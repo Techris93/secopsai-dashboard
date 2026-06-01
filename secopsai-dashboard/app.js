@@ -167,6 +167,78 @@ const PAGE_CONTEXT = {
 
 function el(id) { return document.getElementById(id); }
 
+const DEFAULT_LATEST_FIRST_FIELDS = [
+  'last_seen',
+  'last_seen_at',
+  'updated_at',
+  'detected_at',
+  'observed_at',
+  'created_at',
+  'first_seen',
+  'first_seen_at',
+  'published_at',
+  'fetched_at',
+  'generated_at',
+  'completed_at',
+  'started_at',
+  'queued_at'
+];
+const FINDING_LATEST_FIELDS = ['last_seen', 'last_seen_at', 'updated_at', 'detected_at', 'observed_at', 'created_at', 'first_seen', 'first_seen_at'];
+const BLOG_DRAFT_LATEST_FIELDS = ['source_metadata.published_at', 'published_at', 'updated_at', 'created_at', 'source_metadata.fetched_at', 'fetched_at'];
+const BLOG_RUN_LATEST_FIELDS = ['updated_at', 'created_at', 'completed_at', 'started_at', 'run_started_at'];
+const CAMPAIGN_CANDIDATE_LATEST_FIELDS = ['discovered_at', 'generated_at', 'updated_at', 'created_at', 'campaign.source_metadata.published_at', 'campaign.published_at', 'campaign.source_metadata.fetched_at'];
+
+function valueAtPath(item, dottedPath) {
+  return String(dottedPath || '').split('.').reduce((current, key) => {
+    if (!current || typeof current !== 'object') return undefined;
+    return current[key];
+  }, item);
+}
+
+function timestampFromValue(value) {
+  if (value === null || typeof value === 'undefined' || typeof value === 'boolean') return 0;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 100000000000 ? value : value * 1000;
+  }
+  const text = String(value).trim();
+  if (!text) return 0;
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const raw = Number(text);
+    return raw > 100000000000 ? raw : raw * 1000;
+  }
+  const dmy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (dmy) {
+    const [, day, month, year, hour, minute, second = '0'] = dmy;
+    return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  }
+  const parsed = Date.parse(text);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function latestFirstTime(item, fields = DEFAULT_LATEST_FIRST_FIELDS) {
+  for (const field of fields) {
+    const timestamp = timestampFromValue(valueAtPath(item, field));
+    if (timestamp > 0) return timestamp;
+  }
+  return 0;
+}
+
+function latestFirstDateValue(item, fields = DEFAULT_LATEST_FIRST_FIELDS) {
+  for (const field of fields) {
+    const value = valueAtPath(item, field);
+    if (timestampFromValue(value) > 0) return value;
+  }
+  return null;
+}
+
+function sortLatestFirst(items, fields = DEFAULT_LATEST_FIRST_FIELDS) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item, index) => ({ item, index, timestamp: latestFirstTime(item, fields) }))
+    .sort((a, b) => (b.timestamp - a.timestamp) || (a.index - b.index))
+    .map(entry => entry.item);
+}
+
 function aiGuardConfig() {
   return cfg.aiGuard || {};
 }
@@ -705,7 +777,7 @@ function findingConfidence(finding) {
 }
 
 function findingDetectedAt(finding) {
-  return finding?.detected_at || finding?.first_seen_at || finding?.observed_at || finding?.created_at || null;
+  return latestFirstDateValue(finding, FINDING_LATEST_FIELDS);
 }
 
 function findingFingerprint(finding) {
@@ -833,13 +905,19 @@ function correlatedRunRequestsForFinding(finding) {
 }
 
 function selectFinding(nextFindingId = null) {
-  const nextId = nextFindingId || findingId(state.findings?.[0]) || null;
+  const findings = sortedFindings();
+  const nextId = nextFindingId || findingId(findings?.[0]) || null;
   state.selectedFindingId = nextId;
 }
 
+function sortedFindings() {
+  return sortLatestFirst(state.findings, FINDING_LATEST_FIELDS);
+}
+
 function currentSelectedFinding() {
-  if (!state.findings.length) return null;
-  return state.findings.find(f => String(findingId(f)) === String(state.selectedFindingId)) || state.findings[0] || null;
+  const findings = sortedFindings();
+  if (!findings.length) return null;
+  return findings.find(f => String(findingId(f)) === String(state.selectedFindingId)) || findings[0] || null;
 }
 
 async function bestEffortLinkFindingToTask(finding, task) {
@@ -1779,7 +1857,8 @@ function renderTasks() {
 
 function renderFindings() {
   const findingsAvailable = state.optionalTables.findings !== false;
-  if (findingsAvailable && state.findings.length && !state.selectedFindingId) selectFinding();
+  const findings = sortedFindings();
+  if (findingsAvailable && findings.length && !state.selectedFindingId) selectFinding();
   const triageSummary = localTriageSummary();
   const triageLatest = localTriageLatestRun();
   const pendingActions = localPendingActions();
@@ -1812,13 +1891,13 @@ function renderFindings() {
   if (table) {
     if (!findingsAvailable) {
       table.innerHTML = `<div class="empty">The <code>findings</code> table is not available yet. You can still create investigation tasks from this view and wire the table later without changing the UI again.</div>`;
-    } else if (!state.findings.length) {
+    } else if (!findings.length) {
       table.innerHTML = `<div class="empty">No findings yet. Once data lands in <code>findings</code>, this queue will show severity, confidence, correlation, and task actions.</div>`;
     } else {
       table.innerHTML = `
         <div class="table-wrap"><table>
           <thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Correlation</th><th>Linked work</th><th>Actions</th></tr></thead>
-          <tbody>${state.findings.map(f => {
+          <tbody>${findings.map(f => {
             const related = relatedTasksForFinding(f);
             const best = related[0] || null;
             const normalizedFindingId = findingId(f);
@@ -1835,12 +1914,12 @@ function renderFindings() {
         </table></div>`;
       table.querySelectorAll('.finding-task-btn').forEach(btn => btn.addEventListener('click', (event) => {
         event.stopPropagation();
-        const finding = state.findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
+        const finding = findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
         if (finding) openFindingTaskModal(finding);
       }));
       table.querySelectorAll('.finding-run-investigate-btn').forEach(btn => btn.addEventListener('click', async (event) => {
         event.stopPropagation();
-        const finding = state.findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
+        const finding = findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
         if (!finding) return;
         try {
           await runNativeInvestigate(finding);
@@ -1851,7 +1930,7 @@ function renderFindings() {
       }));
       table.querySelectorAll('.finding-copy-investigate-btn').forEach(btn => btn.addEventListener('click', async (event) => {
         event.stopPropagation();
-        const finding = state.findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
+        const finding = findings.find(f => String(findingId(f)) === String(btn.dataset.findingId));
         if (finding) await copyTextWithStatus(investigateFindingCommand(finding), `Investigate command copied for ${findingTitle(finding)}`);
       }));
       table.querySelectorAll('.finding-select-btn, .finding-row').forEach(row => row.addEventListener('click', (event) => {
@@ -2728,7 +2807,7 @@ async function fetchBlogOpsJson(path = '', options = {}) {
 }
 
 function blogOpsDrafts() {
-  return Array.isArray(state.blogOps.drafts) ? state.blogOps.drafts : [];
+  return sortLatestFirst(state.blogOps.drafts, BLOG_DRAFT_LATEST_FIELDS);
 }
 
 function selectedBlogDraftSummary() {
@@ -2753,7 +2832,10 @@ function blogDraftFilterValue() {
 
 function filteredBlogDrafts() {
   const filter = blogDraftFilterValue();
-  return blogOpsDrafts().filter(draft => filter === 'all' || String(draft.review_status || '') === filter);
+  return sortLatestFirst(
+    blogOpsDrafts().filter(draft => filter === 'all' || String(draft.review_status || '') === filter),
+    BLOG_DRAFT_LATEST_FIELDS
+  );
 }
 
 function renderReadinessPill(draft = {}) {
@@ -2818,10 +2900,13 @@ async function loadBlogOpsStatus({ render = true } = {}) {
   try {
     const payload = await fetchBlogOpsJson('status');
     state.blogOps.status = payload;
-    state.blogOps.drafts = payload.drafts || [];
-    state.blogOps.runs = payload.runs || [];
-    if (!state.blogOps.selectedSlug && state.blogOps.drafts[0]) {
+    state.blogOps.drafts = sortLatestFirst(payload.drafts || [], BLOG_DRAFT_LATEST_FIELDS);
+    state.blogOps.runs = sortLatestFirst(payload.runs || [], BLOG_RUN_LATEST_FIELDS);
+    const selectedStillVisible = state.blogOps.drafts.some(draft => String(draft.slug || '') === String(state.blogOps.selectedSlug || ''));
+    if ((!state.blogOps.selectedSlug || !selectedStillVisible) && state.blogOps.drafts[0]) {
       state.blogOps.selectedSlug = state.blogOps.drafts[0].slug;
+    } else if (!state.blogOps.drafts.length) {
+      state.blogOps.selectedSlug = null;
     }
     syncSelectedBlogDraftAfterStatusLoad();
   } catch (error) {
@@ -2933,7 +3018,7 @@ function renderBlogOpsStats() {
   if (!host) return;
   const status = state.blogOps.status || {};
   const counts = status.counts || {};
-  const runs = state.blogOps.runs || [];
+  const runs = sortLatestFirst(state.blogOps.runs, BLOG_RUN_LATEST_FIELDS);
   const latestRun = runs[0] || null;
   const cards = [
     ['Sources', counts.sources ?? '—', isLocalBlogOpsMode() ? 'Local SecOpsAI registry' : status.configured ? 'GitHub backed registry' : 'GitHub token needed'],
@@ -3061,7 +3146,7 @@ function renderBlogDraftPreview() {
 function renderBlogWorkflowRuns() {
   const host = el('blog-workflow-runs');
   if (!host) return;
-  const runs = Array.isArray(state.blogOps.runs) ? state.blogOps.runs : [];
+  const runs = sortLatestFirst(state.blogOps.runs, BLOG_RUN_LATEST_FIELDS);
   if (!runs.length) {
     host.innerHTML = `<div class="empty-state">No Blog Ops workflow runs loaded yet.</div>`;
     return;
@@ -3170,7 +3255,7 @@ function triageOpsFilters() {
 
 function filteredTriageOpsAlerts() {
   const filters = triageOpsFilters();
-  return (state.triageOps.alerts || []).filter(alert => {
+  return sortLatestFirst((state.triageOps.alerts || []).filter(alert => {
     if (filters.status !== 'all' && String(alert.status || '').toLowerCase() !== filters.status) return false;
     if (filters.ecosystem !== 'all' && String(alert.ecosystem || '').toLowerCase() !== filters.ecosystem) return false;
     if (filters.severity !== 'all' && String(alert.severity || '').toLowerCase() !== filters.severity) return false;
@@ -3189,7 +3274,7 @@ function filteredTriageOpsAlerts() {
       }
     }
     return true;
-  });
+  }), FINDING_LATEST_FIELDS);
 }
 
 function triageOpsAdminTokenHint() {
@@ -3205,9 +3290,12 @@ function renderRecommendationPill(recommendation = {}) {
 async function loadTriageOpsAlerts({ render = true } = {}) {
   try {
     const payload = await fetchTriageOpsJson('alerts');
-    state.triageOps.alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
-    if (!state.triageOps.selectedId && state.triageOps.alerts[0]) {
+    state.triageOps.alerts = sortLatestFirst(payload.alerts || [], FINDING_LATEST_FIELDS);
+    const selectedStillVisible = state.triageOps.alerts.some(alert => String(alert.finding_id || '') === String(state.triageOps.selectedId || ''));
+    if ((!state.triageOps.selectedId || !selectedStillVisible) && state.triageOps.alerts[0]) {
       state.triageOps.selectedId = state.triageOps.alerts[0].finding_id;
+    } else if (!state.triageOps.alerts.length) {
+      state.triageOps.selectedId = null;
     }
   } catch (error) {
     state.triageOps.alerts = [];
@@ -3772,7 +3860,11 @@ function discoveryPayload({ persist = false, createDrafts = false } = {}) {
 
 function selectedCampaignCandidate() {
   const id = state.triageOps.campaignDiscovery?.selectedCandidateId || '';
-  return (state.triageOps.campaignCandidates || []).find(candidate => String(candidate.candidate_id || '') === id) || null;
+  return campaignCandidates().find(candidate => String(candidate.candidate_id || '') === id) || null;
+}
+
+function campaignCandidates() {
+  return sortLatestFirst(state.triageOps.campaignCandidates, CAMPAIGN_CANDIDATE_LATEST_FIELDS);
 }
 
 function campaignDiscoveryCliFallback() {
@@ -3817,9 +3909,12 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
     });
     state.triageOps.campaignLastOutput = { action, result, at: new Date().toISOString() };
     if (Array.isArray(result.candidates)) {
-      state.triageOps.campaignCandidates = result.candidates;
-      if (!state.triageOps.campaignDiscovery.selectedCandidateId && result.candidates[0]) {
-        state.triageOps.campaignDiscovery.selectedCandidateId = result.candidates[0].candidate_id || '';
+      state.triageOps.campaignCandidates = sortLatestFirst(result.candidates, CAMPAIGN_CANDIDATE_LATEST_FIELDS);
+      const selectedStillVisible = state.triageOps.campaignCandidates.some(candidate => String(candidate.candidate_id || '') === String(state.triageOps.campaignDiscovery.selectedCandidateId || ''));
+      if ((!state.triageOps.campaignDiscovery.selectedCandidateId || !selectedStillVisible) && state.triageOps.campaignCandidates[0]) {
+        state.triageOps.campaignDiscovery.selectedCandidateId = state.triageOps.campaignCandidates[0].candidate_id || '';
+      } else if (!state.triageOps.campaignCandidates.length) {
+        state.triageOps.campaignDiscovery.selectedCandidateId = '';
       }
     }
     if (action === 'campaign-orchestrate' && result.candidate) {
@@ -3832,7 +3927,7 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
       } else {
         candidates.unshift({ ...reviewed, candidate_id: reviewedId });
       }
-      state.triageOps.campaignCandidates = candidates;
+      state.triageOps.campaignCandidates = sortLatestFirst(candidates, CAMPAIGN_CANDIDATE_LATEST_FIELDS);
       state.triageOps.campaignDiscovery.selectedCandidateId = reviewedId;
     }
     if (result.campaign) {
@@ -3873,7 +3968,7 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
 }
 
 function renderCampaignCandidateList() {
-  const candidates = state.triageOps.campaignCandidates || [];
+  const candidates = campaignCandidates();
   if (!candidates.length) {
     return '<div class="empty-state">No discovery candidates loaded yet. Run Discovery to fill the inbox, or load saved candidates if a previous run already found leads.</div>';
   }
@@ -4254,9 +4349,12 @@ function renderCampaignResearchPanel() {
     setButtonBusy(event.currentTarget, true, 'Loading…');
     try {
       const payload = await fetchTriageOpsJson('campaign-candidates');
-      state.triageOps.campaignCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
-      if (!state.triageOps.campaignDiscovery.selectedCandidateId && state.triageOps.campaignCandidates[0]) {
+      state.triageOps.campaignCandidates = sortLatestFirst(payload.candidates || [], CAMPAIGN_CANDIDATE_LATEST_FIELDS);
+      const selectedStillVisible = state.triageOps.campaignCandidates.some(candidate => String(candidate.candidate_id || '') === String(state.triageOps.campaignDiscovery.selectedCandidateId || ''));
+      if ((!state.triageOps.campaignDiscovery.selectedCandidateId || !selectedStillVisible) && state.triageOps.campaignCandidates[0]) {
         state.triageOps.campaignDiscovery.selectedCandidateId = state.triageOps.campaignCandidates[0].candidate_id || '';
+      } else if (!state.triageOps.campaignCandidates.length) {
+        state.triageOps.campaignDiscovery.selectedCandidateId = '';
       }
       setStatus('<span class="dot"></span> Campaign candidates loaded');
       renderTriageOps();
@@ -5313,7 +5411,7 @@ async function boot() {
   }
 
   state.runRequests = await optionalLoadTable('run_requests', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
-  state.findings = await optionalLoadTable('findings', { orderBy: { column: 'created_at', ascending: false }, limit: 100 });
+  state.findings = sortLatestFirst(await optionalLoadTable('findings', { orderBy: { column: 'created_at', ascending: false }, limit: 100 }), FINDING_LATEST_FIELDS);
 
   try {
     await hydrateRunRequestOutputEvidence();
