@@ -185,6 +185,8 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         mark_index = source.index("news-mark-deployed")
         self.assertGreater(mark_index, deploy_index)
         self.assertIn("'deployed_state'", source)
+        self.assertIn("Cloudflare Pages deploy completed, but Blog Ops could not mark staged drafts as deployed.", source)
+        self.assertIn("Cloudflare Pages deploy failed.", source)
 
     def test_local_blog_ops_deploy_command_is_allowlisted(self):
         with tempfile.TemporaryDirectory() as tmp:

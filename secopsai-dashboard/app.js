@@ -2802,7 +2802,11 @@ async function fetchBlogOpsJson(path = '', options = {}) {
     }
   });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error || `Blog Ops HTTP ${res.status}`);
+  if (!res.ok) {
+    const parts = [payload.error || `Blog Ops HTTP ${res.status}`];
+    if (payload.hint) parts.push(payload.hint);
+    throw new Error(parts.filter(Boolean).join(' '));
+  }
   return payload;
 }
 

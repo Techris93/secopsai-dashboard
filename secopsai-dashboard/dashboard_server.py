@@ -1947,12 +1947,24 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     mark_payload = None
                     if result['ok']:
                         mark_result, mark_payload = run_cli_json(['blog', 'news-mark-deployed'], timeout=120)
-                    ok = result['ok'] and (mark_result is None or mark_result['ok'])
+                    deploy_ok = bool(result['ok'])
+                    state_ok = mark_result is None or bool(mark_result.get('ok'))
+                    ok = deploy_ok and state_ok
+                    error = None
+                    hint = None
+                    if not deploy_ok:
+                        error = 'Cloudflare Pages deploy failed.'
+                        hint = 'Review the Wrangler output in cli.stderr/stdout, confirm Cloudflare auth, project name, and account access, then retry Deploy blog.'
+                    elif not state_ok:
+                        error = 'Cloudflare Pages deploy completed, but Blog Ops could not mark staged drafts as deployed.'
+                        hint = 'Update the local SecOpsAI CLI so `secopsai blog news-mark-deployed` is available, then retry Deploy blog to complete the state transition.'
                     return json_response(
                         self,
                         202 if ok else 500,
                         {
                             'ok': ok,
+                            'error': error,
+                            'hint': hint,
                             'action': action,
                             'workflow': 'wrangler pages deploy',
                             'local_helper': True,
