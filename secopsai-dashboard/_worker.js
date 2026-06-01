@@ -292,6 +292,20 @@ function summarizeBlogDraft(path, post) {
   };
 }
 
+function blogDraftIsApproved(draft) {
+  return ["approved", "reviewed"].includes(String(draft?.review_status || ""));
+}
+
+function blogDraftBlockers(draft) {
+  return Array.isArray(draft?.readiness_blockers)
+    ? draft.readiness_blockers.filter((item) => String(item || "").trim())
+    : [];
+}
+
+function blogDraftIsPublishable(draft) {
+  return blogDraftIsApproved(draft) && String(draft?.readiness_status || "").toLowerCase() !== "blocked" && blogDraftBlockers(draft).length === 0;
+}
+
 function clampLimit(value, fallback = 50, max = 50) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -456,7 +470,9 @@ async function handleBlogOps(request, env) {
         sources: sources.enabled ?? sources.total,
         drafts: draftItems.length,
         needs_review: draftItems.filter((draft) => draft.review_status === "needs_review").length,
-        approved: draftItems.filter((draft) => ["approved", "reviewed"].includes(draft.review_status)).length,
+        approved: draftItems.filter(blogDraftIsApproved).length,
+        approved_publishable: draftItems.filter(blogDraftIsPublishable).length,
+        approved_blocked: draftItems.filter((draft) => blogDraftIsApproved(draft) && !blogDraftIsPublishable(draft)).length,
         deployed: draftItems.filter((draft) => ["deployed", "published"].includes(draft.review_status)).length,
         rejected: draftItems.filter((draft) => draft.review_status === "rejected").length,
       },

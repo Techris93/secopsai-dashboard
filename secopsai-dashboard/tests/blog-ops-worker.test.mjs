@@ -654,6 +654,9 @@ function testBlogOpsActionControlsAreNotDuplicated() {
   assert.match(app, /moves staged approved drafts to Deployed/);
   assert.match(html, /drafts remain under <strong>Approved<\/strong>/);
   assert.match(html, /move to <strong>Deployed<\/strong>/);
+  assert.match(app, /approved_publishable/);
+  assert.match(app, /approved_blocked/);
+  assert.match(app, /Approved draft\(s\) are blocked by readiness checks/);
 }
 
 function testCampaignDiscoveryActionsAreNotDuplicated() {

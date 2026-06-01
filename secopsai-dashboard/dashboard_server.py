@@ -645,6 +645,38 @@ def _bounded_blog_limit(value, default=5):
     return str(validate_bounded_int(value, default=default, lower=1, upper=50))
 
 
+def blog_draft_is_approved(draft):
+    return str((draft or {}).get('review_status') or '') in {'approved', 'reviewed'}
+
+
+def blog_draft_blockers(draft):
+    blockers = (draft or {}).get('readiness_blockers') or []
+    if not isinstance(blockers, list):
+        blockers = []
+    return [str(item) for item in blockers if str(item).strip()]
+
+
+def blog_draft_is_publishable(draft):
+    if not blog_draft_is_approved(draft):
+        return False
+    return str((draft or {}).get('readiness_status') or '').lower() != 'blocked' and not blog_draft_blockers(draft)
+
+
+def publish_approved_blocked_error(payload):
+    blocked = payload.get('blocked') if isinstance(payload, dict) else None
+    if not isinstance(blocked, list) or not blocked:
+        return None, None
+    first = blocked[0] if isinstance(blocked[0], dict) else {}
+    title = str(first.get('title') or first.get('slug') or 'approved draft')
+    reasons = first.get('reasons') if isinstance(first.get('reasons'), list) else []
+    reason_text = '; '.join(str(reason) for reason in reasons[:3] if str(reason).strip())
+    error = f'Publish approved blocked by {len(blocked)} draft readiness check(s).'
+    if reason_text:
+        error = f'{error} {title}: {reason_text}.'
+    hint = 'Open the blocked approved draft, resolve the readiness blockers or move it back to Needs review, then retry Publish approved.'
+    return error, hint
+
+
 def _blog_review_drafts_payload():
     result, parsed = run_cli_json(['blog', 'news-review', 'list'], timeout=90)
     if not result['ok']:
@@ -658,6 +690,8 @@ def _blog_review_drafts_payload():
         'drafts': len(drafts),
         'needs_review': len([draft for draft in drafts if draft.get('review_status') == 'needs_review']),
         'approved': len([draft for draft in drafts if draft.get('review_status') in {'approved', 'reviewed'}]),
+        'approved_publishable': len([draft for draft in drafts if blog_draft_is_publishable(draft)]),
+        'approved_blocked': len([draft for draft in drafts if blog_draft_is_approved(draft) and not blog_draft_is_publishable(draft)]),
         'deployed': len([draft for draft in drafts if draft.get('review_status') in {'deployed', 'published'}]),
         'rejected': len([draft for draft in drafts if draft.get('review_status') == 'rejected']),
     }
@@ -1981,11 +2015,25 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 args = build_blog_ops_action_args(action, payload=payload, draft=draft)
                 timeout = 240 if action in {'news-run', 'publish-approved'} else 120
                 result, parsed_result = run_cli_json(args, timeout=timeout)
+                status = 202 if result['ok'] else 500
+                error = None
+                hint = None
+                if not result['ok']:
+                    error = 'Blog Ops local CLI action failed.'
+                    hint = 'Review the CLI output and retry after fixing the reported issue.'
+                    if action == 'publish-approved':
+                        blocked_error, blocked_hint = publish_approved_blocked_error(parsed_result or {})
+                        if blocked_error:
+                            status = 409
+                            error = blocked_error
+                            hint = blocked_hint
                 return json_response(
                     self,
-                    202 if result['ok'] else 500,
+                    status,
                     {
                         'ok': result['ok'],
+                        'error': error,
+                        'hint': hint,
                         'action': action,
                         'workflow': 'secopsai.cli blog',
                         'local_helper': True,

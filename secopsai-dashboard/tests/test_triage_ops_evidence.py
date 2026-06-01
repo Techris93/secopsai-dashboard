@@ -233,6 +233,42 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertEqual([draft['slug'] for draft in payload['drafts']], ['new', 'fallback', 'old'])
         self.assertEqual(payload['counts']['drafts'], 3)
 
+    def test_blog_review_counts_publishable_and_blocked_approved_drafts(self):
+        with mock.patch.object(server, 'run_cli_json') as run_cli_json:
+            run_cli_json.side_effect = [
+                (
+                    {'ok': True, 'returncode': 0, 'stdout': '{}', 'stderr': ''},
+                    {
+                        'drafts': [
+                            {'slug': 'ready', 'review_status': 'approved', 'readiness_status': 'ready', 'readiness_blockers': []},
+                            {'slug': 'blocked', 'review_status': 'approved', 'readiness_status': 'blocked', 'readiness_blockers': ['missing mitigation']},
+                            {'slug': 'review', 'review_status': 'needs_review', 'readiness_status': 'ready'},
+                        ]
+                    },
+                ),
+                ({'ok': True, 'returncode': 0, 'stdout': '{}', 'stderr': ''}, {'sources': []}),
+            ]
+            _, payload = server._blog_review_drafts_payload()
+
+        self.assertEqual(payload['counts']['approved'], 2)
+        self.assertEqual(payload['counts']['approved_publishable'], 1)
+        self.assertEqual(payload['counts']['approved_blocked'], 1)
+
+    def test_publish_approved_blocked_error_includes_readiness_reasons(self):
+        error, hint = server.publish_approved_blocked_error({
+            'blocked': [
+                {
+                    'slug': 'blocked-draft',
+                    'title': 'Blocked draft',
+                    'reasons': ['missing IOC', 'missing SecOpsAI angle'],
+                }
+            ]
+        })
+        self.assertIn('Publish approved blocked by 1 draft readiness check', error)
+        self.assertIn('Blocked draft', error)
+        self.assertIn('missing IOC', error)
+        self.assertIn('resolve the readiness blockers', hint)
+
     def test_dependency_usage_reuses_manifest_text_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

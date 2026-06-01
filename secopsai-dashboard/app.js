@@ -3028,7 +3028,7 @@ function renderBlogOpsStats() {
     ['Sources', counts.sources ?? '—', isLocalBlogOpsMode() ? 'Local SecOpsAI registry' : status.configured ? 'GitHub backed registry' : 'GitHub token needed'],
     ['Drafts', counts.drafts ?? blogOpsDrafts().length, 'review records in repo'],
     ['Needs review', counts.needs_review ?? 0, 'external news waits here'],
-    ['Approved', counts.approved ?? 0, 'approved or staged before deploy'],
+    ['Approved', counts.approved ?? 0, `${counts.approved_publishable ?? counts.approved ?? 0} publishable${Number(counts.approved_blocked || 0) ? `, ${counts.approved_blocked} blocked` : ''}`],
     ['Deployed', counts.deployed ?? 0, 'deployed to Cloudflare'],
     ['Latest run', latestRun ? statusLabel(latestRun.status || latestRun.conclusion || 'queued') : '—', latestRun ? fmtDate(latestRun.updated_at) : isLocalBlogOpsMode() ? 'Local helper does not read workflow runs' : 'No workflow run loaded']
   ];
@@ -3182,6 +3182,8 @@ function renderBlogOps() {
     actionsCopy.textContent = blogOpsWriteActionCopy(status);
   }
   const approvedCount = Number(status.counts?.approved ?? 0);
+  const publishableApprovedCount = Number(status.counts?.approved_publishable ?? approvedCount);
+  const blockedApprovedCount = Number(status.counts?.approved_blocked ?? 0);
   document.querySelectorAll('.blog-action-btn, #blog-approve-btn, #blog-needs-review-btn, #blog-reject-btn, #blog-edit-btn').forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) return;
     const action = button.dataset.blogAction || '';
@@ -3198,11 +3200,18 @@ function renderBlogOps() {
     } else if (action === 'publish-approved' && approvedCount <= 0) {
       button.disabled = true;
       button.title = 'No approved drafts are ready to publish.';
+    } else if (action === 'publish-approved' && publishableApprovedCount <= 0) {
+      button.disabled = true;
+      button.title = blockedApprovedCount > 0
+        ? 'Approved draft(s) are blocked by readiness checks. Open the draft, resolve blockers, or move it back to Needs review.'
+        : 'No approved drafts are publishable yet.';
     } else if (
       button.title === 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.' ||
       button.title === 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.' ||
       button.title === 'Paste the Blog Ops admin token and click Use token before running this protected action.' ||
-      button.title === 'No approved drafts are ready to publish.'
+      button.title === 'No approved drafts are ready to publish.' ||
+      button.title === 'Approved draft(s) are blocked by readiness checks. Open the draft, resolve blockers, or move it back to Needs review.' ||
+      button.title === 'No approved drafts are publishable yet.'
     ) {
       button.disabled = false;
       button.title = '';
