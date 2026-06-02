@@ -38,6 +38,7 @@ BLOG_OPS_WRITE_ACTIONS = {
     'publish-approved',
     'rebuild-feeds',
     'deploy',
+    'attach-source-media',
     'approve',
     'reject',
     'needs-review',
@@ -802,6 +803,44 @@ def build_blog_ops_action_args(action, payload=None, draft=None):
         return ['blog', 'rebuild-feeds']
     if action == 'deploy':
         raise ValueError('Deploy is handled by the local Wrangler deploy allowlist, not the SecOpsAI blog CLI allowlist.')
+    if action == 'attach-source-media':
+        safe_draft = _clean_string(draft, 260)
+        if not safe_draft or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', safe_draft):
+            raise ValueError('Invalid draft')
+        args = ['blog', 'attach-source-media', safe_draft]
+        media_url = _clean_string(payload.get('media_url') or payload.get('url') or '', 2400)
+        if media_url:
+            parsed = urllib.parse.urlparse(media_url)
+            if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+                raise ValueError('Invalid source media URL')
+            args.extend(['--url', media_url])
+        media_index = payload.get('media_index')
+        if media_index is not None:
+            try:
+                media_index_int = max(0, min(50, int(media_index)))
+            except (TypeError, ValueError):
+                raise ValueError('Invalid media_index') from None
+            args.extend(['--media-index', str(media_index_int)])
+        field_map = {
+            'alt': '--alt',
+            'caption': '--caption',
+            'kind': '--kind',
+            'source_name': '--source-name',
+            'source_url': '--source-url',
+        }
+        for key, flag in field_map.items():
+            value = payload.get(key)
+            if value is None:
+                continue
+            cleaned = _clean_string(value, 2400 if key in {'caption', 'source_url'} else 260)
+            if not cleaned:
+                continue
+            if key == 'source_url':
+                parsed = urllib.parse.urlparse(cleaned)
+                if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+                    raise ValueError('Invalid source URL')
+            args.extend([flag, cleaned])
+        return args
     if action in {'approve', 'reject', 'needs-review'}:
         safe_draft = _clean_string(draft, 260)
         if not safe_draft or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', safe_draft):
@@ -1353,6 +1392,53 @@ def mitigation_for_finding(finding, recommendation=None, local_usage=None, advis
     }
 
 
+def triage_ops_actionability(recommendation=None, advisory=None, local_usage=None):
+    recommendation = recommendation or {}
+    advisory = advisory or {}
+    local_usage = local_usage or {}
+    disposition = str(recommendation.get('recommended_disposition') or 'needs_review')
+    advisory_matched = bool(advisory.get('matched') or recommendation.get('advisory_match'))
+    local_present = bool(local_usage.get('present') or recommendation.get('local_dependency_reference'))
+    known_bad = bool(recommendation.get('known_bad_version_match'))
+    if advisory_matched or known_bad or disposition in {'true_positive', 'needs_review'}:
+        return {
+            'bucket': 'actionable',
+            'label': 'Actionable',
+            'is_actionable': True,
+            'reason': 'Advisory, known-bad version, local usage, or unresolved review evidence requires operator action.',
+        }
+    if disposition == 'not_applicable' and not local_present:
+        return {
+            'bucket': 'no_local_impact',
+            'label': 'No local impact',
+            'is_actionable': False,
+            'reason': 'No matching dependency reference was found in the local repository.',
+        }
+    if disposition in {'false_positive', 'expected_behavior', 'tune_policy', 'not_applicable'}:
+        return {
+            'bucket': 'review_only',
+            'label': 'Review only',
+            'is_actionable': False,
+            'reason': 'Scanner evidence is preserved for audit, but it is not currently an actionable incident.',
+        }
+    return {
+        'bucket': 'actionable' if local_present else 'review_only',
+        'label': 'Actionable' if local_present else 'Review only',
+        'is_actionable': bool(local_present),
+        'reason': 'Local usage is present.' if local_present else 'No local impact evidence is present yet.',
+    }
+
+
+def triage_ops_display_severity(finding, actionability=None):
+    severity = str((finding or {}).get('severity') or 'info').lower()
+    bucket = str((actionability or {}).get('bucket') or '')
+    if bucket == 'no_local_impact':
+        return 'info'
+    if bucket == 'review_only' and severity in {'critical', 'high'}:
+        return 'medium'
+    return severity
+
+
 def summarize_triage_ops_alert(finding):
     ecosystem = str(finding.get('ecosystem') or '').lower()
     package = str(finding.get('package') or '').strip()
@@ -1365,6 +1451,7 @@ def summarize_triage_ops_alert(finding):
         'source': 'finding_snapshot',
     }
     recommendation = build_triage_ops_recommendation(finding, advisory=advisory, local_usage=local_usage)
+    actionability = triage_ops_actionability(recommendation, advisory=advisory, local_usage=local_usage)
     return {
         'finding_id': finding.get('finding_id'),
         'ecosystem': ecosystem,
@@ -1383,6 +1470,8 @@ def summarize_triage_ops_alert(finding):
         'analysis': finding.get('analysis'),
         'report_path': finding.get('report_path'),
         'recommendation': recommendation,
+        'actionability': actionability,
+        'display_severity': triage_ops_display_severity(finding, actionability),
         'local_usage': {'present': local_usage.get('present'), 'match_count': len(local_usage.get('matches') or [])},
         'advisory': {'matched': advisory.get('matched'), 'match_count': len(advisory.get('matches') or [])},
     }
@@ -1404,6 +1493,14 @@ def collect_triage_ops_alerts():
         'open': sum(1 for item in alerts if str(item.get('status') or '').lower() == 'open'),
         'in_review': sum(1 for item in alerts if str(item.get('status') or '').lower() == 'in_review'),
         'critical': sum(1 for item in alerts if str(item.get('severity') or '').lower() == 'critical'),
+        'actionable': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'actionable'),
+        'actionable_critical': sum(
+            1 for item in alerts
+            if (item.get('actionability') or {}).get('bucket') == 'actionable'
+            and str(item.get('severity') or '').lower() == 'critical'
+        ),
+        'no_local_impact': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'no_local_impact'),
+        'review_only': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'review_only'),
         'needs_review': sum(1 for item in alerts if item.get('recommendation', {}).get('recommended_disposition') == 'needs_review'),
     }
     return {'ok': True, 'secopsai_root': str(SECOPSAI_ROOT), 'counts': counts, 'alerts': alerts}

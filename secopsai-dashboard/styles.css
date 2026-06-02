@@ -4006,6 +4006,41 @@ label span,
   font-size: 0.88rem;
   font-weight: 750;
 }
+.blog-source-media-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.9);
+}
+.blog-media-attached,
+.blog-source-media-candidates {
+  display: grid;
+  gap: 8px;
+}
+.blog-source-media-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+.blog-source-media-url {
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.blog-source-media-custom {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) auto;
+  gap: 10px;
+  align-items: center;
+}
 .blog-preview-body {
   white-space: pre-wrap;
   overflow: auto;
@@ -4398,6 +4433,36 @@ label span,
   color: #868e96;
   background: rgba(134, 142, 150, 0.15);
   border-color: rgba(134, 142, 150, 0.42);
+}
+
+#page-triage-ops .triage-rec-pill.actionability-actionable {
+  color: #b8f7ff;
+  background: rgba(0, 217, 255, 0.16);
+  border-color: rgba(0, 217, 255, 0.42);
+}
+
+#page-triage-ops .triage-rec-pill.actionability-no_local_impact,
+#page-triage-ops .triage-rec-pill.actionability-review_only,
+#page-triage-ops .triage-rec-pill.scanner-severity {
+  color: #b9c0c8;
+  background: rgba(134, 142, 150, 0.12);
+  border-color: rgba(134, 142, 150, 0.28);
+}
+
+.triage-actionability-no_local_impact,
+.triage-actionability-review_only {
+  opacity: 0.82;
+}
+
+.triage-actionability-callout {
+  margin-top: 14px;
+  padding: 13px 15px;
+  border-radius: 14px;
+  color: #d1d5db;
+  border: 1px solid rgba(134, 142, 150, 0.35);
+  background: rgba(17, 24, 39, 0.72);
+  line-height: 1.5;
+  font-size: 0.88rem;
 }
 
 .triage-review-section {

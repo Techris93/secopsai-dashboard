@@ -153,6 +153,27 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('news-example', args)
         self.assertNotIn(';', ' '.join(args))
 
+    def test_local_blog_ops_attach_source_media_args_are_allowlisted(self):
+        args = server.build_blog_ops_action_args(
+            'attach-source-media',
+            {
+                'media_url': 'https://cdn.example/image.png',
+                'media_index': 2,
+                'alt': 'Source screenshot',
+                'source_name': 'Example News',
+                'source_url': 'https://example.com/story',
+            },
+            draft='news-example',
+        )
+        self.assertEqual(args[:3], ['blog', 'attach-source-media', 'news-example'])
+        self.assertIn('--url', args)
+        self.assertIn('https://cdn.example/image.png', args)
+        self.assertIn('--media-index', args)
+        self.assertIn('2', args)
+        self.assertNotIn(';', ' '.join(args))
+        with self.assertRaises(ValueError):
+            server.build_blog_ops_action_args('attach-source-media', {'media_url': 'file:///tmp/image.png'}, draft='news-example')
+
     def test_local_blog_ops_global_action_buttons_map_to_expected_cli(self):
         expected = {
             'news-fetch': ['blog', 'news-fetch', '--limit', '7'],
@@ -253,6 +274,40 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertEqual(payload['counts']['approved'], 2)
         self.assertEqual(payload['counts']['approved_publishable'], 1)
         self.assertEqual(payload['counts']['approved_blocked'], 1)
+
+    def test_triage_ops_no_local_usage_is_no_local_impact_not_actionable(self):
+        with mock.patch.object(server, 'check_local_dependency_usage', return_value={'present': False, 'matches': []}):
+            alert = server.summarize_triage_ops_alert({
+                'finding_id': 'SCM-UNIT',
+                'ecosystem': 'pypi',
+                'package': 'scikit-learn',
+                'new_version': '1.9.0',
+                'severity': 'critical',
+                'status': 'open',
+                'analysis': 'Deterministic rules flagged: network egress',
+            })
+
+        self.assertEqual(alert['recommendation']['recommended_disposition'], 'not_applicable')
+        self.assertEqual(alert['actionability']['bucket'], 'no_local_impact')
+        self.assertFalse(alert['actionability']['is_actionable'])
+        self.assertEqual(alert['display_severity'], 'info')
+
+    def test_triage_ops_advisory_match_stays_actionable(self):
+        with mock.patch.object(server, 'check_local_dependency_usage', return_value={'present': False, 'matches': []}):
+            alert = server.summarize_triage_ops_alert({
+                'finding_id': 'SCM-UNIT',
+                'ecosystem': 'npm',
+                'package': '@scope/pkg',
+                'new_version': '1.2.3',
+                'severity': 'critical',
+                'status': 'open',
+                'analysis': 'Deterministic rules flagged: credential access',
+                'advisory_ids': ['GHSA-unit'],
+            })
+
+        self.assertEqual(alert['actionability']['bucket'], 'actionable')
+        self.assertTrue(alert['actionability']['is_actionable'])
+        self.assertEqual(alert['display_severity'], 'critical')
 
     def test_publish_approved_blocked_error_includes_readiness_reasons(self):
         error, hint = server.publish_approved_blocked_error({

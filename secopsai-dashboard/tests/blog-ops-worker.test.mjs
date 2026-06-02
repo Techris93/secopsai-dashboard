@@ -657,6 +657,19 @@ function testBlogOpsActionControlsAreNotDuplicated() {
   assert.match(app, /approved_publishable/);
   assert.match(app, /approved_blocked/);
   assert.match(app, /Approved draft\(s\) are blocked by readiness checks/);
+  assert.match(app, /Images & source screenshots/);
+  assert.match(app, /attach-source-media/);
+  assert.match(app, /Source image attachment is available in local helper mode only/);
+}
+
+function testTriageOpsActionabilityControlsArePresent() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(html, /triage-ops-filter-actionability/);
+  assert.match(html, /Actionable only/);
+  assert.match(app, /actionability\.bucket/);
+  assert.match(app, /No actionable SCM alerts match this filter/);
+  assert.match(app, /Blog drafts are disabled for no-local-impact or review-only scanner records/);
 }
 
 function testCampaignDiscoveryActionsAreNotDuplicated() {
@@ -712,6 +725,7 @@ await testGithubWorkflowNotFoundIsActionable();
 await testSaveDraftDispatchIncludesEditedFields();
 await testDraftListHonorsLimitAndAvoidsUnboundedFetches();
 testBlogOpsActionControlsAreNotDuplicated();
+testTriageOpsActionabilityControlsArePresent();
 testCampaignDiscoveryActionsAreNotDuplicated();
 testDashboardListsUseLatestFirstOrdering();
 console.log("blog ops worker tests passed");

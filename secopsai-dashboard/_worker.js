@@ -280,6 +280,8 @@ function summarizeBlogDraft(path, post) {
     readiness_blockers: readinessBlockers,
     readiness_warnings: readinessWarnings,
     extracted,
+    media_candidates: Array.isArray(post.media_candidates) ? post.media_candidates.slice(0, 8) : [],
+    images: Array.isArray(post.images) ? post.images.slice(0, 8) : [],
     source_metadata: {
       canonical_url: post.canonical_url || "",
       source_url: post.source_url || "",
@@ -375,6 +377,8 @@ async function loadBlogDraft(env, identifier) {
     references: Array.isArray(post.references) ? post.references.slice(0, 12) : [],
     primary_references: Array.isArray(post.primary_references) ? post.primary_references.slice(0, 8) : [],
     source_links: Array.isArray(post.source_links) ? post.source_links.slice(0, 12) : [],
+    media_candidates: Array.isArray(post.media_candidates) ? post.media_candidates.slice(0, 8) : [],
+    images: Array.isArray(post.images) ? post.images.slice(0, 8) : [],
     review_note: String(post.review_note || ""),
   };
 }

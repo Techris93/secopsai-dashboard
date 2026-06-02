@@ -2887,6 +2887,10 @@ function canDeployFromBlogOps() {
   return caps.deploy !== false;
 }
 
+function canAttachSourceMediaFromBlogOps() {
+  return isLocalBlogOpsMode();
+}
+
 function blogOpsWriteActionCopy(status = state.blogOps.status || {}) {
   if (status.configured === false) {
     return 'Hosted Blog Ops needs BLOG_OPS_GITHUB_TOKEN before write actions can dispatch GitHub Actions.';
@@ -2960,6 +2964,10 @@ async function runBlogOpsAction(action, { draft = null, note = '', button = null
     state.blogOps.lastAction = { action, draft, payload: result, at: new Date().toISOString() };
     setStatus(`<span class="dot"></span> Blog Ops dispatched ${escapeHtml(action)} via ${escapeHtml(result.workflow || 'workflow')}`);
     await loadBlogOpsStatus({ render: false });
+    if (draft) {
+      await loadBlogDraft(draft);
+      return;
+    }
     renderBlogOps();
   } catch (error) {
     const suffix = /unauthorized/i.test(error.message) ? ' Check that the token matches BLOG_OPS_ADMIN_TOKEN in Cloudflare Pages.' : '';
@@ -3090,6 +3098,9 @@ function renderBlogDraftPreview() {
   const blockers = Array.isArray(draft.readiness_blockers) ? draft.readiness_blockers : [];
   const warnings = Array.isArray(draft.readiness_warnings) ? draft.readiness_warnings : [];
   const checklist = Array.isArray(draft.review_checklist) ? draft.review_checklist : [];
+  const mediaCandidates = Array.isArray(draft.media_candidates) ? draft.media_candidates : [];
+  const attachedImages = Array.isArray(draft.images) ? draft.images : [];
+  const canAttachSourceMedia = canAttachSourceMediaFromBlogOps();
   const body = draft.body_markdown || 'Click a draft card to load the full generated body.';
   const approved = ['approved', 'reviewed'].includes(String(draft.review_status || ''));
   const ready = !blockers.length && String(draft.readiness_status || '') !== 'blocked';
@@ -3129,6 +3140,27 @@ function renderBlogDraftPreview() {
     ${checklist.length ? `<h4 style="margin-top:18px;">Review checklist</h4><ul class="blog-checklist">${checklist.map(item => `<li><span>${escapeHtml(item.label || '')}</span><em>${escapeHtml(statusLabel(item.status || 'needs_review'))}</em></li>`).join('')}</ul>` : ''}
     <h4 style="margin-top:18px;">References</h4>
     <div class="blog-reference-list">${sources.length ? sources.map(source => `<a href="${escapeHtml(source)}" target="_blank" rel="noreferrer">${escapeHtml(source)}</a>`).join('') : '<span class="small">No references listed.</span>'}</div>
+    <h4 style="margin-top:18px;">Images & source screenshots</h4>
+    <div class="blog-source-media-panel">
+      <div class="small">${escapeHtml(canAttachSourceMedia ? 'Attach a source image candidate or approved source image URL. Attachments reset the draft to Needs review so the image can be checked before publishing.' : 'Source image attachment is available in local helper mode only. Use local Blog Ops to fetch images, or attach a local screenshot with the CLI.')}</div>
+      <div class="blog-media-attached">
+        ${attachedImages.length ? attachedImages.map(image => `<span class="compact-chip">${escapeHtml(image.kind || 'image')}: ${escapeHtml(image.alt || image.src || '')}</span>`).join('') : '<span class="small">No approved images attached yet.</span>'}
+      </div>
+      <div class="blog-source-media-candidates">
+        ${mediaCandidates.length ? mediaCandidates.slice(0, 6).map((candidate, index) => {
+          const src = candidate?.src || candidate?.url || '';
+          return `<div class="blog-source-media-row">
+            <span class="blog-source-media-url">${escapeHtml(src || 'source media candidate')}</span>
+            <button class="mini-btn blog-source-media-btn" type="button" data-source-media-index="${escapeHtml(String(index))}" ${canAttachSourceMedia ? '' : 'disabled title="Use local helper mode to attach source media."'}>Attach image</button>
+          </div>`;
+        }).join('') : '<div class="small">No image candidates were provided by this feed. Paste a source image URL below, or take a screenshot and use the CLI attach-media fallback.</div>'}
+      </div>
+      <div class="blog-source-media-custom">
+        <input id="blog-source-media-url" type="url" placeholder="https://source.example/image.png" ${canAttachSourceMedia ? '' : 'disabled'} />
+        <input id="blog-source-media-alt" type="text" placeholder="Alt text for the image" ${canAttachSourceMedia ? '' : 'disabled'} />
+        <button class="secondary-btn" id="blog-source-media-url-btn" type="button" ${canAttachSourceMedia ? '' : 'disabled title="Use local helper mode to attach source media."'}>Attach source image URL</button>
+      </div>
+    </div>
     <h4 style="margin-top:18px;">Generated body</h4>
     <pre class="blog-preview-body">${escapeHtml(body)}</pre>
     <label class="blog-review-note"><span class="small">Reviewer note</span><textarea id="blog-review-note" rows="3" placeholder="Why did you approve or reject this draft?"></textarea></label>
@@ -3145,6 +3177,47 @@ function renderBlogDraftPreview() {
   el('blog-approve-btn')?.addEventListener('click', (event) => runBlogOpsAction('approve', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
   el('blog-needs-review-btn')?.addEventListener('click', (event) => runBlogOpsAction('needs-review', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
   el('blog-reject-btn')?.addEventListener('click', (event) => runBlogOpsAction('reject', { draft: draft.slug, note: noteValue(), button: event.currentTarget }));
+  host.querySelectorAll('.blog-source-media-btn').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      if (!canAttachSourceMediaFromBlogOps()) {
+        alert('Source image attachment is available in local helper mode only.');
+        return;
+      }
+      const index = Number(button.dataset.sourceMediaIndex || 0) || 0;
+      const candidate = mediaCandidates[index] || {};
+      runBlogOpsAction('attach-source-media', {
+        draft: draft.slug,
+        button: event.currentTarget,
+        payload: {
+          media_index: index,
+          alt: candidate.alt || `Source image for ${draft.title || 'blog draft'}`,
+          source_name: candidate.source_name || draft.source_name || 'External source',
+          source_url: candidate.source_url || sourceMetadata.canonical_url || sources[0] || ''
+        }
+      });
+    });
+  });
+  el('blog-source-media-url-btn')?.addEventListener('click', (event) => {
+    if (!canAttachSourceMediaFromBlogOps()) {
+      alert('Source image attachment is available in local helper mode only.');
+      return;
+    }
+    const mediaUrl = (el('blog-source-media-url')?.value || '').trim();
+    if (!mediaUrl) {
+      alert('Paste a source image URL first.');
+      return;
+    }
+    runBlogOpsAction('attach-source-media', {
+      draft: draft.slug,
+      button: event.currentTarget,
+      payload: {
+        media_url: mediaUrl,
+        alt: (el('blog-source-media-alt')?.value || '').trim() || `Source image for ${draft.title || 'blog draft'}`,
+        source_name: draft.source_name || 'External source',
+        source_url: sourceMetadata.canonical_url || sources[0] || mediaUrl
+      }
+    });
+  });
 }
 
 function renderBlogWorkflowRuns() {
@@ -3184,17 +3257,21 @@ function renderBlogOps() {
   const approvedCount = Number(status.counts?.approved ?? 0);
   const publishableApprovedCount = Number(status.counts?.approved_publishable ?? approvedCount);
   const blockedApprovedCount = Number(status.counts?.approved_blocked ?? 0);
-  document.querySelectorAll('.blog-action-btn, #blog-approve-btn, #blog-needs-review-btn, #blog-reject-btn, #blog-edit-btn').forEach((button) => {
+  document.querySelectorAll('.blog-action-btn, .blog-source-media-btn, #blog-source-media-url-btn, #blog-approve-btn, #blog-needs-review-btn, #blog-reject-btn, #blog-edit-btn').forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) return;
     const action = button.dataset.blogAction || '';
     const draftWriteAction = ['blog-approve-btn', 'blog-needs-review-btn', 'blog-reject-btn'].includes(button.id);
+    const mediaWriteAction = button.classList.contains('blog-source-media-btn') || button.id === 'blog-source-media-url-btn';
     if (status.configured === false) {
       button.disabled = true;
       button.title = 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.';
+    } else if (mediaWriteAction && !canAttachSourceMediaFromBlogOps()) {
+      button.disabled = true;
+      button.title = 'Source image attachment is available in local helper mode only.';
     } else if (action === 'deploy' && !canDeployFromBlogOps()) {
       button.disabled = true;
       button.title = 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.';
-    } else if ((action || draftWriteAction) && !state.blogOps.adminToken) {
+    } else if ((action || draftWriteAction || mediaWriteAction) && !state.blogOps.adminToken) {
       button.disabled = true;
       button.title = 'Paste the Blog Ops admin token and click Use token before running this protected action.';
     } else if (action === 'publish-approved' && approvedCount <= 0) {
@@ -3207,6 +3284,7 @@ function renderBlogOps() {
         : 'No approved drafts are publishable yet.';
     } else if (
       button.title === 'Add BLOG_OPS_GITHUB_TOKEN to Cloudflare Pages before using Blog Ops actions.' ||
+      button.title === 'Source image attachment is available in local helper mode only.' ||
       button.title === 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.' ||
       button.title === 'Paste the Blog Ops admin token and click Use token before running this protected action.' ||
       button.title === 'No approved drafts are ready to publish.' ||
@@ -3261,6 +3339,7 @@ function triageOpsFilters() {
   return {
     status: el('triage-ops-filter-status')?.value || 'all',
     ecosystem: el('triage-ops-filter-ecosystem')?.value || 'all',
+    actionability: el('triage-ops-filter-actionability')?.value || 'actionable',
     severity: el('triage-ops-filter-severity')?.value || 'all',
     search: (el('triage-ops-filter-search')?.value || '').trim().toLowerCase()
   };
@@ -3271,6 +3350,7 @@ function filteredTriageOpsAlerts() {
   return sortLatestFirst((state.triageOps.alerts || []).filter(alert => {
     if (filters.status !== 'all' && String(alert.status || '').toLowerCase() !== filters.status) return false;
     if (filters.ecosystem !== 'all' && String(alert.ecosystem || '').toLowerCase() !== filters.ecosystem) return false;
+    if (filters.actionability !== 'all' && String(alert.actionability?.bucket || 'actionable') !== filters.actionability) return false;
     if (filters.severity !== 'all' && String(alert.severity || '').toLowerCase() !== filters.severity) return false;
     if (filters.search) {
       const haystack = [
@@ -3298,6 +3378,12 @@ function renderRecommendationPill(recommendation = {}) {
   const disposition = String(recommendation.recommended_disposition || 'needs_review');
   const confidence = String(recommendation.confidence || 'medium');
   return `<span class="triage-rec-pill ${escapeHtml(disposition.replace(/[^a-z0-9_-]/gi, '-').toLowerCase())}">${escapeHtml(statusLabel(disposition))} · ${escapeHtml(confidence)}</span>`;
+}
+
+function renderActionabilityPill(actionability = {}) {
+  const bucket = String(actionability.bucket || 'actionable');
+  const label = String(actionability.label || statusLabel(bucket));
+  return `<span class="triage-rec-pill actionability-${escapeHtml(bucket.replace(/[^a-z0-9_-]/gi, '-').toLowerCase())}">${escapeHtml(label)}</span>`;
 }
 
 async function loadTriageOpsAlerts({ render = true } = {}) {
@@ -4446,12 +4532,14 @@ function renderTriageOpsStats() {
   const host = el('triage-ops-stats');
   if (!host) return;
   const alerts = state.triageOps.alerts || [];
+  const actionable = alerts.filter(item => item.actionability?.bucket === 'actionable');
   const cards = [
     ['SCM alerts', alerts.length, 'active supply-chain findings'],
+    ['Actionable', actionable.length, 'needs operator work'],
     ['Open', alerts.filter(item => String(item.status || '').toLowerCase() === 'open').length, 'waiting for triage'],
-    ['In review', alerts.filter(item => String(item.status || '').toLowerCase() === 'in_review').length, 'already started'],
-    ['Critical', alerts.filter(item => String(item.severity || '').toLowerCase() === 'critical').length, 'highest severity'],
-    ['Needs review', alerts.filter(item => item.recommendation?.recommended_disposition === 'needs_review').length, 'manual decision needed']
+    ['Actionable critical', actionable.filter(item => String(item.severity || '').toLowerCase() === 'critical').length, 'true-priority queue'],
+    ['No local impact', alerts.filter(item => item.actionability?.bucket === 'no_local_impact').length, 'hidden by default'],
+    ['Needs review', actionable.filter(item => item.recommendation?.recommended_disposition === 'needs_review').length, 'manual decision needed']
   ];
   host.innerHTML = cards.map(([label, value, sub]) => `
     <div class="card metric-card">
@@ -4467,16 +4555,28 @@ function renderTriageOpsAlertList() {
   if (!host) return;
   const alerts = filteredTriageOpsAlerts();
   if (!alerts.length) {
-    host.innerHTML = `<div class="empty-state">No SCM alerts match this filter. Refresh evidence or adjust filters.</div>`;
+    const hiddenNoImpact = (state.triageOps.alerts || []).filter(item => item.actionability?.bucket === 'no_local_impact').length;
+    state.triageOps.selectedId = null;
+    host.innerHTML = `<div class="empty-state">No actionable SCM alerts match this filter.${hiddenNoImpact ? ` ${escapeHtml(String(hiddenNoImpact))} no-local-impact review record(s) are hidden; switch Actionability to All alerts to audit them.` : ' Refresh evidence or adjust filters.'}</div>`;
     return;
+  }
+  const visibleIds = new Set(alerts.map(alert => String(alert.finding_id || '')));
+  if (!visibleIds.has(String(state.triageOps.selectedId || ''))) {
+    state.triageOps.selectedId = alerts[0].finding_id || null;
+    state.triageOps.selectedDetail = null;
   }
   host.innerHTML = `<div class="triage-alert-list">${alerts.map(alert => {
     const selected = String(alert.finding_id || '') === String(state.triageOps.selectedId || '');
+    const displaySeverity = alert.display_severity || alert.severity || 'critical';
+    const scannerSeverity = String(alert.severity || '').toLowerCase();
+    const displaySeverityText = String(displaySeverity || '').toLowerCase();
     return `
-      <button class="triage-alert-card ${selected ? 'selected-row' : ''}" data-triage-alert="${escapeHtml(alert.finding_id || '')}">
+      <button class="triage-alert-card ${selected ? 'selected-row' : ''} triage-actionability-${escapeHtml(String(alert.actionability?.bucket || 'actionable'))}" data-triage-alert="${escapeHtml(alert.finding_id || '')}">
         <div class="triage-alert-topline">
           ${renderStatusPill(alert.status || 'open')}
-          ${renderSeverityPill(alert.severity || 'critical')}
+          ${renderSeverityPill(displaySeverity)}
+          ${scannerSeverity && scannerSeverity !== displaySeverityText ? `<span class="triage-rec-pill scanner-severity">Scanner: ${escapeHtml(scannerSeverity)}</span>` : ''}
+          ${renderActionabilityPill(alert.actionability || {})}
           ${renderRecommendationPill(alert.recommendation || {})}
         </div>
         <h4>${escapeHtml(alert.title || alert.finding_id || 'Supply-chain alert')}</h4>
@@ -4763,6 +4863,10 @@ function renderTriageOpsDetail() {
   const rec = alert.recommendation || {};
   const closeNote = state.triageOps.verdictNotes[alert.finding_id] || rec.recommended_note || `Reviewed ${alert.package}@${alert.version} from Triage Ops dashboard.`;
   const cliCommands = triageOpsCliCommands(alert);
+  const actionability = alert.actionability || {};
+  const isActionableAlert = actionability.bucket === 'actionable';
+  const displaySeverity = alert.display_severity || alert.severity || 'critical';
+  const blogDraftDisabled = !isActionableAlert;
   host.innerHTML = `
     <div class="finding-detail-header">
       <div>
@@ -4772,10 +4876,12 @@ function renderTriageOpsDetail() {
       </div>
       <div class="blog-preview-status-stack">
         ${renderStatusPill(alert.status || 'open')}
-        ${renderSeverityPill(alert.severity || 'critical')}
+        ${renderSeverityPill(displaySeverity)}
+        ${renderActionabilityPill(actionability)}
         ${renderRecommendationPill(rec)}
       </div>
     </div>
+    ${!isActionableAlert ? `<div class="triage-actionability-callout">This finding is preserved as scanner evidence, but it is not currently an actionable incident: ${escapeHtml(actionability.reason || 'No local impact or advisory evidence is present.')} Close it as ${escapeHtml(statusLabel(rec.recommended_disposition || 'not_applicable'))} unless new evidence appears.</div>` : ''}
     <section class="triage-review-section">
       <div class="triage-section-heading">
         <span>Overview</span>
@@ -4787,6 +4893,8 @@ function renderTriageOpsDetail() {
         <div class="kv-row"><span class="kv-key">Version</span><span class="kv-val">${escapeHtml(alert.version || '—')}</span></div>
         <div class="kv-row"><span class="kv-key">Advisory match</span><span class="kv-val">${alert.advisory?.matched ? 'yes' : 'no'}</span></div>
         <div class="kv-row"><span class="kv-key">Local usage</span><span class="kv-val">${alert.local_usage?.present ? `${alert.local_usage.match_count || 0} match(es)` : 'none found'}</span></div>
+        <div class="kv-row"><span class="kv-key">Actionability</span><span class="kv-val">${escapeHtml(actionability.label || 'Actionable')}</span></div>
+        <div class="kv-row"><span class="kv-key">Scanner severity</span><span class="kv-val">${escapeHtml(alert.severity || '—')}</span></div>
         <div class="kv-row"><span class="kv-key">Report</span><span class="kv-val">${escapeHtml(alert.report_path || '—')}</span></div>
       </div>
     </section>
@@ -4843,7 +4951,7 @@ function renderTriageOpsDetail() {
         <button class="secondary-btn triage-ops-action-btn" data-triage-action="generate-mitigation">Generate mitigation</button>
         <button class="mini-btn triage-ops-action-btn" data-triage-action="escalate" data-write="true">Move to in review</button>
         <button class="danger-btn triage-ops-action-btn" data-triage-action="close" data-write="true">Close finding</button>
-        <button class="primary-btn triage-ops-action-btn" data-triage-action="create-blog-draft" data-write="true">Create blog draft</button>
+        <button class="primary-btn triage-ops-action-btn" data-triage-action="create-blog-draft" data-write="true" ${blogDraftDisabled ? 'disabled title="Blog drafts are disabled for no-local-impact or review-only scanner records."' : ''}>Create blog draft</button>
       </div>
     </section>
 
@@ -5590,7 +5698,7 @@ function bindEvents() {
     el(id)?.addEventListener('click', event => runTriageOpsEvidenceBundle(event.currentTarget));
   });
   el('guide-discovery-review-btn')?.addEventListener('click', event => runGuideDiscoveryReview(event.currentTarget));
-  ['triage-ops-filter-status', 'triage-ops-filter-ecosystem', 'triage-ops-filter-severity', 'triage-ops-filter-search'].forEach(id => {
+  ['triage-ops-filter-status', 'triage-ops-filter-ecosystem', 'triage-ops-filter-actionability', 'triage-ops-filter-severity', 'triage-ops-filter-search'].forEach(id => {
     el(id)?.addEventListener('input', renderTriageOps);
     el(id)?.addEventListener('change', renderTriageOps);
   });
