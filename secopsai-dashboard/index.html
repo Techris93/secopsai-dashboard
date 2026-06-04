@@ -605,6 +605,10 @@
     window.addEventListener('unhandledrejection', function (event) {
       var el = document.getElementById('global-status');
       var reason = event.reason && (event.reason.message || String(event.reason));
+      var lowerReason = String(reason || '').toLowerCase();
+      if (lowerReason.indexOf('metamask') !== -1 || lowerReason.indexOf('wallet') !== -1 || lowerReason.indexOf('ethereum') !== -1) {
+        return;
+      }
       if (el) el.textContent = 'Promise error: ' + (reason || 'unknown rejection');
     });
   </script>
