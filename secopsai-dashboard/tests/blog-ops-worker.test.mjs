@@ -660,6 +660,8 @@ function testBlogOpsActionControlsAreNotDuplicated() {
   assert.match(app, /Images & source screenshots/);
   assert.match(app, /attach-source-media/);
   assert.match(app, /Source image attachment is available in local helper mode only/);
+  assert.match(app, /attachedSourceUrls/);
+  assert.match(app, />Attached<\/span>/);
 }
 
 function testTriageOpsActionabilityControlsArePresent() {

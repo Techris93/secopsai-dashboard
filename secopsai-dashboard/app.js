@@ -3100,6 +3100,7 @@ function renderBlogDraftPreview() {
   const checklist = Array.isArray(draft.review_checklist) ? draft.review_checklist : [];
   const mediaCandidates = Array.isArray(draft.media_candidates) ? draft.media_candidates : [];
   const attachedImages = Array.isArray(draft.images) ? draft.images : [];
+  const attachedSourceUrls = new Set(attachedImages.map(image => String(image?.source_url || '').trim()).filter(Boolean));
   const canAttachSourceMedia = canAttachSourceMediaFromBlogOps();
   const body = draft.body_markdown || 'Click a draft card to load the full generated body.';
   const approved = ['approved', 'reviewed'].includes(String(draft.review_status || ''));
@@ -3149,9 +3150,12 @@ function renderBlogDraftPreview() {
       <div class="blog-source-media-candidates">
         ${mediaCandidates.length ? mediaCandidates.slice(0, 6).map((candidate, index) => {
           const src = candidate?.src || candidate?.url || '';
+          const isAttached = attachedSourceUrls.has(String(src || '').trim());
           return `<div class="blog-source-media-row">
             <span class="blog-source-media-url">${escapeHtml(src || 'source media candidate')}</span>
-            <button class="mini-btn blog-source-media-btn" type="button" data-source-media-index="${escapeHtml(String(index))}" ${canAttachSourceMedia ? '' : 'disabled title="Use local helper mode to attach source media."'}>Attach image</button>
+            ${isAttached
+              ? '<span class="triage-rec-pill actionability-actionable">Attached</span>'
+              : `<button class="mini-btn blog-source-media-btn" type="button" data-source-media-index="${escapeHtml(String(index))}" ${canAttachSourceMedia ? '' : 'disabled title="Use local helper mode to attach source media."'}>Attach image</button>`}
           </div>`;
         }).join('') : '<div class="small">No image candidates were provided by this feed. Paste a source image URL below, or take a screenshot and use the CLI attach-media fallback.</div>'}
       </div>
