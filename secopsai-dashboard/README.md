@@ -8,6 +8,7 @@ The dashboard is now intentionally narrow:
 - task management
 - native triage queue visibility
 - helper-backed native SecOpsAI actions
+- Hermes Agent telemetry findings when SecOpsAI is refreshed with `--platform hermes`
 - protected Triage Ops for supply-chain alert review and closure
 - Blog Ops workflow dispatch and review queue
 - built-in operator guide for dashboard click paths and safety rules
@@ -24,6 +25,7 @@ It now also reads native local SecOpsAI state through the helper server:
 - pending/applyable triage actions
 - latest orchestrator summaries
 - latest local findings artifact metadata
+- Hermes Agent findings and evidence when present in the local SOC store
 - direct native `triage investigate`
 - direct native `triage apply-action`
 - guarded native `triage close`

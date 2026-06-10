@@ -1087,7 +1087,7 @@ function inferWorkBriefPlan(item = {}, roleLabel = null) {
   focus.push('Keep the solution practical, local-first, and shippable now.');
 
   const constraints = [
-    'This dashboard is control-plane only, but this task should be executed directly in the local workspace through the current OpenClaw dispatcher path; do not require ACP/Codex-specific execution assumptions.',
+    'This dashboard is control-plane only, but this task should be executed directly in the local workspace through the current OpenClaw/Hermes dispatcher path; do not require ACP/Codex-specific execution assumptions.',
     'Prefer existing metadata and lightweight heuristics over a hard dependency on a new backend.',
     'Validate syntax/basic behavior before handing off.',
     'Report implementation evidence clearly: exact files touched, whether code actually changed, and any commit/PR only if real.'
@@ -1120,7 +1120,7 @@ function buildSmartLocalBrief(item, roleLabel = null) {
   return `Prepare work for ${plan.role}.
 
 Mode: smart local brief
-Context: this dashboard is control-plane only. This task should be executed directly in the local workspace via the active OpenClaw dispatcher path, without ACP-specific or Codex-specific assumptions.
+Context: this dashboard is control-plane only. This task should be executed directly in the local workspace via the active OpenClaw/Hermes dispatcher path, without ACP-specific or Codex-specific assumptions.
 
 Task summary:
 - Title: ${plan.title}
@@ -1158,7 +1158,7 @@ function buildAgentReadyBrief(item, roleLabel = null) {
   return `SYSTEM / LOCAL OPENCLAW EXECUTION HANDOFF
 
 You are preparing an implementation pass for ${plan.role}.
-Execute directly in the local workspace via the current OpenClaw dispatcher path. Do not assume ACP one-shot execution, Codex-specific runtime requirements, or any external planning backend. Use the brief below as grounded context, but improve repo/path inference if stronger evidence appears during code inspection.
+Execute directly in the local workspace via the current OpenClaw/Hermes dispatcher path. Do not assume ACP one-shot execution, Codex-specific runtime requirements, or any external planning backend. Use the brief below as grounded context, but improve repo/path inference if stronger evidence appears during code inspection.
 ${plan.execution?.needsImplementationPush ? 'This handoff is for a continuation/retry. Push beyond analysis-only output and produce concrete implementation evidence where possible.\n' : ''}
 STRUCTURED INPUT
 - task_title: ${plan.title}
@@ -1181,7 +1181,7 @@ OBJECTIVE
 ${plan.focus.map(line => `- ${line}`).join('\n')}
 
 OPERATING CONSTRAINTS
-- Do not refuse or stop solely because ACP/Codex-specific execution paths are unavailable; continue using the current OpenClaw/local-workspace execution path.
+- Do not refuse or stop solely because ACP/Codex-specific execution paths are unavailable; continue using the current OpenClaw/Hermes/local-workspace execution path.
 ${plan.constraints.map(line => `- ${line}`).join('\n')}
 
 EXPECTED OUTPUT
@@ -2644,7 +2644,7 @@ function renderIntegrations() {
           <div class="kv-row"><div class="kv-key">Event stream</div><div class="kv-val">${escapeHtml(humanizeSnake(state.nativeStreamStatus || 'disconnected'))}${state.nativeStreamLastEventAt ? ` • ${escapeHtml(fmtDate(state.nativeStreamLastEventAt))}` : ''}</div></div>
           <div class="kv-row"><div class="kv-key">Latest findings artifact</div><div class="kv-val">${escapeHtml(localFindingsArtifact()?.generated_at ? fmtDate(localFindingsArtifact().generated_at) : 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Latest orchestrator run</div><div class="kv-val">${escapeHtml(localTriageLatestRun()?.generated_at ? fmtDate(localTriageLatestRun().generated_at) : 'Unavailable')}</div></div>
-          <div class="kv-row"><div class="kv-key">Runtime authority</div><div class="kv-val">SecOpsAI / OpenClaw</div></div>
+          <div class="kv-row"><div class="kv-key">Runtime authority</div><div class="kv-val">SecOpsAI / OpenClaw / Hermes</div></div>
         </div>
         <div class="small" style="margin-top:12px;">The dashboard now treats local SecOpsAI triage as a first-class source of truth instead of just a side helper.</div>
       </div>
