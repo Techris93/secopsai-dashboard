@@ -347,6 +347,7 @@
             <a href="#guide-overview">Overview</a>
             <a href="#guide-tasks">Tasks</a>
             <a href="#guide-findings">Findings</a>
+            <a href="#guide-ai-dependency-guard">AI Dependency Guard</a>
             <a href="#guide-native-triage">Native Triage</a>
             <a href="#guide-triage-ops">Triage Ops</a>
             <a href="#guide-campaigns">Campaign Research</a>
@@ -429,6 +430,27 @@
                 <div class="guide-step"><span>4</span><p>For supply-chain <strong>SCM-*</strong> findings, switch to <strong>Triage Ops</strong> for advisory checks, evidence verdicts, mitigation, closure, and blog draft handoff.</p></div>
               </div>
               <div class="guide-callout guide-warning">Important: absence of local usage means lower environment impact, not that the package itself is benign.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-ai-dependency-guard">
+              <div class="guide-section-head">
+                <span class="guide-pill">AI Dependency Guard</span>
+                <h3>AI Dependency Guard workflow</h3>
+                <p>Use AI Dependency Guard before merging AI-built code, generated manifests, or agent-suggested install commands. It detects missing, newly registered, lookalike, advisory-matched, and private/allowlisted dependency candidates without installing or executing packages.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Safe by default</strong><span>The guard reports and warns by default. CI only fails when you explicitly pass <code>--fail-on high</code> or <code>--fail-on critical</code>.</span></div>
+                <div class="guide-mini-card"><strong>Agent-aware</strong><span>Add <code>--include-agent-logs</code> to compare manifests against OpenClaw, Hermes, and session telemetry for packages suggested before they appear in code.</span></div>
+                <div class="guide-mini-card"><strong>Dashboard surface</strong><span>Persisted guard findings appear in <strong>Findings</strong> with latest-first ordering, evidence, registry context, recommendations, and copyable CLI fallback.</span></div>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Run <code>secopsai supply-chain ai-dependency-guard --path . --json</code> from the repo you want to review.</p></div>
+                <div class="guide-step"><span>2</span><p>Add <code>--include-agent-logs --agent-source auto</code> when OpenClaw, Hermes, or local session logs might contain AI-suggested dependencies.</p></div>
+                <div class="guide-step"><span>3</span><p>Review <strong>missing_or_hallucinated</strong>, <strong>newly_registered</strong>, <strong>name_similarity_risk</strong>, <strong>source_mismatch</strong>, and <strong>advisory_matched</strong> classifications. Treat <strong>local_only_or_private</strong> as expected only when it matches your policy allowlist.</p></div>
+                <div class="guide-step"><span>4</span><p>Use <code>--persist-findings</code> only for high-confidence risks that should enter the SOC queue. Those findings remain reviewable in <strong>Findings</strong>; the dashboard does not run package installs or dependency code.</p></div>
+                <div class="guide-step"><span>5</span><p>For CI, use the GitHub Action mode <code>ai-dependency-guard</code>. Keep it warning-only for early rollout, then opt into <code>fail-on: high</code> once private package allowlists are tuned.</p></div>
+              </div>
+              <div class="guide-callout guide-good">Best use: scan AI-generated dependency changes before install, before CI cache population, and before letting an agent apply package suggestions to a real repo.</div>
             </section>
 
             <section class="card guide-section" id="guide-native-triage">

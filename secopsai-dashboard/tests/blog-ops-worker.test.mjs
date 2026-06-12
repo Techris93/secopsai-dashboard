@@ -381,6 +381,9 @@ function testOperatorGuideUiIsPresent() {
   assert.match(html, /Run Discovery Review/);
   assert.match(html, /Assisted Candidate Cleanup/);
   assert.match(html, /Clean Obvious Package Noise/);
+  assert.match(html, /AI Dependency Guard workflow/);
+  assert.match(html, /secopsai supply-chain ai-dependency-guard --path \. --json/);
+  assert.match(html, /OpenClaw, Hermes, and session telemetry/);
   assert.match(html, /generated watchlist suggestions/);
   assert.match(html, /package-noise summary/);
   assert.match(html, /verify it is real/);
@@ -400,6 +403,10 @@ function testOperatorGuideUiIsPresent() {
   assert.match(app, /evidence-bundle/);
   assert.match(app, /analyzeCampaignPackageNoise/);
   assert.match(app, /cleanCampaignPackageNoise/);
+  assert.match(app, /function isAiDependencyGuardFinding/);
+  assert.match(app, /AI Dependency Guard risks/);
+  assert.match(app, /AI Dependency Guard evidence/);
+  assert.match(app, /aiDependencyGuardCliFallback/);
   assert.match(app, /campaignWatchlistSuggestions/);
   assert.match(app, /campaign-watchlist-suggestion/);
   assert.match(app, /Review Selected Lead/);

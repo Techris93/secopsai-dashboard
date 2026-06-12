@@ -756,6 +756,100 @@ function findingSource(finding) {
   return finding?.source || finding?.source_name || finding?.vendor || finding?.provider || finding?.detector || finding?.tool || 'Unknown source';
 }
 
+function findingPayload(finding) {
+  const raw = finding?.payload_json || finding?.payload || finding?.details_json || null;
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function findingValue(finding, key) {
+  const payload = findingPayload(finding);
+  return finding?.[key] ?? payload?.[key] ?? null;
+}
+
+function findingArrayValue(finding, key) {
+  const value = findingValue(finding, key);
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) return value.split(/\n+/).map(item => item.trim()).filter(Boolean);
+  return [];
+}
+
+function isAiDependencyGuardFinding(finding) {
+  const source = String(findingSource(finding) || '').toLowerCase();
+  const id = String(findingId(finding) || '').toUpperCase();
+  const rules = findingArrayValue(finding, 'rule_ids').map(item => String(item).toUpperCase());
+  const classification = String(findingValue(finding, 'classification') || '').toLowerCase();
+  return source === 'secopsai-ai-dependency-guard'
+    || id.startsWith('AIDG-')
+    || rules.includes('AI-DEPENDENCY-GUARD')
+    || ['missing_or_hallucinated', 'newly_registered', 'name_similarity_risk'].includes(classification);
+}
+
+function aiDependencyGuardFindings(findings = sortedFindings()) {
+  return findings.filter(isAiDependencyGuardFinding);
+}
+
+function aiDependencyGuardCliFallback() {
+  return 'secopsai supply-chain ai-dependency-guard --path . --include-agent-logs --json';
+}
+
+function renderAiDependencyGuardSurface(findings) {
+  const guardFindings = aiDependencyGuardFindings(findings);
+  const latest = guardFindings[0] || null;
+  const highRisk = guardFindings.filter(item => ['high', 'critical', 'urgent'].includes(String(findingSeverity(item)).toLowerCase())).length;
+  return `
+    <div class="card finding-detail-card">
+      <h4>AI Dependency Guard</h4>
+      <div class="kv-list">
+        <div class="kv-row"><div class="kv-key">Loaded risks</div><div class="kv-val">${escapeHtml(String(guardFindings.length))}</div></div>
+        <div class="kv-row"><div class="kv-key">High risk</div><div class="kv-val">${escapeHtml(String(highRisk))}</div></div>
+        <div class="kv-row"><div class="kv-key">Latest</div><div class="kv-val">${latest ? `${escapeHtml(findingTitle(latest))} • ${escapeHtml(fmtDate(findingDetectedAt(latest)))}` : 'No persisted guard findings loaded yet'}</div></div>
+      </div>
+      <div class="small" style="margin-top:12px;">Run <code>${escapeHtml(aiDependencyGuardCliFallback())}</code> locally. The guard warns by default and only fails CI when <code>--fail-on high</code> or <code>--fail-on critical</code> is set.</div>
+    </div>
+  `;
+}
+
+function renderAiDependencyGuardDetail(finding) {
+  if (!isAiDependencyGuardFinding(finding)) return '';
+  const ecosystem = findingValue(finding, 'ecosystem') || 'unknown';
+  const packageName = findingValue(finding, 'package') || findingValue(finding, 'package_name') || 'unknown';
+  const classification = findingValue(finding, 'classification') || 'needs_review';
+  const registry = findingValue(finding, 'registry') || {};
+  const evidence = findingArrayValue(finding, 'evidence').map(item => {
+    if (typeof item === 'object' && item !== null) {
+      return [item.kind, item.value, item.path, item.detail || item.description].filter(Boolean).join(' • ');
+    }
+    return String(item);
+  });
+  const recommendations = findingArrayValue(finding, 'recommended_mitigation');
+  const aiOrigin = findingValue(finding, 'ai_origin');
+  const manifestOrigin = findingValue(finding, 'manifest_origin');
+  return `
+    <div class="card finding-detail-card" style="margin-top:14px;">
+      <h4>AI Dependency Guard evidence</h4>
+      <div class="kv-list">
+        <div class="kv-row"><div class="kv-key">Package</div><div class="kv-val">${escapeHtml(ecosystem)}:${escapeHtml(packageName)}</div></div>
+        <div class="kv-row"><div class="kv-key">Classification</div><div class="kv-val">${escapeHtml(humanizeSnake(classification))}</div></div>
+        <div class="kv-row"><div class="kv-key">AI-origin evidence</div><div class="kv-val">${escapeHtml(aiOrigin ? 'yes' : 'no')}</div></div>
+        <div class="kv-row"><div class="kv-key">Manifest evidence</div><div class="kv-val">${escapeHtml(manifestOrigin ? 'yes' : 'no')}</div></div>
+        <div class="kv-row"><div class="kv-key">Registry</div><div class="kv-val">${escapeHtml(registry?.metadata_url || (registry?.exists === false ? 'missing from registry metadata' : registry?.latest_version || 'not available'))}</div></div>
+      </div>
+      <h4 style="margin-top:14px;">Source evidence</h4>
+      ${renderBulletList(evidence, 'No structured source evidence was included. Re-run the guard with JSON output for full context.')}
+      <h4 style="margin-top:14px;">Recommended action</h4>
+      ${renderBulletList(recommendations, 'Verify the package name against official documentation, tune allowlists for private packages, and scan again before install.')}
+      <div class="small" style="margin-top:12px;"><strong>CLI fallback:</strong> <code>${escapeHtml(aiDependencyGuardCliFallback())}</code></div>
+    </div>
+  `;
+}
+
 function compactPathLabel(value) {
   const text = String(value || '').trim();
   if (!text) return 'Unknown source';
@@ -1866,6 +1960,7 @@ function renderFindings() {
   const pendingApprovals = pendingLocalApprovalsCount();
   const summary = el('finding-summary');
   const total = state.findings.length;
+  const aiGuardCount = aiDependencyGuardFindings(state.findings).length;
   const openCount = state.findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
   const criticalCount = state.findings.filter(f => ['critical', 'urgent'].includes(String(findingSeverity(f)).toLowerCase())).length;
   const linkedCount = state.findings.filter(f => relatedTasksForFinding(f).length > 0).length;
@@ -1878,6 +1973,7 @@ function renderFindings() {
       <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div></div>
       <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div></div>
       <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div></div>
+      <div class="card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div></div>
       <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With task correlation</div></div>
       <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div></div>
       <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Native SecOpsAI open findings</div></div>
@@ -1895,6 +1991,7 @@ function renderFindings() {
       table.innerHTML = `<div class="empty">No findings yet. Once data lands in <code>findings</code>, this queue will show severity, confidence, correlation, and task actions.</div>`;
     } else {
       table.innerHTML = `
+        ${renderAiDependencyGuardSurface(findings)}
         <div class="table-wrap"><table>
           <thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Correlation</th><th>Linked work</th><th>Actions</th></tr></thead>
           <tbody>${findings.map(f => {
@@ -2014,6 +2111,7 @@ function renderFindings() {
           ${related.length ? related.map(match => `<div class="feed-item compact-feed-item"><div><strong>${escapeHtml(match.item.title)}</strong></div><div class="small">${escapeHtml(humanizeSnake(match.item.status || 'unknown'))} • score ${match.score}</div><div class="small">${escapeHtml(compactText(match.reasons.join(' • '), 140))}</div></div>`).join('') : '<div class="empty">No convincing task match yet. Create a dedicated investigation task.</div>'}
         </div>
       </div>
+      ${renderAiDependencyGuardDetail(selected)}
       <div class="card finding-detail-card" style="margin-top:14px;">
         <h4>Native SecOpsAI triage</h4>
         ${nativeInsight ? `

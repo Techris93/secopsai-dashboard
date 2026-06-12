@@ -93,7 +93,7 @@ Local Blog Ops deploy is available when the helper can see `${SECOPSAI_ROOT}/blo
 
 ### Guide
 
-The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, Native Triage, Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, when to use CLI fallback, why discovery candidates must pass Orchestrator Review before persistence or blog drafting, and why source domains are references rather than attacker IOCs.
+The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, AI Dependency Guard, Native Triage, Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, when to use CLI fallback, why discovery candidates must pass Orchestrator Review before persistence or blog drafting, and why source domains are references rather than attacker IOCs.
 
 The guide includes safe automation buttons for repetitive read-only work:
 - **Run Daily Refresh** reloads dashboard data, helper state, Blog Ops status, Triage Ops alerts, and campaign fixtures.
@@ -102,6 +102,7 @@ The guide includes safe automation buttons for repetitive read-only work:
 - Discovery candidates are automatically annotated with likely package rows vs obvious extraction noise so high scores are treated as "worth checking," not proof.
 - Promoted campaign forms include **Clean Obvious Package Noise** for common false package extractions such as byline CSS classes, generic article words, ordinary websites, image filenames, numeric tokens, repository issue paths, and long encoded-looking slugs.
 - Watchlist suggestions are generated from clean packages, publishers, actors, campaign IDs, repositories, malware names, and attacker IOCs. Source/reporting domains stay under source references instead of being suggested as attacker IOCs.
+- **AI Dependency Guard** guidance shows how to scan AI-built code and optional OpenClaw/Hermes/session telemetry with `secopsai supply-chain ai-dependency-guard --path . --include-agent-logs --json`. Persisted guard findings render in the Findings queue with latest-first ordering, source evidence, registry context, recommended action, and CLI fallback. The dashboard never installs or executes packages for this flow.
 
 These guide automations intentionally do not close findings, persist SOC findings, create blog drafts, approve drafts, publish posts, or bypass admin-token gates.
 
