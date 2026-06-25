@@ -173,6 +173,22 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertNotIn(';', ' '.join(args))
         with self.assertRaises(ValueError):
             server.build_blog_ops_action_args('attach-source-media', {'media_url': 'file:///tmp/image.png'}, draft='news-example')
+        for unsafe_draft in ('../secret', '/tmp/news-example', 'nested/news-example', 'news..example'):
+            with self.subTest(unsafe_draft=unsafe_draft):
+                with self.assertRaises(ValueError):
+                    server.build_blog_ops_action_args(
+                        'attach-source-media',
+                        {'media_url': 'https://cdn.example/image.png'},
+                        draft=unsafe_draft,
+                    )
+
+    def test_local_blog_ops_review_draft_ids_are_slug_only(self):
+        for action in ('approve', 'reject', 'needs-review', 'save'):
+            with self.subTest(action=action):
+                with self.assertRaises(ValueError):
+                    server.build_blog_ops_action_args(action, {'note': 'reviewed'}, draft='../secret')
+                with self.assertRaises(ValueError):
+                    server.build_blog_ops_action_args(action, {'note': 'reviewed'}, draft='/tmp/news-example')
 
     def test_local_blog_ops_global_action_buttons_map_to_expected_cli(self):
         expected = {

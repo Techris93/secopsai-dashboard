@@ -565,6 +565,31 @@ function getDiscordWebhookForChannel(env, channel) {
   return "";
 }
 
+function discordNotifyToken(env) {
+  return String(env.DISCORD_NOTIFY_TOKEN || "").trim();
+}
+
+function requireDiscordNotifyToken(request, env) {
+  const expected = discordNotifyToken(env);
+  if (!expected) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Discord notify token is not configured. Set DISCORD_NOTIFY_TOKEN before enabling /api/discord-notify.",
+        code: "not_configured",
+      },
+      { status: 501 },
+    );
+  }
+  const direct = request.headers.get("x-discord-notify-token") || "";
+  const auth = request.headers.get("authorization") || "";
+  const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
+  if (![direct, bearer].includes(expected)) {
+    return jsonResponse({ ok: false, error: "Unauthorized Discord notify action" }, { status: 401 });
+  }
+  return null;
+}
+
 function getRunOutputBinding(env) {
   const bindingName = (env.RUN_OUTPUT_R2_BINDING || DEFAULT_RUN_OUTPUTS_BINDING).trim();
   const binding = bindingName ? env[bindingName] : null;
@@ -804,6 +829,9 @@ async function proxySecopsaiHelper(request, env) {
 }
 
 async function handleDiscordNotify(request, env) {
+  const authResponse = requireDiscordNotifyToken(request, env);
+  if (authResponse) return authResponse;
+
   const payload = await parseJsonBody(request);
   if (!payload || typeof payload !== "object") {
     return jsonResponse({ ok: false, error: "Invalid JSON" }, { status: 400 });

@@ -3198,7 +3198,13 @@ function renderBlogDraftPreview() {
   const checklist = Array.isArray(draft.review_checklist) ? draft.review_checklist : [];
   const mediaCandidates = Array.isArray(draft.media_candidates) ? draft.media_candidates : [];
   const attachedImages = Array.isArray(draft.images) ? draft.images : [];
-  const attachedSourceUrls = new Set(attachedImages.map(image => String(image?.source_url || '').trim()).filter(Boolean));
+  const attachedMediaKeys = new Set();
+  attachedImages.forEach(image => {
+    [image?.src, image?.source_url, image?.original_src, image?.media_url].forEach(value => {
+      const normalized = String(value || '').trim();
+      if (normalized) attachedMediaKeys.add(normalized);
+    });
+  });
   const canAttachSourceMedia = canAttachSourceMediaFromBlogOps();
   const body = draft.body_markdown || 'Click a draft card to load the full generated body.';
   const approved = ['approved', 'reviewed'].includes(String(draft.review_status || ''));
@@ -3248,7 +3254,10 @@ function renderBlogDraftPreview() {
       <div class="blog-source-media-candidates">
         ${mediaCandidates.length ? mediaCandidates.slice(0, 6).map((candidate, index) => {
           const src = candidate?.src || candidate?.url || '';
-          const isAttached = attachedSourceUrls.has(String(src || '').trim());
+          const candidateKeys = [src, candidate?.url, candidate?.source_url]
+            .map(value => String(value || '').trim())
+            .filter(Boolean);
+          const isAttached = candidateKeys.some(key => attachedMediaKeys.has(key));
           return `<div class="blog-source-media-row">
             <span class="blog-source-media-url">${escapeHtml(src || 'source media candidate')}</span>
             ${isAttached
@@ -3291,6 +3300,7 @@ function renderBlogDraftPreview() {
         draft: draft.slug,
         button: event.currentTarget,
         payload: {
+          media_url: candidate.src || candidate.url || '',
           media_index: index,
           alt: candidate.alt || `Source image for ${draft.title || 'blog draft'}`,
           source_name: candidate.source_name || draft.source_name || 'External source',

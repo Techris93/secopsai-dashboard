@@ -36,6 +36,71 @@ async function testIntegrationStatusExposesCampaignApi() {
   assert.equal(payload.blog_ops.capabilities.deploy, true);
 }
 
+async function testDiscordNotifyRequiresDedicatedToken() {
+  const body = JSON.stringify({ channel: "ops-log", content: "hello ops" });
+  const unconfigured = await worker.fetch(
+    new Request("https://dashboard.example/api/discord-notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    }),
+    { DISCORD_OPS_LOG_WEBHOOK: "https://discord.example/webhook" },
+  );
+  assert.equal(unconfigured.status, 501);
+  const unconfiguredPayload = await jsonFrom(unconfigured);
+  assert.equal(unconfiguredPayload.code, "not_configured");
+  assert.equal(JSON.stringify(unconfiguredPayload).includes("https://discord.example/webhook"), false);
+
+  const unauthorized = await worker.fetch(
+    new Request("https://dashboard.example/api/discord-notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    }),
+    {
+      DISCORD_NOTIFY_TOKEN: "notify-secret",
+      DISCORD_OPS_LOG_WEBHOOK: "https://discord.example/webhook",
+    },
+  );
+  assert.equal(unauthorized.status, 401);
+  const unauthorizedPayload = await jsonFrom(unauthorized);
+  assert.match(unauthorizedPayload.error, /Unauthorized/);
+  assert.equal(JSON.stringify(unauthorizedPayload).includes("notify-secret"), false);
+}
+
+async function testDiscordNotifyAuthorizedForwardsWebhook() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response("ok", { status: 200 });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/discord-notify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-discord-notify-token": "notify-secret",
+        },
+        body: JSON.stringify({ channel: "ops-log", content: "hello ops" }),
+      }),
+      {
+        DISCORD_NOTIFY_TOKEN: "notify-secret",
+        DISCORD_OPS_LOG_WEBHOOK: "https://discord.example/webhook",
+      },
+    );
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://discord.example/webhook");
+    assert.deepEqual(JSON.parse(calls[0].init.body), { content: "hello ops" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testTriageOpsHostedModeFailsClearlyWithoutHelper() {
   const response = await worker.fetch(new Request("https://dashboard.example/api/secopsai/triage-ops/alerts"), {});
   assert.equal(response.status, 501);
@@ -667,7 +732,9 @@ function testBlogOpsActionControlsAreNotDuplicated() {
   assert.match(app, /Images & source screenshots/);
   assert.match(app, /attach-source-media/);
   assert.match(app, /Source image attachment is available in local helper mode only/);
-  assert.match(app, /attachedSourceUrls/);
+  assert.match(app, /attachedMediaKeys/);
+  assert.match(app, /candidateKeys/);
+  assert.match(app, /media_url: candidate\.src \|\| candidate\.url \|\| ''/);
   assert.match(app, />Attached<\/span>/);
 }
 
@@ -713,6 +780,8 @@ function testDashboardListsUseLatestFirstOrdering() {
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
 await testIntegrationStatusExposesCampaignApi();
+await testDiscordNotifyRequiresDedicatedToken();
+await testDiscordNotifyAuthorizedForwardsWebhook();
 await testTriageOpsHostedModeFailsClearlyWithoutHelper();
 await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();

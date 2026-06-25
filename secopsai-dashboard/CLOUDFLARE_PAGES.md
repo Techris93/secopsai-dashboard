@@ -6,7 +6,7 @@ This dashboard is now prepared for **Cloudflare Pages advanced mode** with a roo
 - `GET /api/integration-status`
 - `GET /api/secopsai/*` via optional upstream helper proxy
 - `POST /api/secopsai/*` via optional upstream helper proxy
-- `POST /api/discord-notify`
+- `POST /api/discord-notify` with `x-discord-notify-token` or `Authorization: Bearer ...`
 - `POST /api/discord-send-message`
 - `GET /api/run-output`
 
@@ -31,7 +31,7 @@ For `dashboard.secopsai.dev` or any other permanent hosted domain, use:
 1. Cloudflare Pages for the dashboard UI and edge endpoints.
 2. Supabase for dashboard data.
 3. Cloudflare R2 for run output files.
-4. Optional Discord webhooks for `ops-log` and `kanban-updates`.
+4. Optional Discord webhooks for `ops-log` and `kanban-updates`, protected by `DISCORD_NOTIFY_TOKEN`.
 
 This keeps the browser talking only to same-origin dashboard endpoints while the worker reads config and private integrations server-side.
 
@@ -45,6 +45,7 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `SUPABASE_ANON_KEY`
 - `APP_NAME`
 - `DISCORD_SERVER_ID`
+- `DISCORD_NOTIFY_TOKEN`
 - `HOSTED_AI_ENABLED`
 - `HOSTED_AI_MODEL`
 - `HOSTED_AI_MAX_COST_USD`
@@ -414,7 +415,7 @@ After the first live deployment:
 3. Click **Refresh data**.
 4. Open **Integrations** and confirm webhook status.
 5. Open a completed run and click **View output**.
-6. Send a non-critical Discord test to `ops-log`.
+6. Send a non-critical Discord test to `ops-log` with `x-discord-notify-token: <DISCORD_NOTIFY_TOKEN>`.
 
 ## Official Cloudflare docs used
 

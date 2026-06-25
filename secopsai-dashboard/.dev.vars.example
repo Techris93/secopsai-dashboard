@@ -4,6 +4,8 @@ APP_NAME=SecOpsAI Mission Control
 DISCORD_SERVER_ID=1484917962245668874
 
 # Optional notification webhooks used by /api/discord-notify
+# Requests must include x-discord-notify-token or Bearer with this value.
+DISCORD_NOTIFY_TOKEN=
 DISCORD_OPS_LOG_WEBHOOK=
 DISCORD_KANBAN_UPDATES_WEBHOOK=
 

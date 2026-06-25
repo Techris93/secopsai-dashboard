@@ -22,6 +22,7 @@ FINDING_ID_RE = re.compile(r'^[A-Z]{3}-[A-Z0-9]+$')
 ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
 APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
+BLOG_DRAFT_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,260}$')
 ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive', 'not_applicable'}
 ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
     'close',
@@ -787,6 +788,18 @@ def run_local_blog_deploy(timeout=600):
     }
 
 
+def clean_blog_draft_id(draft):
+    safe_draft = _clean_string(draft, 260)
+    if (
+        not safe_draft
+        or not BLOG_DRAFT_ID_RE.fullmatch(safe_draft)
+        or safe_draft in {'.', '..'}
+        or '..' in safe_draft
+    ):
+        raise ValueError('Invalid draft')
+    return safe_draft
+
+
 def build_blog_ops_action_args(action, payload=None, draft=None):
     payload = payload or {}
     limit = _bounded_blog_limit(payload.get('limit'), default=5)
@@ -804,9 +817,7 @@ def build_blog_ops_action_args(action, payload=None, draft=None):
     if action == 'deploy':
         raise ValueError('Deploy is handled by the local Wrangler deploy allowlist, not the SecOpsAI blog CLI allowlist.')
     if action == 'attach-source-media':
-        safe_draft = _clean_string(draft, 260)
-        if not safe_draft or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', safe_draft):
-            raise ValueError('Invalid draft')
+        safe_draft = clean_blog_draft_id(draft)
         args = ['blog', 'attach-source-media', safe_draft]
         media_url = _clean_string(payload.get('media_url') or payload.get('url') or '', 2400)
         if media_url:
@@ -842,17 +853,13 @@ def build_blog_ops_action_args(action, payload=None, draft=None):
             args.extend([flag, cleaned])
         return args
     if action in {'approve', 'reject', 'needs-review'}:
-        safe_draft = _clean_string(draft, 260)
-        if not safe_draft or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', safe_draft):
-            raise ValueError('Invalid draft')
+        safe_draft = clean_blog_draft_id(draft)
         args = ['blog', 'news-review', action, safe_draft]
         if note:
             args.extend(['--note', note])
         return args
     if action == 'save':
-        safe_draft = _clean_string(draft, 260)
-        if not safe_draft or not re.match(r'^[A-Za-z0-9_.:/-]{1,260}$', safe_draft):
-            raise ValueError('Invalid draft')
+        safe_draft = clean_blog_draft_id(draft)
         args = ['blog', 'news-review', 'edit', safe_draft]
         field_map = {
             'title': '--title',
