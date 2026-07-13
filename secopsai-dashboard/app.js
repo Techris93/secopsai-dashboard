@@ -1,9 +1,24 @@
 window.__SECOPSAI_APP_LOADED = true;
+window.__SECOPSAI_DEBUG = { htmlLoaded: true, configLoaded: Boolean(window.SECOPSAI_CONFIG), appLoaded: true };
+
+window.addEventListener('error', event => {
+  const status = document.getElementById('global-status');
+  if (status) status.textContent = `JS error: ${event.message || 'unknown error'}`;
+});
+
+window.addEventListener('unhandledrejection', event => {
+  const status = document.getElementById('global-status');
+  const reason = event.reason && (event.reason.message || String(event.reason));
+  const lowerReason = String(reason || '').toLowerCase();
+  if (lowerReason.includes('metamask') || lowerReason.includes('wallet') || lowerReason.includes('ethereum')) return;
+  if (status) status.textContent = `Promise error: ${reason || 'unknown rejection'}`;
+});
 
 const supabaseGlobal = window.supabase;
 const cfg = window.SECOPSAI_CONFIG || {};
 let supabaseClient = null;
 let bootError = null;
+let authSubscription = null;
 
 if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
   bootError = 'Supabase client library failed to load.';
@@ -95,6 +110,12 @@ function defaultCampaignForm() {
 }
 
 const state = {
+  auth: {
+    session: null,
+    user: null,
+    activeUserId: null,
+    recoveryMode: false
+  },
   runs: [],
   runRequests: [],
   findings: [],
@@ -183,6 +204,214 @@ const PAGE_CONTEXT = {
 };
 
 function el(id) { return document.getElementById(id); }
+
+function dashboardAuthRequired() {
+  return cfg?.auth?.required !== false;
+}
+
+function setAuthMessage(message, { error = false, update = false } = {}) {
+  const target = el(update ? 'auth-update-message' : 'auth-message');
+  if (!target) return;
+  target.textContent = message;
+  target.classList.toggle('error', error);
+}
+
+function setAuthBusy(button, busy, busyLabel) {
+  if (!button) return;
+  if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent || '';
+  button.disabled = busy;
+  button.textContent = busy ? busyLabel : button.dataset.idleLabel;
+}
+
+function showAuthSurface({ recovery = false, message = '', error = false } = {}) {
+  const gate = el('auth-gate');
+  const shell = el('app-shell');
+  const loginForm = el('auth-login-form');
+  const updateForm = el('auth-update-form');
+  gate?.classList.remove('hidden');
+  shell?.classList.add('auth-pending');
+  shell?.setAttribute('aria-hidden', 'true');
+  loginForm?.classList.toggle('hidden', recovery);
+  updateForm?.classList.toggle('hidden', !recovery);
+  state.auth.recoveryMode = recovery;
+  if (message) setAuthMessage(message, { error, update: recovery });
+  window.setTimeout(() => el(recovery ? 'auth-new-password' : 'auth-email')?.focus(), 0);
+}
+
+function showAuthenticatedShell(session) {
+  const gate = el('auth-gate');
+  const shell = el('app-shell');
+  const identity = el('operator-identity');
+  const signOut = el('auth-signout-btn');
+  gate?.classList.add('hidden');
+  shell?.classList.remove('auth-pending');
+  shell?.setAttribute('aria-hidden', 'false');
+  const email = session?.user?.email || '';
+  if (identity) {
+    identity.textContent = email;
+    identity.hidden = !email;
+  }
+  if (signOut) signOut.hidden = !session;
+}
+
+function stopDashboardRuntime() {
+  if (state.liveRefreshTimer) {
+    clearInterval(state.liveRefreshTimer);
+    state.liveRefreshTimer = null;
+  }
+  if (state.nativeEventSource) {
+    state.nativeEventSource.close();
+    state.nativeEventSource = null;
+  }
+}
+
+async function enterAuthenticatedDashboard(session) {
+  const userId = session?.user?.id || (dashboardAuthRequired() ? null : 'local-auth-disabled');
+  if (dashboardAuthRequired() && !userId) {
+    showAuthSurface({ message: 'Sign in with an invited operator account.' });
+    return;
+  }
+  if (state.auth.activeUserId === userId) {
+    showAuthenticatedShell(session);
+    return;
+  }
+  state.auth.session = session || null;
+  state.auth.user = session?.user || null;
+  state.auth.activeUserId = userId;
+  showAuthenticatedShell(session);
+  setPage('mission-control');
+  setStatus('<span class="dot"></span> Loading authorized workspace…');
+  await boot();
+}
+
+function leaveAuthenticatedDashboard(message = 'Your session ended. Sign in again to continue.') {
+  stopDashboardRuntime();
+  state.auth.session = null;
+  state.auth.user = null;
+  state.auth.activeUserId = null;
+  showAuthSurface({ message });
+}
+
+async function initializeDashboardAuth() {
+  if (bootError || !supabaseClient) {
+    showAuthSurface({ message: bootError || 'Dashboard authentication is unavailable.', error: true });
+    return;
+  }
+
+  if (!dashboardAuthRequired()) {
+    await enterAuthenticatedDashboard(null);
+    return;
+  }
+
+  const authListener = supabaseClient.auth.onAuthStateChange((event, session) => {
+    window.setTimeout(async () => {
+      if (event === 'PASSWORD_RECOVERY') {
+        state.auth.session = session || null;
+        state.auth.user = session?.user || null;
+        showAuthSurface({ recovery: true, message: 'Choose a new password for this operator account.' });
+        return;
+      }
+      if (session && !state.auth.recoveryMode) {
+        await enterAuthenticatedDashboard(session);
+      } else if (event === 'SIGNED_OUT') {
+        leaveAuthenticatedDashboard();
+      }
+    }, 0);
+  });
+  authSubscription = authListener?.data?.subscription || null;
+
+  const { data, error } = await supabaseClient.auth.getSession();
+  await new Promise(resolve => window.setTimeout(resolve, 0));
+  if (error) {
+    showAuthSurface({ message: 'Unable to validate the browser session. Check the connection and retry.', error: true });
+  } else if (data?.session && !state.auth.recoveryMode) {
+    await enterAuthenticatedDashboard(data.session);
+  } else if (!state.auth.recoveryMode) {
+    showAuthSurface({ message: 'Sign in with an invited operator account.' });
+  }
+}
+
+async function signInOperator(event) {
+  event.preventDefault();
+  const email = el('auth-email')?.value?.trim() || '';
+  const password = el('auth-password')?.value || '';
+  const button = el('auth-signin-btn');
+  if (!email || !password) {
+    setAuthMessage('Enter your operator email and password.', { error: true });
+    return;
+  }
+  setAuthBusy(button, true, 'Signing in…');
+  setAuthMessage('Validating operator access…');
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error || !data?.session) throw error || new Error('No session returned');
+    if (el('auth-password')) el('auth-password').value = '';
+    await enterAuthenticatedDashboard(data.session);
+  } catch {
+    setAuthMessage('Sign-in failed. Check your credentials or reset the password.', { error: true });
+  } finally {
+    setAuthBusy(button, false, 'Signing in…');
+  }
+}
+
+async function requestPasswordReset() {
+  const email = el('auth-email')?.value?.trim() || '';
+  const button = el('auth-reset-request-btn');
+  if (!email) {
+    setAuthMessage('Enter your operator email before requesting a reset.', { error: true });
+    el('auth-email')?.focus();
+    return;
+  }
+  setAuthBusy(button, true, 'Requesting…');
+  try {
+    await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}${window.location.pathname}`
+    });
+    setAuthMessage('If the account exists, a password reset link has been sent.');
+  } catch {
+    setAuthMessage('The reset request could not be completed. Check the connection and retry.', { error: true });
+  } finally {
+    setAuthBusy(button, false, 'Requesting…');
+  }
+}
+
+async function updateRecoveredPassword(event) {
+  event.preventDefault();
+  const password = el('auth-new-password')?.value || '';
+  const confirmation = el('auth-confirm-password')?.value || '';
+  const button = el('auth-update-password-btn');
+  if (password.length < 12) {
+    setAuthMessage('Use at least 12 characters.', { error: true, update: true });
+    return;
+  }
+  if (password !== confirmation) {
+    setAuthMessage('The password confirmation does not match.', { error: true, update: true });
+    return;
+  }
+  setAuthBusy(button, true, 'Updating…');
+  try {
+    const { data, error } = await supabaseClient.auth.updateUser({ password });
+    if (error) throw error;
+    setAuthMessage('Password updated. Loading Mission Control…', { update: true });
+    state.auth.recoveryMode = false;
+    await enterAuthenticatedDashboard(state.auth.session || { user: data?.user });
+  } catch {
+    setAuthMessage('The password could not be updated. Request a new reset link and retry.', { error: true, update: true });
+  } finally {
+    setAuthBusy(button, false, 'Updating…');
+  }
+}
+
+async function signOutOperator() {
+  const button = el('auth-signout-btn');
+  setAuthBusy(button, true, 'Signing out…');
+  try {
+    await supabaseClient.auth.signOut();
+  } finally {
+    setAuthBusy(button, false, 'Signing out…');
+    leaveAuthenticatedDashboard('Signed out safely.');
+  }
+}
 
 const DEFAULT_LATEST_FIRST_FIELDS = [
   'last_seen',
@@ -6116,6 +6345,10 @@ async function boot() {
 }
 
 function bindEvents() {
+  el('auth-login-form')?.addEventListener('submit', signInOperator);
+  el('auth-reset-request-btn')?.addEventListener('click', requestPasswordReset);
+  el('auth-update-form')?.addEventListener('submit', updateRecoveredPassword);
+  el('auth-signout-btn')?.addEventListener('click', signOutOperator);
   document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
   el('mobile-menu-btn')?.addEventListener('click', toggleMobileNav);
   el('refresh-btn')?.addEventListener('click', async () => {
@@ -6337,10 +6570,10 @@ function bindEvents() {
 window.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   startTopStripClock();
-  setPage('mission-control');
-  if (bootError) {
-    setStatus(bootError, true);
-    return;
-  }
-  boot();
+  initializeDashboardAuth();
+});
+
+window.addEventListener('beforeunload', () => {
+  stopDashboardRuntime();
+  authSubscription?.unsubscribe();
 });

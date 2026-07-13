@@ -26,6 +26,31 @@ async function testConfigExposesTriageOpsEndpoint() {
   assert.equal(body.includes("/api/secopsai/research-cases"), true);
 }
 
+async function testConfigRequiresAuthenticationByDefault() {
+  const defaultResponse = await worker.fetch(new Request("https://dashboard.example/config.js"), {});
+  const defaultBody = await defaultResponse.text();
+  assert.match(defaultBody, /"auth":\s*\{/);
+  assert.match(defaultBody, /"required": true/);
+
+  const localResponse = await worker.fetch(
+    new Request("https://dashboard.example/config.js"),
+    { DASHBOARD_AUTH_REQUIRED: "false" },
+  );
+  const localBody = await localResponse.text();
+  assert.match(localBody, /"required": false/);
+}
+
+async function testWorkerAppliesSecurityHeaders() {
+  const response = await worker.fetch(new Request("https://dashboard.example/config.js"), {});
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("Content-Security-Policy") || "", /default-src 'self'/);
+  assert.match(response.headers.get("Content-Security-Policy") || "", /frame-ancestors 'none'/);
+  assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.equal(response.headers.get("X-Frame-Options"), "DENY");
+  assert.equal(response.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin");
+  assert.match(response.headers.get("Permissions-Policy") || "", /camera=\(\)/);
+}
+
 async function testResearchCaseWriteRequiresAndForwardsOperatorToken() {
   const body = JSON.stringify({ title: "Independent package investigation" });
   const unauthorized = await worker.fetch(
@@ -848,8 +873,28 @@ function testResearchCaseWorkspaceIsPresentAndTokenGated() {
   assert.equal(html.includes("TRIAGE_OPS_ADMIN_TOKEN="), false);
 }
 
+function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(html, /id="auth-gate"/);
+  assert.match(html, /id="auth-login-form"/);
+  assert.match(html, /id="auth-update-form"/);
+  assert.match(html, /id="auth-signout-btn"/);
+  assert.match(app, /signInWithPassword/);
+  assert.match(app, /resetPasswordForEmail/);
+  assert.match(app, /PASSWORD_RECOVERY/);
+  assert.match(app, /initializeDashboardAuth\(\)/);
+  assert.match(html, /@supabase\/supabase-js@2\.110\.2\/dist\/umd\/supabase\.js/);
+  assert.match(html, /integrity="sha384-yifgV8iFWyp5cgu\+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP\/NlXVJT3vO"/);
+  assert.equal(/<script(?![^>]*src=)/.test(html), false);
+  assert.equal(/<script[^>]+\sonload=/.test(html), false);
+  assert.equal(app.includes("window.addEventListener('DOMContentLoaded', () => {\n  bindEvents();\n  startTopStripClock();\n  setPage('mission-control');"), false);
+}
+
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
+await testConfigRequiresAuthenticationByDefault();
+await testWorkerAppliesSecurityHeaders();
 await testResearchCaseWriteRequiresAndForwardsOperatorToken();
 await testIntegrationStatusExposesCampaignApi();
 await testDiscordNotifyRequiresDedicatedToken();
@@ -880,4 +925,5 @@ testCampaignDiscoveryActionsAreNotDuplicated();
 testDashboardListsUseLatestFirstOrdering();
 testEdgeWorkspaceUiIsPresentAndReadOnly();
 testResearchCaseWorkspaceIsPresentAndTokenGated();
+testDashboardAuthGateIsPresentAndBootIsSessionGated();
 console.log("blog ops worker tests passed");

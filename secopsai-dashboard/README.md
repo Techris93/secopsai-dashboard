@@ -18,6 +18,42 @@ The dashboard is now intentionally narrow:
 
 It is not a Discord control plane and not a generic multi-agent org shell.
 
+## Operator Authentication
+
+Mission Control is invitation-only by default. The browser restores a Supabase
+Auth session before it loads any operational table, and provides sign-in,
+sign-out, reset-link, and recovered-password flows. Sensor, Edge integration,
+Blog Ops, and Triage Ops credentials are separate credentials and cannot sign
+in to the dashboard.
+
+Apply `supabase_migrations/2026-07-13_authenticated_pilot.sql` before enabling a
+hosted pilot. The migration removes `anon` access from every browser-backed
+table, enables RLS, protects views, and permits only non-anonymous authenticated
+users. This is a deliberately single-tenant pilot policy: invite only members of
+one organization until workspace IDs and membership-scoped policies ship.
+
+Create operator users through Supabase Auth administration; the dashboard does
+not expose public signup. Keep `DASHBOARD_AUTH_REQUIRED=true` in hosted and pilot
+environments. Setting it to `false` is a local development escape hatch and is
+incompatible with the authenticated RLS migration for browser data access.
+
+Apply and verify the policy non-interactively when a direct database connection
+is available:
+
+```bash
+SECOPSAI_DASHBOARD_DATABASE_URL='postgresql://...' scripts/dashboard-security apply
+SECOPSAI_DASHBOARD_DATABASE_URL='postgresql://...' scripts/dashboard-security verify
+```
+
+The script never prints the connection string. It fails unless every present
+dashboard table has RLS enabled and has zero anonymous policies or grants.
+
+The static console pins `@supabase/supabase-js` to an exact version with a
+SHA-384 Subresource Integrity check. The Pages Worker adds CSP, anti-framing,
+content-type, referrer, permissions, opener, and transport-security headers to
+both static and API responses. Update the version and integrity hash together;
+never restore an unversioned CDN import.
+
 ## Visual System
 
 The dashboard uses an OKComputer_Sec-inspired dark command-plane skin: void-black shell, elevated dark panels, teal/cyan live-state accents, Lucide-style inline SVG navigation icons, compact mono metadata, and high-contrast status badges. The reference audit is tracked in [`docs/okcomputer-reference-audit.md`](docs/okcomputer-reference-audit.md). No Kimi runtime, compiled reference bundle, external image assets, or mock data are imported into production.
@@ -170,6 +206,8 @@ that only understands single-finding actions. If you intentionally want to keep
 an existing helper, run with `SECOPSAI_DASHBOARD_REPLACE_STALE_HELPER=0`.
 
 Optional `.env` values:
+- `DASHBOARD_AUTH_REQUIRED`
+  - defaults to `true`; keep enabled outside isolated local UI development
 - `SECOPSAI_ROOT`
   - local repo root used by the helper server for native triage/orchestrator state and helper-backed native actions
 - `SECOPSAI_DB_PATH`
