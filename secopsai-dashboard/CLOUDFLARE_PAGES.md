@@ -64,6 +64,8 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
   uses local helper mode for SecOpsAI helper-backed actions instead of the
   retired `secopsai-helper.secopsai.dev` tunnel.
 - `SECOPSAI_HELPER_AUTH_HEADER`
+- `SECOPSAI_CORE_API_URL`
+- `SECOPSAI_EDGE_API_URL`
 - `BLOG_OPS_OWNER`
 - `BLOG_OPS_REPO`
 - `BLOG_OPS_WORKFLOW`
@@ -75,6 +77,8 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `DISCORD_KANBAN_UPDATES_WEBHOOK`
 - `RUN_OUTPUT_AUTH_TOKEN`
 - `SECOPSAI_HELPER_AUTH_TOKEN`
+- `SECOPSAI_CORE_READ_TOKEN`
+- `SECOPSAI_EDGE_OPERATIONS_TOKEN`
 - `BLOG_OPS_GITHUB_TOKEN`
 - `BLOG_OPS_ADMIN_TOKEN`
 
@@ -87,6 +91,10 @@ Notes:
   `DASHBOARD_AUTH_REQUIRED=false` to work around a missing operator account.
 - The current policy is single-tenant. Invite users from only one pilot
   organization until workspace membership policies are deployed.
+- Protected Worker routes validate the browser Supabase session before using
+  any server-side Core, Edge, helper, Blog Ops, or run-output credential. The
+  Worker refuses protected backend configuration while
+  `DASHBOARD_AUTH_REQUIRED=false`.
 - With a direct database connection, run
   `SECOPSAI_DASHBOARD_DATABASE_URL='postgresql://...' scripts/dashboard-security apply`.
   Follow it with `scripts/dashboard-security verify`; deployment is blocked
@@ -166,9 +174,16 @@ Required for hosted Triage Ops:
 - Optional `SECOPSAI_HELPER_AUTH_HEADER`
 - Optional `SECOPSAI_HELPER_AUTH_TOKEN`
 
-The same helper also serves the read-only SecOpsAI Edge workspace at
-`/api/secopsai/edge-workspace`. Configure these on the helper host, not in
-Cloudflare Pages:
+The read-only SecOpsAI Edge workspace is served at
+`/api/secopsai/edge-workspace`. Preferred hosted mode aggregates Core and Edge
+inside the Pages Worker. Configure these in Cloudflare Pages:
+
+- Variable `SECOPSAI_CORE_API_URL`
+- Secret `SECOPSAI_CORE_READ_TOKEN`
+- Variable `SECOPSAI_EDGE_API_URL`
+- Secret `SECOPSAI_EDGE_OPERATIONS_TOKEN`
+
+Local helper mode continues to use:
 
 - `SECOPSAI_EDGE_API_URL`
 - `SECOPSAI_EDGE_OPERATIONS_TOKEN`
@@ -185,7 +200,7 @@ The Edge operations token must never be a Pages build variable or browser
 config value. Core graph assets and Edge-origin findings remain available when the
 live Edge API enrichment is not configured.
 
-The helper reads only the credential's non-secret self-status and warns when 14
+The Worker or helper reads only the credential's non-secret self-status and warns when 14
 days remain. Rotate it in Edge Settings, update the helper's server-side secret,
 verify a successful Edge workspace refresh, and then revoke the previous
 short-ID credential. Never revoke the previous credential before verifying the
