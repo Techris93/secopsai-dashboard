@@ -102,6 +102,11 @@ const state = {
   channelRoutes: [],
   events: [],
   integrationStatus: null,
+  edgeWorkspace: {
+    data: null,
+    loading: false,
+    error: null
+  },
   localTriage: null,
   blogOps: {
     status: null,
@@ -154,11 +159,12 @@ const state = {
 const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
-const pages = ["mission-control", "tasks", "findings", "integrations", "triage-ops", "blog-ops", "operator-guide"];
+const pages = ["mission-control", "tasks", "findings", "edge", "integrations", "triage-ops", "blog-ops", "operator-guide"];
 const PAGE_CONTEXT = {
   "mission-control": "Mission Control overview",
   "tasks": "Task queue, ownership, and run visibility",
   "findings": "Detection triage and correlation surface",
+  "edge": "Network assets, sensors, and Edge-origin findings",
   "integrations": "Native triage and helper visibility",
   "triage-ops": "Supply-chain alert review and closure",
   "blog-ops": "Security blog newsroom control plane",
@@ -437,6 +443,7 @@ async function runNativeInvestigate(finding) {
   setStatus(`<span class="dot"></span> ${escapeHtml(`${summary}${sessionSuffix}`)}`);
   await loadLocalTriageState();
   renderFindings();
+  renderEdgeWorkspace();
   renderIntegrations();
 }
 
@@ -5108,6 +5115,7 @@ function renderAll() {
   renderMissionControl();
   renderTasks();
   renderFindings();
+  renderEdgeWorkspace();
   renderRunRequests();
   renderIntegrations();
   renderTriageOps();
@@ -5334,6 +5342,99 @@ async function backgroundRefreshOpsData() {
   }
 }
 
+function edgeMetric(label, value, detail) {
+  return `<div class="card metric-card"><div class="metric-label">${escapeHtml(label)}</div><div class="metric">${escapeHtml(String(value))}</div><div class="metric-label">${escapeHtml(detail)}</div></div>`;
+}
+
+function renderEdgeWorkspace() {
+  const workspace = state.edgeWorkspace.data;
+  const core = workspace?.core || {};
+  const edge = workspace?.edge || {};
+  const assets = Array.isArray(core.assets) ? core.assets : [];
+  const findings = Array.isArray(core.findings) ? core.findings : [];
+  const sensors = Array.isArray(edge.sensors) ? edge.sensors : [];
+  const sites = Array.isArray(edge.sites) ? edge.sites : [];
+  const schedules = Array.isArray(edge.schedules) ? edge.schedules : [];
+  const jobs = Array.isArray(edge.scan_jobs) ? edge.scan_jobs : [];
+  const changes = core.changes && typeof core.changes === 'object' ? core.changes : { nodes: [], edges: [] };
+  const priority = findings.filter(item => ['critical', 'high'].includes(String(item.severity || '').toLowerCase())).length;
+  const openFindings = findings.filter(item => !['closed', 'resolved'].includes(String(item.status || '').toLowerCase())).length;
+  const onlineSensors = sensors.filter(item => String(item.connection_state || '').toLowerCase() === 'online').length;
+  const activeSchedules = schedules.filter(item => item.enabled !== false).length;
+  const activeJobs = jobs.filter(item => ['queued', 'claimed', 'running'].includes(String(item.status || '').toLowerCase())).length;
+
+  const adminLink = el('edge-admin-link');
+  if (adminLink) {
+    const url = String(cfg.edgeDashboardUrl || '').trim();
+    adminLink.hidden = !url;
+    if (url) adminLink.href = url;
+  }
+
+  const health = el('edge-health');
+  if (health) {
+    if (state.edgeWorkspace.loading) {
+      health.innerHTML = '<div class="small">Loading Core graph and Edge sensor health…</div>';
+    } else if (!workspace) {
+      health.innerHTML = `<div class="error">${escapeHtml(state.edgeWorkspace.error || 'Edge workspace has not loaded.')}</div>`;
+    } else {
+      health.innerHTML = `
+        <div class="kv-list">
+          <div class="kv-row"><div class="kv-key">Core graph & triage</div><div class="kv-val">${core.ok ? renderStatusPill('completed', 'Connected') : renderStatusPill('failed', 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Edge operations API</div><div class="kv-val">${edge.ok ? renderStatusPill('completed', 'Live') : renderStatusPill(edge.configured ? 'failed' : 'blocked', edge.configured ? 'Unavailable' : 'Not configured')}</div></div>
+          <div class="kv-row"><div class="kv-key">Last refreshed</div><div class="kv-val">${escapeHtml(fmtDate(workspace.generated_at))}</div></div>
+          ${core.error ? `<div class="error">${escapeHtml(core.error)}</div>` : ''}
+          ${edge.error ? `<div class="small">${escapeHtml(edge.error)}</div>` : ''}
+        </div>`;
+    }
+  }
+
+  if (el('edge-stats')) el('edge-stats').innerHTML = [
+    edgeMetric('Network assets', assets.length, 'Canonical Core graph'),
+    edgeMetric('Open findings', openFindings, `${priority} high or critical`),
+    edgeMetric('Sensors online', `${onlineSensors}/${sensors.length}`, `${sites.length} site(s)`),
+    edgeMetric('Active schedules', activeSchedules, `${activeJobs} active job(s)`),
+    edgeMetric('Graph changes', (changes.nodes || []).length + (changes.edges || []).length, 'Recent nodes and relationships')
+  ].join('');
+
+  const sensorHost = el('edge-sensors');
+  if (sensorHost) sensorHost.innerHTML = sensors.length ? `<div class="table-wrap"><table><thead><tr><th>Sensor</th><th>State</th><th>Runtime</th><th>Version</th><th>Last seen</th></tr></thead><tbody>${sensors.map(sensor => `<tr><td><strong>${escapeHtml(sensor.name || sensor.hostname || sensor.id)}</strong><div class="small">${escapeHtml(sensor.site_name || sensor.site_id || 'Unknown site')}</div></td><td>${renderStatusPill(sensor.connection_state || sensor.status || 'unknown')}</td><td>${escapeHtml(sensor.worker_state || 'unknown')}${sensor.current_job_id ? `<div class="small">Job ${escapeHtml(sensor.current_job_id)}</div>` : ''}</td><td>${escapeHtml(sensor.version || 'unknown')}<div class="small">${escapeHtml(sensor.os_name || '')}</div></td><td>${escapeHtml(fmtDate(sensor.last_seen_at))}${sensor.last_error ? `<div class="error">${escapeHtml(sensor.last_error)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No live sensor data. Configure the Edge API on the helper to enrich Core context.</div>';
+
+  const scheduleHost = el('edge-schedules');
+  if (scheduleHost) scheduleHost.innerHTML = schedules.length || jobs.length ? `<div class="table-wrap"><table><thead><tr><th>Name / target</th><th>State</th><th>Next / updated</th></tr></thead><tbody>${schedules.map(item => `<tr><td><strong>${escapeHtml(item.name || 'Schedule')}</strong><div class="small">${escapeHtml(item.target_cidr || '')}</div></td><td>${renderStatusPill(item.enabled === false ? 'blocked' : 'completed', item.enabled === false ? 'Disabled' : item.frequency || 'Enabled')}</td><td>${escapeHtml(fmtDate(item.next_run_at))}</td></tr>`).join('')}${jobs.filter(item => ['queued', 'claimed', 'running'].includes(String(item.status || '').toLowerCase())).map(item => `<tr><td><strong>Scan job</strong><div class="small">${escapeHtml(item.target_cidr || item.id)}</div></td><td>${renderStatusPill(item.status || 'queued')}</td><td>${escapeHtml(fmtDate(item.updated_at || item.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No schedules or active scan jobs loaded.</div>';
+
+  const assetHost = el('edge-assets');
+  if (assetHost) assetHost.innerHTML = assets.length ? `<div class="table-wrap"><table><thead><tr><th>IP address</th><th>Hostname</th><th>Vendor / type</th><th>Status</th><th>Last seen</th></tr></thead><tbody>${assets.map(asset => `<tr><td><code>${escapeHtml(asset.ip_address || asset.label || 'unknown')}</code></td><td>${escapeHtml(asset.hostname || 'Unknown')}</td><td>${escapeHtml(asset.vendor || 'Unknown')}<div class="small">${escapeHtml(asset.device_type || '')}</div></td><td>${renderStatusPill(asset.status || 'unknown')}</td><td>${escapeHtml(fmtDate(asset.last_seen))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No Edge assets are present in the Core graph yet.</div>';
+
+  const findingHost = el('edge-findings');
+  if (findingHost) findingHost.innerHTML = findings.length ? `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Last seen</th></tr></thead><tbody>${findings.slice(0, 100).map(finding => `<tr><td><strong>${escapeHtml(finding.title || finding.rule_name || finding.finding_id)}</strong><div class="small"><code>${escapeHtml(finding.finding_id || '')}</code> · ${escapeHtml(finding.summary || '')}</div></td><td>${renderSeverityPill(finding.severity)}</td><td>${renderStatusPill(finding.status || 'open')}</td><td>${escapeHtml(fmtDate(finding.last_seen || finding.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No Edge-origin findings are present in Core triage.</div>';
+
+  const changeHost = el('edge-changes');
+  if (changeHost) {
+    const rows = [...(Array.isArray(changes.nodes) ? changes.nodes : []).map(item => ({ kind: 'Node', label: item.label || item.node_id || item.id, at: item.updated_at || item.last_seen || item.created_at })), ...(Array.isArray(changes.edges) ? changes.edges : []).map(item => ({ kind: 'Relationship', label: item.type || item.edge_type || item.id, at: item.updated_at || item.observed_at || item.created_at }))];
+    changeHost.innerHTML = rows.length ? `<div class="feed">${rows.slice(0, 30).map(item => `<div class="feed-item"><strong>${escapeHtml(item.kind)}</strong><div>${escapeHtml(item.label || 'Graph change')}</div><div class="meta">${escapeHtml(fmtDate(item.at))}</div></div>`).join('')}</div>` : '<div class="empty">No recent graph changes were returned.</div>';
+  }
+}
+
+async function loadEdgeWorkspace({ render = true } = {}) {
+  state.edgeWorkspace.loading = true;
+  state.edgeWorkspace.error = null;
+  if (render) renderEdgeWorkspace();
+  try {
+    const response = await fetch(cfg.edgeWorkspaceEndpoint || '/api/secopsai/edge-workspace', { cache: 'no-store' });
+    const payload = await response.json().catch(() => null);
+    if (!payload || (!response.ok && !payload.core)) throw new Error(payload?.error || `Edge workspace HTTP ${response.status}`);
+    state.edgeWorkspace.data = payload;
+    state.edgeWorkspace.error = response.ok ? null : (payload.error || payload.core?.error || `HTTP ${response.status}`);
+  } catch (error) {
+    state.edgeWorkspace.data = null;
+    state.edgeWorkspace.error = error?.message || String(error);
+  } finally {
+    state.edgeWorkspace.loading = false;
+    if (render) renderEdgeWorkspace();
+  }
+  return state.edgeWorkspace.data;
+}
+
 async function loadIntegrationStatus() {
   try {
     const res = await fetch(cfg.integrationStatusEndpoint || '/api/integration-status');
@@ -5350,7 +5451,8 @@ async function loadIntegrationStatus() {
         secopsai_sessions_api: false,
         secopsai_research_api: false,
         secopsai_campaign_api: false,
-        secopsai_events_api: false
+        secopsai_events_api: false,
+        secopsai_edge_api: false
       },
       ai_guard: aiGuardConfig()
     };
@@ -5675,6 +5777,13 @@ async function boot() {
   }
 
   try {
+    await loadEdgeWorkspace({ render: false });
+  } catch (err) {
+    console.warn('loadEdgeWorkspace failed during boot', err);
+    errors.push(`Edge workspace: ${err.message || String(err)}`);
+  }
+
+  try {
     await loadBlogOpsStatus({ render: false });
   } catch (err) {
     console.warn('loadBlogOpsStatus failed during boot', err);
@@ -5731,6 +5840,12 @@ function bindEvents() {
       return;
     }
     openFindingTaskModal();
+  });
+  el('edge-refresh-btn')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
+    await loadEdgeWorkspace();
+    setButtonBusy(btn, false);
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);

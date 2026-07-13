@@ -5,6 +5,8 @@ window.SECOPSAI_CONFIG = {
   integrationStatusEndpoint: "/api/integration-status",
   runOutputEndpoint: "/api/run-output",
   triageOpsEndpoint: "/api/secopsai/triage-ops",
+  edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
+  edgeDashboardUrl: "",
   aiGuard: {
     hostedEnabled: false,
     defaultModel: "gpt-5.4-mini",

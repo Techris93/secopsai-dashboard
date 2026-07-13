@@ -5141,16 +5141,44 @@ label span,
     padding: 12px;
   }
 
-  .top-strip {
-    top: 64px;
+  .okcomputer-skin .top-strip {
+    position: static;
+    top: auto;
     gap: 8px;
     padding: 10px;
+    height: auto;
+    min-height: 48px;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    align-items: center;
   }
 
-  .top-strip-live,
-  .top-strip-meta {
-    width: 100%;
+  .okcomputer-skin .top-strip-live,
+  .okcomputer-skin .top-strip-meta {
+    width: auto;
     justify-content: space-between;
+  }
+
+  .okcomputer-skin .top-strip-live {
+    flex: 0 0 auto;
+  }
+
+  .okcomputer-skin .top-strip-meta {
+    min-width: 0;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+  }
+
+  #top-strip-context {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #top-strip-time {
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .page-header {
@@ -5707,5 +5735,34 @@ label span,
   .guide-step > span {
     width: 32px;
     height: 32px;
+  }
+}
+#page-edge .page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+#page-edge .edge-health .kv-val .status-pill {
+  display: inline-flex;
+}
+
+#page-edge .edge-table table {
+  min-width: 680px;
+}
+
+#page-edge #edge-findings table {
+  min-width: 760px;
+}
+
+#page-edge code {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  #page-edge .page-actions,
+  #page-edge .page-actions > * {
+    width: 100%;
   }
 }

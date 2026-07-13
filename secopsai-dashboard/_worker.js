@@ -72,6 +72,8 @@ function buildBrowserConfig(env) {
     runOutputEndpoint: DEFAULT_RUN_OUTPUT_PROXY_PATH,
     blogOpsEndpoint: "/api/blog",
     triageOpsEndpoint: "/api/secopsai/triage-ops",
+    edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
+    edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     aiGuard: buildAiGuard(env),
     departments: DASHBOARD_DEPARTMENTS,
     roleGroups: DASHBOARD_ROLE_GROUPS,
@@ -717,6 +719,7 @@ async function handleIntegrationStatus(env) {
       secopsai_research_api: Boolean(secopsaiHelperBase),
       secopsai_campaign_api: Boolean(secopsaiHelperBase),
       secopsai_events_api: Boolean(secopsaiHelperBase),
+      secopsai_edge_api: Boolean(secopsaiHelperBase),
     },
     blog_ops: {
       mode: blogOpsStatus.mode,

@@ -10,6 +10,7 @@ The dashboard is now intentionally narrow:
 - helper-backed native SecOpsAI actions
 - Hermes Agent telemetry findings when SecOpsAI is refreshed with `--platform hermes`
 - protected Triage Ops for supply-chain alert review and closure
+- a unified SecOpsAI Edge workspace backed by the canonical Core graph and findings store
 - Blog Ops workflow dispatch and review queue
 - built-in operator guide for dashboard click paths and safety rules
 - Supabase-backed integration status
@@ -54,6 +55,16 @@ It now also reads native local SecOpsAI state through the helper server:
 - `findings` table visibility when present
 - finding detail and correlation
 - create a task directly from a finding
+
+### SecOpsAI Edge
+- canonical network assets and Edge-origin findings from SecOpsAI Core
+- recent asset-graph changes created by the supervised Edge-to-Core sync service
+- optional live sensor, site, schedule, and scan-job status from the Edge API
+- a deliberate link to the separate sensor administration console when configured
+
+Core remains the source of truth for graph and triage data. The helper may enrich
+that view with live Edge operations by using server-side credentials. The browser
+never receives `SECOPSAI_EDGE_ADMIN_TOKEN`.
 
 ### Native Triage
 - helper readiness
@@ -155,6 +166,12 @@ Optional `.env` values:
   - local operator token required by write endpoints
 - `TRIAGE_OPS_ADMIN_TOKEN`
   - optional local operator token for Triage Ops write endpoints; if omitted, the helper falls back to `BLOG_OPS_ADMIN_TOKEN`
+- `SECOPSAI_EDGE_API_URL`
+  - optional Edge API base URL used by the helper to load sensor operations
+- `SECOPSAI_EDGE_ADMIN_TOKEN`
+  - server-only Edge administrator token; never place it in `config.js` or a `NEXT_PUBLIC_*` variable
+- `SECOPSAI_EDGE_DASHBOARD_URL`
+  - optional public URL for the separate Edge sensor administration console
 
 ## Cloudflare Pages
 

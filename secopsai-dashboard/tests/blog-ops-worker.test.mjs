@@ -22,6 +22,7 @@ async function testConfigExposesTriageOpsEndpoint() {
   const body = await response.text();
   assert.match(body, /triageOpsEndpoint/);
   assert.equal(body.includes("/api/secopsai/triage-ops"), true);
+  assert.equal(body.includes("/api/secopsai/edge-workspace"), true);
 }
 
 async function testIntegrationStatusExposesCampaignApi() {
@@ -32,6 +33,7 @@ async function testIntegrationStatusExposesCampaignApi() {
   assert.equal(response.status, 200);
   const payload = await jsonFrom(response);
   assert.equal(payload.helper.secopsai_campaign_api, true);
+  assert.equal(payload.helper.secopsai_edge_api, true);
   assert.equal(payload.blog_ops.mode, "hosted-github-actions");
   assert.equal(payload.blog_ops.capabilities.deploy, true);
 }
@@ -777,6 +779,21 @@ function testDashboardListsUseLatestFirstOrdering() {
   assert.match(app, /state\.triageOps\.campaignCandidates = sortLatestFirst\(result\.candidates, CAMPAIGN_CANDIDATE_LATEST_FIELDS\)/);
 }
 
+function testEdgeWorkspaceUiIsPresentAndReadOnly() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(html, /data-page="edge"/);
+  assert.match(html, /id="page-edge"/);
+  assert.match(html, /id="edge-sensors"/);
+  assert.match(html, /id="edge-assets"/);
+  assert.match(html, /id="edge-findings"/);
+  assert.match(app, /async function loadEdgeWorkspace/);
+  assert.match(app, /function renderEdgeWorkspace/);
+  assert.equal(html.includes("SECOPSAI_EDGE_ADMIN_TOKEN"), false);
+  assert.equal(app.includes("SECOPSAI_EDGE_ADMIN_TOKEN"), false);
+  assert.equal(html.includes("cdn.tailwindcss.com"), false);
+}
+
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
 await testIntegrationStatusExposesCampaignApi();
@@ -806,4 +823,5 @@ testBlogOpsActionControlsAreNotDuplicated();
 testTriageOpsActionabilityControlsArePresent();
 testCampaignDiscoveryActionsAreNotDuplicated();
 testDashboardListsUseLatestFirstOrdering();
+testEdgeWorkspaceUiIsPresentAndReadOnly();
 console.log("blog ops worker tests passed");

@@ -6,6 +6,9 @@ import shutil
 import subprocess
 import tempfile
 import urllib.parse
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -494,12 +497,15 @@ def collect_secopsai_triage_state():
 
 def json_response(handler, code, payload):
     body = json.dumps(payload).encode('utf-8')
-    handler.send_response(code)
-    handler.send_header('Content-Type', 'application/json')
-    handler.send_header('Content-Length', str(len(body)))
-    handler.send_header('Cache-Control', 'no-store')
-    handler.end_headers()
-    handler.wfile.write(body)
+    try:
+        handler.send_response(code)
+        handler.send_header('Content-Type', 'application/json')
+        handler.send_header('Content-Length', str(len(body)))
+        handler.send_header('Cache-Control', 'no-store')
+        handler.end_headers()
+        handler.wfile.write(body)
+    except (BrokenPipeError, ConnectionResetError):
+        return
 
 
 def sse_send(handler, event_name, payload):
@@ -641,6 +647,86 @@ def run_cli_json(args, timeout=120):
     result = run_secopsai_cli([*args, '--json'], timeout=timeout)
     parsed = parse_cli_json(result)
     return result, parsed
+
+
+def edge_api_snapshot():
+    base_url = os.environ.get('SECOPSAI_EDGE_API_URL', '').strip().rstrip('/')
+    admin_token = os.environ.get('SECOPSAI_EDGE_ADMIN_TOKEN', '').strip()
+    if not base_url or not admin_token:
+        return {
+            'configured': False,
+            'ok': False,
+            'error': 'Set SECOPSAI_EDGE_API_URL and SECOPSAI_EDGE_ADMIN_TOKEN on the helper to load live sensor operations.',
+            'sites': [],
+            'sensors': [],
+            'schedules': [],
+            'scan_jobs': [],
+        }
+    resources = {
+        'sites': '/api/v1/sites',
+        'sensors': '/api/v1/sensors',
+        'schedules': '/api/v1/scan-schedules',
+        'scan_jobs': '/api/v1/scan-jobs',
+    }
+    result = {'configured': True, 'ok': True}
+
+    def fetch_resource(key, path):
+        request = urllib.request.Request(
+            f'{base_url}{path}',
+            headers={'Authorization': f'Bearer {admin_token}', 'Accept': 'application/json'},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                payload = json.loads(response.read().decode('utf-8'))
+            return key, payload if isinstance(payload, list) else [], None
+        except urllib.error.HTTPError as exc:
+            return key, [], f'Edge API returned HTTP {exc.code} for {key}.'
+        except Exception:
+            return key, [], f'Edge API is unavailable while loading {key}.'
+
+    errors = []
+    with ThreadPoolExecutor(max_workers=len(resources)) as executor:
+        futures = [executor.submit(fetch_resource, key, path) for key, path in resources.items()]
+        for future in as_completed(futures):
+            key, payload, error = future.result()
+            result[key] = payload
+            if error:
+                errors.append(error)
+    if errors:
+        result['ok'] = False
+        result['error'] = ' '.join(sorted(errors))
+    return result
+
+
+def collect_edge_workspace():
+    assets_result, assets_payload = run_cli_json(
+        ['graph', 'assets', '--limit', '500', *secopsai_db_args()],
+        timeout=90,
+    )
+    changes_result, changes_payload = run_cli_json(
+        ['graph', 'changes', '--limit', '100', *secopsai_db_args()],
+        timeout=90,
+    )
+    findings_result, findings_payload = run_cli_json(
+        ['triage', 'list', '--source', 'secopsai_edge', '--limit', '500', *secopsai_db_args()],
+        timeout=90,
+    )
+    core_ok = bool(assets_result['ok'] and changes_result['ok'] and findings_result['ok'])
+    core_error = None
+    if not core_ok:
+        core_error = 'Core Edge graph or findings could not be loaded. Run the Edge sync service and inspect its logs.'
+    return {
+        'ok': core_ok,
+        'generated_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+        'core': {
+            'ok': core_ok,
+            'error': core_error,
+            'assets': (assets_payload or {}).get('assets', []) if isinstance(assets_payload, dict) else [],
+            'changes': changes_payload if isinstance(changes_payload, dict) else {'nodes': [], 'edges': []},
+            'findings': (findings_payload or {}).get('findings', []) if isinstance(findings_payload, dict) else [],
+        },
+        'edge': edge_api_snapshot(),
+    }
 
 
 def _bounded_blog_limit(value, default=5):
@@ -1888,6 +1974,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'secopsai_research_api': True,
                     'secopsai_events_api': True,
                     'secopsai_campaign_api': True,
+                    'secopsai_edge_api': True,
                 },
                 'blog_ops': {
                     'mode': 'local-helper-cli',
@@ -1906,6 +1993,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if parsed.path == '/api/secopsai/triage-state':
             try:
                 return json_response(self, 200, collect_secopsai_triage_state())
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/edge-workspace':
+            try:
+                payload = collect_edge_workspace()
+                return json_response(self, 200 if payload.get('ok') else 503, payload)
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
