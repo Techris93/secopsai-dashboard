@@ -38,6 +38,12 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
         )
         self.assertNotRegex(sql.lower(), r"(?:using|with\s+check)\s*\(\s*true\s*\)")
 
+    def test_edge_workspace_surfaces_core_sync_freshness(self):
+        app = (ROOT / "app.js").read_text(encoding="utf-8")
+        self.assertIn("core.sync_state", app)
+        self.assertIn("Edge to Core sync", app)
+        self.assertIn("syncStale", app)
+
 
 if __name__ == "__main__":
     unittest.main()

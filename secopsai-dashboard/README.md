@@ -11,6 +11,8 @@ The dashboard is now intentionally narrow:
 - Hermes Agent telemetry findings when SecOpsAI is refreshed with `--platform hermes`
 - protected Triage Ops for supply-chain alert review and closure
 - a unified SecOpsAI Edge workspace backed by the canonical Core graph and findings store
+- explicit Edge-to-Core sync freshness so operators can distinguish current,
+  stale, and never-synced graph context
 - durable Research Cases for evidence, IOCs, disclosure, exports, and review-only publication handoff
 - Blog Ops workflow dispatch and review queue
 - built-in operator guide for dashboard click paths and safety rules

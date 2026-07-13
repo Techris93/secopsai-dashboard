@@ -5676,6 +5676,11 @@ function renderEdgeWorkspace() {
   const schedules = Array.isArray(edge.schedules) ? edge.schedules : [];
   const jobs = Array.isArray(edge.scan_jobs) ? edge.scan_jobs : [];
   const changes = core.changes && typeof core.changes === 'object' ? core.changes : { nodes: [], edges: [] };
+  const syncState = Array.isArray(core.sync_state) ? core.sync_state : [];
+  const latestSync = syncState[0] || null;
+  const latestSyncAt = latestSync?.last_synced_at || null;
+  const syncAgeMs = latestSyncAt ? Date.now() - Date.parse(latestSyncAt) : null;
+  const syncStale = Number.isFinite(syncAgeMs) && syncAgeMs > 15 * 60 * 1000;
   const priority = findings.filter(item => ['critical', 'high'].includes(String(item.severity || '').toLowerCase())).length;
   const openFindings = findings.filter(item => !['closed', 'resolved'].includes(String(item.status || '').toLowerCase())).length;
   const onlineSensors = sensors.filter(item => String(item.connection_state || '').toLowerCase() === 'online').length;
@@ -5699,6 +5704,7 @@ function renderEdgeWorkspace() {
       health.innerHTML = `
         <div class="kv-list">
           <div class="kv-row"><div class="kv-key">Core graph & triage</div><div class="kv-val">${core.ok ? renderStatusPill('completed', 'Connected') : renderStatusPill('failed', 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Edge to Core sync</div><div class="kv-val">${latestSync ? renderStatusPill(syncStale ? 'in_review' : 'completed', syncStale ? 'Stale' : 'Current') : renderStatusPill('blocked', 'No sync recorded')}<div class="small">${latestSync ? `Last sync ${escapeHtml(fmtDate(latestSyncAt))}` : 'Run the supervised Edge sync before relying on Core graph freshness.'}</div></div></div>
           <div class="kv-row"><div class="kv-key">Edge operations API</div><div class="kv-val">${edge.ok ? renderStatusPill('completed', 'Live') : renderStatusPill(edge.configured ? 'failed' : 'blocked', edge.configured ? 'Unavailable' : 'Not configured')}</div></div>
           ${edge.credential ? `<div class="kv-row"><div class="kv-key">Edge credential</div><div class="kv-val">${renderStatusPill(edge.credential.rotation_recommended ? 'in_review' : 'completed', edge.credential.rotation_recommended ? 'Rotate soon' : 'Active')}<div class="small">Expires ${escapeHtml(fmtDate(edge.credential.expires_at))} · ${escapeHtml(String(edge.credential.expires_in_days))} day(s)</div></div></div>` : ''}
           <div class="kv-row"><div class="kv-key">Last refreshed</div><div class="kv-val">${escapeHtml(fmtDate(workspace.generated_at))}</div></div>
