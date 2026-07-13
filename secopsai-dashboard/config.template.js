@@ -8,6 +8,9 @@ window.SECOPSAI_CONFIG = {
   researchCasesEndpoint: "/api/secopsai/research-cases",
   edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
   edgeDashboardUrl: "__SECOPSAI_EDGE_DASHBOARD_URL__",
+  auth: {
+    required: __DASHBOARD_AUTH_REQUIRED__
+  },
   aiGuard: {
     hostedEnabled: __HOSTED_AI_ENABLED__,
     defaultModel: "__HOSTED_AI_MODEL__",

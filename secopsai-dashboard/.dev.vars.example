@@ -1,6 +1,7 @@
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=replace_me
 APP_NAME=SecOpsAI Mission Control
+DASHBOARD_AUTH_REQUIRED=true
 DISCORD_SERVER_ID=1484917962245668874
 
 # Optional notification webhooks used by /api/discord-notify

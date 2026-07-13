@@ -1,0 +1,133 @@
+#!/bin/sh
+set -eu
+
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+MIGRATION="$ROOT_DIR/supabase_migrations/2026-07-13_authenticated_pilot.sql"
+DATABASE_URL=${SECOPSAI_DASHBOARD_DATABASE_URL:-}
+PSQL_BIN=${PSQL:-psql}
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/dashboard-security <apply|verify>
+
+Required environment:
+  SECOPSAI_DASHBOARD_DATABASE_URL  Direct Supabase/Postgres connection string.
+
+The connection string is passed directly to psql and is never printed.
+EOF
+}
+
+require_connection() {
+  if [ -z "$DATABASE_URL" ]; then
+    echo "SECOPSAI_DASHBOARD_DATABASE_URL is required." >&2
+    exit 2
+  fi
+  if ! command -v "$PSQL_BIN" >/dev/null 2>&1; then
+    echo "psql is required. Install PostgreSQL client tools first." >&2
+    exit 2
+  fi
+}
+
+verify() {
+  result=$(
+    "$PSQL_BIN" "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At <<'SQL'
+with dashboard_tables(table_name) as (
+  values
+    ('agent_runs'),
+    ('channel_routes'),
+    ('dashboard_events'),
+    ('findings'),
+    ('run_requests'),
+    ('work_items')
+), present_tables as (
+  select table_name
+  from dashboard_tables
+  where to_regclass(format('public.%I', table_name)) is not null
+), checks as (
+  select
+    (select count(*) from present_tables) as present_count,
+    (
+      select count(*)
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join present_tables p on p.table_name = c.relname
+      where n.nspname = 'public' and c.relrowsecurity
+    ) as rls_count,
+    (
+      select count(*)
+      from pg_policies
+      where schemaname = 'public'
+        and tablename in (select table_name from present_tables)
+        and roles @> array['anon']::name[]
+    ) as anon_policy_count,
+    (
+      select count(*)
+      from pg_policies
+      where schemaname = 'public'
+        and tablename in (select table_name from present_tables)
+        and roles @> array['authenticated']::name[]
+    ) as authenticated_policy_count,
+    (
+      select count(*)
+      from information_schema.role_table_grants
+      where grantee = 'anon'
+        and table_schema = 'public'
+        and table_name in (
+          select table_name from present_tables
+          union all values
+            ('high_priority_findings'),
+            ('correlated_findings'),
+            ('findings_by_source'),
+          ('mitre_technique_frequency')
+        )
+    ) as anon_grant_count,
+    (
+      select count(*)
+      from (
+        values
+          ('public.link_finding_to_work_item(uuid,uuid)'),
+          ('public.get_user_findings_timeline(text,integer)')
+      ) as functions(signature)
+      where to_regprocedure(signature) is not null
+        and has_function_privilege('anon', to_regprocedure(signature), 'execute')
+    ) as anon_function_count
+)
+select present_count || '|' || rls_count || '|' || anon_policy_count || '|' || authenticated_policy_count || '|' || anon_grant_count || '|' || anon_function_count
+from checks;
+SQL
+  )
+
+  present=$(printf '%s' "$result" | cut -d'|' -f1)
+  rls=$(printf '%s' "$result" | cut -d'|' -f2)
+  anon_policies=$(printf '%s' "$result" | cut -d'|' -f3)
+  authenticated_policies=$(printf '%s' "$result" | cut -d'|' -f4)
+  anon_grants=$(printf '%s' "$result" | cut -d'|' -f5)
+  anon_functions=$(printf '%s' "$result" | cut -d'|' -f6)
+  expected_authenticated_policies=$((present * 4))
+
+  if [ "$present" -lt 1 ]; then
+    echo "No dashboard tables were found in public schema." >&2
+    exit 1
+  fi
+  if [ "$present" -ne "$rls" ] || [ "$anon_policies" -ne 0 ] || [ "$authenticated_policies" -ne "$expected_authenticated_policies" ] || [ "$anon_grants" -ne 0 ] || [ "$anon_functions" -ne 0 ]; then
+    echo "Dashboard security verification failed: tables=$present rls=$rls anon_policies=$anon_policies authenticated_policies=$authenticated_policies expected_authenticated_policies=$expected_authenticated_policies anon_grants=$anon_grants anon_functions=$anon_functions" >&2
+    exit 1
+  fi
+  echo "Dashboard security verified: tables=$present rls=$rls authenticated_policies=$authenticated_policies anon_policies=0 anon_grants=0 anon_functions=0"
+}
+
+case ${1:-} in
+  apply)
+    require_connection
+    "$PSQL_BIN" "$DATABASE_URL" -X -v ON_ERROR_STOP=1 --single-transaction -f "$MIGRATION"
+    verify
+    ;;
+  verify)
+    require_connection
+    verify
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

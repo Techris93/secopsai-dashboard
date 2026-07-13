@@ -59,6 +59,7 @@ def main():
         '__HOSTED_AI_MAX_COST_USD__': js_number(merged.get('HOSTED_AI_MAX_COST_USD'), default=3.0),
         '__HOSTED_AI_ALLOW_MUTATIONS__': js_bool(merged.get('HOSTED_AI_ALLOW_MUTATIONS'), default=False),
         '__SECOPSAI_EDGE_DASHBOARD_URL__': js_escape(merged.get('SECOPSAI_EDGE_DASHBOARD_URL', '')),
+        '__DASHBOARD_AUTH_REQUIRED__': js_bool(merged.get('DASHBOARD_AUTH_REQUIRED'), default=True),
     }
 
     text = TEMPLATE_PATH.read_text(encoding='utf-8')

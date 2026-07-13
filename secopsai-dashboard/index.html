@@ -8,11 +8,48 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="./styles.css?v=20260518-okcomputer" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/dist/umd/supabase.js" integrity="sha384-yifgV8iFWyp5cgu+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP/NlXVJT3vO" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="./styles.css?v=20260713-auth" />
 </head>
 <body class="okcomputer-skin">
-  <div class="app-shell">
+  <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
+    <div class="auth-panel">
+      <div class="auth-brand" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l7 3v5c0 5-3.5 8.8-7 10-3.5-1.2-7-5-7-10V6l7-3Z"></path>
+          <path d="M9.5 11.8 11.4 13.7 14.9 10.2"></path>
+        </svg>
+      </div>
+      <div class="auth-heading">
+        <div class="brand-overline">SECOPSAI MISSION CONTROL</div>
+        <h1 id="auth-title">Operator sign in</h1>
+        <p>Authenticate before accessing findings, assets, research cases, or response workflows.</p>
+      </div>
+
+      <form id="auth-login-form" class="auth-form">
+        <label for="auth-email"><span>Email</span></label>
+        <input id="auth-email" name="email" type="email" autocomplete="username" inputmode="email" required />
+        <label for="auth-password"><span>Password</span></label>
+        <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" required />
+        <div class="auth-message" id="auth-message" role="status" aria-live="polite">Checking your session…</div>
+        <button class="primary-btn auth-primary" id="auth-signin-btn" type="submit">Sign in</button>
+        <button class="secondary-btn" id="auth-reset-request-btn" type="button">Send password reset</button>
+      </form>
+
+      <form id="auth-update-form" class="auth-form hidden">
+        <label for="auth-new-password"><span>New password</span></label>
+        <input id="auth-new-password" name="new-password" type="password" autocomplete="new-password" minlength="12" required />
+        <label for="auth-confirm-password"><span>Confirm password</span></label>
+        <input id="auth-confirm-password" name="confirm-password" type="password" autocomplete="new-password" minlength="12" required />
+        <div class="auth-message" id="auth-update-message" role="status" aria-live="polite">Use at least 12 characters.</div>
+        <button class="primary-btn auth-primary" id="auth-update-password-btn" type="submit">Update password</button>
+      </form>
+
+      <p class="auth-boundary">Access is invitation-only. Sensor and integration credentials cannot sign in to this console.</p>
+    </div>
+  </section>
+
+  <div class="app-shell auth-pending" id="app-shell" aria-hidden="true">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-badge" aria-hidden="true">
@@ -88,6 +125,8 @@
         <div class="top-strip-meta">
           <span id="top-strip-context">Mission Control overview</span>
           <span id="top-strip-time">--:--:--</span>
+          <span class="operator-identity" id="operator-identity" hidden></span>
+          <button class="top-strip-action" id="auth-signout-btn" type="button" hidden>Sign out</button>
         </div>
       </div>
 
@@ -718,24 +757,8 @@
     </div>
   </div>
 
-  <script>
-    window.__SECOPSAI_DEBUG = { htmlLoaded: true, configLoaded: false, appLoaded: false };
-    window.addEventListener('error', function (event) {
-      var el = document.getElementById('global-status');
-      if (el) el.textContent = 'JS error: ' + (event.message || 'unknown error');
-    });
-    window.addEventListener('unhandledrejection', function (event) {
-      var el = document.getElementById('global-status');
-      var reason = event.reason && (event.reason.message || String(event.reason));
-      var lowerReason = String(reason || '').toLowerCase();
-      if (lowerReason.indexOf('metamask') !== -1 || lowerReason.indexOf('wallet') !== -1 || lowerReason.indexOf('ethereum') !== -1) {
-        return;
-      }
-      if (el) el.textContent = 'Promise error: ' + (reason || 'unknown rejection');
-    });
-  </script>
-  <script src="./config.js?v=20260429e" onload="window.__SECOPSAI_DEBUG.configLoaded=true"></script>
-  <script src="./app.js?v=20260514a" onload="window.__SECOPSAI_DEBUG.appLoaded=!!window.__SECOPSAI_APP_LOADED"></script>
+  <script src="./config.js?v=20260713-auth"></script>
+  <script src="./app.js?v=20260713-auth"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

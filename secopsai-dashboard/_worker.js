@@ -40,6 +40,37 @@ const DASHBOARD_ROLE_GROUPS = {
   support: ["support/support-responder"],
 };
 const ALLOWED_DISCORD_CHANNELS = new Set(["ops-log", "kanban-updates"]);
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "font-src 'self' https://fonts.gstatic.com",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "frame-src 'none'",
+  "img-src 'self' data: https:",
+  "object-src 'none'",
+  "script-src 'self' https://cdn.jsdelivr.net",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "upgrade-insecure-requests",
+].join("; ");
+
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 function jsonResponse(payload, init = {}) {
   const headers = new Headers(init.headers || {});
@@ -75,6 +106,9 @@ function buildBrowserConfig(env) {
     researchCasesEndpoint: "/api/secopsai/research-cases",
     edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
+    auth: {
+      required: truthyEnv(env.DASHBOARD_AUTH_REQUIRED, true),
+    },
     aiGuard: buildAiGuard(env),
     departments: DASHBOARD_DEPARTMENTS,
     roleGroups: DASHBOARD_ROLE_GROUPS,
@@ -926,8 +960,7 @@ async function handleRunOutput(request, env) {
   );
 }
 
-export default {
-  async fetch(request, env) {
+async function routeRequest(request, env) {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/config.js") {
@@ -973,5 +1006,10 @@ export default {
     }
 
     return env.ASSETS.fetch(request);
+}
+
+export default {
+  async fetch(request, env) {
+    return withSecurityHeaders(await routeRequest(request, env));
   },
 };

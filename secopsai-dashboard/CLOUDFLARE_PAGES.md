@@ -35,6 +35,10 @@ For `dashboard.secopsai.dev` or any other permanent hosted domain, use:
 
 This keeps the browser talking only to same-origin dashboard endpoints while the worker reads config and private integrations server-side.
 
+The Worker applies the dashboard security-header baseline to every response.
+`@supabase/supabase-js` is exact-version pinned with SRI; a library upgrade must
+update both the URL and integrity digest and must pass browser CSP checks.
+
 ## Required Cloudflare values
 
 Set these in **Workers & Pages → your project → Settings → Variables and Secrets**:
@@ -44,6 +48,7 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `APP_NAME`
+- `DASHBOARD_AUTH_REQUIRED` (set to `true` for every hosted environment)
 - `DISCORD_SERVER_ID`
 - `DISCORD_NOTIFY_TOKEN`
 - `HOSTED_AI_ENABLED`
@@ -76,6 +81,16 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 Notes:
 
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` are required for the app to load.
+- Apply `supabase_migrations/2026-07-13_authenticated_pilot.sql` and create at
+  least one invited Supabase Auth operator before deploying the auth-gated UI.
+  The migration revokes `anon` table/view access. Do not set
+  `DASHBOARD_AUTH_REQUIRED=false` to work around a missing operator account.
+- The current policy is single-tenant. Invite users from only one pilot
+  organization until workspace membership policies are deployed.
+- With a direct database connection, run
+  `SECOPSAI_DASHBOARD_DATABASE_URL='postgresql://...' scripts/dashboard-security apply`.
+  Follow it with `scripts/dashboard-security verify`; deployment is blocked
+  until the verifier reports zero anonymous policies and grants.
 - `RUN_OUTPUT_R2_BINDING` defaults to `RUN_OUTPUTS`; only change it if you deliberately use a different binding name.
 - You only need **one** run-output mode:
   - R2 mode: configure an R2 binding and optionally `RUN_OUTPUT_R2_PREFIX`.

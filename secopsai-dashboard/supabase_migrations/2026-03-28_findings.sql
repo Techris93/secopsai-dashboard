@@ -154,13 +154,27 @@ create index if not exists idx_findings_status_severity on public.findings(statu
 
 alter table public.findings enable row level security;
 
--- Read policy (allow all for now - adjust based on your security model)
+-- Single-tenant pilot policy. A later workspace migration can narrow this by
+-- organization without ever reopening anonymous access.
 drop policy if exists "allow read findings" on public.findings;
-create policy "allow read findings" on public.findings for select using (true);
+create policy "allow authenticated read findings" on public.findings
+    for select to authenticated
+    using (
+        (select auth.uid()) is not null
+        and coalesce(((select auth.jwt()) ->> 'is_anonymous')::boolean, false) = false
+    );
 
--- Write policy (allow all for now - adjust based on your security model)
 drop policy if exists "allow write findings" on public.findings;
-create policy "allow write findings" on public.findings for all using (true) with check (true);
+create policy "allow authenticated write findings" on public.findings
+    for all to authenticated
+    using (
+        (select auth.uid()) is not null
+        and coalesce(((select auth.jwt()) ->> 'is_anonymous')::boolean, false) = false
+    )
+    with check (
+        (select auth.uid()) is not null
+        and coalesce(((select auth.jwt()) ->> 'is_anonymous')::boolean, false) = false
+    );
 
 -- Trigger to auto-update updated_at
 
