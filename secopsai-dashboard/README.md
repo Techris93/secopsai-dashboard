@@ -236,8 +236,9 @@ Optional `.env` values:
 The browser sends its short-lived Supabase operator session to protected
 same-origin Worker routes. The Worker validates that session with Supabase
 before it uses any Core, Edge, helper, Blog Ops, or run-output credential. When
-`DASHBOARD_AUTH_REQUIRED=false`, protected backend configuration is rejected;
-that mode is for isolated demo UI only.
+`DASHBOARD_AUTH_REQUIRED=false`, the Worker removes Supabase credentials from
+browser configuration, the app renders a locked rollout screen, and protected
+backend configuration is rejected. Live records are never loaded in this mode.
 
 ## Cloudflare Pages
 

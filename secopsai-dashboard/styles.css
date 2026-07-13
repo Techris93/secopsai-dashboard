@@ -6086,6 +6086,16 @@ label span,
   color: #ff8f9b;
 }
 
+.auth-locked-message {
+  padding: 14px;
+  color: #ffd6da;
+  border: 1px solid rgba(255, 93, 113, 0.34);
+  border-radius: 6px;
+  background: rgba(255, 93, 113, 0.08);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .auth-boundary {
   margin-top: 22px;
   padding-top: 18px;

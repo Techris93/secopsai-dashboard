@@ -237,19 +237,35 @@ function setAuthBusy(button, busy, busyLabel) {
   button.textContent = busy ? busyLabel : button.dataset.idleLabel;
 }
 
-function showAuthSurface({ recovery = false, message = '', error = false } = {}) {
+function showAuthSurface({ recovery = false, locked = false, message = '', error = false } = {}) {
   const gate = el('auth-gate');
   const shell = el('app-shell');
   const loginForm = el('auth-login-form');
   const updateForm = el('auth-update-form');
+  const lockedMessage = el('auth-locked-message');
+  const title = el('auth-title');
+  const summary = el('auth-summary');
+  const boundary = el('auth-boundary');
   gate?.classList.remove('hidden');
   shell?.classList.add('auth-pending');
   shell?.setAttribute('aria-hidden', 'true');
-  loginForm?.classList.toggle('hidden', recovery);
-  updateForm?.classList.toggle('hidden', !recovery);
+  loginForm?.classList.toggle('hidden', recovery || locked);
+  updateForm?.classList.toggle('hidden', !recovery || locked);
+  if (lockedMessage) lockedMessage.hidden = !locked;
+  if (title) title.textContent = locked ? 'Operator access is not activated' : (recovery ? 'Reset operator password' : 'Operator sign in');
+  if (summary) {
+    summary.textContent = locked
+      ? 'This deployment is locked until its database policies and invited operator account are verified.'
+      : (recovery ? 'Choose a new password to recover your invited operator account.' : 'Authenticate before accessing findings, assets, research cases, or response workflows.');
+  }
+  if (boundary) {
+    boundary.textContent = locked
+      ? 'No live workspace records are loaded while operator authentication is disabled.'
+      : 'Access is invitation-only. Sensor and integration credentials cannot sign in to this console.';
+  }
   state.auth.recoveryMode = recovery;
   if (message) setAuthMessage(message, { error, update: recovery });
-  window.setTimeout(() => el(recovery ? 'auth-new-password' : 'auth-email')?.focus(), 0);
+  if (!locked) window.setTimeout(() => el(recovery ? 'auth-new-password' : 'auth-email')?.focus(), 0);
 }
 
 function showAuthenticatedShell(session) {
@@ -307,13 +323,17 @@ function leaveAuthenticatedDashboard(message = 'Your session ended. Sign in agai
 }
 
 async function initializeDashboardAuth() {
-  if (bootError || !supabaseClient) {
-    showAuthSurface({ message: bootError || 'Dashboard authentication is unavailable.', error: true });
+  if (!dashboardAuthRequired()) {
+    showAuthSurface({
+      locked: true,
+      message: 'Operator authentication must be enabled before this console can load live data.',
+      error: true
+    });
     return;
   }
 
-  if (!dashboardAuthRequired()) {
-    await enterAuthenticatedDashboard(null);
+  if (bootError || !supabaseClient) {
+    showAuthSurface({ message: bootError || 'Dashboard authentication is unavailable.', error: true });
     return;
   }
 
