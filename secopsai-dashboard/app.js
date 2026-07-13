@@ -5396,6 +5396,7 @@ function renderEdgeWorkspace() {
           <div class="kv-row"><div class="kv-key">Last refreshed</div><div class="kv-val">${escapeHtml(fmtDate(workspace.generated_at))}</div></div>
           ${core.error ? `<div class="error">${escapeHtml(core.error)}</div>` : ''}
           ${edge.error ? `<div class="small">${escapeHtml(edge.error)}</div>` : ''}
+          ${edge.warning ? `<div class="warning">${escapeHtml(edge.warning)}</div>` : ''}
         </div>`;
     }
   }

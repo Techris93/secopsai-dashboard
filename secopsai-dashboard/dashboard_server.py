@@ -776,12 +776,14 @@ def run_cli_json(args, timeout=120):
 
 def edge_api_snapshot():
     base_url = os.environ.get('SECOPSAI_EDGE_API_URL', '').strip().rstrip('/')
-    admin_token = os.environ.get('SECOPSAI_EDGE_ADMIN_TOKEN', '').strip()
-    if not base_url or not admin_token:
+    operations_token = os.environ.get('SECOPSAI_EDGE_OPERATIONS_TOKEN', '').strip()
+    legacy_admin_token = os.environ.get('SECOPSAI_EDGE_ADMIN_TOKEN', '').strip()
+    access_token = operations_token or legacy_admin_token
+    if not base_url or not access_token:
         return {
             'configured': False,
             'ok': False,
-            'error': 'Set SECOPSAI_EDGE_API_URL and SECOPSAI_EDGE_ADMIN_TOKEN on the helper to load live sensor operations.',
+            'error': 'Set SECOPSAI_EDGE_API_URL and SECOPSAI_EDGE_OPERATIONS_TOKEN on the helper to load live sensor operations.',
             'sites': [],
             'sensors': [],
             'schedules': [],
@@ -793,12 +795,20 @@ def edge_api_snapshot():
         'schedules': '/api/v1/scan-schedules',
         'scan_jobs': '/api/v1/scan-jobs',
     }
-    result = {'configured': True, 'ok': True}
+    result = {
+        'configured': True,
+        'ok': True,
+        'credential_scope': 'operations:read' if operations_token else 'legacy-admin',
+    }
+    if not operations_token:
+        result['warning'] = (
+            'Legacy Edge administrator credential is configured. Replace it with a scoped operations:read token.'
+        )
 
     def fetch_resource(key, path):
         request = urllib.request.Request(
             f'{base_url}{path}',
-            headers={'Authorization': f'Bearer {admin_token}', 'Accept': 'application/json'},
+            headers={'Authorization': f'Bearer {access_token}', 'Accept': 'application/json'},
         )
         try:
             with urllib.request.urlopen(request, timeout=12) as response:

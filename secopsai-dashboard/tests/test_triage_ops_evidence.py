@@ -384,6 +384,49 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertFalse(payload['ok'])
         self.assertNotIn('top-secret-token', json.dumps(payload))
 
+    def test_edge_api_snapshot_prefers_scoped_operations_token(self):
+        response = mock.MagicMock()
+        response.read.return_value = b'[]'
+        response.__enter__.return_value = response
+        with mock.patch.dict(
+            os.environ,
+            {
+                'SECOPSAI_EDGE_API_URL': 'https://edge.example.test',
+                'SECOPSAI_EDGE_OPERATIONS_TOKEN': 'scoped-operations-token',
+                'SECOPSAI_EDGE_ADMIN_TOKEN': 'legacy-admin-token',
+            },
+            clear=False,
+        ), mock.patch.object(server.urllib.request, 'urlopen', return_value=response) as urlopen:
+            payload = server.edge_api_snapshot()
+
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['credential_scope'], 'operations:read')
+        self.assertNotIn('warning', payload)
+        self.assertEqual(len(urlopen.call_args_list), 4)
+        for call in urlopen.call_args_list:
+            request = call.args[0]
+            self.assertEqual(request.get_header('Authorization'), 'Bearer scoped-operations-token')
+
+    def test_edge_api_snapshot_marks_legacy_admin_fallback(self):
+        response = mock.MagicMock()
+        response.read.return_value = b'[]'
+        response.__enter__.return_value = response
+        with mock.patch.dict(
+            os.environ,
+            {
+                'SECOPSAI_EDGE_API_URL': 'https://edge.example.test',
+                'SECOPSAI_EDGE_OPERATIONS_TOKEN': '',
+                'SECOPSAI_EDGE_ADMIN_TOKEN': 'legacy-admin-token',
+            },
+            clear=False,
+        ), mock.patch.object(server.urllib.request, 'urlopen', return_value=response):
+            payload = server.edge_api_snapshot()
+
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['credential_scope'], 'legacy-admin')
+        self.assertIn('operations:read', payload['warning'])
+        self.assertNotIn('legacy-admin-token', json.dumps(payload))
+
     def test_json_response_ignores_disconnected_client(self):
         handler = mock.Mock()
         handler.wfile.write.side_effect = BrokenPipeError()
