@@ -1071,6 +1071,20 @@ function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   assert.equal(app.includes("window.addEventListener('DOMContentLoaded', () => {\n  bindEvents();\n  startTopStripClock();\n  setPage('mission-control');"), false);
 }
 
+function testCanonicalCoreFindingsJoinTheOperatorQueue() {
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const start = app.indexOf("function renderFindings()");
+  const end = app.indexOf("function renderRunRequests()", start);
+  const renderFindingsSource = app.slice(start, end > start ? end : undefined);
+  assert.match(app, /function coreWorkspaceFindings\(\)/);
+  assert.match(app, /function mergedOperatorFindings\(\)/);
+  assert.match(app, /Core is canonical and deliberately replaces/);
+  assert.match(app, /if \(findingRecordOrigin\(finding\) === 'core'\) return false;/);
+  assert.match(renderFindingsSource, /const total = findings\.length;/);
+  assert.equal(renderFindingsSource.includes("const total = state.findings.length;"), false);
+  assert.match(renderFindingsSource, /Core canonical/);
+}
+
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
 await testConfigRequiresAuthenticationByDefault();
@@ -1110,4 +1124,5 @@ testDashboardListsUseLatestFirstOrdering();
 testEdgeWorkspaceUiIsPresentAndReadOnly();
 testResearchCaseWorkspaceIsPresentAndTokenGated();
 testDashboardAuthGateIsPresentAndBootIsSessionGated();
+testCanonicalCoreFindingsJoinTheOperatorQueue();
 console.log("blog ops worker tests passed");

@@ -35,7 +35,8 @@ one organization until workspace IDs and membership-scoped policies ship.
 Create operator users through Supabase Auth administration; the dashboard does
 not expose public signup. Keep `DASHBOARD_AUTH_REQUIRED=true` in hosted and pilot
 environments. Setting it to `false` is a local development escape hatch and is
-incompatible with the authenticated RLS migration for browser data access.
+a locked rollout state: browser database credentials are removed and no live
+workspace records load.
 
 Apply and verify the policy non-interactively when a direct database connection
 is available:
@@ -89,7 +90,9 @@ It now also reads native local SecOpsAI state through the helper server:
 - queueing into `run_requests`
 
 ### Findings
-- `findings` table visibility when present
+- one deduplicated queue combining canonical Core findings with optional
+  dashboard operational findings
+- explicit record-owner labels so operators know where status is authoritative
 - finding detail and correlation
 - create a task directly from a finding
 

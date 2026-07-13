@@ -1285,8 +1285,36 @@ function selectFinding(nextFindingId = null) {
   state.selectedFindingId = nextId;
 }
 
+function coreWorkspaceFindings() {
+  const core = state.edgeWorkspace.data?.core || null;
+  if (!core || !Array.isArray(core.findings)) return [];
+  return core.findings.map(finding => ({ ...finding, _secopsai_record_origin: 'core' }));
+}
+
+function findingRecordOrigin(finding) {
+  return finding?._secopsai_record_origin === 'core' ? 'core' : 'dashboard';
+}
+
+function mergedOperatorFindings() {
+  const merged = new Map();
+  const add = (finding, origin) => {
+    if (!finding || typeof finding !== 'object') return;
+    const id = String(findingId(finding) || '').trim();
+    const fallback = [findingSource(finding), findingTitle(finding), findingDetectedAt(finding)]
+      .map(value => String(value || '').trim().toLowerCase())
+      .join('|');
+    const key = id ? `id:${id.toLowerCase()}` : `fallback:${fallback}`;
+    merged.set(key, { ...finding, _secopsai_record_origin: origin });
+  };
+  state.findings.forEach(finding => add(finding, 'dashboard'));
+  // Core is canonical and deliberately replaces a dashboard projection that
+  // carries the same stable finding ID.
+  coreWorkspaceFindings().forEach(finding => add(finding, 'core'));
+  return [...merged.values()];
+}
+
 function sortedFindings() {
-  return sortLatestFirst(state.findings, FINDING_LATEST_FIELDS);
+  return sortLatestFirst(mergedOperatorFindings(), FINDING_LATEST_FIELDS);
 }
 
 function currentSelectedFinding() {
@@ -1297,6 +1325,7 @@ function currentSelectedFinding() {
 
 async function bestEffortLinkFindingToTask(finding, task) {
   const normalizedId = findingId(finding);
+  if (findingRecordOrigin(finding) === 'core') return false;
   if (!normalizedId || !task?.id || state.optionalTables.findings === false) return false;
   const candidates = ['related_work_item_id', 'work_item_id', 'linked_work_item_id', 'task_id', 'linked_task_id'];
   for (const column of candidates) {
@@ -2044,7 +2073,7 @@ function renderMissionControl() {
   }, {});
   const topDomains = Object.entries(byDomain).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const extFacing = state.workItems.filter(w => w.external_facing).length;
-  const openFindings = state.findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
+  const openFindings = sortedFindings().filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
   const missionOverview = el("mission-overview");
   if (missionOverview) {
     missionOverview.innerHTML = `
@@ -2231,8 +2260,10 @@ function renderTasks() {
 }
 
 function renderFindings() {
-  const findingsAvailable = state.optionalTables.findings !== false;
   const findings = sortedFindings();
+  const coreFindingCount = findings.filter(finding => findingRecordOrigin(finding) === 'core').length;
+  const dashboardFindingCount = findings.length - coreFindingCount;
+  const findingsAvailable = state.optionalTables.findings !== false || coreFindingCount > 0;
   if (findingsAvailable && findings.length && !state.selectedFindingId) selectFinding();
   const triageSummary = localTriageSummary();
   const triageLatest = localTriageLatestRun();
@@ -2240,18 +2271,20 @@ function renderFindings() {
   const openSessions = openLocalSessionsCount();
   const pendingApprovals = pendingLocalApprovalsCount();
   const summary = el('finding-summary');
-  const total = state.findings.length;
-  const aiGuardCount = aiDependencyGuardFindings(state.findings).length;
-  const openCount = state.findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
-  const criticalCount = state.findings.filter(f => ['critical', 'urgent'].includes(String(findingSeverity(f)).toLowerCase())).length;
-  const linkedCount = state.findings.filter(f => relatedTasksForFinding(f).length > 0).length;
-  const actionableCount = state.findings.filter(f => {
+  const total = findings.length;
+  const aiGuardCount = aiDependencyGuardFindings(findings).length;
+  const openCount = findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
+  const criticalCount = findings.filter(f => ['critical', 'urgent'].includes(String(findingSeverity(f)).toLowerCase())).length;
+  const linkedCount = findings.filter(f => relatedTasksForFinding(f).length > 0).length;
+  const actionableCount = findings.filter(f => {
     const related = relatedTasksForFinding(f);
     return related.length === 0 || (related[0]?.item?.status && !['done', 'review'].includes(related[0].item.status));
   }).length;
   if (summary) {
     summary.innerHTML = `
       <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div></div>
+      <div class="card"><div class="metric">${coreFindingCount}</div><div class="metric-label">Core canonical</div></div>
+      <div class="card"><div class="metric">${dashboardFindingCount}</div><div class="metric-label">Dashboard operational</div></div>
       <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div></div>
       <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div></div>
       <div class="card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div></div>
@@ -2267,9 +2300,9 @@ function renderFindings() {
   const table = el('findings-table');
   if (table) {
     if (!findingsAvailable) {
-      table.innerHTML = `<div class="empty">The <code>findings</code> table is not available yet. You can still create investigation tasks from this view and wire the table later without changing the UI again.</div>`;
+      table.innerHTML = `<div class="empty">Neither canonical Core findings nor the optional dashboard <code>findings</code> table are available yet. Connect Core or restore the dashboard table to populate this queue.</div>`;
     } else if (!findings.length) {
-      table.innerHTML = `<div class="empty">No findings yet. Once data lands in <code>findings</code>, this queue will show severity, confidence, correlation, and task actions.</div>`;
+      table.innerHTML = `<div class="empty">No findings yet. Canonical Core records and dashboard operational findings will appear here with severity, correlation, and next actions.</div>`;
     } else {
       table.innerHTML = `
         ${renderAiDependencyGuardSurface(findings)}
@@ -2281,7 +2314,7 @@ function renderFindings() {
             const normalizedFindingId = findingId(f);
             const selected = String(state.selectedFindingId) === String(normalizedFindingId);
             return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(normalizedFindingId || '')}">
-              <td><strong>${escapeHtml(findingTitle(f))}</strong><div class="small">${escapeHtml(displayFindingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(compactText(findingBody(f), 120))}</div></td>
+              <td><strong>${escapeHtml(findingTitle(f))}</strong><span class="finding-origin ${findingRecordOrigin(f)}">${findingRecordOrigin(f) === 'core' ? 'Core canonical' : 'Dashboard'}</span><div class="small">${escapeHtml(displayFindingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(compactText(findingBody(f), 120))}</div></td>
               <td><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
               <td>${renderStatusPill(String(effectiveFindingStatus(f)).toLowerCase(), humanizeSnake(effectiveFindingStatus(f)))}</td>
               <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
@@ -2383,6 +2416,7 @@ function renderFindings() {
             <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val">${escapeHtml(findingSeverity(selected))}</div></div>
             <div class="kv-row"><div class="kv-key">Confidence</div><div class="kv-val">${escapeHtml(findingConfidence(selected) ?? '—')}</div></div>
             <div class="kv-row"><div class="kv-key">Disposition</div><div class="kv-val">${escapeHtml(humanizeSnake(effectiveFindingDisposition(selected)))}</div></div>
+            <div class="kv-row"><div class="kv-key">Record owner</div><div class="kv-val">${findingRecordOrigin(selected) === 'core' ? 'SecOpsAI Core (canonical)' : 'Dashboard operations'}</div></div>
             <div class="kv-row"><div class="kv-key">Suggested domain</div><div class="kv-val">${escapeHtml(findingDomainHint(selected))}</div></div>
           </div>
           <div class="detail-summary">${escapeHtml(findingBody(selected) || 'No additional finding narrative available.')}</div>
