@@ -3,6 +3,7 @@
 !.dev.vars.example
 .wrangler/
 .env
+node_modules/
 __pycache__/
 .pytest_cache/
 *.pyc
