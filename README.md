@@ -73,6 +73,24 @@ Then open:
 http://127.0.0.1:45680
 ```
 
+## SecOpsAI Edge integration
+
+The **Edge** workspace treats SecOpsAI Core as the canonical source for network
+assets, graph changes, and Edge-origin findings. The local helper can enrich
+that view with live site, sensor, schedule, and scan-job status from the Edge
+API.
+
+Configure these values on the helper host, never in browser configuration:
+
+- `SECOPSAI_EDGE_API_URL`
+- `SECOPSAI_EDGE_OPERATIONS_TOKEN`
+
+Generate the second value from the Edge dashboard under **Settings → Workspace
+integration tokens → Create dashboard token**. It is workspace-scoped,
+revocable, shown once, and limited to `operations:read`. The legacy
+`SECOPSAI_EDGE_ADMIN_TOKEN` variable is accepted temporarily for migration but
+is intentionally marked as degraded in the operator UI.
+
 ## Product fit
 
 This dashboard now complements the latest `secopsai` repo work:

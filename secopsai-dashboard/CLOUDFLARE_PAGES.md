@@ -156,12 +156,18 @@ The same helper also serves the read-only SecOpsAI Edge workspace at
 Cloudflare Pages:
 
 - `SECOPSAI_EDGE_API_URL`
-- `SECOPSAI_EDGE_ADMIN_TOKEN`
+- `SECOPSAI_EDGE_OPERATIONS_TOKEN`
+
+Create the credential from the Edge **Settings → Workspace integration
+tokens** panel using **Create dashboard token**. It is scoped to
+`operations:read`, bound to the selected workspace, revocable, and shown only
+once. `SECOPSAI_EDGE_ADMIN_TOKEN` remains a deprecated helper-only migration
+fallback and should be removed after the scoped token is configured.
 
 Set `SECOPSAI_EDGE_DASHBOARD_URL` in Cloudflare Pages only when you want the
 operator console to show an **Open sensor admin** link. This value is public.
-The Edge admin token must never be a Pages build variable or browser config
-value. Core graph assets and Edge-origin findings remain available when the
+The Edge operations token must never be a Pages build variable or browser
+config value. Core graph assets and Edge-origin findings remain available when the
 live Edge API enrichment is not configured.
 
 The helper also serves `/api/secopsai/research-cases`. Case reads use the
