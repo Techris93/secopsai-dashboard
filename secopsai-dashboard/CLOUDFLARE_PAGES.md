@@ -151,6 +151,26 @@ Required for hosted Triage Ops:
 - Optional `SECOPSAI_HELPER_AUTH_HEADER`
 - Optional `SECOPSAI_HELPER_AUTH_TOKEN`
 
+The same helper also serves the read-only SecOpsAI Edge workspace at
+`/api/secopsai/edge-workspace`. Configure these on the helper host, not in
+Cloudflare Pages:
+
+- `SECOPSAI_EDGE_API_URL`
+- `SECOPSAI_EDGE_ADMIN_TOKEN`
+
+Set `SECOPSAI_EDGE_DASHBOARD_URL` in Cloudflare Pages only when you want the
+operator console to show an **Open sensor admin** link. This value is public.
+The Edge admin token must never be a Pages build variable or browser config
+value. Core graph assets and Edge-origin findings remain available when the
+live Edge API enrichment is not configured.
+
+The helper also serves `/api/secopsai/research-cases`. Case reads use the
+authenticated helper proxy. Every case mutation, export, and review-draft
+handoff requires `TRIAGE_OPS_ADMIN_TOKEN` (or the configured Blog Ops fallback)
+and is re-authorized by both the Worker and helper. Research case exports are
+returned as bounded Markdown downloads; arbitrary helper files are never
+served.
+
 Required for write actions on the helper:
 
 - `TRIAGE_OPS_ADMIN_TOKEN`

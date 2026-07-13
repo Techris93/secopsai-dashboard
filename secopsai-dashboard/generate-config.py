@@ -58,6 +58,7 @@ def main():
         '__HOSTED_AI_MODEL__': js_escape(merged.get('HOSTED_AI_MODEL', 'gpt-5.4-mini')),
         '__HOSTED_AI_MAX_COST_USD__': js_number(merged.get('HOSTED_AI_MAX_COST_USD'), default=3.0),
         '__HOSTED_AI_ALLOW_MUTATIONS__': js_bool(merged.get('HOSTED_AI_ALLOW_MUTATIONS'), default=False),
+        '__SECOPSAI_EDGE_DASHBOARD_URL__': js_escape(merged.get('SECOPSAI_EDGE_DASHBOARD_URL', '')),
     }
 
     text = TEMPLATE_PATH.read_text(encoding='utf-8')

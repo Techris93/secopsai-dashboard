@@ -102,6 +102,21 @@ const state = {
   channelRoutes: [],
   events: [],
   integrationStatus: null,
+  edgeWorkspace: {
+    data: null,
+    loading: false,
+    error: null
+  },
+  researchCases: {
+    cases: [],
+    selectedId: null,
+    selected: null,
+    loading: false,
+    error: null,
+    lastAction: null,
+    retractTarget: null,
+    adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
+  },
   localTriage: null,
   blogOps: {
     status: null,
@@ -154,13 +169,15 @@ const state = {
 const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
-const pages = ["mission-control", "tasks", "findings", "integrations", "triage-ops", "blog-ops", "operator-guide"];
+const pages = ["mission-control", "tasks", "findings", "edge", "integrations", "triage-ops", "research-cases", "blog-ops", "operator-guide"];
 const PAGE_CONTEXT = {
   "mission-control": "Mission Control overview",
   "tasks": "Task queue, ownership, and run visibility",
   "findings": "Detection triage and correlation surface",
+  "edge": "Network assets, sensors, and Edge-origin findings",
   "integrations": "Native triage and helper visibility",
   "triage-ops": "Supply-chain alert review and closure",
+  "research-cases": "Independent research cases, evidence, and disclosure",
   "blog-ops": "Security blog newsroom control plane",
   "operator-guide": "Dashboard operator guide"
 };
@@ -437,6 +454,7 @@ async function runNativeInvestigate(finding) {
   setStatus(`<span class="dot"></span> ${escapeHtml(`${summary}${sessionSuffix}`)}`);
   await loadLocalTriageState();
   renderFindings();
+  renderEdgeWorkspace();
   renderIntegrations();
 }
 
@@ -5108,9 +5126,11 @@ function renderAll() {
   renderMissionControl();
   renderTasks();
   renderFindings();
+  renderEdgeWorkspace();
   renderRunRequests();
   renderIntegrations();
   renderTriageOps();
+  renderResearchCases();
   renderBlogOps();
   const triageSummary = localTriageSummary();
   const triageBit = triageSummary
@@ -5334,6 +5354,384 @@ async function backgroundRefreshOpsData() {
   }
 }
 
+function edgeMetric(label, value, detail) {
+  return `<div class="card metric-card"><div class="metric-label">${escapeHtml(label)}</div><div class="metric">${escapeHtml(String(value))}</div><div class="metric-label">${escapeHtml(detail)}</div></div>`;
+}
+
+function renderEdgeWorkspace() {
+  const workspace = state.edgeWorkspace.data;
+  const core = workspace?.core || {};
+  const edge = workspace?.edge || {};
+  const assets = Array.isArray(core.assets) ? core.assets : [];
+  const findings = Array.isArray(core.findings) ? core.findings : [];
+  const sensors = Array.isArray(edge.sensors) ? edge.sensors : [];
+  const sites = Array.isArray(edge.sites) ? edge.sites : [];
+  const schedules = Array.isArray(edge.schedules) ? edge.schedules : [];
+  const jobs = Array.isArray(edge.scan_jobs) ? edge.scan_jobs : [];
+  const changes = core.changes && typeof core.changes === 'object' ? core.changes : { nodes: [], edges: [] };
+  const priority = findings.filter(item => ['critical', 'high'].includes(String(item.severity || '').toLowerCase())).length;
+  const openFindings = findings.filter(item => !['closed', 'resolved'].includes(String(item.status || '').toLowerCase())).length;
+  const onlineSensors = sensors.filter(item => String(item.connection_state || '').toLowerCase() === 'online').length;
+  const activeSchedules = schedules.filter(item => item.enabled !== false).length;
+  const activeJobs = jobs.filter(item => ['queued', 'claimed', 'running'].includes(String(item.status || '').toLowerCase())).length;
+
+  const adminLink = el('edge-admin-link');
+  if (adminLink) {
+    const url = String(cfg.edgeDashboardUrl || '').trim();
+    adminLink.hidden = !url;
+    if (url) adminLink.href = url;
+  }
+
+  const health = el('edge-health');
+  if (health) {
+    if (state.edgeWorkspace.loading) {
+      health.innerHTML = '<div class="small">Loading Core graph and Edge sensor health…</div>';
+    } else if (!workspace) {
+      health.innerHTML = `<div class="error">${escapeHtml(state.edgeWorkspace.error || 'Edge workspace has not loaded.')}</div>`;
+    } else {
+      health.innerHTML = `
+        <div class="kv-list">
+          <div class="kv-row"><div class="kv-key">Core graph & triage</div><div class="kv-val">${core.ok ? renderStatusPill('completed', 'Connected') : renderStatusPill('failed', 'Unavailable')}</div></div>
+          <div class="kv-row"><div class="kv-key">Edge operations API</div><div class="kv-val">${edge.ok ? renderStatusPill('completed', 'Live') : renderStatusPill(edge.configured ? 'failed' : 'blocked', edge.configured ? 'Unavailable' : 'Not configured')}</div></div>
+          <div class="kv-row"><div class="kv-key">Last refreshed</div><div class="kv-val">${escapeHtml(fmtDate(workspace.generated_at))}</div></div>
+          ${core.error ? `<div class="error">${escapeHtml(core.error)}</div>` : ''}
+          ${edge.error ? `<div class="small">${escapeHtml(edge.error)}</div>` : ''}
+        </div>`;
+    }
+  }
+
+  if (el('edge-stats')) el('edge-stats').innerHTML = [
+    edgeMetric('Network assets', assets.length, 'Canonical Core graph'),
+    edgeMetric('Open findings', openFindings, `${priority} high or critical`),
+    edgeMetric('Sensors online', `${onlineSensors}/${sensors.length}`, `${sites.length} site(s)`),
+    edgeMetric('Active schedules', activeSchedules, `${activeJobs} active job(s)`),
+    edgeMetric('Graph changes', (changes.nodes || []).length + (changes.edges || []).length, 'Recent nodes and relationships')
+  ].join('');
+
+  const sensorHost = el('edge-sensors');
+  if (sensorHost) sensorHost.innerHTML = sensors.length ? `<div class="table-wrap"><table><thead><tr><th>Sensor</th><th>State</th><th>Runtime</th><th>Version</th><th>Last seen</th></tr></thead><tbody>${sensors.map(sensor => `<tr><td><strong>${escapeHtml(sensor.name || sensor.hostname || sensor.id)}</strong><div class="small">${escapeHtml(sensor.site_name || sensor.site_id || 'Unknown site')}</div></td><td>${renderStatusPill(sensor.connection_state || sensor.status || 'unknown')}</td><td>${escapeHtml(sensor.worker_state || 'unknown')}${sensor.current_job_id ? `<div class="small">Job ${escapeHtml(sensor.current_job_id)}</div>` : ''}</td><td>${escapeHtml(sensor.version || 'unknown')}<div class="small">${escapeHtml(sensor.os_name || '')}</div></td><td>${escapeHtml(fmtDate(sensor.last_seen_at))}${sensor.last_error ? `<div class="error">${escapeHtml(sensor.last_error)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No live sensor data. Configure the Edge API on the helper to enrich Core context.</div>';
+
+  const scheduleHost = el('edge-schedules');
+  if (scheduleHost) scheduleHost.innerHTML = schedules.length || jobs.length ? `<div class="table-wrap"><table><thead><tr><th>Name / target</th><th>State</th><th>Next / updated</th></tr></thead><tbody>${schedules.map(item => `<tr><td><strong>${escapeHtml(item.name || 'Schedule')}</strong><div class="small">${escapeHtml(item.target_cidr || '')}</div></td><td>${renderStatusPill(item.enabled === false ? 'blocked' : 'completed', item.enabled === false ? 'Disabled' : item.frequency || 'Enabled')}</td><td>${escapeHtml(fmtDate(item.next_run_at))}</td></tr>`).join('')}${jobs.filter(item => ['queued', 'claimed', 'running'].includes(String(item.status || '').toLowerCase())).map(item => `<tr><td><strong>Scan job</strong><div class="small">${escapeHtml(item.target_cidr || item.id)}</div></td><td>${renderStatusPill(item.status || 'queued')}</td><td>${escapeHtml(fmtDate(item.updated_at || item.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No schedules or active scan jobs loaded.</div>';
+
+  const assetHost = el('edge-assets');
+  if (assetHost) assetHost.innerHTML = assets.length ? `<div class="table-wrap"><table><thead><tr><th>IP address</th><th>Hostname</th><th>Vendor / type</th><th>Status</th><th>Last seen</th></tr></thead><tbody>${assets.map(asset => `<tr><td><code>${escapeHtml(asset.ip_address || asset.label || 'unknown')}</code></td><td>${escapeHtml(asset.hostname || 'Unknown')}</td><td>${escapeHtml(asset.vendor || 'Unknown')}<div class="small">${escapeHtml(asset.device_type || '')}</div></td><td>${renderStatusPill(asset.status || 'unknown')}</td><td>${escapeHtml(fmtDate(asset.last_seen))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No Edge assets are present in the Core graph yet.</div>';
+
+  const findingHost = el('edge-findings');
+  if (findingHost) findingHost.innerHTML = findings.length ? `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Last seen</th></tr></thead><tbody>${findings.slice(0, 100).map(finding => `<tr><td><strong>${escapeHtml(finding.title || finding.rule_name || finding.finding_id)}</strong><div class="small"><code>${escapeHtml(finding.finding_id || '')}</code> · ${escapeHtml(finding.summary || '')}</div></td><td>${renderSeverityPill(finding.severity)}</td><td>${renderStatusPill(finding.status || 'open')}</td><td>${escapeHtml(fmtDate(finding.last_seen || finding.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No Edge-origin findings are present in Core triage.</div>';
+
+  const changeHost = el('edge-changes');
+  if (changeHost) {
+    const rows = [...(Array.isArray(changes.nodes) ? changes.nodes : []).map(item => ({ kind: 'Node', label: item.label || item.node_id || item.id, at: item.updated_at || item.last_seen || item.created_at })), ...(Array.isArray(changes.edges) ? changes.edges : []).map(item => ({ kind: 'Relationship', label: item.type || item.edge_type || item.id, at: item.updated_at || item.observed_at || item.created_at }))];
+    changeHost.innerHTML = rows.length ? `<div class="feed">${rows.slice(0, 30).map(item => `<div class="feed-item"><strong>${escapeHtml(item.kind)}</strong><div>${escapeHtml(item.label || 'Graph change')}</div><div class="meta">${escapeHtml(fmtDate(item.at))}</div></div>`).join('')}</div>` : '<div class="empty">No recent graph changes were returned.</div>';
+  }
+}
+
+async function loadEdgeWorkspace({ render = true } = {}) {
+  state.edgeWorkspace.loading = true;
+  state.edgeWorkspace.error = null;
+  if (render) renderEdgeWorkspace();
+  try {
+    const response = await fetch(cfg.edgeWorkspaceEndpoint || '/api/secopsai/edge-workspace', { cache: 'no-store' });
+    const payload = await response.json().catch(() => null);
+    if (!payload || (!response.ok && !payload.core)) throw new Error(payload?.error || `Edge workspace HTTP ${response.status}`);
+    state.edgeWorkspace.data = payload;
+    state.edgeWorkspace.error = response.ok ? null : (payload.error || payload.core?.error || `HTTP ${response.status}`);
+  } catch (error) {
+    state.edgeWorkspace.data = null;
+    state.edgeWorkspace.error = error?.message || String(error);
+  } finally {
+    state.edgeWorkspace.loading = false;
+    if (render) renderEdgeWorkspace();
+  }
+  return state.edgeWorkspace.data;
+}
+
+function researchCasesEndpoint(suffix = '') {
+  return `${cfg.researchCasesEndpoint || '/api/secopsai/research-cases'}${suffix}`;
+}
+
+function researchOption(value, current, label = null) {
+  return `<option value="${escapeHtml(value)}" ${String(value) === String(current) ? 'selected' : ''}>${escapeHtml(label || statusLabel(value))}</option>`;
+}
+
+function filteredResearchCases() {
+  const status = el('research-filter-status')?.value || 'all';
+  const query = (el('research-filter-search')?.value || '').trim().toLowerCase();
+  return (state.researchCases.cases || []).filter(item => {
+    if (status !== 'all' && String(item.status || '') !== status) return false;
+    if (!query) return true;
+    return [item.case_id, item.title, item.summary, item.owner, item.case_type]
+      .some(value => String(value || '').toLowerCase().includes(query));
+  });
+}
+
+function researchDownloadArtifact(artifact) {
+  if (!artifact?.content) return;
+  const blob = new Blob([artifact.content], { type: artifact.content_type || 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = artifact.filename || 'secopsai-research-case.md';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function loadResearchCaseDetail(caseId, { render = true } = {}) {
+  if (!caseId) {
+    state.researchCases.selected = null;
+    if (render) renderResearchCases();
+    return null;
+  }
+  const response = await fetch(researchCasesEndpoint(`/${encodeURIComponent(caseId)}`), { cache: 'no-store' });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) throw new Error(payload.error || `Research case HTTP ${response.status}`);
+  state.researchCases.selectedId = caseId;
+  state.researchCases.selected = payload.case;
+  if (render) renderResearchCases();
+  return payload.case;
+}
+
+async function loadResearchCases({ render = true, preserveSelection = true } = {}) {
+  state.researchCases.loading = true;
+  state.researchCases.error = null;
+  if (render) renderResearchCases();
+  try {
+    const response = await fetch(`${researchCasesEndpoint()}?limit=250`, { cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Research cases HTTP ${response.status}`);
+    state.researchCases.cases = Array.isArray(payload.cases) ? payload.cases : [];
+    const retained = preserveSelection && state.researchCases.cases.some(item => item.case_id === state.researchCases.selectedId);
+    state.researchCases.selectedId = retained ? state.researchCases.selectedId : (state.researchCases.cases[0]?.case_id || null);
+    if (state.researchCases.selectedId) await loadResearchCaseDetail(state.researchCases.selectedId, { render: false });
+    else state.researchCases.selected = null;
+  } catch (error) {
+    state.researchCases.error = error?.message || String(error);
+    state.researchCases.cases = [];
+    state.researchCases.selected = null;
+  } finally {
+    state.researchCases.loading = false;
+    if (render) renderResearchCases();
+  }
+}
+
+async function runResearchCaseAction(action, payload = {}, button = null) {
+  const token = state.researchCases.adminToken || state.triageOps.adminToken;
+  if (!token) {
+    setStatus('Use the protected research action token before changing a case.', true);
+    el('research-cases-admin-token')?.focus();
+    return null;
+  }
+  setButtonBusy(button, true, action === 'draft-blog' ? 'Creating draft…' : 'Working…');
+  try {
+    const response = await fetch(researchCasesEndpoint(`/${action}`), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Triage-Ops-Admin-Token': token
+      },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || result.result?.error || `Research action HTTP ${response.status}`);
+    state.researchCases.lastAction = { action, result, at: new Date().toISOString() };
+    const nextId = result.result?.case_id || payload.case_id || state.researchCases.selectedId;
+    if (nextId) state.researchCases.selectedId = nextId;
+    if (action === 'export' && result.artifact) researchDownloadArtifact(result.artifact);
+    await loadResearchCases({ render: false, preserveSelection: true });
+    renderResearchCases();
+    setStatus(`<span class="dot"></span> ${escapeHtml(statusLabel(action))} completed for ${escapeHtml(nextId || 'research case')}`);
+    return result;
+  } catch (error) {
+    state.researchCases.lastAction = { action, error: error?.message || String(error), at: new Date().toISOString() };
+    setStatus(`Research action failed: ${error?.message || String(error)}`, true);
+    renderResearchCases();
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function researchDetailSection(title, body) {
+  return `<section class="research-detail-section"><h4>${escapeHtml(title)}</h4>${body}</section>`;
+}
+
+function researchTable(headers, rows, emptyMessage) {
+  if (!rows.length) return `<div class="empty-state compact">${escapeHtml(emptyMessage)}</div>`;
+  return `<div class="table-wrap research-table"><table><thead><tr>${headers.map(item => `<th>${escapeHtml(item)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
+
+function researchRetractControl(itemType, item) {
+  if (item.status === 'retracted') return renderStatusPill('closed', 'Retracted');
+  const id = item[`${itemType}_id`] || item.subject_id || item.evidence_id || item.ioc_id;
+  return `<button class="mini-btn research-retract-btn" type="button" data-item-type="${escapeHtml(itemType)}" data-item-id="${escapeHtml(id || '')}">Retract</button>`;
+}
+
+function openResearchRetractModal(researchCase, itemType, itemId) {
+  state.researchCases.retractTarget = { caseId: researchCase.case_id, itemType, itemId };
+  const context = el('research-retract-context');
+  if (context) context.textContent = `${itemType} ${itemId} will remain in ${researchCase.case_id} but will be excluded from active evidence and publication.`;
+  if (el('research-retract-reason')) el('research-retract-reason').value = '';
+  el('research-retract-modal')?.classList.remove('hidden');
+  setTimeout(() => el('research-retract-reason')?.focus(), 0);
+}
+
+function closeResearchRetractModal() {
+  state.researchCases.retractTarget = null;
+  el('research-retract-modal')?.classList.add('hidden');
+}
+
+function bindResearchCaseDetailActions(researchCase) {
+  el('research-save-case-btn')?.addEventListener('click', event => runResearchCaseAction('update', {
+    case_id: researchCase.case_id,
+    status: el('research-detail-status')?.value,
+    disclosure_status: el('research-detail-disclosure')?.value,
+    confidence: el('research-detail-confidence')?.value,
+    severity: el('research-detail-severity')?.value,
+    owner: el('research-detail-owner')?.value,
+    summary: el('research-detail-summary')?.value,
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-add-subject-btn')?.addEventListener('click', event => runResearchCaseAction('add-subject', {
+    case_id: researchCase.case_id,
+    subject_type: el('research-subject-type')?.value,
+    ecosystem: el('research-subject-ecosystem')?.value,
+    name: el('research-subject-name')?.value,
+    version: el('research-subject-version')?.value,
+    publisher: el('research-subject-publisher')?.value,
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-add-evidence-btn')?.addEventListener('click', event => runResearchCaseAction('add-evidence', {
+    case_id: researchCase.case_id,
+    evidence_type: el('research-evidence-type')?.value,
+    title: el('research-evidence-title')?.value,
+    locator: el('research-evidence-locator')?.value,
+    sha256: el('research-evidence-sha256')?.value,
+    provenance: el('research-evidence-provenance')?.value,
+    notes: el('research-evidence-notes')?.value,
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-add-ioc-btn')?.addEventListener('click', event => runResearchCaseAction('add-ioc', {
+    case_id: researchCase.case_id,
+    ioc_type: el('research-ioc-type')?.value,
+    value: el('research-ioc-value')?.value,
+    confidence: el('research-ioc-confidence')?.value,
+    source_evidence_id: el('research-ioc-evidence')?.value,
+    tags: (el('research-ioc-tags')?.value || '').split(',').map(item => item.trim()).filter(Boolean),
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-link-finding-btn')?.addEventListener('click', event => runResearchCaseAction('link-finding', {
+    case_id: researchCase.case_id,
+    finding_id: el('research-link-finding-id')?.value,
+    relationship: el('research-link-relationship')?.value,
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-add-note-btn')?.addEventListener('click', event => runResearchCaseAction('note', {
+    case_id: researchCase.case_id,
+    note: el('research-note-text')?.value,
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-export-btn')?.addEventListener('click', event => runResearchCaseAction('export', { case_id: researchCase.case_id }, event.currentTarget));
+  el('research-draft-blog-btn')?.addEventListener('click', event => {
+    if (!confirm(`Create a review-only blog draft for ${researchCase.case_id}? This does not publish it.`)) return;
+    runResearchCaseAction('draft-blog', { case_id: researchCase.case_id }, event.currentTarget);
+  });
+  document.querySelectorAll('#research-case-detail .research-retract-btn').forEach(button => button.addEventListener('click', () => {
+    openResearchRetractModal(researchCase, button.dataset.itemType, button.dataset.itemId);
+  }));
+}
+
+function renderResearchCaseDetail(researchCase) {
+  const host = el('research-case-detail');
+  if (!host) return;
+  if (state.researchCases.loading && !researchCase) {
+    host.innerHTML = '<div class="empty-state">Loading research case…</div>';
+    return;
+  }
+  if (!researchCase) {
+    host.innerHTML = `<div class="empty-state">${escapeHtml(state.researchCases.error || 'Select or create a research case.')}</div>`;
+    return;
+  }
+  const readiness = researchCase.publication_readiness || { ready: false, blockers: [], warnings: [] };
+  const subjects = researchCase.subjects || [];
+  const evidence = researchCase.evidence || [];
+  const iocs = researchCase.iocs || [];
+  const findings = researchCase.findings || [];
+  const timeline = researchCase.timeline || [];
+  host.innerHTML = `
+    <div class="research-detail-head">
+      <div><div class="detail-eyebrow"><code>${escapeHtml(researchCase.case_id)}</code></div><h3>${escapeHtml(researchCase.title)}</h3><p class="small">Updated ${escapeHtml(fmtDate(researchCase.updated_at))} · ${escapeHtml(statusLabel(researchCase.case_type))}</p></div>
+      <div class="research-detail-badges">${renderSeverityPill(researchCase.severity)}${renderStatusPill(researchCase.status)}</div>
+    </div>
+    <div class="research-readiness ${readiness.ready ? 'ready' : 'blocked'}">
+      <strong>${readiness.ready ? 'Publication ready' : `${(readiness.blockers || []).length} publication blocker(s)`}</strong>
+      ${renderBulletList(readiness.ready ? (readiness.warnings || []) : (readiness.blockers || []), readiness.ready ? 'No readiness warnings.' : 'Run the readiness workflow before publication.')}
+    </div>
+    ${researchDetailSection('Case workflow', `
+      <div class="research-form-grid">
+        <label><span>Status</span><select id="research-detail-status">${['draft','investigating','validation','disclosure_pending','ready_to_publish','published','closed'].map(value => researchOption(value, researchCase.status)).join('')}</select></label>
+        <label><span>Disclosure</span><select id="research-detail-disclosure">${['not_started','not_required','preparing','reported','coordinating','disclosed','closed'].map(value => researchOption(value, researchCase.disclosure_status)).join('')}</select></label>
+        <label><span>Severity</span><select id="research-detail-severity">${['critical','high','medium','low','info'].map(value => researchOption(value, researchCase.severity)).join('')}</select></label>
+        <label><span>Confidence</span><input id="research-detail-confidence" type="number" min="0" max="100" value="${escapeHtml(String(researchCase.confidence || 0))}" /></label>
+        <label class="research-span-2"><span>Owner</span><input id="research-detail-owner" value="${escapeHtml(researchCase.owner || '')}" maxlength="160" /></label>
+        <label class="research-span-2"><span>Executive summary</span><textarea id="research-detail-summary" rows="5" maxlength="8000">${escapeHtml(researchCase.summary || '')}</textarea></label>
+      </div><div class="research-form-actions"><button class="primary-btn" id="research-save-case-btn" type="button">Save workflow</button><button class="secondary-btn" id="research-export-btn" type="button">Download case report</button><button class="secondary-btn" id="research-draft-blog-btn" type="button" ${readiness.ready ? '' : 'disabled'} title="${readiness.ready ? 'Creates a review-only Blog Ops draft.' : 'Resolve publication blockers first.'}">Create review draft</button></div>`)}
+    ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','State'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td>${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
+    ${researchDetailSection('Evidence', researchTable(['Evidence','Type','Provenance','Collected','State'], evidence.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td><strong>${escapeHtml(item.title)}</strong><div class="small">${escapeHtml(item.locator || item.sha256 || 'No locator')}</div></td><td>${escapeHtml(statusLabel(item.evidence_type))}</td><td>${escapeHtml(item.provenance || '—')}</td><td>${escapeHtml(fmtDate(item.collected_at))}</td><td>${researchRetractControl('evidence', item)}</td></tr>`), 'No evidence recorded.'))}
+    ${researchDetailSection('Indicators', researchTable(['Type','Value','Confidence','Evidence','State'], iocs.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(item.ioc_type)}</td><td><code>${escapeHtml(item.value)}</code></td><td>${escapeHtml(String(item.confidence))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('ioc', item)}</td></tr>`), 'No indicators recorded; explicitly state when none were found.'))}
+    ${researchDetailSection('Linked findings', researchTable(['Finding','Relationship','Linked'], findings.map(item => `<tr><td><code>${escapeHtml(item.finding_id)}</code></td><td>${escapeHtml(statusLabel(item.relationship))}</td><td>${escapeHtml(fmtDate(item.created_at))}</td></tr>`), 'No SOC findings linked.'))}
+    <details class="research-action-drawer"><summary>Add subject</summary><div class="research-form-grid"><label><span>Type</span><select id="research-subject-type">${['package','extension','repository','publisher','brand','infrastructure','other'].map(value => researchOption(value, 'package')).join('')}</select></label><label><span>Ecosystem</span><input id="research-subject-ecosystem" placeholder="npm, pypi, nuget" /></label><label class="research-span-2"><span>Name</span><input id="research-subject-name" placeholder="Package, brand, repository, or infrastructure" /></label><label><span>Version</span><input id="research-subject-version" /></label><label><span>Publisher</span><input id="research-subject-publisher" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-subject-btn" type="button">Add subject</button></div></details>
+    <details class="research-action-drawer"><summary>Add evidence</summary><div class="research-form-grid"><label><span>Type</span><select id="research-evidence-type">${['source','registry_metadata','package_artifact','static_analysis','sandbox_analysis','screenshot','analyst_note','other'].map(value => researchOption(value, 'source')).join('')}</select></label><label><span>Title</span><input id="research-evidence-title" /></label><label class="research-span-2"><span>Locator</span><input id="research-evidence-locator" placeholder="Public URL or controlled local reference" /></label><label class="research-span-2"><span>SHA-256</span><input id="research-evidence-sha256" maxlength="64" /></label><label><span>Provenance</span><input id="research-evidence-provenance" /></label><label><span>Notes</span><textarea id="research-evidence-notes" rows="3"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-evidence-btn" type="button">Add evidence</button></div></details>
+    <details class="research-action-drawer"><summary>Add IOC</summary><div class="research-form-grid"><label><span>Type</span><select id="research-ioc-type">${['domain','url','ipv4','ipv6','sha256','sha1','md5','email','wallet','file_path','other'].map(value => researchOption(value, 'domain')).join('')}</select></label><label><span>Confidence</span><input id="research-ioc-confidence" type="number" min="0" max="100" value="50" /></label><label class="research-span-2"><span>Value</span><input id="research-ioc-value" /></label><label><span>Source evidence</span><select id="research-ioc-evidence"><option value="">Not linked</option>${evidence.map(item => `<option value="${escapeHtml(item.evidence_id)}">${escapeHtml(item.title)}</option>`).join('')}</select></label><label><span>Tags</span><input id="research-ioc-tags" placeholder="credential-theft, skimmer" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-ioc-btn" type="button">Add IOC</button></div></details>
+    <details class="research-action-drawer"><summary>Link finding or add note</summary><div class="research-form-grid"><label><span>Finding ID</span><input id="research-link-finding-id" placeholder="SCM-... or EDGE-..." /></label><label><span>Relationship</span><select id="research-link-relationship">${['supports','related','derived_from','impacts'].map(value => researchOption(value, 'supports')).join('')}</select></label><label class="research-span-2"><span>Analyst note</span><textarea id="research-note-text" rows="3"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-link-finding-btn" type="button">Link finding</button><button class="secondary-btn" id="research-add-note-btn" type="button">Add note</button></div></details>
+    ${researchDetailSection('Timeline', timeline.length ? `<div class="feed">${timeline.slice().reverse().slice(0, 50).map(item => `<div class="feed-item"><strong>${escapeHtml(statusLabel(item.event_type))}</strong><div>${escapeHtml(item.message)}</div><div class="meta">${escapeHtml(item.actor)} · ${escapeHtml(fmtDate(item.created_at))}</div></div>`).join('')}</div>` : '<div class="empty-state compact">No case activity recorded.</div>')}
+    ${state.researchCases.lastAction?.error ? `<div class="error">${escapeHtml(state.researchCases.lastAction.error)}</div>` : ''}
+  `;
+  bindResearchCaseDetailActions(researchCase);
+}
+
+function renderResearchCases() {
+  const tokenInput = el('research-cases-admin-token');
+  if (tokenInput && tokenInput.value !== state.researchCases.adminToken) tokenInput.value = state.researchCases.adminToken;
+  const cases = state.researchCases.cases || [];
+  const ready = cases.filter(item => item.status === 'ready_to_publish').length;
+  const active = cases.filter(item => !['published', 'closed'].includes(item.status)).length;
+  const disclosure = cases.filter(item => ['disclosure_pending'].includes(item.status) || ['reported', 'coordinating'].includes(item.disclosure_status)).length;
+  const evidence = cases.reduce((sum, item) => sum + Number(item.evidence_count || 0), 0);
+  const stats = el('research-cases-stats');
+  if (stats) stats.innerHTML = [
+    edgeMetric('Active cases', active, `${cases.length} total`),
+    edgeMetric('Ready to publish', ready, 'Disclosure checks passed'),
+    edgeMetric('Coordinating', disclosure, 'Disclosure in progress'),
+    edgeMetric('Evidence records', evidence, 'Structured provenance'),
+    edgeMetric('IOC records', cases.reduce((sum, item) => sum + Number(item.ioc_count || 0), 0), 'Normalized indicators')
+  ].join('');
+  const list = el('research-case-list');
+  const filtered = filteredResearchCases();
+  if (list) list.innerHTML = state.researchCases.loading && !cases.length
+    ? '<div class="empty-state">Loading research cases…</div>'
+    : filtered.length
+      ? `<div class="research-case-list">${filtered.map(item => `<button class="research-case-row ${item.case_id === state.researchCases.selectedId ? 'selected' : ''}" type="button" data-research-case-id="${escapeHtml(item.case_id)}"><span class="research-case-row-head"><strong>${escapeHtml(item.title)}</strong>${renderSeverityPill(item.severity)}</span><span class="small"><code>${escapeHtml(item.case_id)}</code> · ${escapeHtml(statusLabel(item.status))} · confidence ${escapeHtml(String(item.confidence || 0))}</span><span class="small">${escapeHtml(String(item.evidence_count || 0))} evidence · ${escapeHtml(String(item.ioc_count || 0))} IOCs · ${escapeHtml(fmtDate(item.updated_at))}</span></button>`).join('')}</div>`
+      : `<div class="empty-state">${escapeHtml(state.researchCases.error || 'No research cases match this view.')}</div>`;
+  list?.querySelectorAll('[data-research-case-id]').forEach(button => button.addEventListener('click', async () => {
+    state.researchCases.selectedId = button.dataset.researchCaseId;
+    state.researchCases.loading = true;
+    renderResearchCases();
+    try {
+      await loadResearchCaseDetail(state.researchCases.selectedId, { render: false });
+      state.researchCases.error = null;
+    } catch (error) {
+      state.researchCases.error = error?.message || String(error);
+    } finally {
+      state.researchCases.loading = false;
+      renderResearchCases();
+    }
+  }));
+  renderResearchCaseDetail(state.researchCases.selected);
+}
+
 async function loadIntegrationStatus() {
   try {
     const res = await fetch(cfg.integrationStatusEndpoint || '/api/integration-status');
@@ -5350,7 +5748,8 @@ async function loadIntegrationStatus() {
         secopsai_sessions_api: false,
         secopsai_research_api: false,
         secopsai_campaign_api: false,
-        secopsai_events_api: false
+        secopsai_events_api: false,
+        secopsai_edge_api: false
       },
       ai_guard: aiGuardConfig()
     };
@@ -5675,6 +6074,13 @@ async function boot() {
   }
 
   try {
+    await loadEdgeWorkspace({ render: false });
+  } catch (err) {
+    console.warn('loadEdgeWorkspace failed during boot', err);
+    errors.push(`Edge workspace: ${err.message || String(err)}`);
+  }
+
+  try {
     await loadBlogOpsStatus({ render: false });
   } catch (err) {
     console.warn('loadBlogOpsStatus failed during boot', err);
@@ -5684,6 +6090,12 @@ async function boot() {
     await loadTriageOpsAlerts({ render: false });
   } catch (err) {
     console.warn('loadTriageOpsAlerts failed during boot', err);
+  }
+
+  try {
+    await loadResearchCases({ render: false });
+  } catch (err) {
+    console.warn('loadResearchCases failed during boot', err);
   }
 
   try {
@@ -5731,6 +6143,12 @@ function bindEvents() {
       return;
     }
     openFindingTaskModal();
+  });
+  el('edge-refresh-btn')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
+    await loadEdgeWorkspace();
+    setButtonBusy(btn, false);
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);
@@ -5784,6 +6202,7 @@ function bindEvents() {
   });
   el('triage-ops-save-token-btn')?.addEventListener('click', () => {
     state.triageOps.adminToken = el('triage-ops-admin-token')?.value || '';
+    state.researchCases.adminToken = state.triageOps.adminToken;
     if (state.triageOps.adminToken) {
       sessionStorage.setItem('secopsai_triage_ops_admin_token', state.triageOps.adminToken);
       setStatus('<span class="dot"></span> Triage Ops admin token stored for this browser session');
@@ -5792,16 +6211,85 @@ function bindEvents() {
       setStatus('Triage Ops admin token cleared');
     }
     renderTriageOps();
+    renderResearchCases();
   });
   el('triage-ops-clear-token-btn')?.addEventListener('click', () => {
     state.triageOps.adminToken = '';
+    state.researchCases.adminToken = '';
     sessionStorage.removeItem('secopsai_triage_ops_admin_token');
     if (el('triage-ops-admin-token')) el('triage-ops-admin-token').value = '';
     renderTriageOps();
+    renderResearchCases();
     setStatus('Triage Ops admin token cleared');
   });
   el('triage-ops-refresh-btn')?.addEventListener('click', async (event) => {
     await runTriageOpsAction('refresh-evidence', { button: event.currentTarget });
+  });
+  el('research-cases-new-btn')?.addEventListener('click', () => {
+    const panel = el('research-case-create-panel');
+    if (panel) {
+      panel.open = true;
+      el('research-create-title')?.focus();
+    }
+  });
+  el('research-cases-refresh-btn')?.addEventListener('click', async event => {
+    setButtonBusy(event.currentTarget, true, 'Refreshing…');
+    await loadResearchCases();
+    setButtonBusy(event.currentTarget, false);
+  });
+  el('research-cases-save-token-btn')?.addEventListener('click', () => {
+    const token = el('research-cases-admin-token')?.value || '';
+    state.researchCases.adminToken = token;
+    state.triageOps.adminToken = token;
+    if (token) sessionStorage.setItem('secopsai_triage_ops_admin_token', token);
+    else sessionStorage.removeItem('secopsai_triage_ops_admin_token');
+    renderResearchCases();
+    setStatus(token ? '<span class="dot"></span> Protected research actions enabled for this browser session' : 'Research action token cleared');
+  });
+  el('research-cases-clear-token-btn')?.addEventListener('click', () => {
+    state.researchCases.adminToken = '';
+    state.triageOps.adminToken = '';
+    sessionStorage.removeItem('secopsai_triage_ops_admin_token');
+    if (el('research-cases-admin-token')) el('research-cases-admin-token').value = '';
+    renderResearchCases();
+    setStatus('Research action token cleared');
+  });
+  el('research-create-submit-btn')?.addEventListener('click', async event => {
+    const result = await runResearchCaseAction('create', {
+      title: el('research-create-title')?.value,
+      summary: el('research-create-summary')?.value,
+      case_type: el('research-create-type')?.value,
+      severity: el('research-create-severity')?.value,
+      confidence: el('research-create-confidence')?.value,
+      owner: el('research-create-owner')?.value
+    }, event.currentTarget);
+    if (result) {
+      ['research-create-title', 'research-create-summary', 'research-create-owner'].forEach(id => { if (el(id)) el(id).value = ''; });
+      if (el('research-create-confidence')) el('research-create-confidence').value = '0';
+      if (el('research-case-create-panel')) el('research-case-create-panel').open = false;
+    }
+  });
+  ['research-retract-close-btn', 'research-retract-cancel-btn'].forEach(id => el(id)?.addEventListener('click', closeResearchRetractModal));
+  el('research-retract-confirm-btn')?.addEventListener('click', async event => {
+    const target = state.researchCases.retractTarget;
+    const reason = el('research-retract-reason')?.value?.trim() || '';
+    if (!target || !reason) {
+      setStatus('A retraction reason is required.', true);
+      el('research-retract-reason')?.focus();
+      return;
+    }
+    const result = await runResearchCaseAction('retract', {
+      case_id: target.caseId,
+      item_type: target.itemType,
+      item_id: target.itemId,
+      reason,
+      actor: 'dashboard-operator'
+    }, event.currentTarget);
+    if (result) closeResearchRetractModal();
+  });
+  ['research-filter-status', 'research-filter-search'].forEach(id => {
+    el(id)?.addEventListener('input', renderResearchCases);
+    el(id)?.addEventListener('change', renderResearchCases);
   });
   ['guide-daily-refresh-btn', 'guide-daily-refresh-card-btn'].forEach(id => {
     el(id)?.addEventListener('click', event => runDailyGuideRefresh(event.currentTarget));

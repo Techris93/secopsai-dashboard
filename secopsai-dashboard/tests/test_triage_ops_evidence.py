@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import inspect
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -354,6 +356,68 @@ class TriageOpsEvidenceTests(unittest.TestCase):
 
             self.assertTrue(first['present'])
             self.assertTrue(second['present'])
+
+    def test_edge_workspace_uses_core_as_canonical_source(self):
+        cli_results = [
+            ({'ok': True}, {'assets': [{'node_id': 'edge:asset:1', 'ip_address': '192.168.1.10'}]}),
+            ({'ok': True}, {'nodes': [{'id': 'edge:asset:1'}], 'edges': []}),
+            ({'ok': True}, {'findings': [{'finding_id': 'EDGE-ABC123', 'source': 'secopsai_edge'}]}),
+        ]
+        with mock.patch.object(server, 'run_cli_json', side_effect=cli_results) as run_cli, \
+             mock.patch.object(server, 'edge_api_snapshot', return_value={'configured': False, 'ok': False}):
+            payload = server.collect_edge_workspace()
+
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['core']['assets'][0]['ip_address'], '192.168.1.10')
+        self.assertEqual(payload['core']['findings'][0]['finding_id'], 'EDGE-ABC123')
+        self.assertEqual(run_cli.call_args_list[0].args[0][:4], ['graph', 'assets', '--limit', '500'])
+        self.assertIn('secopsai_edge', run_cli.call_args_list[2].args[0])
+
+    def test_edge_api_snapshot_never_returns_admin_token_on_failure(self):
+        with mock.patch.dict(
+            os.environ,
+            {'SECOPSAI_EDGE_API_URL': 'https://edge.example.test', 'SECOPSAI_EDGE_ADMIN_TOKEN': 'top-secret-token'},
+            clear=False,
+        ), mock.patch.object(server.urllib.request, 'urlopen', side_effect=RuntimeError('token=top-secret-token')):
+            payload = server.edge_api_snapshot()
+
+        self.assertFalse(payload['ok'])
+        self.assertNotIn('top-secret-token', json.dumps(payload))
+
+    def test_json_response_ignores_disconnected_client(self):
+        handler = mock.Mock()
+        handler.wfile.write.side_effect = BrokenPipeError()
+
+        server.json_response(handler, 200, {'ok': True})
+
+        handler.send_response.assert_called_once_with(200)
+
+    def test_research_case_command_builder_uses_allowlisted_arguments(self):
+        args = server.build_research_case_args(
+            'add-evidence',
+            {
+                'case_id': 'RSC-ABCDEF123456',
+                'evidence_type': 'source',
+                'title': 'Registry evidence',
+                'locator': 'https://example.test/package; rm -rf /',
+                'actor': 'dashboard-operator',
+            },
+        )
+
+        self.assertEqual(args[:4], ['research', 'case', 'add-evidence', 'RSC-ABCDEF123456'])
+        self.assertIn('https://example.test/package; rm -rf /', args)
+        self.assertNotIn('sh', args)
+
+    def test_research_case_command_builder_rejects_invalid_case_id(self):
+        with self.assertRaisesRegex(ValueError, 'Invalid research case id'):
+            server.build_research_case_args('export', {'case_id': '../../etc/passwd'})
+
+    def test_research_case_retraction_requires_reason(self):
+        with self.assertRaisesRegex(ValueError, 'reason is required'):
+            server.build_research_case_args(
+                'retract',
+                {'case_id': 'RSC-ABCDEF123456', 'item_type': 'ioc', 'item_id': 'IOC-ABCDEF1234567890'},
+            )
 
 
 if __name__ == '__main__':

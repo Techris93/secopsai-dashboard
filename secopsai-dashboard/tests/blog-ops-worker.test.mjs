@@ -22,6 +22,46 @@ async function testConfigExposesTriageOpsEndpoint() {
   const body = await response.text();
   assert.match(body, /triageOpsEndpoint/);
   assert.equal(body.includes("/api/secopsai/triage-ops"), true);
+  assert.equal(body.includes("/api/secopsai/edge-workspace"), true);
+  assert.equal(body.includes("/api/secopsai/research-cases"), true);
+}
+
+async function testResearchCaseWriteRequiresAndForwardsOperatorToken() {
+  const body = JSON.stringify({ title: "Independent package investigation" });
+  const unauthorized = await worker.fetch(
+    new Request("https://dashboard.example/api/secopsai/research-cases/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    }),
+    { SECOPSAI_HELPER_BASE_URL: "https://helper.example", TRIAGE_OPS_ADMIN_TOKEN: "research-admin" },
+  );
+  assert.equal(unauthorized.status, 401);
+
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ ok: true, result: { case_id: "RSC-ABCDEF123456" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const authorized = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/research-cases/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Triage-Ops-Admin-Token": "research-admin" },
+        body,
+      }),
+      { SECOPSAI_HELPER_BASE_URL: "https://helper.example", TRIAGE_OPS_ADMIN_TOKEN: "research-admin" },
+    );
+    assert.equal(authorized.status, 200);
+    assert.equal(calls[0].url, "https://helper.example/api/secopsai/research-cases/create");
+    assert.equal(calls[0].init.headers.get("X-Triage-Ops-Admin-Token"), "research-admin");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 async function testIntegrationStatusExposesCampaignApi() {
@@ -32,6 +72,7 @@ async function testIntegrationStatusExposesCampaignApi() {
   assert.equal(response.status, 200);
   const payload = await jsonFrom(response);
   assert.equal(payload.helper.secopsai_campaign_api, true);
+  assert.equal(payload.helper.secopsai_edge_api, true);
   assert.equal(payload.blog_ops.mode, "hosted-github-actions");
   assert.equal(payload.blog_ops.capabilities.deploy, true);
 }
@@ -777,8 +818,39 @@ function testDashboardListsUseLatestFirstOrdering() {
   assert.match(app, /state\.triageOps\.campaignCandidates = sortLatestFirst\(result\.candidates, CAMPAIGN_CANDIDATE_LATEST_FIELDS\)/);
 }
 
+function testEdgeWorkspaceUiIsPresentAndReadOnly() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(html, /data-page="edge"/);
+  assert.match(html, /id="page-edge"/);
+  assert.match(html, /id="edge-sensors"/);
+  assert.match(html, /id="edge-assets"/);
+  assert.match(html, /id="edge-findings"/);
+  assert.match(app, /async function loadEdgeWorkspace/);
+  assert.match(app, /function renderEdgeWorkspace/);
+  assert.equal(html.includes("SECOPSAI_EDGE_ADMIN_TOKEN"), false);
+  assert.equal(app.includes("SECOPSAI_EDGE_ADMIN_TOKEN"), false);
+  assert.equal(html.includes("cdn.tailwindcss.com"), false);
+}
+
+function testResearchCaseWorkspaceIsPresentAndTokenGated() {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(html, /data-page="research-cases"/);
+  assert.match(html, /id="page-research-cases"/);
+  assert.match(html, /id="research-case-list"/);
+  assert.match(html, /id="research-case-detail"/);
+  assert.match(html, /id="research-retract-modal"/);
+  assert.match(app, /async function loadResearchCases/);
+  assert.match(app, /async function runResearchCaseAction/);
+  assert.match(app, /X-Triage-Ops-Admin-Token/);
+  assert.match(app, /openResearchRetractModal/);
+  assert.equal(html.includes("TRIAGE_OPS_ADMIN_TOKEN="), false);
+}
+
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
+await testResearchCaseWriteRequiresAndForwardsOperatorToken();
 await testIntegrationStatusExposesCampaignApi();
 await testDiscordNotifyRequiresDedicatedToken();
 await testDiscordNotifyAuthorizedForwardsWebhook();
@@ -806,4 +878,6 @@ testBlogOpsActionControlsAreNotDuplicated();
 testTriageOpsActionabilityControlsArePresent();
 testCampaignDiscoveryActionsAreNotDuplicated();
 testDashboardListsUseLatestFirstOrdering();
+testEdgeWorkspaceUiIsPresentAndReadOnly();
+testResearchCaseWorkspaceIsPresentAndTokenGated();
 console.log("blog ops worker tests passed");
