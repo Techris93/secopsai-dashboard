@@ -64,6 +64,9 @@ async function testConfigRequiresAuthenticationByDefault() {
   );
   const localBody = await localResponse.text();
   assert.match(localBody, /"required": false/);
+  assert.match(localBody, /"mode": "locked"/);
+  assert.equal(localBody.includes("https://test-project.supabase.co"), false);
+  assert.equal(localBody.includes("test-anon-key"), false);
 }
 
 async function testWorkerAppliesSecurityHeaders() {
@@ -1055,6 +1058,8 @@ function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   assert.match(app, /resetPasswordForEmail/);
   assert.match(app, /PASSWORD_RECOVERY/);
   assert.match(app, /initializeDashboardAuth\(\)/);
+  assert.match(app, /if \(!dashboardAuthRequired\(\)\) \{\s*showAuthSurface\(\{\s*locked: true,/);
+  assert.ok(app.indexOf("if (!dashboardAuthRequired())") < app.indexOf("if (bootError || !supabaseClient)"));
   assert.match(app, /async function dashboardApiFetch/);
   assert.match(app, /headers\.set\('Authorization', `Bearer \$\{accessToken\}`\)/);
   assert.equal((app.match(/window\.fetch\(/g) || []).length, 1);

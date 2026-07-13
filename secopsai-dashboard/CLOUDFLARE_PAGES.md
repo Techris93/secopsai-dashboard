@@ -95,6 +95,9 @@ Notes:
   any server-side Core, Edge, helper, Blog Ops, or run-output credential. The
   Worker refuses protected backend configuration while
   `DASHBOARD_AUTH_REQUIRED=false`.
+- An auth-disabled deployment is deliberately locked: its browser config omits
+  Supabase credentials and the app does not boot the live workspace. This is a
+  rollout safety state, not a public demo data mode.
 - With a direct database connection, run
   `SECOPSAI_DASHBOARD_DATABASE_URL='postgresql://...' scripts/dashboard-security apply`.
   Follow it with `scripts/dashboard-security verify`; deployment is blocked

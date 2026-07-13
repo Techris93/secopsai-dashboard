@@ -102,9 +102,12 @@ function jsResponse(source, init = {}) {
 }
 
 function buildBrowserConfig(env) {
+  const authRequired = truthyEnv(env.DASHBOARD_AUTH_REQUIRED, true);
   return {
-    supabaseUrl: env.SUPABASE_URL || "",
-    supabaseAnonKey: env.SUPABASE_ANON_KEY || "",
+    // Never hand browser-readable database credentials to an auth-disabled
+    // deployment. The static app renders a locked rollout state instead.
+    supabaseUrl: authRequired ? env.SUPABASE_URL || "" : "",
+    supabaseAnonKey: authRequired ? env.SUPABASE_ANON_KEY || "" : "",
     appName: env.APP_NAME || DEFAULT_APP_NAME,
     serverId: env.DISCORD_SERVER_ID || DEFAULT_SERVER_ID,
     discordNotifyEndpoint: "/api/discord-notify",
@@ -116,7 +119,8 @@ function buildBrowserConfig(env) {
     edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     auth: {
-      required: truthyEnv(env.DASHBOARD_AUTH_REQUIRED, true),
+      required: authRequired,
+      mode: authRequired ? "operator" : "locked",
     },
     aiGuard: buildAiGuard(env),
     departments: DASHBOARD_DEPARTMENTS,
