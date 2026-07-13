@@ -385,9 +385,20 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertNotIn('top-secret-token', json.dumps(payload))
 
     def test_edge_api_snapshot_prefers_scoped_operations_token(self):
-        response = mock.MagicMock()
-        response.read.return_value = b'[]'
-        response.__enter__.return_value = response
+        def response_for(request, timeout=0):
+            response = mock.MagicMock()
+            if request.full_url.endswith('/api/v1/integration-tokens/self'):
+                response.read.return_value = json.dumps({
+                    'id': 'token-operations',
+                    'state': 'active',
+                    'expires_at': '2026-10-11T00:00:00Z',
+                    'expires_in_days': 90,
+                    'rotation_recommended': False,
+                }).encode()
+            else:
+                response.read.return_value = b'[]'
+            response.__enter__.return_value = response
+            return response
         with mock.patch.dict(
             os.environ,
             {
@@ -396,16 +407,69 @@ class TriageOpsEvidenceTests(unittest.TestCase):
                 'SECOPSAI_EDGE_ADMIN_TOKEN': 'legacy-admin-token',
             },
             clear=False,
-        ), mock.patch.object(server.urllib.request, 'urlopen', return_value=response) as urlopen:
+        ), mock.patch.object(server.urllib.request, 'urlopen', side_effect=response_for) as urlopen:
             payload = server.edge_api_snapshot()
 
         self.assertTrue(payload['ok'])
         self.assertEqual(payload['credential_scope'], 'operations:read')
+        self.assertEqual(payload['credential']['expires_in_days'], 90)
         self.assertNotIn('warning', payload)
-        self.assertEqual(len(urlopen.call_args_list), 4)
+        self.assertEqual(len(urlopen.call_args_list), 5)
         for call in urlopen.call_args_list:
             request = call.args[0]
             self.assertEqual(request.get_header('Authorization'), 'Bearer scoped-operations-token')
+
+    def test_edge_api_snapshot_warns_before_scoped_token_expires(self):
+        def response_for(request, timeout=0):
+            response = mock.MagicMock()
+            if request.full_url.endswith('/api/v1/integration-tokens/self'):
+                response.read.return_value = json.dumps({
+                    'id': 'token-expiring',
+                    'state': 'active',
+                    'expires_at': '2026-07-20T00:00:00Z',
+                    'expires_in_days': 7,
+                    'rotation_recommended': True,
+                }).encode()
+            else:
+                response.read.return_value = b'[]'
+            response.__enter__.return_value = response
+            return response
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                'SECOPSAI_EDGE_API_URL': 'https://edge.example.test',
+                'SECOPSAI_EDGE_OPERATIONS_TOKEN': 'scoped-operations-token',
+            },
+            clear=False,
+        ), mock.patch.object(server.urllib.request, 'urlopen', side_effect=response_for):
+            payload = server.edge_api_snapshot()
+
+        self.assertTrue(payload['ok'])
+        self.assertIn('expires in 7 day(s)', payload['warning'])
+        self.assertNotIn('scoped-operations-token', json.dumps(payload))
+
+    def test_edge_api_snapshot_keeps_operations_live_when_self_status_is_unavailable(self):
+        def response_for(request, timeout=0):
+            if request.full_url.endswith('/api/v1/integration-tokens/self'):
+                raise server.urllib.error.URLError('self status unavailable')
+            response = mock.MagicMock()
+            response.read.return_value = b'[]'
+            response.__enter__.return_value = response
+            return response
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                'SECOPSAI_EDGE_API_URL': 'https://edge.example.test',
+                'SECOPSAI_EDGE_OPERATIONS_TOKEN': 'scoped-operations-token',
+            },
+            clear=False,
+        ), mock.patch.object(server.urllib.request, 'urlopen', side_effect=response_for):
+            payload = server.edge_api_snapshot()
+
+        self.assertTrue(payload['ok'])
+        self.assertIn('expiry could not be verified', payload['warning'])
 
     def test_edge_api_snapshot_marks_legacy_admin_fallback(self):
         response = mock.MagicMock()

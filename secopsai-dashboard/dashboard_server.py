@@ -790,11 +790,13 @@ def edge_api_snapshot():
             'scan_jobs': [],
         }
     resources = {
-        'sites': '/api/v1/sites',
-        'sensors': '/api/v1/sensors',
-        'schedules': '/api/v1/scan-schedules',
-        'scan_jobs': '/api/v1/scan-jobs',
+        'sites': ('/api/v1/sites', 'list'),
+        'sensors': ('/api/v1/sensors', 'list'),
+        'schedules': ('/api/v1/scan-schedules', 'list'),
+        'scan_jobs': ('/api/v1/scan-jobs', 'list'),
     }
+    if operations_token:
+        resources['credential'] = ('/api/v1/integration-tokens/self', 'object')
     result = {
         'configured': True,
         'ok': True,
@@ -805,7 +807,7 @@ def edge_api_snapshot():
             'Legacy Edge administrator credential is configured. Replace it with a scoped operations:read token.'
         )
 
-    def fetch_resource(key, path):
+    def fetch_resource(key, path, expected):
         request = urllib.request.Request(
             f'{base_url}{path}',
             headers={'Authorization': f'Bearer {access_token}', 'Accept': 'application/json'},
@@ -813,7 +815,9 @@ def edge_api_snapshot():
         try:
             with urllib.request.urlopen(request, timeout=12) as response:
                 payload = json.loads(response.read().decode('utf-8'))
-            return key, payload if isinstance(payload, list) else [], None
+            valid = isinstance(payload, list) if expected == 'list' else isinstance(payload, dict)
+            empty = [] if expected == 'list' else {}
+            return key, payload if valid else empty, None if valid else f'Edge API returned an invalid {key} response.'
         except urllib.error.HTTPError as exc:
             return key, [], f'Edge API returned HTTP {exc.code} for {key}.'
         except Exception:
@@ -821,12 +825,28 @@ def edge_api_snapshot():
 
     errors = []
     with ThreadPoolExecutor(max_workers=len(resources)) as executor:
-        futures = [executor.submit(fetch_resource, key, path) for key, path in resources.items()]
+        futures = [
+            executor.submit(fetch_resource, key, path, expected)
+            for key, (path, expected) in resources.items()
+        ]
         for future in as_completed(futures):
             key, payload, error = future.result()
             result[key] = payload
             if error:
-                errors.append(error)
+                if key == 'credential':
+                    result['warning'] = (
+                        'Live Edge operations are available, but credential expiry could not be verified. '
+                        'Confirm the Edge API is current and inspect the token in Edge Settings.'
+                    )
+                else:
+                    errors.append(error)
+    credential = result.get('credential') or {}
+    if credential.get('rotation_recommended'):
+        days = credential.get('expires_in_days', 0)
+        result['warning'] = (
+            f'Edge operations credential expires in {days} day(s). Rotate it in Edge Settings, '
+            'update this helper, verify the workspace, then revoke the previous credential.'
+        )
     if errors:
         result['ok'] = False
         result['error'] = ' '.join(sorted(errors))
