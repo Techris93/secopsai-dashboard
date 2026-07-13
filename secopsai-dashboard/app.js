@@ -5393,6 +5393,7 @@ function renderEdgeWorkspace() {
         <div class="kv-list">
           <div class="kv-row"><div class="kv-key">Core graph & triage</div><div class="kv-val">${core.ok ? renderStatusPill('completed', 'Connected') : renderStatusPill('failed', 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Edge operations API</div><div class="kv-val">${edge.ok ? renderStatusPill('completed', 'Live') : renderStatusPill(edge.configured ? 'failed' : 'blocked', edge.configured ? 'Unavailable' : 'Not configured')}</div></div>
+          ${edge.credential ? `<div class="kv-row"><div class="kv-key">Edge credential</div><div class="kv-val">${renderStatusPill(edge.credential.rotation_recommended ? 'in_review' : 'completed', edge.credential.rotation_recommended ? 'Rotate soon' : 'Active')}<div class="small">Expires ${escapeHtml(fmtDate(edge.credential.expires_at))} · ${escapeHtml(String(edge.credential.expires_in_days))} day(s)</div></div></div>` : ''}
           <div class="kv-row"><div class="kv-key">Last refreshed</div><div class="kv-val">${escapeHtml(fmtDate(workspace.generated_at))}</div></div>
           ${core.error ? `<div class="error">${escapeHtml(core.error)}</div>` : ''}
           ${edge.error ? `<div class="small">${escapeHtml(edge.error)}</div>` : ''}

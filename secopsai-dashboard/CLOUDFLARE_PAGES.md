@@ -170,6 +170,12 @@ The Edge operations token must never be a Pages build variable or browser
 config value. Core graph assets and Edge-origin findings remain available when the
 live Edge API enrichment is not configured.
 
+The helper reads only the credential's non-secret self-status and warns when 14
+days remain. Rotate it in Edge Settings, update the helper's server-side secret,
+verify a successful Edge workspace refresh, and then revoke the previous
+short-ID credential. Never revoke the previous credential before verifying the
+replacement.
+
 The helper also serves `/api/secopsai/research-cases`. Case reads use the
 authenticated helper proxy. Every case mutation, export, and review-draft
 handoff requires `TRIAGE_OPS_ADMIN_TOKEN` (or the configured Blog Ops fallback)
