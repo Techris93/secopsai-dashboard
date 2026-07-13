@@ -164,6 +164,13 @@ The Edge admin token must never be a Pages build variable or browser config
 value. Core graph assets and Edge-origin findings remain available when the
 live Edge API enrichment is not configured.
 
+The helper also serves `/api/secopsai/research-cases`. Case reads use the
+authenticated helper proxy. Every case mutation, export, and review-draft
+handoff requires `TRIAGE_OPS_ADMIN_TOKEN` (or the configured Blog Ops fallback)
+and is re-authorized by both the Worker and helper. Research case exports are
+returned as bounded Markdown downloads; arbitrary helper files are never
+served.
+
 Required for write actions on the helper:
 
 - `TRIAGE_OPS_ADMIN_TOKEN`

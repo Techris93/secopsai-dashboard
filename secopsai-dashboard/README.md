@@ -11,6 +11,7 @@ The dashboard is now intentionally narrow:
 - Hermes Agent telemetry findings when SecOpsAI is refreshed with `--platform hermes`
 - protected Triage Ops for supply-chain alert review and closure
 - a unified SecOpsAI Edge workspace backed by the canonical Core graph and findings store
+- durable Research Cases for evidence, IOCs, disclosure, exports, and review-only publication handoff
 - Blog Ops workflow dispatch and review queue
 - built-in operator guide for dashboard click paths and safety rules
 - Supabase-backed integration status
@@ -65,6 +66,17 @@ It now also reads native local SecOpsAI state through the helper server:
 Core remains the source of truth for graph and triage data. The helper may enrich
 that view with live Edge operations by using server-side credentials. The browser
 never receives `SECOPSAI_EDGE_ADMIN_TOKEN`.
+
+### Research Cases
+- Core-backed case queue and full investigation timeline
+- structured subjects, evidence provenance, IOCs, and linked SOC findings
+- deterministic publication readiness and responsible-disclosure state
+- downloadable Markdown case reports
+- readiness-gated, review-only Original Research drafts for Blog Ops
+
+Research reads are available through the helper without a write token.
+Mutations use `TRIAGE_OPS_ADMIN_TOKEN`; the browser never constructs or runs a
+shell command.
 
 ### Native Triage
 - helper readiness

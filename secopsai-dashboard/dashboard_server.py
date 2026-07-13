@@ -25,6 +25,7 @@ FINDING_ID_RE = re.compile(r'^[A-Z]{3}-[A-Z0-9]+$')
 ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
 APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
+RESEARCH_CASE_ID_RE = re.compile(r'^RSC-[A-F0-9]{12}$')
 BLOG_DRAFT_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,260}$')
 ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive', 'not_applicable'}
 ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
@@ -47,6 +48,18 @@ BLOG_OPS_WRITE_ACTIONS = {
     'reject',
     'needs-review',
     'save',
+}
+RESEARCH_CASE_ACTIONS = {
+    'create',
+    'update',
+    'add-subject',
+    'add-evidence',
+    'add-ioc',
+    'link-finding',
+    'note',
+    'retract',
+    'export',
+    'draft-blog',
 }
 CAMPAIGN_TRIAGE_OPS_ACTIONS = {
     'campaign-discover',
@@ -641,6 +654,118 @@ def validate_triage_ops_target(payload):
     if version and not VERSION_RE.match(version):
         raise ValueError('Invalid version')
     return finding_id, ecosystem, package, version
+
+
+def build_research_case_args(action, payload):
+    if action not in RESEARCH_CASE_ACTIONS:
+        raise ValueError('Unsupported research case action')
+
+    def add(args, flag, key, limit=4096):
+        value = _clean_string(payload.get(key), limit)
+        if value:
+            args.extend([flag, value])
+
+    if action == 'create':
+        title = _clean_string(payload.get('title'), 240)
+        if not title:
+            raise ValueError('Research case title is required')
+        args = ['research', 'case', 'create', '--title', title]
+        for flag, key, limit in [
+            ('--summary', 'summary', 8000),
+            ('--type', 'case_type', 80),
+            ('--severity', 'severity', 20),
+            ('--confidence', 'confidence', 20),
+            ('--owner', 'owner', 160),
+        ]:
+            add(args, flag, key, limit)
+        return args
+
+    case_id = _clean_string(payload.get('case_id'), 32).upper()
+    if not RESEARCH_CASE_ID_RE.match(case_id):
+        raise ValueError('Invalid research case id')
+    args = ['research', 'case', action, case_id]
+    fields = {
+        'update': [
+            ('--title', 'title', 240),
+            ('--summary', 'summary', 8000),
+            ('--type', 'case_type', 80),
+            ('--severity', 'severity', 20),
+            ('--confidence', 'confidence', 20),
+            ('--status', 'status', 40),
+            ('--owner', 'owner', 160),
+            ('--disclosure-status', 'disclosure_status', 40),
+            ('--embargo-until', 'embargo_until', 64),
+            ('--actor', 'actor', 160),
+        ],
+        'add-subject': [
+            ('--subject-type', 'subject_type', 80),
+            ('--name', 'name', 512),
+            ('--ecosystem', 'ecosystem', 80),
+            ('--version', 'version', 160),
+            ('--publisher', 'publisher', 240),
+            ('--actor', 'actor', 160),
+        ],
+        'add-evidence': [
+            ('--evidence-type', 'evidence_type', 80),
+            ('--title', 'title', 500),
+            ('--locator', 'locator', 4000),
+            ('--sha256', 'sha256', 64),
+            ('--provenance', 'provenance', 1000),
+            ('--notes', 'notes', 12000),
+            ('--collected-at', 'collected_at', 64),
+            ('--actor', 'actor', 160),
+        ],
+        'add-ioc': [
+            ('--ioc-type', 'ioc_type', 80),
+            ('--value', 'value', 4096),
+            ('--confidence', 'confidence', 20),
+            ('--source-evidence-id', 'source_evidence_id', 32),
+            ('--first-seen', 'first_seen', 64),
+            ('--last-seen', 'last_seen', 64),
+            ('--actor', 'actor', 160),
+        ],
+        'link-finding': [
+            (None, 'finding_id', 128),
+            ('--relationship', 'relationship', 40),
+            ('--actor', 'actor', 160),
+        ],
+        'note': [('--note', 'note', 12000), ('--actor', 'actor', 160)],
+        'retract': [
+            ('--item-type', 'item_type', 40),
+            ('--item-id', 'item_id', 40),
+            ('--reason', 'reason', 2000),
+            ('--actor', 'actor', 160),
+        ],
+        'export': [],
+        'draft-blog': [],
+    }
+    for flag, key, limit in fields[action]:
+        value = _clean_string(payload.get(key), limit)
+        if value:
+            if flag is None:
+                args.append(value)
+            else:
+                args.extend([flag, value])
+    if action == 'add-ioc':
+        for tag in (payload.get('tags') if isinstance(payload.get('tags'), list) else []):
+            value = _clean_string(tag, 80)
+            if value:
+                args.extend(['--tag', value])
+    required = {
+        'add-subject': ['--subject-type', '--name'],
+        'add-evidence': ['--evidence-type', '--title'],
+        'add-ioc': ['--ioc-type', '--value'],
+        'link-finding': [None],
+        'note': ['--note'],
+        'retract': ['--item-type', '--item-id', '--reason'],
+    }
+    for flag in required.get(action, []):
+        if flag is None:
+            if len(args) < 5:
+                raise ValueError('finding_id is required')
+        elif flag not in args:
+            raise ValueError(f'{flag[2:].replace("-", "_")} is required')
+    return args
 
 
 def run_cli_json(args, timeout=120):
@@ -2003,6 +2128,47 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/secopsai/research-cases':
+            try:
+                qs = urllib.parse.parse_qs(parsed.query or '')
+                limit = max(1, min(int((qs.get('limit') or ['100'])[0]), 500))
+                args = ['research', 'case', 'list', '--limit', str(limit), *secopsai_db_args()]
+                status = _clean_string((qs.get('status') or [''])[0], 40)
+                case_type = _clean_string((qs.get('type') or [''])[0], 80)
+                if status:
+                    args.extend(['--status', status])
+                if case_type:
+                    args.extend(['--type', case_type])
+                result, parsed_result = run_cli_json(args, timeout=60)
+                return json_response(
+                    self,
+                    200 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'cases': (parsed_result or {}).get('cases', []),
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path.startswith('/api/secopsai/research-cases/'):
+            try:
+                case_id = urllib.parse.unquote(parsed.path.rsplit('/', 1)[-1]).strip().upper()
+                if not RESEARCH_CASE_ID_RE.match(case_id):
+                    return json_response(self, 400, {'ok': False, 'error': 'Invalid research case id'})
+                result, parsed_result = run_cli_json(
+                    ['research', 'case', 'show', case_id, *secopsai_db_args()],
+                    timeout=60,
+                )
+                return json_response(
+                    self,
+                    200 if result['ok'] else 404,
+                    {'ok': result['ok'], 'case': parsed_result, 'cli': compact_cli_result(result)},
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
         if parsed.path == '/api/blog' or parsed.path == '/api/blog/status':
             try:
                 result, payload = _blog_review_drafts_payload()
@@ -2162,6 +2328,41 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         payload = read_request_json(self)
+
+        if parsed.path.startswith('/api/secopsai/research-cases/'):
+            if require_triage_ops_admin(self):
+                return
+            action = parsed.path.rsplit('/', 1)[-1]
+            try:
+                args = build_research_case_args(action, payload)
+                timeout = 180 if action in {'export', 'draft-blog'} else 90
+                result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=timeout)
+                artifact = None
+                if action == 'export' and result['ok'] and isinstance(parsed_result, dict):
+                    report_root = (SECOPSAI_ROOT / 'reports' / 'research' / 'cases').resolve()
+                    report_path = Path(str(parsed_result.get('markdown_report') or '')).expanduser().resolve()
+                    if report_path.is_file() and (report_path == report_root or report_root in report_path.parents):
+                        content = report_path.read_text(encoding='utf-8', errors='replace')
+                        if len(content.encode('utf-8')) > 2_000_000:
+                            raise ValueError('Research report exceeds the browser download limit')
+                        artifact = {
+                            'filename': report_path.name,
+                            'content_type': 'text/markdown;charset=utf-8',
+                            'content': content,
+                        }
+                return json_response(
+                    self,
+                    200 if result['ok'] else 400,
+                    {
+                        'ok': result['ok'],
+                        'action': action,
+                        'result': parsed_result,
+                        'artifact': artifact,
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
         if parsed.path == '/api/blog' or parsed.path.startswith('/api/blog/'):
             action = parsed.path.rsplit('/', 1)[-1]
@@ -2752,4 +2953,10 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', '45680'))
     print(f'Serving SecOpsAI dashboard from: {DIR}')
     print(f'URL: http://{host}:{port}')
-    ThreadingHTTPServer((host, port), DashboardHandler).serve_forever()
+    server = ThreadingHTTPServer((host, port), DashboardHandler)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print('\nSecOpsAI dashboard stopped.')
+    finally:
+        server.server_close()

@@ -72,6 +72,7 @@ function buildBrowserConfig(env) {
     runOutputEndpoint: DEFAULT_RUN_OUTPUT_PROXY_PATH,
     blogOpsEndpoint: "/api/blog",
     triageOpsEndpoint: "/api/secopsai/triage-ops",
+    researchCasesEndpoint: "/api/secopsai/research-cases",
     edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     aiGuard: buildAiGuard(env),
@@ -199,6 +200,7 @@ function requireTriageOpsAdmin(request, env) {
 
 function isTriageOpsWriteRoute(request, pathname) {
   if (request.method.toUpperCase() !== "POST") return false;
+  if (pathname.startsWith("/api/secopsai/research-cases/")) return true;
   const action = pathname.split("/").filter(Boolean).pop() || "";
   return ["close", "escalate", "create-blog-draft", "campaign-persist-findings", "campaign-blog-draft", "campaign-watchlist"].includes(action);
 }
@@ -773,7 +775,10 @@ async function proxySecopsaiHelper(request, env) {
     headers.set(authHeader, authToken);
   }
   const triageOpsToken = request.headers.get("x-triage-ops-admin-token") || "";
-  if (triageOpsToken && incomingUrl.pathname.startsWith("/api/secopsai/triage-ops/")) {
+  if (triageOpsToken && (
+    incomingUrl.pathname.startsWith("/api/secopsai/triage-ops/")
+    || incomingUrl.pathname.startsWith("/api/secopsai/research-cases/")
+  )) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
 
@@ -934,7 +939,7 @@ export default {
     }
 
     if (url.pathname.startsWith("/api/secopsai/")) {
-      if (url.pathname.startsWith("/api/secopsai/triage-ops/") && isTriageOpsWriteRoute(request, url.pathname)) {
+      if (isTriageOpsWriteRoute(request, url.pathname)) {
         const authResponse = requireTriageOpsAdmin(request, env);
         if (authResponse) return authResponse;
       }

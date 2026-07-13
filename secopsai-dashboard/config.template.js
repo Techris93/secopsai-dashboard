@@ -5,6 +5,7 @@ window.SECOPSAI_CONFIG = {
   integrationStatusEndpoint: "/api/integration-status",
   runOutputEndpoint: "/api/run-output",
   triageOpsEndpoint: "/api/secopsai/triage-ops",
+  researchCasesEndpoint: "/api/secopsai/research-cases",
   edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
   edgeDashboardUrl: "__SECOPSAI_EDGE_DASHBOARD_URL__",
   aiGuard: {

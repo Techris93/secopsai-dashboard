@@ -59,6 +59,10 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M7 7v10a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7"></path><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path><path d="M10 12h4"></path><path d="M12 10v4"></path></svg></span>
           <span class="nav-copy"><span class="title">Triage Ops</span><span class="desc">Supply-chain alerts, verdicts, closure</span></span>
         </button>
+        <button class="nav-btn" data-page="research-cases">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6"></path><path d="M10 9h4"></path><path d="M8 3v5l-4 9a3 3 0 0 0 2.7 4h10.6a3 3 0 0 0 2.7-4l-4-9V3"></path><path d="M7 15h10"></path></svg></span>
+          <span class="nav-copy"><span class="title">Research</span><span class="desc">Cases, evidence, IOCs, disclosure</span></span>
+        </button>
         <button class="nav-btn" data-page="blog-ops">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"></path><path d="M8 8h8"></path><path d="M8 12h8"></path><path d="M8 16h5"></path></svg></span>
           <span class="nav-copy"><span class="title">Blog Ops</span><span class="desc">News drafts, approvals, publishing</span></span>
@@ -233,6 +237,60 @@
         <div class="card" style="margin-top:18px;">
           <h3>Recent orchestrator runs</h3>
           <div id="routes-table"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-research-cases">
+        <div class="page-header">
+          <div>
+            <h2>Research Cases</h2>
+            <p>Durable independent investigations with structured evidence, indicators, disclosure gates, and review-only publication handoff.</p>
+          </div>
+          <div class="research-page-actions">
+            <button class="secondary-btn" id="research-cases-new-btn" type="button">New case</button>
+            <button class="secondary-btn" id="research-cases-refresh-btn" type="button">Refresh cases</button>
+          </div>
+        </div>
+
+        <form class="card research-auth-card" onsubmit="return false;">
+          <div>
+            <h3>Protected research actions</h3>
+            <p class="small">Case review is read-only. Creation, evidence changes, disclosure updates, exports, and blog handoff require the helper-side Triage Ops token.</p>
+          </div>
+          <div class="research-auth-controls">
+            <input id="research-cases-admin-token" type="password" placeholder="Use the Triage Ops token for this session" autocomplete="current-password" />
+            <button class="secondary-btn" id="research-cases-save-token-btn" type="button">Use token</button>
+            <button class="mini-btn" id="research-cases-clear-token-btn" type="button">Clear</button>
+          </div>
+        </form>
+
+        <div class="grid cols-5" id="research-cases-stats" style="margin-top:18px;"></div>
+
+        <details class="card research-create-panel" id="research-case-create-panel">
+          <summary>Create research case</summary>
+          <div class="research-form-grid">
+            <label class="research-span-2"><span>Title</span><input id="research-create-title" maxlength="240" placeholder="Specific investigation title" /></label>
+            <label><span>Type</span><select id="research-create-type"><option value="malicious_package">Malicious package</option><option value="typosquatting">Typosquatting</option><option value="dependency_confusion">Dependency confusion</option><option value="supply_chain_campaign">Supply-chain campaign</option><option value="credential_theft">Credential theft</option><option value="malware">Malware</option><option value="infrastructure_cluster">Infrastructure cluster</option><option value="vulnerability_research">Vulnerability research</option><option value="other">Other</option></select></label>
+            <label><span>Severity</span><select id="research-create-severity"><option value="critical">Critical</option><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option><option value="info">Info</option></select></label>
+            <label><span>Confidence</span><input id="research-create-confidence" type="number" min="0" max="100" value="0" /></label>
+            <label><span>Owner</span><input id="research-create-owner" maxlength="160" placeholder="Research team or analyst" /></label>
+            <label class="research-span-2"><span>Summary</span><textarea id="research-create-summary" rows="4" maxlength="8000" placeholder="What is known, why it matters, and what remains to validate"></textarea></label>
+          </div>
+          <div class="research-form-actions"><button class="primary-btn" id="research-create-submit-btn" type="button">Create case</button></div>
+        </details>
+
+        <div class="grid cols-2 research-case-layout">
+          <div class="card research-case-list-panel">
+            <div class="research-list-head"><div><h3>Case queue</h3><p class="small">Select a case to review its evidence and workflow.</p></div></div>
+            <div class="research-case-filters">
+              <select id="research-filter-status"><option value="all">All statuses</option><option value="draft">Draft</option><option value="investigating">Investigating</option><option value="validation">Validation</option><option value="disclosure_pending">Disclosure pending</option><option value="ready_to_publish">Ready to publish</option><option value="published">Published</option><option value="closed">Closed</option></select>
+              <input id="research-filter-search" type="search" placeholder="Search case, subject, owner" />
+            </div>
+            <div id="research-case-list"></div>
+          </div>
+          <div class="card research-case-detail-panel">
+            <div id="research-case-detail"></div>
+          </div>
         </div>
       </section>
 
@@ -679,6 +737,24 @@
   <script src="./config.js?v=20260429e" onload="window.__SECOPSAI_DEBUG.configLoaded=true"></script>
   <script src="./app.js?v=20260514a" onload="window.__SECOPSAI_DEBUG.appLoaded=!!window.__SECOPSAI_APP_LOADED"></script>
 
+
+  <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">
+    <div class="modal-card research-retract-modal-card">
+      <div class="modal-head">
+        <h3 id="research-retract-title">Retract research record</h3>
+        <button id="research-retract-close-btn" class="icon-btn" type="button" aria-label="Close retraction dialog">✕</button>
+      </div>
+      <p class="small" id="research-retract-context">The record stays in the case history but is excluded from readiness, reports, and publication.</p>
+      <label><span>Retraction reason</span><textarea id="research-retract-reason" rows="4" maxlength="2000" placeholder="Explain what was incorrect and what evidence changed"></textarea></label>
+      <div class="modal-actions">
+        <div class="small">This action is auditable and does not delete evidence.</div>
+        <div class="modal-actions-right">
+          <button class="secondary-btn" id="research-retract-cancel-btn" type="button">Cancel</button>
+          <button class="primary-btn" id="research-retract-confirm-btn" type="button">Retract record</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div id="prompt-modal" class="modal hidden">
     <div class="modal-card">

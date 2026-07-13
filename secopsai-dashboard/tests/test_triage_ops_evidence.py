@@ -392,6 +392,33 @@ class TriageOpsEvidenceTests(unittest.TestCase):
 
         handler.send_response.assert_called_once_with(200)
 
+    def test_research_case_command_builder_uses_allowlisted_arguments(self):
+        args = server.build_research_case_args(
+            'add-evidence',
+            {
+                'case_id': 'RSC-ABCDEF123456',
+                'evidence_type': 'source',
+                'title': 'Registry evidence',
+                'locator': 'https://example.test/package; rm -rf /',
+                'actor': 'dashboard-operator',
+            },
+        )
+
+        self.assertEqual(args[:4], ['research', 'case', 'add-evidence', 'RSC-ABCDEF123456'])
+        self.assertIn('https://example.test/package; rm -rf /', args)
+        self.assertNotIn('sh', args)
+
+    def test_research_case_command_builder_rejects_invalid_case_id(self):
+        with self.assertRaisesRegex(ValueError, 'Invalid research case id'):
+            server.build_research_case_args('export', {'case_id': '../../etc/passwd'})
+
+    def test_research_case_retraction_requires_reason(self):
+        with self.assertRaisesRegex(ValueError, 'reason is required'):
+            server.build_research_case_args(
+                'retract',
+                {'case_id': 'RSC-ABCDEF123456', 'item_type': 'ioc', 'item_id': 'IOC-ABCDEF1234567890'},
+            )
+
 
 if __name__ == '__main__':
     unittest.main()
