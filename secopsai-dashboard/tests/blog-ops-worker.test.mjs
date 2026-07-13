@@ -1,6 +1,32 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import worker from "../_worker.js";
+import workerModule from "../_worker.js";
+
+const TEST_OPERATOR_TOKEN = "test-operator-session";
+const TEST_AUTH_FETCHER = {
+  async fetch() {
+    return new Response(JSON.stringify({ id: "operator-1", email: "operator@example.com" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  },
+};
+const worker = {
+  fetch(request, env = {}) {
+    const headers = new Headers(request.headers);
+    if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${TEST_OPERATOR_TOKEN}`);
+    return workerModule.fetch(
+      new Request(request, { headers }),
+      {
+        DASHBOARD_AUTH_REQUIRED: "true",
+        SUPABASE_URL: "https://test-project.supabase.co",
+        SUPABASE_ANON_KEY: "test-anon-key",
+        SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+        ...env,
+      },
+    );
+  },
+};
 
 async function jsonFrom(response) {
   return JSON.parse(await response.text());
@@ -49,6 +75,151 @@ async function testWorkerAppliesSecurityHeaders() {
   assert.equal(response.headers.get("X-Frame-Options"), "DENY");
   assert.equal(response.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin");
   assert.match(response.headers.get("Permissions-Policy") || "", /camera=\(\)/);
+}
+
+async function testProtectedWorkspaceRequiresOperatorSession() {
+  const response = await workerModule.fetch(
+    new Request("https://dashboard.example/api/secopsai/edge-workspace"),
+    {
+      DASHBOARD_AUTH_REQUIRED: "true",
+      SUPABASE_URL: "https://test-project.supabase.co",
+      SUPABASE_ANON_KEY: "test-anon-key",
+      SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+    },
+  );
+  assert.equal(response.status, 401);
+  const payload = await jsonFrom(response);
+  assert.equal(payload.code, "operator_session_required");
+
+  const blogResponse = await workerModule.fetch(
+    new Request("https://dashboard.example/api/blog/status"),
+    {
+      DASHBOARD_AUTH_REQUIRED: "true",
+      SUPABASE_URL: "https://test-project.supabase.co",
+      SUPABASE_ANON_KEY: "test-anon-key",
+      SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+    },
+  );
+  assert.equal(blogResponse.status, 401);
+}
+
+async function testDisabledAuthRefusesProtectedBackendCredentials() {
+  const response = await workerModule.fetch(
+    new Request("https://dashboard.example/api/secopsai/edge-workspace"),
+    {
+      DASHBOARD_AUTH_REQUIRED: "false",
+      SECOPSAI_CORE_API_URL: "https://core.example",
+      SECOPSAI_CORE_READ_TOKEN: "core-read-secret",
+    },
+  );
+  assert.equal(response.status, 503);
+  const payload = await jsonFrom(response);
+  assert.equal(payload.code, "operator_auth_required");
+  assert.equal(JSON.stringify(payload).includes("core-read-secret"), false);
+}
+
+async function testHostedCoreEdgeWorkspaceAggregatesServerSide() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const parsed = new URL(String(url));
+    calls.push({ url: parsed.toString(), authorization: new Headers(init.headers).get("Authorization") });
+    if (parsed.hostname === "core.example" && parsed.pathname === "/api/v1/workspace") {
+      return new Response(JSON.stringify({
+        schema_version: "secopsai.core.workspace.v1",
+        generated_at: "2026-07-13T12:00:00Z",
+        summary: { assets: 1, findings: 1, sensors: 1, sites: 1 },
+        assets: [{ node_id: "asset:1", ip_address: "192.168.1.10", hostname: "office-mac" }],
+        findings: [{ finding_id: "EDGE-NEW-DEVICE", source: "secopsai_edge", severity: "high", status: "open" }],
+        changes: { nodes: [{ node_id: "asset:1" }], edges: [] },
+        sites: [{ node_id: "site:1", properties: { name: "Office" } }],
+        sensors: [{ node_id: "sensor:1", properties: { name: "MacBook Sensor" } }],
+        services: [],
+        wifi_networks: [],
+        sync_state: [],
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    const edgePayloads = {
+      "/api/v1/sites": [{ id: "site-1", name: "Office" }],
+      "/api/v1/sensors": [{ id: "sensor-1", name: "MacBook Sensor", connection_state: "online" }],
+      "/api/v1/scan-schedules": [{ id: "schedule-1", enabled: true }],
+      "/api/v1/scan-jobs": [{ id: "job-1", status: "queued" }],
+      "/api/v1/integration-tokens/self": { id: "token-1", expires_in_days: 45, rotation_recommended: false },
+    };
+    if (parsed.hostname === "edge.example" && parsed.pathname in edgePayloads) {
+      return new Response(JSON.stringify(edgePayloads[parsed.pathname]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ error: "unexpected test URL" }), { status: 404 });
+  };
+  try {
+    const response = await workerModule.fetch(
+      new Request("https://dashboard.example/api/secopsai/edge-workspace", {
+        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}` },
+      }),
+      {
+        DASHBOARD_AUTH_REQUIRED: "true",
+        SUPABASE_URL: "https://test-project.supabase.co",
+        SUPABASE_ANON_KEY: "test-anon-key",
+        SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+        SECOPSAI_CORE_API_URL: "https://core.example",
+        SECOPSAI_CORE_READ_TOKEN: "core-read-secret",
+        SECOPSAI_EDGE_API_URL: "https://edge.example",
+        SECOPSAI_EDGE_OPERATIONS_TOKEN: "edge-operations-secret",
+      },
+    );
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.source, "hosted-core-edge");
+    assert.equal(payload.core.assets[0].hostname, "office-mac");
+    assert.equal(payload.edge.sensors[0].connection_state, "online");
+    assert.equal(payload.edge.credential_scope, "operations:read");
+    assert.equal(calls.length, 6);
+    assert.equal(calls.filter(call => call.authorization === "Bearer core-read-secret").length, 1);
+    assert.equal(calls.filter(call => call.authorization === "Bearer edge-operations-secret").length, 5);
+    const serialized = JSON.stringify(payload);
+    assert.equal(serialized.includes("core-read-secret"), false);
+    assert.equal(serialized.includes("edge-operations-secret"), false);
+    assert.equal(serialized.includes(TEST_OPERATOR_TOKEN), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function testHostedCoreRedirectIsRejected() {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(String(url));
+    if (parsed.hostname === "core.example") {
+      return new Response(null, { status: 302, headers: { Location: "https://other.example/workspace" } });
+    }
+    return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  try {
+    const response = await workerModule.fetch(
+      new Request("https://dashboard.example/api/secopsai/edge-workspace", {
+        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}` },
+      }),
+      {
+        DASHBOARD_AUTH_REQUIRED: "true",
+        SUPABASE_URL: "https://test-project.supabase.co",
+        SUPABASE_ANON_KEY: "test-anon-key",
+        SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+        SECOPSAI_CORE_API_URL: "https://core.example",
+        SECOPSAI_CORE_READ_TOKEN: "core-read-secret",
+      },
+    );
+    assert.equal(response.status, 503);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.core.ok, false);
+    assert.match(payload.core.error, /redirect/);
+    assert.equal(JSON.stringify(payload).includes("other.example"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 async function testResearchCaseWriteRequiresAndForwardsOperatorToken() {
@@ -884,6 +1055,10 @@ function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   assert.match(app, /resetPasswordForEmail/);
   assert.match(app, /PASSWORD_RECOVERY/);
   assert.match(app, /initializeDashboardAuth\(\)/);
+  assert.match(app, /async function dashboardApiFetch/);
+  assert.match(app, /headers\.set\('Authorization', `Bearer \$\{accessToken\}`\)/);
+  assert.equal((app.match(/window\.fetch\(/g) || []).length, 1);
+  assert.ok(app.indexOf("state.auth.session = session || null;") < app.indexOf("if (state.auth.activeUserId === userId)"));
   assert.match(html, /@supabase\/supabase-js@2\.110\.2\/dist\/umd\/supabase\.js/);
   assert.match(html, /integrity="sha384-yifgV8iFWyp5cgu\+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP\/NlXVJT3vO"/);
   assert.equal(/<script(?![^>]*src=)/.test(html), false);
@@ -895,6 +1070,10 @@ await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
 await testConfigRequiresAuthenticationByDefault();
 await testWorkerAppliesSecurityHeaders();
+await testProtectedWorkspaceRequiresOperatorSession();
+await testDisabledAuthRefusesProtectedBackendCredentials();
+await testHostedCoreEdgeWorkspaceAggregatesServerSide();
+await testHostedCoreRedirectIsRejected();
 await testResearchCaseWriteRequiresAndForwardsOperatorToken();
 await testIntegrationStatusExposesCampaignApi();
 await testDiscordNotifyRequiresDedicatedToken();

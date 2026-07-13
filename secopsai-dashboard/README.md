@@ -100,7 +100,9 @@ It now also reads native local SecOpsAI state through the helper server:
 - a deliberate link to the separate sensor administration console when configured
 
 Core remains the source of truth for graph and triage data. The helper may enrich
-that view with live Edge operations by using server-side credentials. The browser
+that view with live Edge operations by using server-side credentials. Hosted
+Pages can now aggregate Core and Edge directly in its Worker, so a laptop tunnel
+is not required for this read-only workspace. The browser
 never receives `SECOPSAI_EDGE_OPERATIONS_TOKEN` or the deprecated
 `SECOPSAI_EDGE_ADMIN_TOKEN` fallback. The workspace shows non-secret credential
 expiry and warns when overlap-safe rotation is due.
@@ -219,13 +221,23 @@ Optional `.env` values:
 - `TRIAGE_OPS_ADMIN_TOKEN`
   - optional local operator token for Triage Ops write endpoints; if omitted, the helper falls back to `BLOG_OPS_ADMIN_TOKEN`
 - `SECOPSAI_EDGE_API_URL`
-  - optional Edge API base URL used by the helper to load sensor operations
+  - optional Edge API base URL used by the local helper or hosted Pages Worker to load sensor operations
 - `SECOPSAI_EDGE_OPERATIONS_TOKEN`
   - preferred server-only, workspace-scoped read credential for sites, sensors, schedules, scan jobs, and its own expiry; never place it in `config.js` or a `NEXT_PUBLIC_*` variable
+- `SECOPSAI_CORE_API_URL`
+  - hosted Core API origin used by the Pages Worker for the canonical graph and findings workspace
+- `SECOPSAI_CORE_READ_TOKEN`
+  - server-only Core operator read credential; configure it as a Pages secret and never expose it to browser configuration
 - `SECOPSAI_EDGE_ADMIN_TOKEN`
   - deprecated server-only migration fallback; remove it after the scoped operations credential is verified
 - `SECOPSAI_EDGE_DASHBOARD_URL`
   - optional public URL for the separate Edge sensor administration console
+
+The browser sends its short-lived Supabase operator session to protected
+same-origin Worker routes. The Worker validates that session with Supabase
+before it uses any Core, Edge, helper, Blog Ops, or run-output credential. When
+`DASHBOARD_AUTH_REQUIRED=false`, protected backend configuration is rejected;
+that mode is for isolated demo UI only.
 
 ## Cloudflare Pages
 

@@ -209,6 +209,20 @@ function dashboardAuthRequired() {
   return cfg?.auth?.required !== false;
 }
 
+async function dashboardApiFetch(input, init = {}) {
+  const headers = new Headers(init.headers || {});
+  if (dashboardAuthRequired()) {
+    const accessToken = state.auth.session?.access_token || '';
+    if (!accessToken) throw new Error('Operator session required');
+    headers.set('Authorization', `Bearer ${accessToken}`);
+  }
+  const response = await window.fetch(input, { ...init, headers });
+  if (response.status === 401 && dashboardAuthRequired()) {
+    leaveAuthenticatedDashboard('Your operator session expired. Sign in again to continue.');
+  }
+  return response;
+}
+
 function setAuthMessage(message, { error = false, update = false } = {}) {
   const target = el(update ? 'auth-update-message' : 'auth-message');
   if (!target) return;
@@ -271,12 +285,12 @@ async function enterAuthenticatedDashboard(session) {
     showAuthSurface({ message: 'Sign in with an invited operator account.' });
     return;
   }
+  state.auth.session = session || null;
+  state.auth.user = session?.user || null;
   if (state.auth.activeUserId === userId) {
     showAuthenticatedShell(session);
     return;
   }
-  state.auth.session = session || null;
-  state.auth.user = session?.user || null;
   state.auth.activeUserId = userId;
   showAuthenticatedShell(session);
   setPage('mission-control');
@@ -652,7 +666,7 @@ async function copyTextWithStatus(text, successMessage) {
 }
 
 async function postNativeHelper(path, payload) {
-  const response = await fetch(path, {
+  const response = await dashboardApiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload || {})
@@ -788,7 +802,7 @@ async function loadSessionDetail(sessionId) {
     state.selectedSessionDetail = null;
     return null;
   }
-  const response = await fetch(`/api/secopsai/session?session_id=${encodeURIComponent(normalized)}`);
+  const response = await dashboardApiFetch(`/api/secopsai/session?session_id=${encodeURIComponent(normalized)}`);
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.ok === false) {
     throw new Error(data?.error || `Session detail HTTP ${response.status}`);
@@ -3139,7 +3153,7 @@ function blogOpsHeaders({ write = false } = {}) {
 
 async function fetchBlogOpsJson(path = '', options = {}) {
   const isWrite = options.method && String(options.method).toUpperCase() !== 'GET';
-  const res = await fetch(blogOpsEndpoint(path), {
+  const res = await dashboardApiFetch(blogOpsEndpoint(path), {
     ...options,
     headers: {
       ...blogOpsHeaders({ write: isWrite }),
@@ -3672,7 +3686,7 @@ function triageOpsHeaders({ write = false } = {}) {
 async function fetchTriageOpsJson(path = '', options = {}) {
   const { write: explicitWrite, ...fetchOptions } = options;
   const isWrite = explicitWrite ?? false;
-  const res = await fetch(triageOpsEndpoint(path), {
+  const res = await dashboardApiFetch(triageOpsEndpoint(path), {
     ...fetchOptions,
     headers: {
       ...triageOpsHeaders({ write: isWrite }),
@@ -5526,7 +5540,7 @@ async function fetchRunOutputEvidence(rel, { force = false } = {}) {
   if (existing?.pending) return existing.pending;
   if (!force && existing && !existing.text && (now - existing.fetchedAt) < failureBackoffMs) return null;
 
-  const pending = fetch(getRunOutputEndpointUrl(rel))
+  const pending = dashboardApiFetch(getRunOutputEndpointUrl(rel))
     .then(resp => resp.json())
     .then(payload => {
       const text = payload?.ok && payload?.text ? payload.text : null;
@@ -5587,14 +5601,24 @@ function edgeMetric(label, value, detail) {
   return `<div class="card metric-card"><div class="metric-label">${escapeHtml(label)}</div><div class="metric">${escapeHtml(String(value))}</div><div class="metric-label">${escapeHtml(detail)}</div></div>`;
 }
 
+function flattenCoreGraphNode(node) {
+  const properties = node?.properties && typeof node.properties === 'object' ? node.properties : {};
+  return { ...properties, ...node, id: node?.source_id || node?.node_id || properties.id };
+}
+
 function renderEdgeWorkspace() {
   const workspace = state.edgeWorkspace.data;
   const core = workspace?.core || {};
   const edge = workspace?.edge || {};
   const assets = Array.isArray(core.assets) ? core.assets : [];
-  const findings = Array.isArray(core.findings) ? core.findings : [];
-  const sensors = Array.isArray(edge.sensors) ? edge.sensors : [];
-  const sites = Array.isArray(edge.sites) ? edge.sites : [];
+  const findings = (Array.isArray(core.findings) ? core.findings : []).filter(item => (
+    String(item.source || '').toLowerCase() === 'secopsai_edge'
+    || String(item.finding_id || '').toUpperCase().startsWith('EDGE-')
+  ));
+  const coreSensors = (Array.isArray(core.sensors) ? core.sensors : []).map(flattenCoreGraphNode);
+  const coreSites = (Array.isArray(core.sites) ? core.sites : []).map(flattenCoreGraphNode);
+  const sensors = edge.ok && Array.isArray(edge.sensors) ? edge.sensors : coreSensors;
+  const sites = edge.ok && Array.isArray(edge.sites) ? edge.sites : coreSites;
   const schedules = Array.isArray(edge.schedules) ? edge.schedules : [];
   const jobs = Array.isArray(edge.scan_jobs) ? edge.scan_jobs : [];
   const changes = core.changes && typeof core.changes === 'object' ? core.changes : { nodes: [], edges: [] };
@@ -5634,7 +5658,7 @@ function renderEdgeWorkspace() {
   if (el('edge-stats')) el('edge-stats').innerHTML = [
     edgeMetric('Network assets', assets.length, 'Canonical Core graph'),
     edgeMetric('Open findings', openFindings, `${priority} high or critical`),
-    edgeMetric('Sensors online', `${onlineSensors}/${sensors.length}`, `${sites.length} site(s)`),
+    edgeMetric('Sensors online', edge.ok ? `${onlineSensors}/${sensors.length}` : sensors.length, edge.ok ? `${sites.length} site(s)` : 'Synced sensor records'),
     edgeMetric('Active schedules', activeSchedules, `${activeJobs} active job(s)`),
     edgeMetric('Graph changes', (changes.nodes || []).length + (changes.edges || []).length, 'Recent nodes and relationships')
   ].join('');
@@ -5663,7 +5687,7 @@ async function loadEdgeWorkspace({ render = true } = {}) {
   state.edgeWorkspace.error = null;
   if (render) renderEdgeWorkspace();
   try {
-    const response = await fetch(cfg.edgeWorkspaceEndpoint || '/api/secopsai/edge-workspace', { cache: 'no-store' });
+    const response = await dashboardApiFetch(cfg.edgeWorkspaceEndpoint || '/api/secopsai/edge-workspace', { cache: 'no-store' });
     const payload = await response.json().catch(() => null);
     if (!payload || (!response.ok && !payload.core)) throw new Error(payload?.error || `Edge workspace HTTP ${response.status}`);
     state.edgeWorkspace.data = payload;
@@ -5716,7 +5740,7 @@ async function loadResearchCaseDetail(caseId, { render = true } = {}) {
     if (render) renderResearchCases();
     return null;
   }
-  const response = await fetch(researchCasesEndpoint(`/${encodeURIComponent(caseId)}`), { cache: 'no-store' });
+  const response = await dashboardApiFetch(researchCasesEndpoint(`/${encodeURIComponent(caseId)}`), { cache: 'no-store' });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) throw new Error(payload.error || `Research case HTTP ${response.status}`);
   state.researchCases.selectedId = caseId;
@@ -5730,7 +5754,7 @@ async function loadResearchCases({ render = true, preserveSelection = true } = {
   state.researchCases.error = null;
   if (render) renderResearchCases();
   try {
-    const response = await fetch(`${researchCasesEndpoint()}?limit=250`, { cache: 'no-store' });
+    const response = await dashboardApiFetch(`${researchCasesEndpoint()}?limit=250`, { cache: 'no-store' });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.ok === false) throw new Error(payload.error || `Research cases HTTP ${response.status}`);
     state.researchCases.cases = Array.isArray(payload.cases) ? payload.cases : [];
@@ -5757,7 +5781,7 @@ async function runResearchCaseAction(action, payload = {}, button = null) {
   }
   setButtonBusy(button, true, action === 'draft-blog' ? 'Creating draft…' : 'Working…');
   try {
-    const response = await fetch(researchCasesEndpoint(`/${action}`), {
+    const response = await dashboardApiFetch(researchCasesEndpoint(`/${action}`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -5965,7 +5989,7 @@ function renderResearchCases() {
 
 async function loadIntegrationStatus() {
   try {
-    const res = await fetch(cfg.integrationStatusEndpoint || '/api/integration-status');
+    const res = await dashboardApiFetch(cfg.integrationStatusEndpoint || '/api/integration-status');
     if (!res.ok) throw new Error(`Integration status HTTP ${res.status}`);
     state.integrationStatus = await res.json();
   } catch (error) {
@@ -5989,7 +6013,7 @@ async function loadIntegrationStatus() {
 
 async function loadLocalTriageState() {
   try {
-    const res = await fetch('/api/secopsai/triage-state');
+    const res = await dashboardApiFetch('/api/secopsai/triage-state');
     if (!res.ok) throw new Error(`Local triage HTTP ${res.status}`);
     state.localTriage = await res.json();
     await refreshSelectedSessionDetail();

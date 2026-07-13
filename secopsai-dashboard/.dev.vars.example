@@ -35,11 +35,13 @@ BLOG_OPS_ADMIN_TOKEN=
 SECOPSAI_HELPER_BASE_URL=
 SECOPSAI_HELPER_AUTH_HEADER=
 SECOPSAI_HELPER_AUTH_TOKEN=
-# Helper-only Edge enrichment. Generate an operations:read token in the Edge
-# Settings panel; never expose it to browser configuration.
+# Preferred hosted canonical workspace. These credentials are consumed only by
+# the Pages Worker and are never emitted through config.js.
+SECOPSAI_CORE_API_URL=
+SECOPSAI_CORE_READ_TOKEN=
 SECOPSAI_EDGE_API_URL=
 SECOPSAI_EDGE_OPERATIONS_TOKEN=
-# Deprecated migration fallback only.
+# Deprecated local-helper migration fallback only. Hosted mode does not use it.
 SECOPSAI_EDGE_ADMIN_TOKEN=
 # Required for protected Triage Ops write actions such as close, escalate,
 # persist campaign findings, and create campaign blog drafts.

@@ -8,6 +8,15 @@ const DEFAULT_HOSTED_AI_MAX_COST_USD = 3;
 const DEFAULT_BLOG_OPS_OWNER = "Techris93";
 const DEFAULT_BLOG_OPS_REPO = "secopsai";
 const DEFAULT_BLOG_OPS_WORKFLOW = "blog-ops.yml";
+const MAX_OPERATOR_PROFILE_BYTES = 64 * 1024;
+const MAX_SECOPSAI_WORKSPACE_BYTES = 5 * 1024 * 1024;
+const EDGE_OPERATIONS_RESOURCES = {
+  sites: ["/api/v1/sites", "list"],
+  sensors: ["/api/v1/sensors", "list"],
+  schedules: ["/api/v1/scan-schedules", "list"],
+  scan_jobs: ["/api/v1/scan-jobs", "list"],
+  credential: ["/api/v1/integration-tokens/self", "object"],
+};
 const DASHBOARD_DEPARTMENTS = {
   exec: "#06B6D4",
   platform: "#3B82F6",
@@ -147,6 +156,250 @@ function truthyEnv(value, fallback = false) {
 function numberEnv(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function hasProtectedDashboardBackend(env) {
+  return Boolean(getRunOutputBinding(env) || [
+    env.SECOPSAI_CORE_API_URL,
+    env.SECOPSAI_CORE_READ_TOKEN,
+    env.SECOPSAI_EDGE_API_URL,
+    env.SECOPSAI_EDGE_OPERATIONS_TOKEN,
+    env.SECOPSAI_EDGE_ADMIN_TOKEN,
+    env.SECOPSAI_HELPER_BASE_URL,
+    env.SECOPSAI_HELPER_AUTH_TOKEN,
+    env.BLOG_OPS_GITHUB_TOKEN,
+    env.RUN_OUTPUT_BASE_URL,
+    env.RUN_OUTPUT_AUTH_TOKEN,
+  ].some(value => String(value || "").trim()));
+}
+
+function bearerToken(request) {
+  const authorization = request.headers.get("authorization") || "";
+  if (!authorization.toLowerCase().startsWith("bearer ")) return "";
+  const token = authorization.slice(7).trim();
+  return token.length <= 4096 ? token : "";
+}
+
+function serviceBaseUrl(value, label, { requireSupabaseHost = false } = {}) {
+  let url;
+  try {
+    url = new URL(String(value || "").trim());
+  } catch {
+    throw new Error(`${label} is not a valid URL`);
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+    throw new Error(`${label} must be an HTTPS origin without credentials, query parameters, or fragments`);
+  }
+  if (requireSupabaseHost && !url.hostname.endsWith(".supabase.co")) {
+    throw new Error(`${label} must use a Supabase project origin`);
+  }
+  url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+  return url;
+}
+
+async function boundedJson(response, maxBytes, label) {
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+  if (declaredLength > maxBytes) throw new Error(`${label} exceeded the response size limit`);
+  const text = await response.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw new Error(`${label} exceeded the response size limit`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${label} returned invalid JSON`);
+  }
+}
+
+async function timedFetch(fetcher, input, init = {}, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetcher(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function requireDashboardOperator(request, env) {
+  if (!truthyEnv(env.DASHBOARD_AUTH_REQUIRED, true)) {
+    if (hasProtectedDashboardBackend(env)) {
+      return jsonResponse(
+        {
+          ok: false,
+          code: "operator_auth_required",
+          error: "Dashboard backend access is disabled until operator authentication is enabled.",
+        },
+        { status: 503 },
+      );
+    }
+    return null;
+  }
+
+  const token = bearerToken(request);
+  if (!token) {
+    return jsonResponse({ ok: false, code: "operator_session_required", error: "Operator session required" }, { status: 401 });
+  }
+
+  const anonKey = String(env.SUPABASE_ANON_KEY || "").trim();
+  let supabaseUrl;
+  try {
+    supabaseUrl = serviceBaseUrl(env.SUPABASE_URL, "SUPABASE_URL", { requireSupabaseHost: true });
+  } catch {
+    return jsonResponse({ ok: false, code: "operator_auth_unavailable", error: "Operator authentication is unavailable" }, { status: 503 });
+  }
+  if (!anonKey) {
+    return jsonResponse({ ok: false, code: "operator_auth_unavailable", error: "Operator authentication is unavailable" }, { status: 503 });
+  }
+
+  const userUrl = new URL("/auth/v1/user", supabaseUrl);
+  const authRequest = new Request(userUrl.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      apikey: anonKey,
+      Authorization: `Bearer ${token}`,
+    },
+    redirect: "manual",
+  });
+  let response;
+  try {
+    const authFetcher = env.SUPABASE_AUTH_FETCHER;
+    const fetcher = authFetcher && typeof authFetcher.fetch === "function"
+      ? (input, init) => authFetcher.fetch(input, init)
+      : (input, init) => fetch(input, init);
+    response = await timedFetch(fetcher, authRequest, {}, 8000);
+  } catch {
+    return jsonResponse({ ok: false, code: "operator_auth_unavailable", error: "Operator authentication is unavailable" }, { status: 503 });
+  }
+  if (!response.ok) {
+    return jsonResponse({ ok: false, code: "operator_session_invalid", error: "Operator session is invalid or expired" }, { status: 401 });
+  }
+  try {
+    const profile = await boundedJson(response, MAX_OPERATOR_PROFILE_BYTES, "Operator profile");
+    if (!profile || typeof profile !== "object" || !String(profile.id || "").trim()) {
+      throw new Error("Operator profile is incomplete");
+    }
+  } catch {
+    return jsonResponse({ ok: false, code: "operator_session_invalid", error: "Operator session is invalid or expired" }, { status: 401 });
+  }
+  return null;
+}
+
+async function secopsaiApiJson(baseUrl, path, token, label) {
+  const url = new URL(path, baseUrl);
+  const response = await timedFetch((input, init) => fetch(input, init), url.toString(), {
+    method: "GET",
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    redirect: "manual",
+  }, 12000);
+  if (response.status >= 300 && response.status < 400) throw new Error(`${label} refused an upstream redirect`);
+  if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}`);
+  return boundedJson(response, MAX_SECOPSAI_WORKSPACE_BYTES, label);
+}
+
+function unavailableCore(error, configured = false) {
+  return {
+    configured,
+    ok: false,
+    error,
+    assets: [],
+    findings: [],
+    changes: { nodes: [], edges: [] },
+    sites: [],
+    sensors: [],
+    services: [],
+    wifi_networks: [],
+    sync_state: [],
+  };
+}
+
+async function loadHostedCoreWorkspace(env) {
+  const rawUrl = String(env.SECOPSAI_CORE_API_URL || "").trim();
+  const token = String(env.SECOPSAI_CORE_READ_TOKEN || "").trim();
+  if (!rawUrl || !token) {
+    return unavailableCore("Set SECOPSAI_CORE_API_URL and SECOPSAI_CORE_READ_TOKEN to load the canonical Core workspace.");
+  }
+  try {
+    const baseUrl = serviceBaseUrl(rawUrl, "SECOPSAI_CORE_API_URL");
+    const payload = await secopsaiApiJson(baseUrl, "/api/v1/workspace?limit=500", token, "SecOpsAI Core API");
+    if (!payload || typeof payload !== "object" || payload.schema_version !== "secopsai.core.workspace.v1") {
+      throw new Error("SecOpsAI Core API returned an unsupported workspace schema");
+    }
+    return { ...payload, configured: true, ok: true };
+  } catch (error) {
+    return unavailableCore(sanitizeHelperErrorDetail(error?.message || error), true);
+  }
+}
+
+function unavailableEdge(error, configured = false) {
+  return {
+    configured,
+    ok: false,
+    error,
+    sites: [],
+    sensors: [],
+    schedules: [],
+    scan_jobs: [],
+  };
+}
+
+async function loadHostedEdgeOperations(env) {
+  const rawUrl = String(env.SECOPSAI_EDGE_API_URL || "").trim();
+  const token = String(env.SECOPSAI_EDGE_OPERATIONS_TOKEN || "").trim();
+  if (!rawUrl || !token) {
+    return unavailableEdge("Set SECOPSAI_EDGE_API_URL and SECOPSAI_EDGE_OPERATIONS_TOKEN to load live sensor operations.");
+  }
+  let baseUrl;
+  try {
+    baseUrl = serviceBaseUrl(rawUrl, "SECOPSAI_EDGE_API_URL");
+  } catch (error) {
+    return unavailableEdge(sanitizeHelperErrorDetail(error?.message || error), true);
+  }
+
+  const result = { configured: true, ok: true, credential_scope: "operations:read" };
+  const failures = [];
+  await Promise.all(Object.entries(EDGE_OPERATIONS_RESOURCES).map(async ([key, [path, expected]]) => {
+    try {
+      const payload = await secopsaiApiJson(baseUrl, path, token, `SecOpsAI Edge ${key}`);
+      const valid = expected === "list" ? Array.isArray(payload) : payload && typeof payload === "object" && !Array.isArray(payload);
+      if (!valid) throw new Error(`SecOpsAI Edge ${key} returned an invalid response`);
+      result[key] = payload;
+    } catch (error) {
+      result[key] = expected === "list" ? [] : {};
+      if (key === "credential") {
+        result.warning = "Live Edge operations are available, but credential expiry could not be verified.";
+      } else {
+        failures.push(sanitizeHelperErrorDetail(error?.message || error));
+      }
+    }
+  }));
+
+  if (result.credential?.rotation_recommended) {
+    result.warning = `Edge operations credential expires in ${Number(result.credential.expires_in_days || 0)} day(s). Rotate it before expiry.`;
+  }
+  if (failures.length) {
+    result.ok = false;
+    result.error = failures.sort().join(" ");
+  }
+  return result;
+}
+
+async function handleHostedCoreEdgeWorkspace(env) {
+  const [core, edge] = await Promise.all([
+    loadHostedCoreWorkspace(env),
+    loadHostedEdgeOperations(env),
+  ]);
+  return jsonResponse(
+    {
+      ok: core.ok,
+      generated_at: new Date().toISOString(),
+      source: "hosted-core-edge",
+      core,
+      edge,
+    },
+    { status: core.ok ? 200 : 503 },
+  );
 }
 
 function blogOpsConfig(env) {
@@ -757,6 +1010,14 @@ async function handleIntegrationStatus(env) {
       secopsai_events_api: Boolean(secopsaiHelperBase),
       secopsai_edge_api: Boolean(secopsaiHelperBase),
     },
+    core: {
+      mode: String(env.SECOPSAI_CORE_API_URL || "").trim() ? "hosted-api" : "disabled",
+      configured: Boolean(String(env.SECOPSAI_CORE_API_URL || "").trim() && String(env.SECOPSAI_CORE_READ_TOKEN || "").trim()),
+    },
+    edge_operations: {
+      mode: String(env.SECOPSAI_EDGE_API_URL || "").trim() ? "hosted-api" : "disabled",
+      configured: Boolean(String(env.SECOPSAI_EDGE_API_URL || "").trim() && String(env.SECOPSAI_EDGE_OPERATIONS_TOKEN || "").trim()),
+    },
     blog_ops: {
       mode: blogOpsStatus.mode,
       configured: Boolean(blogOpsStatus.github_configured),
@@ -968,22 +1229,39 @@ async function routeRequest(request, env) {
     }
 
     if (request.method === "GET" && url.pathname === "/api/integration-status") {
+      const authResponse = await requireDashboardOperator(request, env);
+      if (authResponse) return authResponse;
       return handleIntegrationStatus(env);
     }
 
     if (url.pathname.startsWith("/api/secopsai/")) {
+      const authResponse = await requireDashboardOperator(request, env);
+      if (authResponse) return authResponse;
+      if (request.method === "GET" && url.pathname === "/api/secopsai/edge-workspace") {
+        const directHostedMode = Boolean([
+          env.SECOPSAI_CORE_API_URL,
+          env.SECOPSAI_CORE_READ_TOKEN,
+          env.SECOPSAI_EDGE_API_URL,
+          env.SECOPSAI_EDGE_OPERATIONS_TOKEN,
+        ].some(value => String(value || "").trim()));
+        if (directHostedMode) return handleHostedCoreEdgeWorkspace(env);
+      }
       if (isTriageOpsWriteRoute(request, url.pathname)) {
-        const authResponse = requireTriageOpsAdmin(request, env);
-        if (authResponse) return authResponse;
+        const writeAuthResponse = requireTriageOpsAdmin(request, env);
+        if (writeAuthResponse) return writeAuthResponse;
       }
       return proxySecopsaiHelper(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/api/run-output") {
+      const authResponse = await requireDashboardOperator(request, env);
+      if (authResponse) return authResponse;
       return handleRunOutput(request, env);
     }
 
     if (url.pathname === "/api/blog" || url.pathname.startsWith("/api/blog/")) {
+      const authResponse = await requireDashboardOperator(request, env);
+      if (authResponse) return authResponse;
       try {
         return await handleBlogOps(request, env);
       } catch (error) {
