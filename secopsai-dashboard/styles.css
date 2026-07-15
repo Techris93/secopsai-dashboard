@@ -149,6 +149,19 @@ a { color: inherit; }
 .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+.research-rule-preview {
+  max-width: 42rem;
+  max-height: 8rem;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--surface-muted, rgba(0, 0, 0, 0.16));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
