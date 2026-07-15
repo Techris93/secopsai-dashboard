@@ -116,6 +116,7 @@ function buildBrowserConfig(env) {
     blogOpsEndpoint: "/api/blog",
     triageOpsEndpoint: "/api/secopsai/triage-ops",
     researchCasesEndpoint: "/api/secopsai/research-cases",
+    researchWatchlistEndpoint: "/api/secopsai/research-watchlist",
     edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     auth: {
@@ -1077,6 +1078,7 @@ async function proxySecopsaiHelper(request, env) {
   if (triageOpsToken && (
     incomingUrl.pathname.startsWith("/api/secopsai/triage-ops/")
     || incomingUrl.pathname.startsWith("/api/secopsai/research-cases/")
+    || incomingUrl.pathname === "/api/secopsai/research-watchlist"
   )) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
@@ -1253,6 +1255,14 @@ async function routeRequest(request, env) {
       if (isTriageOpsWriteRoute(request, url.pathname)) {
         const writeAuthResponse = requireTriageOpsAdmin(request, env);
         if (writeAuthResponse) return writeAuthResponse;
+      }
+      if (request.method === "POST" && url.pathname === "/api/secopsai/research-watchlist") {
+        // Preview is read-only; only draft-case creation needs the write token.
+        const body = await request.clone().json().catch(() => ({}));
+        if (String(body.action || "preview").trim().toLowerCase() === "create") {
+          const writeAuthResponse = requireTriageOpsAdmin(request, env);
+          if (writeAuthResponse) return writeAuthResponse;
+        }
       }
       return proxySecopsaiHelper(request, env);
     }

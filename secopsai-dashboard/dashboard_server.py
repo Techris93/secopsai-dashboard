@@ -88,6 +88,7 @@ ALLOWED_CAMPAIGN_ECOSYSTEMS = {
 ECOSYSTEM_RE = re.compile(r'^(npm|pypi|crates|chrome-web-store|packagist|go|huggingface|maven|nuget|open-vsx|rubygems)$', re.IGNORECASE)
 CAMPAIGN_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,140}$')
 PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._:/-]{1,260}$')
+NPM_WATCHLIST_PACKAGE_RE = re.compile(r'^(?:npm:)?(?:@[a-z0-9._~-]+/)?[a-z0-9._~-]+$', re.IGNORECASE)
 VERSION_RE = re.compile(r'^[A-Za-z0-9.+:_~!*-]{1,160}$')
 SAFE_SOURCE_URL_RE = re.compile(r'^https?://[^\s<>"\']{3,500}$', re.IGNORECASE)
 PAGES_PROJECT_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$')
@@ -786,6 +787,66 @@ def run_cli_json(args, timeout=120):
     result = run_secopsai_cli([*args, '--json'], timeout=timeout)
     parsed = parse_cli_json(result)
     return result, parsed
+
+
+def build_research_watchlist_args(payload):
+    """Build the preview/create command for the narrow npm watchlist flow."""
+    action = _clean_string(payload.get('action'), 20).lower()
+    if action not in {'preview', 'create'}:
+        raise ValueError('Watchlist action must be preview or create')
+    ecosystem = _clean_string(payload.get('ecosystem') or 'npm', 20).lower()
+    if ecosystem != 'npm':
+        raise ValueError('The dashboard watchlist workflow currently supports npm only')
+
+    select_all = bool(payload.get('select_all'))
+    packages = payload.get('packages')
+    if isinstance(packages, str):
+        packages = [packages]
+    if not isinstance(packages, list):
+        packages = []
+    if len(packages) > 50:
+        raise ValueError('Watchlist package limit is 50')
+    cleaned_packages = []
+    for package in packages:
+        value = _clean_string(package, 260)
+        if not value or not NPM_WATCHLIST_PACKAGE_RE.fullmatch(value):
+            raise ValueError(f'Invalid npm watchlist package: {value[:80]}')
+        cleaned_packages.append(value)
+    if select_all and cleaned_packages:
+        raise ValueError('Select all cannot be combined with individual packages')
+    if not select_all and not cleaned_packages:
+        raise ValueError('Select at least one npm package')
+
+    args = ['research', 'case', 'from-watchlist', '--ecosystem', 'npm']
+    if select_all:
+        args.append('--all')
+    else:
+        for package in cleaned_packages:
+            args.extend(['--package', package])
+    if action == 'create':
+        args.append('--create')
+        for flag, key, limit in [
+            ('--owner', 'owner', 160),
+            ('--title-prefix', 'title_prefix', 240),
+            ('--severity', 'severity', 20),
+            ('--source-url', 'source_url', 4000),
+            ('--actor', 'actor', 160),
+        ]:
+            value = _clean_string(payload.get(key), limit)
+            if value:
+                args.extend([flag, value])
+    return args
+
+
+def normalize_npm_watchlist_packages(values):
+    packages = []
+    for raw in values if isinstance(values, list) else []:
+        value = _clean_string(raw, 260)
+        if not NPM_WATCHLIST_PACKAGE_RE.fullmatch(value):
+            continue
+        name = value.split(':', 1)[1] if value.lower().startswith('npm:') else value
+        packages.append({'value': value, 'name': name})
+    return packages
 
 
 def edge_api_snapshot():
@@ -2205,6 +2266,24 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/secopsai/research-watchlist':
+            try:
+                result, parsed_result = run_cli_json(['supply-chain', 'campaign-watchlist', 'list'], timeout=60)
+                parsed_result = parsed_result if isinstance(parsed_result, dict) else {}
+                return json_response(
+                    self,
+                    200 if result['ok'] else 500,
+                    {
+                        'ok': result['ok'],
+                        'ecosystem': 'npm',
+                        'packages': normalize_npm_watchlist_packages(parsed_result.get('packages', [])),
+                        'source_urls': parsed_result.get('source_urls', []),
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
         if parsed.path.startswith('/api/secopsai/research-cases/'):
             try:
                 case_id = urllib.parse.unquote(parsed.path.rsplit('/', 1)[-1]).strip().upper()
@@ -2381,6 +2460,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         payload = read_request_json(self)
+
+        if parsed.path == '/api/secopsai/research-watchlist':
+            action = str(payload.get('action') or 'preview').strip().lower()
+            if action == 'create' and require_triage_ops_admin(self):
+                return
+            try:
+                args = build_research_watchlist_args(payload)
+                result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=120)
+                return json_response(
+                    self,
+                    200 if result['ok'] else 400,
+                    {
+                        'ok': result['ok'],
+                        'action': action,
+                        'result': parsed_result,
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
         if parsed.path.startswith('/api/secopsai/research-cases/'):
             if require_triage_ops_admin(self):

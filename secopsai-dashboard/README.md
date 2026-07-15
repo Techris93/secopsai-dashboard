@@ -123,6 +123,13 @@ Research reads are available through the helper without a write token.
 Mutations use `TRIAGE_OPS_ADMIN_TOKEN`; the browser never constructs or runs a
 shell command.
 
+The Research Cases workspace also includes a protected watchlist promotion
+panel. Select one or more npm packages, click **Preview selected**, then click
+**Create draft cases** after reviewing the result. Preview maps directly to
+`research case from-watchlist` without creating records; creation uses the
+admin token and remains idempotent. Package code is never fetched or executed
+by this workflow.
+
 ### Native Triage
 - helper readiness
 - pending action queue
