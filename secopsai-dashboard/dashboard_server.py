@@ -61,6 +61,21 @@ RESEARCH_CASE_ACTIONS = {
     'retract',
     'export',
     'draft-blog',
+    'intake-preview',
+    'intake-run',
+    'intake-attach',
+    'jobs',
+    'job-retry',
+    'job-cancel',
+    'evidence-matrix',
+    'analyst-brief',
+    'verdict',
+    'publication-check',
+    'publication-approve',
+    'prepare-disclosure',
+    'disclosure-status',
+    'sandbox-request',
+    'sandbox-status',
 }
 CAMPAIGN_TRIAGE_OPS_ACTIONS = {
     'campaign-discover',
@@ -682,10 +697,110 @@ def build_research_case_args(action, payload):
             add(args, flag, key, limit)
         return args
 
+    if action == 'intake-preview':
+        ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+        package = _clean_string(payload.get('package'), 512)
+        if not ecosystem or not package:
+            raise ValueError('ecosystem and package are required')
+        if not PACKAGE_RE.match(package):
+            raise ValueError('Invalid package')
+        args = ['research', 'intake', 'preview', '--ecosystem', ecosystem, '--package', package]
+        add(args, '--version', 'version', 160)
+        return args
+
+    if action == 'intake-attach':
+        job_id = _clean_string(payload.get('job_id'), 40).upper()
+        if not job_id:
+            raise ValueError('job_id is required')
+        args = ['research', 'intake', 'attach', job_id]
+        add(args, '--actor', 'actor', 160)
+        return args
+
+    if action == 'disclosure-status':
+        disclosure_id = _clean_string(payload.get('disclosure_id'), 40).upper()
+        if not disclosure_id:
+            raise ValueError('disclosure_id is required')
+        args = ['research', 'workflow', 'disclosure-status', disclosure_id]
+        add(args, '--status', 'status', 40)
+        add(args, '--actor', 'actor', 160)
+        if '--status' not in args:
+            raise ValueError('status is required')
+        return args
+
+    if action == 'sandbox-status':
+        request_id = _clean_string(payload.get('request_id'), 40).upper()
+        if not request_id:
+            raise ValueError('request_id is required')
+        args = ['research', 'workflow', 'sandbox-status', request_id]
+        add(args, '--status', 'status', 40)
+        add(args, '--actor', 'actor', 160)
+        if payload.get('result') is not None:
+            args.extend(['--result-json', json.dumps(payload.get('result'), sort_keys=True)])
+        if '--status' not in args:
+            raise ValueError('status is required')
+        return args
+
+    if action == 'jobs':
+        args = ['research', 'jobs', 'list']
+        add(args, '--case', 'case_id', 32)
+        add(args, '--status', 'status', 40)
+        limit = payload.get('limit')
+        if limit is not None:
+            try:
+                args.extend(['--limit', str(max(1, min(int(limit), 500)))])
+            except (TypeError, ValueError) as exc:
+                raise ValueError('limit must be an integer') from exc
+        return args
+
+    if action in {'job-retry', 'job-cancel'}:
+        job_id = _clean_string(payload.get('job_id'), 40).upper()
+        if not job_id:
+            raise ValueError('job_id is required')
+        command = 'retry' if action == 'job-retry' else 'cancel'
+        args = ['research', 'jobs', command, job_id]
+        add(args, '--actor', 'actor', 160)
+        return args
+
     case_id = _clean_string(payload.get('case_id'), 32).upper()
     if not RESEARCH_CASE_ID_RE.match(case_id):
         raise ValueError('Invalid research case id')
-    args = ['research', 'case', action, case_id]
+    workflow_commands = {
+        'intake-run', 'evidence-matrix', 'analyst-brief', 'verdict', 'publication-check', 'publication-approve',
+        'prepare-disclosure', 'disclosure-status', 'sandbox-request', 'sandbox-status',
+    }
+    if action in workflow_commands:
+        args = ['research', 'workflow']
+        if action == 'intake-run':
+            args = ['research', 'intake', 'run', '--case', case_id]
+            ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+            package = _clean_string(payload.get('package'), 512)
+            if not ecosystem or not package:
+                raise ValueError('ecosystem and package are required')
+            if not ECOSYSTEM_RE.match(ecosystem) or not PACKAGE_RE.match(package):
+                raise ValueError('Invalid package target')
+            args.extend(['--ecosystem', ecosystem, '--package', package])
+            add(args, '--version', 'version', 160)
+            add(args, '--actor', 'actor', 160)
+            if payload.get('attach'):
+                args.append('--attach')
+            if '--ecosystem' not in args or '--package' not in args:
+                raise ValueError('ecosystem and package are required')
+            return args
+        command_map = {
+            'evidence-matrix': 'evidence-matrix',
+            'analyst-brief': 'analyst-brief',
+            'verdict': 'verdict',
+            'publication-check': 'publication-check',
+            'publication-approve': 'publication-approve',
+            'prepare-disclosure': 'prepare-disclosure',
+            'disclosure-status': 'disclosure-status',
+            'sandbox-request': 'request-sandbox',
+            'sandbox-status': 'sandbox-status',
+        }
+        args.append(command_map[action])
+        args.append(case_id)
+    else:
+        args = ['research', 'case', action, case_id]
     fields = {
         'update': [
             ('--title', 'title', 240),
@@ -747,6 +862,15 @@ def build_research_case_args(action, payload):
         ],
         'export': [],
         'draft-blog': [],
+        'evidence-matrix': [('--actor', 'actor', 160)],
+        'analyst-brief': [('--actor', 'actor', 160)],
+        'publication-check': [('--actor', 'actor', 160)],
+        'publication-approve': [('--review-id', 'review_id', 40), ('--actor', 'actor', 160)],
+        'prepare-disclosure': [('--recipient', 'recipient', 320), ('--subject', 'subject', 240), ('--body', 'body', 30000), ('--embargo-until', 'embargo_until', 64), ('--actor', 'actor', 160)],
+        'verdict': [('--verdict', 'verdict', 40), ('--confidence', 'confidence', 20), ('--rationale', 'rationale', 12000), ('--actor', 'actor', 160)],
+        'sandbox-request': [('--artifact-sha256', 'artifact_sha256', 64), ('--justification', 'justification', 12000), ('--provider', 'provider', 80), ('--actor', 'actor', 160)],
+        'sandbox-status': [('--status', 'status', 40), ('--result-json', 'result_json', 50000), ('--actor', 'actor', 160)],
+        'disclosure-status': [('--status', 'status', 40), ('--actor', 'actor', 160)],
     }
     for flag, key, limit in fields[action]:
         value = _clean_string(payload.get(key), limit)
@@ -765,6 +889,21 @@ def build_research_case_args(action, payload):
             value = _clean_string(tag, 80)
             if value:
                 args.extend(['--tag', value])
+    if action == 'verdict':
+        evidence_ids = payload.get('evidence_ids') if isinstance(payload.get('evidence_ids'), list) else []
+        if not evidence_ids:
+            raise ValueError('evidence_ids is required')
+        for evidence_id in evidence_ids[:50]:
+            args.extend(['--evidence-id', _clean_string(evidence_id, 32)])
+    if action == 'sandbox-request':
+        behaviors = payload.get('behaviors') if isinstance(payload.get('behaviors'), list) else []
+        for behavior in behaviors[:20]:
+            args.extend(['--behavior', _clean_string(behavior, 160)])
+    if action == 'publication-approve':
+        for waiver in (payload.get('waivers') if isinstance(payload.get('waivers'), list) else []):
+            args.extend(['--waiver', _clean_string(waiver, 1000)])
+    if action == 'sandbox-status' and payload.get('result') is not None:
+        args.extend(['--result-json', json.dumps(payload.get('result'), sort_keys=True)])
     required = {
         'add-subject': ['--subject-type', '--name'],
         'add-evidence': ['--evidence-type', '--title'],
@@ -773,6 +912,12 @@ def build_research_case_args(action, payload):
         'link-finding': [None],
         'note': ['--note'],
         'retract': ['--item-type', '--item-id', '--reason'],
+        'intake-run': ['--ecosystem', '--package'],
+        'verdict': ['--verdict', '--confidence', '--rationale'],
+        'prepare-disclosure': ['--recipient'],
+        'sandbox-request': ['--artifact-sha256', '--justification'],
+        'sandbox-status': ['--status'],
+        'disclosure-status': ['--status'],
     }
     for flag in required.get(action, []):
         if flag is None:
