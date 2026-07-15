@@ -5973,6 +5973,7 @@ function renderResearchCaseDetail(researchCase) {
   const subjects = researchCase.subjects || [];
   const evidence = researchCase.evidence || [];
   const iocs = researchCase.iocs || [];
+  const rules = researchCase.rules || [];
   const findings = researchCase.findings || [];
   const timeline = researchCase.timeline || [];
   host.innerHTML = `
@@ -5996,6 +5997,7 @@ function renderResearchCaseDetail(researchCase) {
     ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','State'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td>${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
     ${researchDetailSection('Evidence', researchTable(['Evidence','Type','Provenance','Collected','State'], evidence.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td><strong>${escapeHtml(item.title)}</strong><div class="small">${escapeHtml(item.locator || item.sha256 || 'No locator')}</div></td><td>${escapeHtml(statusLabel(item.evidence_type))}</td><td>${escapeHtml(item.provenance || '—')}</td><td>${escapeHtml(fmtDate(item.collected_at))}</td><td>${researchRetractControl('evidence', item)}</td></tr>`), 'No evidence recorded.'))}
     ${researchDetailSection('Indicators', researchTable(['Type','Value','Confidence','Evidence','State'], iocs.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(item.ioc_type)}</td><td><code>${escapeHtml(item.value)}</code></td><td>${escapeHtml(String(item.confidence))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('ioc', item)}</td></tr>`), 'No indicators recorded; explicitly state when none were found.'))}
+    ${researchDetailSection('Detection rules', researchTable(['Type','Rule','Validation','Evidence','State'], rules.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(String(item.rule_type || '').toUpperCase())}</td><td><strong>${escapeHtml(item.name)}</strong>${item.purpose ? `<div class="small">${escapeHtml(item.purpose)}</div>` : ''}<pre class="research-rule-preview"><code>${escapeHtml(compactText(item.content || '', 420))}</code></pre></td><td>${escapeHtml(statusLabel(item.validation_status || item.validation?.status || 'unknown'))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('rule', item)}</td></tr>`), 'No detection rules attached.'))}
     ${researchDetailSection('Linked findings', researchTable(['Finding','Relationship','Linked'], findings.map(item => `<tr><td><code>${escapeHtml(item.finding_id)}</code></td><td>${escapeHtml(statusLabel(item.relationship))}</td><td>${escapeHtml(fmtDate(item.created_at))}</td></tr>`), 'No SOC findings linked.'))}
     <details class="research-action-drawer"><summary>Add subject</summary><div class="research-form-grid"><label><span>Type</span><select id="research-subject-type">${['package','extension','repository','publisher','brand','infrastructure','other'].map(value => researchOption(value, 'package')).join('')}</select></label><label><span>Ecosystem</span><input id="research-subject-ecosystem" placeholder="npm, pypi, nuget" /></label><label class="research-span-2"><span>Name</span><input id="research-subject-name" placeholder="Package, brand, repository, or infrastructure" /></label><label><span>Version</span><input id="research-subject-version" /></label><label><span>Publisher</span><input id="research-subject-publisher" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-subject-btn" type="button">Add subject</button></div></details>
     <details class="research-action-drawer"><summary>Add evidence</summary><div class="research-form-grid"><label><span>Type</span><select id="research-evidence-type">${['source','registry_metadata','package_artifact','static_analysis','sandbox_analysis','screenshot','analyst_note','other'].map(value => researchOption(value, 'source')).join('')}</select></label><label><span>Title</span><input id="research-evidence-title" /></label><label class="research-span-2"><span>Locator</span><input id="research-evidence-locator" placeholder="Public URL or controlled local reference" /></label><label class="research-span-2"><span>SHA-256</span><input id="research-evidence-sha256" maxlength="64" /></label><label><span>Provenance</span><input id="research-evidence-provenance" /></label><label><span>Notes</span><textarea id="research-evidence-notes" rows="3"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-evidence-btn" type="button">Add evidence</button></div></details>
@@ -6015,13 +6017,15 @@ function renderResearchCases() {
   const active = cases.filter(item => !['published', 'closed'].includes(item.status)).length;
   const disclosure = cases.filter(item => ['disclosure_pending'].includes(item.status) || ['reported', 'coordinating'].includes(item.disclosure_status)).length;
   const evidence = cases.reduce((sum, item) => sum + Number(item.evidence_count || 0), 0);
+  const rules = cases.reduce((sum, item) => sum + Number(item.rule_count || 0), 0);
   const stats = el('research-cases-stats');
   if (stats) stats.innerHTML = [
     edgeMetric('Active cases', active, `${cases.length} total`),
     edgeMetric('Ready to publish', ready, 'Disclosure checks passed'),
     edgeMetric('Coordinating', disclosure, 'Disclosure in progress'),
     edgeMetric('Evidence records', evidence, 'Structured provenance'),
-    edgeMetric('IOC records', cases.reduce((sum, item) => sum + Number(item.ioc_count || 0), 0), 'Normalized indicators')
+    edgeMetric('IOC records', cases.reduce((sum, item) => sum + Number(item.ioc_count || 0), 0), 'Normalized indicators'),
+    edgeMetric('Detection rules', rules, 'YARA, Sigma, Semgrep')
   ].join('');
   const list = el('research-case-list');
   const filtered = filteredResearchCases();
