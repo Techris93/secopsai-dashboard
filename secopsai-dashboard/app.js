@@ -203,7 +203,7 @@ const PAGE_CONTEXT = {
   "findings": "Detection triage and correlation surface",
   "edge": "Network assets, sensors, and Edge-origin findings",
   "integrations": "Native triage and helper visibility",
-  "triage-ops": "Supply-chain alert review and closure",
+  "triage-ops": "Supply-chain alert review and response",
   "research-cases": "Independent research cases, evidence, and disclosure",
   "blog-ops": "Security blog newsroom control plane",
   "operator-guide": "Dashboard operator guide"

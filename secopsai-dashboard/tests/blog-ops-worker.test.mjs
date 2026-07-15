@@ -695,8 +695,10 @@ function testOperatorGuideUiIsPresent() {
   assert.match(html, /Overview daily workflow/);
   assert.match(html, /Tasks daily workflow/);
   assert.match(html, /Findings daily workflow/);
+  assert.match(html, /Independent research: lead to publication/);
+  assert.match(html, /Passwords, tokens, and recovery/);
   assert.match(html, /Native Triage daily workflow/);
-  assert.match(html, /Triage Ops daily workflow/);
+  assert.match(html, /Supply Chain Triage daily workflow/);
   assert.match(html, /Blog Ops daily workflow/);
   assert.match(html, /Autonomous Discovery is a lead generator/);
   assert.match(html, /Discovery write actions are intentionally not shown/);
