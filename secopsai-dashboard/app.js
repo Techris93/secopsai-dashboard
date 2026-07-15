@@ -136,6 +136,12 @@ const state = {
     error: null,
     lastAction: null,
     retractTarget: null,
+    watchlist: {
+      packages: [],
+      loading: false,
+      error: null,
+      result: null
+    },
     adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
   localTriage: null,
@@ -5832,6 +5838,63 @@ async function loadResearchCases({ render = true, preserveSelection = true } = {
   }
 }
 
+async function loadResearchWatchlist({ render = true } = {}) {
+  const watchlist = state.researchCases.watchlist;
+  watchlist.loading = true;
+  watchlist.error = null;
+  if (render) renderResearchCases();
+  try {
+    const response = await dashboardApiFetch(cfg.researchWatchlistEndpoint || '/api/secopsai/research-watchlist', { cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Research watchlist HTTP ${response.status}`);
+    watchlist.packages = Array.isArray(payload.packages) ? payload.packages : [];
+  } catch (error) {
+    watchlist.error = error?.message || String(error);
+    watchlist.packages = [];
+  } finally {
+    watchlist.loading = false;
+    if (render) renderResearchCases();
+  }
+}
+
+function selectedResearchWatchlistPackages() {
+  return Array.from(el('research-watchlist-packages')?.selectedOptions || [])
+    .map(option => option.value)
+    .filter(Boolean);
+}
+
+function renderResearchWatchlist() {
+  const watchlist = state.researchCases.watchlist;
+  const select = el('research-watchlist-packages');
+  if (select) {
+    const selected = new Set(selectedResearchWatchlistPackages());
+    select.innerHTML = watchlist.packages.length
+      ? watchlist.packages.map(item => `<option value="${escapeHtml(item.value)}" ${selected.has(item.value) ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')
+      : '<option value="" disabled>No npm watchlist packages found</option>';
+    select.disabled = watchlist.loading || !watchlist.packages.length;
+  }
+  const result = el('research-watchlist-result');
+  if (!result) return;
+  if (watchlist.loading) {
+    result.innerHTML = '<div class="small">Loading npm watchlist…</div>';
+    return;
+  }
+  if (watchlist.error) {
+    result.innerHTML = `<div class="error">${escapeHtml(watchlist.error)}</div>`;
+    return;
+  }
+  const payload = watchlist.result;
+  if (!payload) {
+    result.innerHTML = '<div class="small">No preview run yet.</div>';
+    return;
+  }
+  const commandResult = payload.result || {};
+  const selected = commandResult.selected || [];
+  const created = commandResult.created || [];
+  const existing = commandResult.existing || [];
+  result.innerHTML = `<div class="research-watchlist-summary"><strong>${payload.action === 'create' ? 'Draft-case creation' : 'Preview'}</strong><span>${selected.length} selected</span><span>${created.length} created</span><span>${existing.length} already present</span></div>${selected.length ? `<div class="small">${selected.map(item => escapeHtml(item.package)).join(', ')}</div>` : '<div class="small">No packages matched.</div>'}`;
+}
+
 async function runResearchCaseAction(action, payload = {}, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
   if (!token) {
@@ -5863,6 +5926,36 @@ async function runResearchCaseAction(action, payload = {}, button = null) {
     state.researchCases.lastAction = { action, error: error?.message || String(error), at: new Date().toISOString() };
     setStatus(`Research action failed: ${error?.message || String(error)}`, true);
     renderResearchCases();
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function runResearchWatchlistAction(action, payload = {}, button = null) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (action === 'create') {
+    const token = state.researchCases.adminToken || state.triageOps.adminToken;
+    if (!token) {
+      setStatus('Use the protected research action token before creating draft cases.', true);
+      el('research-cases-admin-token')?.focus();
+      return null;
+    }
+    headers['X-Triage-Ops-Admin-Token'] = token;
+  }
+  setButtonBusy(button, true, action === 'create' ? 'Creating…' : 'Previewing…');
+  try {
+    const response = await dashboardApiFetch(cfg.researchWatchlistEndpoint || '/api/secopsai/research-watchlist', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action, ecosystem: 'npm', ...payload })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || result.result?.error || `Research watchlist HTTP ${response.status}`);
+    setStatus(`<span class="dot"></span> ${action === 'create' ? 'Draft cases created' : 'Watchlist preview ready'}`);
+    return result;
+  } catch (error) {
+    setStatus(`Research watchlist action failed: ${error?.message || String(error)}`, true);
     return null;
   } finally {
     setButtonBusy(button, false);
@@ -6037,6 +6130,7 @@ function renderResearchCases() {
     edgeMetric('IOC records', cases.reduce((sum, item) => sum + Number(item.ioc_count || 0), 0), 'Normalized indicators'),
     edgeMetric('Detection rules', rules, 'YARA, Sigma, Semgrep')
   ].join('');
+  renderResearchWatchlist();
   const list = el('research-case-list');
   const filtered = filteredResearchCases();
   if (list) list.innerHTML = state.researchCases.loading && !cases.length
@@ -6428,6 +6522,12 @@ async function boot() {
   }
 
   try {
+    await loadResearchWatchlist({ render: false });
+  } catch (err) {
+    console.warn('loadResearchWatchlist failed during boot', err);
+  }
+
+  try {
     await loadCampaignFixtures({ render: false });
   } catch (err) {
     console.warn('loadCampaignFixtures failed during boot', err);
@@ -6569,6 +6669,35 @@ function bindEvents() {
     setButtonBusy(event.currentTarget, true, 'Refreshing…');
     await loadResearchCases();
     setButtonBusy(event.currentTarget, false);
+  });
+  el('research-watchlist-refresh-btn')?.addEventListener('click', async event => {
+    setButtonBusy(event.currentTarget, true, 'Refreshing…');
+    await loadResearchWatchlist();
+    setButtonBusy(event.currentTarget, false);
+  });
+  el('research-watchlist-preview-btn')?.addEventListener('click', async event => {
+    const packages = selectedResearchWatchlistPackages();
+    const selectAll = Boolean(el('research-watchlist-select-all')?.checked);
+    const result = await runResearchWatchlistAction('preview', { packages, select_all: selectAll }, event.currentTarget);
+    if (result) {
+      state.researchCases.watchlist.result = result;
+      renderResearchWatchlist();
+    }
+  });
+  el('research-watchlist-create-btn')?.addEventListener('click', async event => {
+    const packages = selectedResearchWatchlistPackages();
+    const selectAll = Boolean(el('research-watchlist-select-all')?.checked);
+    if (!selectAll && !packages.length) {
+      setStatus('Select at least one npm watchlist package first.', true);
+      return;
+    }
+    if (!confirm('Create draft Research Cases for the selected npm watchlist packages?')) return;
+    const result = await runResearchWatchlistAction('create', { packages, select_all: selectAll }, event.currentTarget);
+    if (result) {
+      state.researchCases.watchlist.result = result;
+      await loadResearchCases({ render: false, preserveSelection: true });
+      renderResearchCases();
+    }
   });
   el('research-cases-save-token-btn')?.addEventListener('click', () => {
     const token = el('research-cases-admin-token')?.value || '';

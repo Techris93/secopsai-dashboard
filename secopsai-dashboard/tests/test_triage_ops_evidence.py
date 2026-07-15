@@ -556,6 +556,33 @@ class TriageOpsEvidenceTests(unittest.TestCase):
                 },
             )
 
+    def test_research_watchlist_builder_is_preview_first_and_npm_scoped(self):
+        preview = server.build_research_watchlist_args(
+            {'action': 'preview', 'ecosystem': 'npm', 'packages': ['npm:chalk-tempalte']}
+        )
+        self.assertEqual(
+            preview,
+            ['research', 'case', 'from-watchlist', '--ecosystem', 'npm', '--package', 'npm:chalk-tempalte'],
+        )
+        create = server.build_research_watchlist_args(
+            {
+                'action': 'create',
+                'ecosystem': 'npm',
+                'packages': ['npm:chalk-tempalte'],
+                'owner': 'SecOpsAI Research',
+            }
+        )
+        self.assertIn('--create', create)
+        self.assertNotIn('--watchlist-path', create)
+
+    def test_research_watchlist_builder_rejects_unsafe_selection(self):
+        with self.assertRaisesRegex(ValueError, 'Invalid npm watchlist package'):
+            server.build_research_watchlist_args(
+                {'action': 'preview', 'ecosystem': 'npm', 'packages': ['npm:chalk-tempalte; rm -rf /']}
+            )
+        with self.assertRaisesRegex(ValueError, 'Select at least one'):
+            server.build_research_watchlist_args({'action': 'preview', 'ecosystem': 'npm', 'packages': []})
+
 
 if __name__ == '__main__':
     unittest.main()

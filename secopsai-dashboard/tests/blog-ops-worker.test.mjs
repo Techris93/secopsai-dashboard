@@ -1035,6 +1035,8 @@ function testEdgeWorkspaceUiIsPresentAndReadOnly() {
 function testResearchCaseWorkspaceIsPresentAndTokenGated() {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const helper = readFileSync(new URL("../dashboard_server.py", import.meta.url), "utf8");
+  const worker = readFileSync(new URL("../_worker.js", import.meta.url), "utf8");
   assert.match(html, /data-page="research-cases"/);
   assert.match(html, /id="page-research-cases"/);
   assert.match(html, /id="research-case-list"/);
@@ -1047,7 +1049,13 @@ function testResearchCaseWorkspaceIsPresentAndTokenGated() {
   assert.match(app, /research-rule-preview/);
   assert.match(app, /id=\"research-add-rule-btn\"/);
   assert.match(app, /runResearchCaseAction\('add-rule'/);
+  assert.match(html, /id=\"research-watchlist-preview-btn\"/);
+  assert.match(html, /id=\"research-watchlist-create-btn\"/);
+  assert.match(app, /async function runResearchWatchlistAction/);
+  assert.match(helper, /research.*case.*from-watchlist/);
   assert.match(app, /X-Triage-Ops-Admin-Token/);
+  assert.match(worker, /Preview is read-only/);
+  assert.match(worker, /body\.action/);
   assert.match(app, /openResearchRetractModal/);
   assert.equal(html.includes("TRIAGE_OPS_ADMIN_TOKEN="), false);
 }

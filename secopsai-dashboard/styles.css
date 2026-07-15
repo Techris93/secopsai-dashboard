@@ -5822,6 +5822,69 @@ label span,
   margin-top: 18px;
 }
 
+.research-watchlist-panel {
+  margin-top: 18px;
+}
+
+.research-watchlist-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.research-watchlist-controls {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(220px, 1fr);
+  gap: 14px;
+  align-items: end;
+  margin-top: 16px;
+}
+
+.research-watchlist-controls label {
+  display: grid;
+  gap: 7px;
+}
+
+.research-watchlist-controls label > span,
+.research-watchlist-all span {
+  color: var(--signal-muted, #9ca3af);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.research-watchlist-controls select {
+  min-height: 130px;
+}
+
+.research-watchlist-all {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.research-watchlist-all input {
+  width: auto;
+}
+
+.research-watchlist-result {
+  margin-top: 14px;
+  min-height: 22px;
+}
+
+.research-watchlist-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  color: var(--signal-muted, #9ca3af);
+}
+
+.research-watchlist-summary strong {
+  color: var(--signal-text-strong, #f8fafc);
+}
+
 .research-create-panel > summary,
 .research-action-drawer > summary {
   cursor: pointer;
@@ -5971,7 +6034,8 @@ label span,
 
 @media (max-width: 1100px) {
   .research-auth-card,
-  .research-case-layout {
+  .research-case-layout,
+  .research-watchlist-controls {
     grid-template-columns: 1fr !important;
   }
 }
@@ -5980,7 +6044,8 @@ label span,
   .research-page-actions,
   .research-page-actions > *,
   .research-form-actions,
-  .research-form-actions > * {
+  .research-form-actions > *,
+  .research-watchlist-head > * {
     width: 100%;
   }
 

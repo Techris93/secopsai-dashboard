@@ -322,6 +322,25 @@
           <div class="research-form-actions"><button class="primary-btn" id="research-create-submit-btn" type="button">Create case</button></div>
         </details>
 
+        <section class="card research-watchlist-panel" aria-labelledby="research-watchlist-title">
+          <div class="research-watchlist-head">
+            <div>
+              <h3 id="research-watchlist-title">Promote from package watchlist</h3>
+              <p class="small">Preview selected npm leads first. Creating draft cases is a separate protected action and never fetches or executes package code.</p>
+            </div>
+            <button class="secondary-btn" id="research-watchlist-refresh-btn" type="button">Refresh watchlist</button>
+          </div>
+          <div class="research-watchlist-controls">
+            <label><span>npm packages</span><select id="research-watchlist-packages" multiple size="5" aria-label="npm watchlist packages"></select></label>
+            <label class="research-watchlist-all"><input id="research-watchlist-select-all" type="checkbox" /> <span>Select all npm packages</span></label>
+          </div>
+          <div class="research-form-actions">
+            <button class="secondary-btn" id="research-watchlist-preview-btn" type="button">Preview selected</button>
+            <button class="primary-btn" id="research-watchlist-create-btn" type="button">Create draft cases</button>
+          </div>
+          <div class="research-watchlist-result" id="research-watchlist-result" role="status" aria-live="polite"></div>
+        </section>
+
         <div class="grid cols-2 research-case-layout">
           <div class="card research-case-list-panel">
             <div class="research-list-head"><div><h3>Case queue</h3><p class="small">Select a case to review its evidence and workflow.</p></div></div>
