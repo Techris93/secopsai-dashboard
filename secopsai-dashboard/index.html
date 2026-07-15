@@ -98,7 +98,7 @@
         </button>
         <button class="nav-btn" data-page="triage-ops">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M7 7v10a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7"></path><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path><path d="M10 12h4"></path><path d="M12 10v4"></path></svg></span>
-          <span class="nav-copy"><span class="title">Triage Ops</span><span class="desc">Supply-chain alerts, verdicts, closure</span></span>
+          <span class="nav-copy"><span class="title">Supply Chain Triage</span><span class="desc">SCM alerts, verdicts, response</span></span>
         </button>
         <button class="nav-btn" data-page="research-cases">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6"></path><path d="M10 9h4"></path><path d="M8 3v5l-4 9a3 3 0 0 0 2.7 4h10.6a3 3 0 0 0 2.7-4l-4-9V3"></path><path d="M7 15h10"></path></svg></span>
@@ -287,7 +287,7 @@
         <div class="page-header">
           <div>
             <h2>Research Cases</h2>
-            <p>Durable independent investigations with structured evidence, indicators, disclosure gates, and review-only publication handoff.</p>
+            <p>Durable independent investigations with structured evidence, indicators, disclosure gates, and review-only publication handoff. Use Supply Chain Triage for incoming alerts; use Research Cases for work you intend to publish or preserve.</p>
           </div>
           <div class="research-page-actions">
             <button class="secondary-btn" id="research-cases-new-btn" type="button">New case</button>
@@ -298,10 +298,10 @@
         <form class="card research-auth-card" onsubmit="return false;">
           <div>
             <h3>Protected research actions</h3>
-            <p class="small">Case review is read-only. Creation, evidence changes, disclosure updates, exports, and blog handoff require the helper-side Triage Ops token.</p>
+            <p class="small">Case review is read-only. Creation, evidence changes, disclosure updates, exports, and blog handoff require the helper-side research action token configured for Supply Chain Triage.</p>
           </div>
           <div class="research-auth-controls">
-            <input id="research-cases-admin-token" type="password" placeholder="Use the Triage Ops token for this session" autocomplete="current-password" />
+            <input id="research-cases-admin-token" type="password" placeholder="Use the research action token for this session" autocomplete="current-password" />
             <button class="secondary-btn" id="research-cases-save-token-btn" type="button">Use token</button>
             <button class="mini-btn" id="research-cases-clear-token-btn" type="button">Clear</button>
           </div>
@@ -432,8 +432,8 @@
       <section class="page" id="page-triage-ops">
         <div class="page-header">
           <div>
-            <h2>Triage Ops</h2>
-            <p>Protected supply-chain alert control plane for investigation, advisory checks, local usage review, mitigation, closure, and blog draft handoff.</p>
+            <h2>Supply Chain Triage</h2>
+            <p>Operational control plane for incoming supply-chain alerts: evidence checks, local impact, mitigation, response, and handoff into Research Cases or Blog Ops.</p>
           </div>
           <div class="status-pill" id="triage-ops-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh evidence</div>
         </div>
@@ -493,12 +493,12 @@
         <div class="page-header">
           <div>
             <h2>Operator Guide</h2>
-            <p>Step-by-step dashboard playbook for daily triage, campaign research, blog review, and protected actions.</p>
+            <p>Step-by-step dashboard playbook for research, daily triage, blog review, and protected actions.</p>
           </div>
           <div class="guide-header-actions">
             <button class="secondary-btn" id="guide-daily-refresh-btn" type="button">Run Daily Refresh</button>
             <button class="primary-btn" id="guide-evidence-bundle-btn" type="button">Run Selected Alert Evidence Bundle</button>
-            <a class="status-pill guide-start-pill" href="#guide-triage-ops"><span class="dot"></span> Start with Triage Ops</a>
+            <a class="status-pill guide-start-pill" href="#guide-research"><span class="dot"></span> Start with Research</a>
           </div>
         </div>
 
@@ -506,12 +506,14 @@
           <aside class="card guide-toc" aria-label="Operator guide table of contents">
             <h3>Guide sections</h3>
             <a href="#guide-automations">Safe automations</a>
+            <a href="#guide-access">Passwords and recovery</a>
             <a href="#guide-overview">Overview</a>
             <a href="#guide-tasks">Tasks</a>
             <a href="#guide-findings">Findings</a>
+            <a href="#guide-research">Research Cases</a>
             <a href="#guide-ai-dependency-guard">AI Dependency Guard</a>
             <a href="#guide-native-triage">Native Triage</a>
-            <a href="#guide-triage-ops">Triage Ops</a>
+            <a href="#guide-triage-ops">Supply Chain Triage</a>
             <a href="#guide-campaigns">Campaign Research</a>
             <a href="#guide-discovery">Autonomous Discovery</a>
             <a href="#guide-blog-ops">Blog Ops</a>
@@ -528,7 +530,7 @@
               <div class="guide-card-grid">
                 <div class="guide-mini-card">
                   <strong>Daily Refresh</strong>
-                  <span>Refreshes dashboard data, helper state, Blog Ops status, Triage Ops alerts, and campaign fixtures.</span>
+                  <span>Refreshes dashboard data, helper state, Blog Ops status, Supply Chain Triage alerts, and campaign fixtures.</span>
                   <button class="secondary-btn guide-automation-btn" id="guide-daily-refresh-card-btn" type="button">Run Daily Refresh</button>
                 </div>
                 <div class="guide-mini-card">
@@ -538,7 +540,7 @@
                 </div>
                 <div class="guide-mini-card">
                   <strong>Discovery Review</strong>
-                  <span>Runs read-only campaign discovery and opens the Triage Ops campaign dock for candidate review.</span>
+                  <span>Runs read-only campaign discovery and opens the Supply Chain Triage campaign dock for candidate review.</span>
                   <button class="secondary-btn guide-automation-btn" id="guide-discovery-review-btn" type="button">Run Discovery Review</button>
                 </div>
                 <div class="guide-mini-card">
@@ -547,6 +549,26 @@
                 </div>
               </div>
               <div class="guide-callout guide-warning">Automation stops at evidence collection and candidate generation. Protected response work still requires an admin token, confirmation, and a reviewed analyst note.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-access">
+              <div class="guide-section-head">
+                <span class="guide-pill">Access</span>
+                <h3>Passwords, tokens, and recovery</h3>
+                <p>SecOpsAI has separate credentials for the dashboard, research actions, and Edge sensor operations. None of these should be shared or pasted into another field.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Dashboard login</strong><span>Your hosted operator email and password are managed by Supabase Auth. There is no public signup and no shared default production password.</span></div>
+                <div class="guide-mini-card"><strong>Research action token</strong><span><code>TRIAGE_OPS_ADMIN_TOKEN</code> protects Research Cases and Supply Chain Triage writes. <code>BLOG_OPS_ADMIN_TOKEN</code> is the documented fallback when configured.</span></div>
+                <div class="guide-mini-card"><strong>Edge API credentials</strong><span><code>SECOPSAI_ADMIN_TOKEN</code> is an API administrator secret for sensor enrollment and recovery. Sensor tokens are separate, scoped credentials.</span></div>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>For a dashboard account, ask an existing workspace owner to invite your email from Settings, then choose your own password from the one-time link. To recover access, use <strong>Send password reset</strong> on the sign-in screen.</p></div>
+                <div class="guide-step"><span>2</span><p>For research actions, an administrator generates a long random token, configures it server-side in the local helper and/or Cloudflare Worker, and gives it to authorized operators through a secure channel. The dashboard stores it only for the browser session.</p></div>
+                <div class="guide-step"><span>3</span><p>For Edge onboarding, use the hosted API administrator secret only with the Edge onboarding flow. Prefer one-time sensor enrollment tokens for normal setup; never use an Edge API token as a dashboard password.</p></div>
+                <div class="guide-step"><span>4</span><p>Never commit secrets, put them in browser build variables, or paste them into chat. Rotate a credential if it was exposed, then verify the replacement before revoking the old one.</p></div>
+              </div>
+              <div class="guide-callout guide-danger">Values such as <code>dev-admin-token</code> and <code>change-me-before-pilot</code> belong only to development templates. They are not administrator passwords and must not be used for a hosted or customer pilot.</div>
             </section>
 
             <section class="card guide-section" id="guide-overview">
@@ -559,7 +581,7 @@
                 <div class="guide-step"><span>1</span><p>Click <strong>Overview</strong>, then click <strong>Refresh data</strong> if the timestamp looks stale.</p></div>
                 <div class="guide-step"><span>2</span><p>Read the top metrics first: active runs, blockers, in-review work, and security-review count.</p></div>
                 <div class="guide-step"><span>3</span><p>Use recent events and recent runs to spot failed automation, stuck reviews, or unexpected spikes.</p></div>
-                <div class="guide-step"><span>4</span><p>If a metric is concerning, jump to <strong>Tasks</strong>, <strong>Findings</strong>, or <strong>Triage Ops</strong> instead of acting from memory.</p></div>
+                <div class="guide-step"><span>4</span><p>If a metric is concerning, jump to <strong>Tasks</strong>, <strong>Findings</strong>, or <strong>Supply Chain Triage</strong> instead of acting from memory.</p></div>
               </div>
               <div class="guide-callout guide-good">Best use: situational awareness. Overview is not where you close security issues; it tells you where to go next.</div>
             </section>
@@ -589,9 +611,34 @@
                 <div class="guide-step"><span>1</span><p>Click <strong>Findings</strong>, then filter or select a finding from the backlog.</p></div>
                 <div class="guide-step"><span>2</span><p>Read the evidence, source, severity, status, and any linked task or run context.</p></div>
                 <div class="guide-step"><span>3</span><p>Click <strong>Create task</strong> when the finding needs remediation, research, or review ownership.</p></div>
-                <div class="guide-step"><span>4</span><p>For supply-chain <strong>SCM-*</strong> findings, switch to <strong>Triage Ops</strong> for advisory checks, evidence verdicts, mitigation, closure, and blog draft handoff.</p></div>
+                <div class="guide-step"><span>4</span><p>For supply-chain <strong>SCM-*</strong> findings, switch to <strong>Supply Chain Triage</strong> for advisory checks, evidence verdicts, mitigation, closure, and research/blog handoff.</p></div>
               </div>
               <div class="guide-callout guide-warning">Important: absence of local usage means lower environment impact, not that the package itself is benign.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-research">
+              <div class="guide-section-head">
+                <span class="guide-pill">Research Cases</span>
+                <h3>Independent research: lead to publication</h3>
+                <p>Research Cases are the durable investigation record. Use them for original package, malware, typosquatting, infrastructure, or vulnerability research that may become a public report.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Supply Chain Triage</strong><span>Incoming <code>SCM-*</code> alert handling, evidence verdicts, local impact, mitigation, and response.</span></div>
+                <div class="guide-mini-card"><strong>Research Cases</strong><span>Evidence ledger, subjects, IOCs, disclosure state, detection rules, reproducible exports, and publication readiness.</span></div>
+                <div class="guide-mini-card"><strong>Blog Ops</strong><span>Editorial review, approval, publishing, feed rebuild, and deployment after a case is ready.</span></div>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Choose a lead: an alert from <strong>Supply Chain Triage</strong>, a reviewed package watchlist entry, or a public source you are authorized to investigate.</p></div>
+                <div class="guide-step"><span>2</span><p>Open <strong>Research</strong>. Click <strong>New case</strong> for a manual investigation, or use <strong>Promote from package watchlist</strong>, then click <strong>Preview selected</strong> before <strong>Create draft cases</strong>.</p></div>
+                <div class="guide-step"><span>3</span><p>Set a precise title, type, severity, confidence, owner, and summary. Add every affected package, publisher, repository, brand, or infrastructure item under <strong>Subjects</strong>.</p></div>
+                <div class="guide-step"><span>4</span><p>Collect evidence safely: public source URLs, registry metadata, local artifact hashes, static-analysis notes, screenshots, and controlled sandbox results. Record provenance and timestamps. Never execute untrusted packages on this Mac.</p></div>
+                <div class="guide-step"><span>5</span><p>Add IOCs only when supported by evidence. Link each IOC to its source evidence, add detection rules when useful, and write analyst notes explaining uncertainty and limitations.</p></div>
+                <div class="guide-step"><span>6</span><p>Validate the claim and complete disclosure handling. Set confidence and move the case through <strong>Investigating</strong>, <strong>Validation</strong>, and <strong>Disclosure pending</strong> as appropriate.</p></div>
+                <div class="guide-step"><span>7</span><p>When the readiness blockers are resolved, set status to <strong>Ready to publish</strong>, click <strong>Download case report</strong>, review the deterministic Markdown/JSON export, then click <strong>Create review draft</strong>.</p></div>
+                <div class="guide-step"><span>8</span><p>Open <strong>Blog Ops</strong>, review the draft line by line, correct claims and references, then use <strong>Approve</strong>. Publish and deploy only after human editorial approval and responsible-disclosure review.</p></div>
+                <div class="guide-step"><span>9</span><p>After publication, set the case to <strong>Published</strong>, preserve the export manifest, and use the IOCs and detection rules to improve SecOpsAI defensive coverage.</p></div>
+              </div>
+              <div class="guide-callout guide-danger">A high score, an LLM explanation, or a watchlist hit is a lead, not proof. Human evidence review, disclosure judgment, and editorial approval remain mandatory.</div>
             </section>
 
             <section class="card guide-section" id="guide-ai-dependency-guard">
@@ -632,9 +679,9 @@
 
             <section class="card guide-section" id="guide-triage-ops">
               <div class="guide-section-head">
-                <span class="guide-pill">Triage Ops</span>
-                <h3>Triage Ops daily workflow</h3>
-                <p>Triage Ops is the supply-chain alert review and closure plane. Start here when you see malicious or suspicious package releases.</p>
+                <span class="guide-pill">Supply Chain Triage</span>
+                <h3>Supply Chain Triage daily workflow</h3>
+                <p>Supply Chain Triage is the operational alert review and response plane. Start here when SecOpsAI has already detected a suspicious package release.</p>
               </div>
               <div class="guide-card-grid">
                 <div class="guide-mini-card"><strong>Read-only actions</strong><span>Refresh evidence, Run Evidence Verdict, Investigate, Explain verdict, advisory check, local usage check, raw report.</span></div>
@@ -642,7 +689,7 @@
                 <div class="guide-mini-card"><strong>Core decision</strong><span>Separate package maliciousness from local environment impact.</span></div>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Click <strong>Triage Ops</strong>, then click <strong>Refresh evidence</strong>.</p></div>
+                <div class="guide-step"><span>1</span><p>Click <strong>Supply Chain Triage</strong>, then click <strong>Refresh evidence</strong>.</p></div>
                 <div class="guide-step"><span>2</span><p>Select an alert in <strong>Supply Chain Alerts</strong>. The default Actionability filter shows only operator-actionable alerts; switch to <strong>All alerts</strong> when you need to audit no-local-impact or review-only scanner evidence.</p></div>
                 <div class="guide-step"><span>3</span><p>Run <strong>Run Evidence Verdict</strong> first. It summarizes package verdict, confidence, advisory evidence, scanner rules, local impact, mitigation, and operator commands.</p></div>
                 <div class="guide-step"><span>4</span><p>Click <strong>Explain verdict</strong> and <strong>Check advisory matches</strong> when you need source-backed evidence beyond the scanner rationale.</p></div>
@@ -661,7 +708,7 @@
                 <p>Use Campaign Research when multiple packages, IOCs, sources, publishers, or ecosystems appear related to one supply-chain attack.</p>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Open the <strong>Campaign Research & Autonomous Discovery</strong> dock inside Triage Ops.</p></div>
+                <div class="guide-step"><span>1</span><p>Open the <strong>Campaign Research & Autonomous Discovery</strong> dock inside Supply Chain Triage.</p></div>
                 <div class="guide-step"><span>2</span><p>Either quick-load a fixture, paste campaign JSON, or manually add campaign ID, title, source URLs, actors, publishers, IOCs, behavior indicators, and package rows.</p></div>
                 <div class="guide-step"><span>3</span><p>Click <strong>Run Campaign Research</strong>. This single read-only action returns campaign verdict, package verdicts, correlations, local impact, mitigation, and references.</p></div>
                 <div class="guide-step"><span>4</span><p>Click <strong>Correlate Campaign</strong> when the campaign includes shared publishers, C2s, source reports, or overlapping strings.</p></div>
@@ -703,7 +750,7 @@
                 <div class="guide-step"><span>4</span><p>Use edit/save if the article needs cleanup. In local helper mode, use <strong>Images & source screenshots</strong> to attach an approved source image candidate or source image URL, then re-review because media resets the draft to Needs review. Approve only when claims and images are source-backed, licensed/safe, and no internal checklist, local path, secret, or copied external article text appears.</p></div>
                 <div class="guide-step"><span>5</span><p>Click <strong>Publish approved to blog</strong> only after approval. This writes approved drafts into the blog posts directory and rebuilds feeds, but drafts remain under <strong>Approved</strong>. Use <strong>Rebuild feeds</strong> only as a repair/regeneration action. Click <strong>Deploy blog to Cloudflare</strong> when ready; after a successful deploy, those staged approved drafts move to <strong>Deployed</strong>.</p></div>
               </div>
-              <div class="guide-callout guide-danger">External-news and campaign drafts must remain human-reviewed. Publishing stays approval-gated even when a draft was created from Triage Ops.</div>
+              <div class="guide-callout guide-danger">External-news and campaign drafts must remain human-reviewed. Publishing stays approval-gated even when a draft was created from Supply Chain Triage.</div>
             </section>
 
             <section class="card guide-section" id="guide-safe-actions">

@@ -9,7 +9,7 @@ The dashboard is now intentionally narrow:
 - native triage queue visibility
 - helper-backed native SecOpsAI actions
 - Hermes Agent telemetry findings when SecOpsAI is refreshed with `--platform hermes`
-- protected Triage Ops for supply-chain alert review and closure
+- protected Supply Chain Triage (technical route: Triage Ops) for supply-chain alert review and response
 - a unified SecOpsAI Edge workspace backed by the canonical Core graph and findings store
 - explicit Edge-to-Core sync freshness so operators can distinguish current,
   stale, and never-synced graph context
@@ -130,6 +130,13 @@ panel. Select one or more npm packages, click **Preview selected**, then click
 admin token and remains idempotent. Package code is never fetched or executed
 by this workflow.
 
+For the complete operator path from a lead to a reviewed publication, see
+[`docs/research-operator-runbook.md`](docs/research-operator-runbook.md). The
+short version is: use **Supply Chain Triage** for an incoming `SCM-*` alert,
+use **Research** for the durable investigation, and use **Blog Ops** for the
+final editorial approval and deployment. These are connected stages, not
+duplicate queues.
+
 ### Native Triage
 - helper readiness
 - pending action queue
@@ -137,7 +144,7 @@ by this workflow.
 - findings/orchestrator freshness
 - direct native investigate, apply-action, and guarded close controls
 
-### Triage Ops
+### Supply Chain Triage (Triage Ops)
 - supply-chain `SCM-*` alert queue from native SecOpsAI
 - one-click investigate, evidence-based verdict, explain verdict, advisory check, local dependency usage check, raw report preview, and mitigation generation
 - cross-ecosystem Campaign Research panel for campaign JSON import, package/IOC/source entry, correlation, local usage checks, SOC finding persistence, and review-only campaign blog drafts
@@ -168,12 +175,12 @@ Local Blog Ops deploy is available when the helper can see `${SECOPSAI_ROOT}/blo
 
 ### Guide
 
-The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, AI Dependency Guard, Native Triage, Triage Ops, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, when to use CLI fallback, why discovery candidates must pass Orchestrator Review before persistence or blog drafting, and why source domains are references rather than attacker IOCs.
+The **Guide** page is the in-dashboard operator manual. It covers the daily click path for Overview, Tasks, Findings, Research Cases, AI Dependency Guard, Native Triage, Supply Chain Triage, Campaign Research, Autonomous Discovery, and Blog Ops. It also explains which actions are read-only, which actions are token-gated, how credentials are created and recovered, when to use CLI fallback, why discovery candidates must pass Orchestrator Review before persistence or blog drafting, and why source domains are references rather than attacker IOCs.
 
 The guide includes safe automation buttons for repetitive read-only work:
-- **Run Daily Refresh** reloads dashboard data, helper state, Blog Ops status, Triage Ops alerts, and campaign fixtures.
+- **Run Daily Refresh** reloads dashboard data, helper state, Blog Ops status, Supply Chain Triage alerts, and campaign fixtures.
 - **Run Selected Alert Evidence Bundle** runs evidence verdict, investigate, explain verdict, advisory check, local usage check, and raw report for the selected SCM alert.
-- **Run Discovery Review** runs read-only campaign discovery and opens the Triage Ops campaign dock for candidate review.
+- **Run Discovery Review** runs read-only campaign discovery and opens the Supply Chain Triage campaign dock for candidate review.
 - Discovery candidates are automatically annotated with likely package rows vs obvious extraction noise so high scores are treated as "worth checking," not proof.
 - Promoted campaign forms include **Clean Obvious Package Noise** for common false package extractions such as byline CSS classes, generic article words, ordinary websites, image filenames, numeric tokens, repository issue paths, and long encoded-looking slugs.
 - Watchlist suggestions are generated from clean packages, publishers, actors, campaign IDs, repositories, malware names, and attacker IOCs. Source/reporting domains stay under source references instead of being suggested as attacker IOCs.
