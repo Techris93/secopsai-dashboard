@@ -175,6 +175,13 @@ const state = {
     campaign: defaultCampaignForm(),
     campaignResult: null,
     campaignLastOutput: null,
+    researchRecommendation: {
+      data: null,
+      dismissed: false,
+      loading: false,
+      error: null,
+      stale: false
+    },
     loading: false,
     adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
@@ -196,18 +203,100 @@ const state = {
 const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
+let workView = 'table';
 const pages = ["mission-control", "tasks", "findings", "edge", "integrations", "triage-ops", "research-cases", "blog-ops", "operator-guide"];
+const PAGE_ROUTES = Object.freeze({
+  "mission-control": "overview",
+  "tasks": "work",
+  "findings": "findings",
+  "edge": "assets",
+  "integrations": "system",
+  "triage-ops": "findings/supply-chain",
+  "research-cases": "research/cases",
+  "blog-ops": "publications",
+  "operator-guide": "help"
+});
+const ROUTE_PAGES = Object.freeze(Object.fromEntries(Object.entries(PAGE_ROUTES).map(([page, route]) => [route, page])));
+const TOP_NAV_PAGE = Object.freeze({
+  "mission-control": "mission-control",
+  "tasks": "tasks",
+  "findings": "findings",
+  "edge": "edge",
+  "integrations": "integrations",
+  "triage-ops": "findings",
+  "research-cases": "research-cases",
+  "blog-ops": "blog-ops",
+  "operator-guide": null
+});
 const PAGE_CONTEXT = {
-  "mission-control": "Mission Control overview",
-  "tasks": "Task queue, ownership, and run visibility",
-  "findings": "Detection triage and correlation surface",
-  "edge": "Network assets, sensors, and Edge-origin findings",
-  "integrations": "Native triage and helper visibility",
-  "triage-ops": "Supply-chain alert review and response",
-  "research-cases": "Independent research cases, evidence, and disclosure",
-  "blog-ops": "Security blog newsroom control plane",
-  "operator-guide": "Dashboard operator guide"
+  "mission-control": "Overview · operational priorities",
+  "tasks": "Work · ownership, approvals, and runs",
+  "findings": "Findings · security issues and triage",
+  "edge": "Assets · inventory, sensors, and changes",
+  "integrations": "System · health and integrations",
+  "triage-ops": "Findings · supply-chain review",
+  "research-cases": "Research · evidence and disclosure",
+  "blog-ops": "Publications · newsroom and delivery",
+  "operator-guide": "Help · operator guidance"
 };
+const CONTEXT_NAV = Object.freeze({
+  "mission-control": [],
+  "findings": [
+    ["All findings", "findings"],
+    ["Supply chain", "triage-ops"],
+    ["AI dependencies", "findings"]
+  ],
+  "edge": [
+    ["Inventory", "edge"],
+    ["Changes", "edge"],
+    ["Sensors", "edge"],
+    ["Scans & schedules", "edge"],
+    ["Wi-Fi", "edge"]
+  ],
+  "tasks": [
+    ["My work", "tasks"],
+    ["Board", "tasks"],
+    ["Approvals", "integrations"],
+    ["Investigations", "integrations"],
+    ["Runs", "integrations"]
+  ],
+  "research-cases": [
+    ["Inbox", "triage-ops"],
+    ["Cases", "research-cases"],
+    ["Watchlists", "research-cases"],
+    ["Disclosure", "research-cases"],
+    ["Sandbox jobs", "research-cases"]
+  ],
+  "blog-ops": [
+    ["News intake", "blog-ops"],
+    ["Drafts", "blog-ops"],
+    ["Review", "blog-ops"],
+    ["Published", "blog-ops"]
+  ],
+  "integrations": [
+    ["Health", "integrations"],
+    ["Integrations", "integrations"],
+    ["Credentials", "integrations"],
+    ["Audit log", "integrations"]
+  ],
+  "triage-ops": [
+    ["Supply-chain queue", "triage-ops"],
+    ["Campaign research", "triage-ops"],
+    ["Discovery inbox", "triage-ops"]
+  ],
+  "operator-guide": []
+});
+const COMMANDS = Object.freeze([
+  ["Open Overview", "See priorities, changes, and system health", "mission-control"],
+  ["Review Findings", "Triage canonical security issues", "findings"],
+  ["Review Supply Chain", "Inspect package and dependency alerts", "triage-ops"],
+  ["Open Assets", "Inspect network inventory and Edge sensors", "edge"],
+  ["Open Work", "Manage tasks, approvals, and runs", "tasks"],
+  ["Open Research", "Investigate leads and research cases", "research-cases"],
+  ["Open Publications", "Review and deliver public content", "blog-ops"],
+  ["Open System", "Check health, integrations, and audit context", "integrations"],
+  ["Open Help", "Read contextual operator guidance", "operator-guide"]
+]);
 
 function el(id) { return document.getElementById(id); }
 
@@ -689,6 +778,7 @@ async function copyTextWithStatus(text, successMessage) {
   if (!text) return;
   await navigator.clipboard.writeText(text);
   setStatus(`<span class="dot"></span> ${escapeHtml(successMessage)}`);
+  showToast(successMessage, 'success');
 }
 
 async function postNativeHelper(path, payload) {
@@ -908,9 +998,169 @@ function setStatus(message, isError = false) {
   target.innerHTML = isError ? `<span class="error">${escapeHtml(message)}</span>` : message;
 }
 
+function showToast(message, tone = 'info', timeout = 4200) {
+  const region = el('toast-region');
+  if (!region) return;
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${tone}`;
+  toast.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+  toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${tone === 'success' ? '✓' : tone === 'error' ? '!' : 'i'}</span><span>${escapeHtml(String(message || ''))}</span><button type="button" aria-label="Dismiss notification">✕</button>`;
+  toast.querySelector('button')?.addEventListener('click', () => toast.remove());
+  region.appendChild(toast);
+  window.setTimeout(() => toast.remove(), timeout);
+}
+
+let confirmationResolver = null;
+
+function requestConfirmation(message, {
+  title = 'Confirm action',
+  eyebrow = 'Action review',
+  context = 'This action will be recorded in the activity history.',
+  confirmLabel = 'Continue',
+  danger = false
+} = {}) {
+  const modal = el('confirm-dialog');
+  if (!modal) return Promise.resolve(false);
+  if (confirmationResolver) confirmationResolver(false);
+  return new Promise(resolve => {
+    confirmationResolver = resolve;
+    el('confirm-dialog-eyebrow').textContent = eyebrow;
+    el('confirm-dialog-title').textContent = title;
+    el('confirm-dialog-message').textContent = message;
+    el('confirm-dialog-context').textContent = context;
+    const confirmButton = el('confirm-dialog-confirm');
+    confirmButton.textContent = confirmLabel;
+    confirmButton.classList.toggle('danger-btn', danger);
+    confirmButton.classList.toggle('primary-btn', !danger);
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    confirmButton.focus();
+  });
+}
+
+function finishConfirmation(result) {
+  const modal = el('confirm-dialog');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('modal-open');
+  const resolver = confirmationResolver;
+  confirmationResolver = null;
+  resolver?.(Boolean(result));
+}
+
+function notifyError(message) {
+  setStatus(String(message || 'Action failed'), true);
+  showToast(String(message || 'Action failed'), 'error');
+}
+
 function updateTopStrip(pageId) {
   const context = el('top-strip-context');
   if (context) context.textContent = PAGE_CONTEXT[pageId] || 'SecOpsAI dashboard';
+}
+
+function pageIdForRoute(route) {
+  const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase() || 'overview';
+  return ROUTE_PAGES[normalized] || (pages.includes(normalized) ? normalized : 'mission-control');
+}
+
+function routeForPage(pageId) {
+  return PAGE_ROUTES[pageId] || PAGE_ROUTES.mission-control;
+}
+
+function currentPageFromLocation() {
+  return pageIdForRoute(window.location.hash || 'overview');
+}
+
+function renderContextNav(pageId) {
+  const host = el('context-nav');
+  if (!host) return;
+  const items = CONTEXT_NAV[pageId] || [];
+  const firstTargetIndex = new Map();
+  items.forEach(([label, target], index) => { if (!firstTargetIndex.has(target)) firstTargetIndex.set(target, index); });
+  host.innerHTML = items.map(([label, target], index) => `
+    <button class="context-nav-btn ${target === pageId && firstTargetIndex.get(target) === index ? 'active' : ''}" type="button" data-context-page="${escapeHtml(target)}">${escapeHtml(label)}</button>
+  `).join('');
+  host.hidden = !items.length;
+  host.querySelectorAll('[data-context-page]').forEach(button => {
+    button.addEventListener('click', () => setPage(button.dataset.contextPage));
+  });
+}
+
+function helpCopyForPage(pageId) {
+  const copies = {
+    'mission-control': ['Overview', 'Start here. Review the items that need attention, then follow each record into Findings, Work, Assets, or Research.'],
+    findings: ['Findings', 'A finding is a canonical security issue. Read its evidence and history before assigning work, changing status, or creating a research case.'],
+    edge: ['Assets', 'Assets show what the local sensor has observed. Use Changes to answer what is new, missing, or exposed, then link back to the related finding.'],
+    tasks: ['Work', 'Work is where humans own remediation, approvals, and investigation outcomes. The dashboard records state; local runtimes perform execution.'],
+    'triage-ops': ['Supply-chain review', 'Use read-only evidence actions first. Separate package maliciousness from local impact, then create a Research case only when the lead deserves durable investigation.'],
+    'research-cases': ['Research', 'Research cases preserve evidence, indicators, disclosure decisions, and publication readiness. Protected actions always require explicit review.'],
+    'blog-ops': ['Publications', 'Publications are editorial output. Review claims, references, IOCs, and safety blockers before approval, staging, or deployment.'],
+    integrations: ['System', 'System explains the health of the dashboard, Core, Edge, helper, and action boundaries. Resolve degraded integrations before relying on their data.'],
+    'operator-guide': ['Help', 'Use the operator guide for detailed click paths, safety boundaries, and recovery steps.']
+  };
+  return copies[pageId] || copies['mission-control'];
+}
+
+function openHelpDrawer(pageId = currentPageFromLocation()) {
+  const drawer = el('help-drawer');
+  const title = el('help-drawer-title');
+  const body = el('help-drawer-body');
+  if (!drawer || !title || !body) return;
+  const [heading, copy] = helpCopyForPage(pageId);
+  title.textContent = heading;
+  body.querySelector('p').textContent = copy;
+  drawer.hidden = false;
+  drawer.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('help-drawer-open');
+  el('help-drawer-close')?.focus();
+}
+
+function closeHelpDrawer() {
+  const drawer = el('help-drawer');
+  if (!drawer) return;
+  drawer.hidden = true;
+  drawer.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('help-drawer-open');
+}
+
+let commandPaletteIndex = 0;
+function renderCommandPalette(query = '') {
+  const host = el('command-palette-list');
+  if (!host) return;
+  const normalized = String(query || '').trim().toLowerCase();
+  const filtered = COMMANDS.filter(([label, description]) => `${label} ${description}`.toLowerCase().includes(normalized));
+  commandPaletteIndex = Math.min(commandPaletteIndex, Math.max(0, filtered.length - 1));
+  host.innerHTML = filtered.length ? filtered.map(([label, description, page], index) => `
+    <button class="command-item ${index === commandPaletteIndex ? 'selected' : ''}" type="button" data-command-page="${escapeHtml(page)}">
+      <span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(description)}</small></span><kbd>↵</kbd>
+    </button>
+  `).join('') : '<div class="command-empty">No matching destination.</div>';
+  host.querySelectorAll('[data-command-page]').forEach(button => {
+    button.addEventListener('click', () => {
+      closeCommandPalette();
+      setPage(button.dataset.commandPage);
+    });
+  });
+}
+
+function openCommandPalette() {
+  const palette = el('command-palette');
+  if (!palette) return;
+  commandPaletteIndex = 0;
+  renderCommandPalette('');
+  palette.classList.remove('hidden');
+  palette.setAttribute('aria-hidden', 'false');
+  el('command-palette-input')?.focus();
+}
+
+function closeCommandPalette() {
+  const palette = el('command-palette');
+  if (!palette) return;
+  palette.classList.add('hidden');
+  palette.setAttribute('aria-hidden', 'true');
+  el('top-search-btn')?.focus();
 }
 
 function updateTopStripClock() {
@@ -929,17 +1179,24 @@ function startTopStripClock() {
   window.setInterval(updateTopStripClock, 1000);
 }
 
-function setPage(pageId) {
+function setPage(pageId, { skipHistory = false } = {}) {
+  const normalizedPageId = pages.includes(pageId) ? pageId : pageIdForRoute(pageId);
   pages.forEach((id) => {
     const page = el(`page-${id}`);
-    if (page) page.classList.toggle("active", id === pageId);
+    if (page) page.classList.toggle("active", id === normalizedPageId);
   });
+  const activeTopPage = TOP_NAV_PAGE[normalizedPageId] || normalizedPageId;
   document.querySelectorAll(".nav-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.page === pageId);
+    btn.classList.toggle("active", btn.dataset.page === activeTopPage);
   });
   document.body.classList.remove('mobile-nav-open');
   el('mobile-menu-btn')?.setAttribute('aria-expanded', 'false');
-  updateTopStrip(pageId);
+  updateTopStrip(normalizedPageId);
+  renderContextNav(normalizedPageId);
+  if (!skipHistory && window.history?.pushState) {
+    const nextHash = `#${routeForPage(normalizedPageId)}`;
+    if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);
+  }
 }
 
 function toggleMobileNav() {
@@ -2042,6 +2299,30 @@ function renderMissionControl() {
   const pendingActions = localPendingActions();
   const openSessions = openLocalSessionsCount();
   const pendingApprovals = pendingLocalApprovalsCount();
+  const openFindingsForCockpit = sortedFindings().filter(finding => !['resolved', 'closed', 'done'].includes(String(findingStatus(finding)).toLowerCase()));
+  const edgeWorkspaceReady = Boolean(state.edgeWorkspace.data) && !state.edgeWorkspace.error;
+  const researchQueue = Array.isArray(state.researchCases.cases) ? state.researchCases.cases : [];
+  const researchReady = researchQueue.filter(item => ['ready_to_publish', 'disclosure_pending', 'validation'].includes(String(item.status || '').toLowerCase())).length;
+
+  const cockpitItems = [];
+  if (blocked) cockpitItems.push({ tone: 'critical', title: `${blocked} blocked work item${blocked === 1 ? '' : 's'}`, detail: 'Review the blocker and assign the next owner.', page: 'tasks' });
+  if (pendingApprovals) cockpitItems.push({ tone: 'high', title: `${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`, detail: 'Review the requested action before it can run.', page: 'integrations' });
+  if (openFindingsForCockpit.length) cockpitItems.push({ tone: 'medium', title: `${openFindingsForCockpit.length} open finding${openFindingsForCockpit.length === 1 ? '' : 's'}`, detail: 'Read evidence and decide the next action.', page: 'findings' });
+  if (researchReady) cockpitItems.push({ tone: 'high', title: `${researchReady} research case${researchReady === 1 ? '' : 's'} need review`, detail: 'Check evidence, disclosure, or publication readiness.', page: 'research-cases' });
+  if (!edgeWorkspaceReady) cockpitItems.push({ tone: 'info', title: 'Asset context is unavailable', detail: 'Check the Edge/Core connection before relying on network changes.', page: 'edge' });
+
+  const attentionHost = el('mission-attention');
+  if (attentionHost) {
+    attentionHost.innerHTML = `
+      <section class="card cockpit-panel">
+        <div class="cockpit-panel-head"><div><span class="eyebrow">Operator cockpit</span><h3>Needs attention</h3></div><span class="small">${cockpitItems.length ? `${cockpitItems.length} priority item${cockpitItems.length === 1 ? '' : 's'}` : 'Nothing urgent'}</span></div>
+        <div class="cockpit-items">${cockpitItems.length ? cockpitItems.slice(0, 5).map(item => `
+          <button class="cockpit-item tone-${escapeHtml(item.tone)}" type="button" data-cockpit-page="${escapeHtml(item.page)}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></span><span aria-hidden="true">›</span></button>
+        `).join('') : '<div class="cockpit-clear"><strong>Workspace is clear</strong><span>Continue with scheduled scans, evidence review, or research intake.</span></div>'}</div>
+      </section>
+      <section class="card cockpit-panel cockpit-summary"><span class="eyebrow">System context</span><h3>Current operating mode</h3><div class="cockpit-facts"><span><strong>${edgeWorkspaceReady ? 'Connected' : 'Degraded'}</strong><small>Asset context</small></span><span><strong>${triageSummary ? 'Available' : 'Unavailable'}</strong><small>Native triage</small></span><span><strong>${state.auth.user?.email ? 'Signed in' : 'Pilot'}</strong><small>Operator session</small></span></div></section>`;
+    attentionHost.querySelectorAll('[data-cockpit-page]').forEach(button => button.addEventListener('click', () => setPage(button.dataset.cockpitPage)));
+  }
 
   function drillToTasks({ status = '', external = null, security = null } = {}) {
     setPage('tasks');
@@ -2153,12 +2434,89 @@ function renderMissionControl() {
 }
 
 
+function renderWorkTable(items) {
+  const table = el('work-table');
+  if (!table) return;
+  if (!items.length) {
+    table.innerHTML = '<div class="empty-state"><strong>No work matches these filters.</strong><div class="small">Clear a filter or create a task to start an accountable workflow.</div></div>';
+    return;
+  }
+  const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 };
+  const sorted = [...items].sort((a, b) => {
+    const priority = (priorityOrder[String(b.priority || 'normal').toLowerCase()] || 0) - (priorityOrder[String(a.priority || 'normal').toLowerCase()] || 0);
+    return priority || new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at);
+  });
+  table.innerHTML = `
+    <div class="table-wrap work-table-wrap"><table>
+      <thead><tr><th>Work item</th><th>Status</th><th>Priority</th><th>Owner</th><th>Updated</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>${sorted.map(item => `
+        <tr>
+          <td><button class="table-link work-open-btn" type="button" data-task-id="${escapeHtml(item.id)}">${escapeHtml(item.title || 'Untitled work')}</button><div class="small">${escapeHtml(compactText(item.description || 'No description yet.', 140))}</div></td>
+          <td>${renderStatusPill(item.status || 'inbox', humanizeSnake(item.status || 'inbox'))}</td>
+          <td><span class="severity-label severity-${escapeHtml(item.priority || 'normal')}">${escapeHtml(item.priority || 'normal')}</span></td>
+          <td>${item.owner_role ? escapeHtml(shortRoleLabel(item.owner_role)) : '<span class="small">Unassigned</span>'}</td>
+          <td><span class="small">${escapeHtml(fmtDate(item.updated_at || item.created_at))}</span></td>
+          <td><button class="mini-btn work-open-btn" type="button" data-task-id="${escapeHtml(item.id)}">Open</button></td>
+        </tr>`).join('')}</tbody>
+    </table></div>`;
+  table.querySelectorAll('.work-open-btn').forEach(button => {
+    button.addEventListener('click', () => {
+      const item = state.workItems.find(workItem => String(workItem.id) === String(button.dataset.taskId));
+      if (item) openTaskModal(item);
+    });
+  });
+}
+
+function updateWorkViewControls() {
+  el('work-table-view-btn')?.classList.toggle('active', workView === 'table');
+  el('work-board-view-btn')?.classList.toggle('active', workView === 'board');
+}
+
+function getFindingFilters() {
+  return {
+    search: (el('finding-search')?.value || '').trim().toLowerCase(),
+    severity: (el('finding-filter-severity')?.value || '').toLowerCase(),
+    status: (el('finding-filter-status')?.value || '').toLowerCase(),
+    source: (el('finding-filter-source')?.value || '').toLowerCase()
+  };
+}
+
+function filteredFindings(items = sortedFindings()) {
+  const filters = getFindingFilters();
+  return items.filter(finding => {
+    const severity = String(findingSeverity(finding) || '').toLowerCase();
+    const status = String(effectiveFindingStatus(finding) || '').toLowerCase();
+    const source = String(findingSource(finding) || '').toLowerCase();
+    if (filters.severity && severity !== filters.severity) return false;
+    if (filters.status && status !== filters.status) return false;
+    if (filters.source) {
+      if (filters.source === 'secopsai_edge' && !source.includes('edge') && !String(finding.finding_id || '').toUpperCase().startsWith('EDGE-')) return false;
+      if (filters.source === 'secopsai_core' && findingRecordOrigin(finding) !== 'core') return false;
+      if (filters.source === 'ai_dependency_guard' && !source.includes('ai') && !source.includes('dependency')) return false;
+    }
+    if (filters.search) {
+      const haystack = `${findingId(finding) || ''} ${findingTitle(finding)} ${findingBody(finding)} ${findingSource(finding)} ${findingValue(finding, 'asset') || ''}`.toLowerCase();
+      if (!haystack.includes(filters.search)) return false;
+    }
+    return true;
+  });
+}
+
 function renderTasks() {
   const statuses = [["inbox", "Inbox"],["planned", "Planned"],["in_progress", "In Progress"],["review", "Review"],["blocked", "Blocked"],["done", "Done"]];
   const board = el("task-board");
+  const table = el('work-table');
+  if (!board && !table) return;
+  const visibleItems = filteredWorkItems();
+  updateWorkViewControls();
+  if (table) table.classList.toggle('hidden', workView !== 'table');
+  if (board) board.classList.toggle('hidden', workView !== 'board');
+  if (workView === 'table') {
+    renderWorkTable(visibleItems);
+    return;
+  }
   if (!board) return;
   board.innerHTML = "";
-  const visibleItems = filteredWorkItems();
 
   statuses.forEach(([status, label]) => {
     const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 };
@@ -2241,7 +2599,7 @@ function renderTasks() {
               .then(() => assignSuggestedOwnerForTask(item))
               .catch(err => {
                 console.error('assign suggested owner failed', err);
-                alert(`Failed to assign suggested owner: ${err.message || err}`);
+                notifyError(`Failed to assign suggested owner: ${err.message || err}`);
               });
             return;
           }
@@ -2251,7 +2609,7 @@ function renderTasks() {
               .then(() => assignSuggestedReviewerForTask(item))
               .catch(err => {
                 console.error('assign suggested reviewer failed', err);
-                alert(`Failed to assign suggested reviewer: ${err.message || err}`);
+                notifyError(`Failed to assign suggested reviewer: ${err.message || err}`);
               });
             return;
           }
@@ -2266,10 +2624,14 @@ function renderTasks() {
 }
 
 function renderFindings() {
-  const findings = sortedFindings();
+  const allFindings = sortedFindings();
+  const findings = filteredFindings(allFindings);
   const coreFindingCount = findings.filter(finding => findingRecordOrigin(finding) === 'core').length;
   const dashboardFindingCount = findings.length - coreFindingCount;
   const findingsAvailable = state.optionalTables.findings !== false || coreFindingCount > 0;
+  if (state.selectedFindingId && !findings.some(finding => String(findingId(finding)) === String(state.selectedFindingId)) && Object.values(getFindingFilters()).some(Boolean)) {
+    state.selectedFindingId = null;
+  }
   if (findingsAvailable && findings.length && !state.selectedFindingId) selectFinding();
   const triageSummary = localTriageSummary();
   const triageLatest = localTriageLatestRun();
@@ -3357,19 +3719,19 @@ async function runBlogOpsAction(action, { draft = null, note = '', button = null
   if (action === 'deploy' && !canDeployFromBlogOps()) {
     const message = 'Deploy blog is unavailable in this dashboard mode. Open hosted Blog Ops or run the Cloudflare deployment workflow from GitHub Actions.';
     setStatus(message, true);
-    alert(message);
+    notifyError(message);
     return;
   }
   if (state.blogOps.status?.configured === false) {
     const message = 'Blog Ops is not connected to GitHub yet. Add BLOG_OPS_GITHUB_TOKEN to the Cloudflare Pages project, then refresh Blog Ops.';
     setStatus(message, true);
-    alert(message);
+    notifyError(message);
     return;
   }
   if (!state.blogOps.adminToken) {
     const message = 'Paste your Blog Ops admin token, then click Use token before running write actions.';
     setStatus(message, true);
-    alert(message);
+    notifyError(message);
     return;
   }
   const actionPath = draft ? `drafts/${encodeURIComponent(draft)}/${action}` : action;
@@ -3391,7 +3753,7 @@ async function runBlogOpsAction(action, { draft = null, note = '', button = null
   } catch (error) {
     const suffix = /unauthorized/i.test(error.message) ? ' Check that the token matches BLOG_OPS_ADMIN_TOKEN in Cloudflare Pages.' : '';
     setStatus(`Blog Ops ${action} failed: ${error.message}${suffix}`, true);
-    alert(`Blog Ops ${action} failed: ${error.message}${suffix}`);
+    notifyError(`Blog Ops ${action} failed: ${error.message}${suffix}`);
   } finally {
     setButtonBusy(button, false);
   }
@@ -3612,7 +3974,7 @@ function renderBlogDraftPreview() {
   host.querySelectorAll('.blog-source-media-btn').forEach((button) => {
     button.addEventListener('click', (event) => {
       if (!canAttachSourceMediaFromBlogOps()) {
-        alert('Source image attachment is available in local helper mode only.');
+        showToast('Source image attachment is available in local helper mode only.', 'info');
         return;
       }
       const index = Number(button.dataset.sourceMediaIndex || 0) || 0;
@@ -3632,12 +3994,12 @@ function renderBlogDraftPreview() {
   });
   el('blog-source-media-url-btn')?.addEventListener('click', (event) => {
     if (!canAttachSourceMediaFromBlogOps()) {
-      alert('Source image attachment is available in local helper mode only.');
+      showToast('Source image attachment is available in local helper mode only.', 'info');
       return;
     }
     const mediaUrl = (el('blog-source-media-url')?.value || '').trim();
     if (!mediaUrl) {
-      alert('Paste a source image URL first.');
+      showToast('Paste a source image URL first.', 'info');
       return;
     }
     runBlogOpsAction('attach-source-media', {
@@ -3849,7 +4211,7 @@ async function runTriageOpsAction(action, { button = null, payload = {}, write =
   if (write && !state.triageOps.adminToken) {
     const message = 'Paste your Triage Ops admin token, then click Use token before write actions.';
     setStatus(message, true);
-    window.alert(message);
+    notifyError(message);
     return;
   }
   const body = {
@@ -4264,6 +4626,7 @@ function sanitizeCampaignSummary(summary = '') {
 }
 
 function setCampaignFormFromPayload(payload = {}) {
+  resetResearchCaseRecommendation();
   const iocs = payload.iocs && typeof payload.iocs === 'object'
     ? Object.values(payload.iocs).flat().map(String)
     : [];
@@ -4323,10 +4686,10 @@ async function runCampaignEndpoint(action, { button = null, write = false, confi
   if (write && !state.triageOps.adminToken) {
     const message = 'Paste your Triage Ops admin token, then click Use token before campaign write actions.';
     setStatus(message, true);
-    alert(message);
+    notifyError(message);
     return;
   }
-  if (confirmMessage && !confirm(confirmMessage)) return;
+  if (confirmMessage && !(await requestConfirmation(confirmMessage, { title: 'Review campaign action', confirmLabel: write ? 'Authorize action' : 'Run analysis' }))) return;
   let campaign;
   try {
     campaign = campaignFormToPayload();
@@ -4346,6 +4709,7 @@ async function runCampaignEndpoint(action, { button = null, write = false, confi
     });
     state.triageOps.campaignResult = result.result || result;
     state.triageOps.campaignLastOutput = { action, result, at: new Date().toISOString() };
+    resetResearchCaseRecommendation();
     if (action === 'campaign-persist-findings') {
       await loadTriageOpsAlerts({ render: false });
       await loadLocalTriageState();
@@ -4427,10 +4791,10 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
   if (write && !state.triageOps.adminToken) {
     const message = 'Paste your Triage Ops admin token, then click Use token before campaign discovery write actions.';
     setStatus(message, true);
-    alert(message);
+    notifyError(message);
     return;
   }
-  if (confirmMessage && !confirm(confirmMessage)) return;
+  if (confirmMessage && !(await requestConfirmation(confirmMessage, { title: 'Review discovery action', confirmLabel: write ? 'Authorize action' : 'Run discovery' }))) return;
   setButtonBusy(button, true, 'Running…');
   try {
     const payload = body || discoveryPayload();
@@ -4720,6 +5084,231 @@ function renderCampaignResult(result = {}) {
   `;
 }
 
+function resetResearchCaseRecommendation({ keepDismissed = false } = {}) {
+  state.triageOps.researchRecommendation = {
+    data: null,
+    dismissed: keepDismissed,
+    loading: false,
+    error: null,
+    stale: false
+  };
+}
+
+function researchRecommendationPayload() {
+  const selected = selectedCampaignCandidate();
+  const selectedAlert = selectedTriageOpsAlert();
+  return {
+    campaign: campaignFormToPayload(),
+    candidate_campaign: selected?.campaign || {},
+    orchestrator: selected?.orchestrator || {},
+    campaign_result: state.triageOps.campaignResult || {},
+    candidate_id: selected?.candidate_id || '',
+    finding_id: selectedAlert?.finding_id || ''
+  };
+}
+
+function researchRecommendationHasInput() {
+  const payload = researchRecommendationPayload();
+  const campaignPackages = Array.isArray(payload.campaign?.packages) ? payload.campaign.packages : [];
+  const candidatePackages = Array.isArray(payload.candidate_campaign?.packages) ? payload.candidate_campaign.packages : [];
+  const validatedPackages = Array.isArray(payload.orchestrator?.validated_packages) ? payload.orchestrator.validated_packages : [];
+  return Boolean(payload.candidate_id || campaignPackages.length || candidatePackages.length || validatedPackages.length);
+}
+
+function renderResearchRecommendationList(items, emptyMessage) {
+  const values = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!values.length) return `<p class="small">${escapeHtml(emptyMessage)}</p>`;
+  return `<ul class="research-recommendation-list">${values.map(item => `<li>${escapeHtml(String(item))}</li>`).join('')}</ul>`;
+}
+
+function renderResearchCaseRecommendation() {
+  const recommendationState = state.triageOps.researchRecommendation || {};
+  if (recommendationState.dismissed) {
+    return `
+      <section class="research-recommendation dismissed">
+        <div><strong>Research-case recommendation dismissed</strong><p class="small">Nothing was created. You can restore the recommendation when the lead is ready for review.</p></div>
+        <button class="mini-btn" id="research-recommendation-restore-btn" type="button">Show recommendation</button>
+      </section>
+    `;
+  }
+  const recommendation = recommendationState.data || null;
+  const selectedAlert = selectedTriageOpsAlert();
+  const cases = Array.isArray(state.researchCases.cases) ? state.researchCases.cases : [];
+  const hasInput = researchRecommendationHasInput();
+  const route = String(recommendation?.route || '');
+  const canCreate = route === 'create_draft_case';
+  const tokenReady = Boolean(state.researchCases.adminToken || state.triageOps.adminToken);
+  const canLink = Boolean(selectedAlert?.finding_id && cases.length);
+  const recommendationClass = route ? route.replace(/[^a-z0-9_-]/gi, '-').toLowerCase() : 'pending';
+  return `
+    <section class="research-recommendation ${recommendationClass}">
+      <div class="research-recommendation-header">
+        <div>
+          <div class="detail-eyebrow">Research handoff</div>
+          <h4>Research case recommendation</h4>
+          <p class="small">Use the evaluator after discovery or Campaign Research. It recommends a durable draft when normalized package evidence is present, but it never decides maliciousness, disclosure, or publication.</p>
+        </div>
+        <button class="primary-btn" id="research-recommendation-btn" type="button" ${hasInput && !recommendationState.loading ? '' : 'disabled'}>${recommendationState.loading ? 'Evaluating…' : 'Suggest Research Case'}</button>
+      </div>
+      ${recommendationState.error ? `<div class="triage-output error"><strong>Recommendation failed</strong><p>${escapeHtml(recommendationState.error)}</p></div>` : ''}
+      ${recommendation ? `
+        <div class="research-recommendation-summary">
+          <div><span class="small">Recommendation</span><strong>${escapeHtml(recommendation.label || statusLabel(route))}</strong></div>
+          <div><span class="small">Confidence</span><strong>${escapeHtml(String(recommendation.confidence || 'unknown'))}</strong></div>
+          <div><span class="small">Evidence score</span><strong>${escapeHtml(String(recommendation.score ?? '—'))}</strong></div>
+          <div><span class="small">Source finding</span><strong><code>${escapeHtml(recommendation.checks?.source_finding_id || selectedAlert?.finding_id || 'none')}</code></strong></div>
+        </div>
+        <div class="research-recommendation-columns">
+          <div><h5>Why</h5>${renderResearchRecommendationList(recommendation.reasons, 'No positive reasons recorded.')}</div>
+          <div><h5>Blockers and cautions</h5>${renderResearchRecommendationList(recommendation.blockers, 'No blockers. Human review is still required.')}</div>
+        </div>
+        ${recommendation.suggested_case ? `
+          <div class="research-recommendation-draft">
+            <div><span class="small">Draft that would be created</span><strong>${escapeHtml(recommendation.suggested_case.title || 'Research case')}</strong><p class="small">${escapeHtml(recommendation.suggested_case.summary || '')}</p></div>
+            <div class="research-recommendation-actions">
+              <button class="primary-btn" id="research-recommendation-create-btn" type="button" ${canCreate && tokenReady ? '' : 'disabled'} title="${canCreate ? (tokenReady ? 'Creates a draft and seeds normalized subjects.' : 'Set the protected research action token first.') : 'Resolve the recommendation blockers before creating a draft.'}">Create draft case</button>
+              <label class="research-recommendation-link-select"><span class="small">Existing case</span><select id="research-recommendation-existing-case" ${cases.length ? '' : 'disabled'}><option value="">Select a case to link…</option>${cases.map(item => `<option value="${escapeHtml(item.case_id)}">${escapeHtml(item.case_id)} · ${escapeHtml(item.title || 'Untitled')}</option>`).join('')}</select></label>
+              <button class="secondary-btn" id="research-recommendation-link-btn" type="button" ${canLink ? '' : 'disabled'} title="${canLink ? 'Links the selected SCM finding to the selected research case.' : 'Select an SCM finding and make sure at least one research case is loaded.'}">Link existing case</button>
+              <button class="mini-btn" id="research-recommendation-dismiss-btn" type="button">Dismiss recommendation</button>
+            </div>
+          </div>
+        ` : ''}
+      ` : `<div class="empty-state compact">${hasInput ? 'Run the evaluator to decide whether this lead belongs in a durable Research Case.' : 'Select a discovery candidate or add a normalized package before requesting a recommendation.'}</div>`}
+      <p class="small research-recommendation-safety">Protected action boundary: creating a case makes a <strong>draft</strong> only. It does not publish, disclose, close, or change the original finding.</p>
+    </section>
+  `;
+}
+
+async function requestResearchCaseRecommendation(button = null) {
+  if (!researchRecommendationHasInput()) {
+    setStatus('Select a discovery candidate or add a package before requesting a research recommendation.', true);
+    return;
+  }
+  const recommendationState = state.triageOps.researchRecommendation || {};
+  recommendationState.loading = true;
+  recommendationState.error = null;
+  recommendationState.dismissed = false;
+  renderTriageOps();
+  setButtonBusy(el('research-recommendation-btn') || button, true, 'Evaluating…');
+  try {
+    const result = await fetchTriageOpsJson('research-recommendation', {
+      method: 'POST',
+      body: JSON.stringify(researchRecommendationPayload())
+    });
+    state.triageOps.researchRecommendation = {
+      data: result.recommendation || null,
+      dismissed: false,
+      loading: false,
+      error: null,
+      stale: false
+    };
+    setStatus('<span class="dot"></span> Research-case recommendation ready');
+  } catch (error) {
+    state.triageOps.researchRecommendation = {
+      ...recommendationState,
+      loading: false,
+      error: error?.message || String(error)
+    };
+    setStatus(`Research-case recommendation failed: ${error?.message || error}`, true);
+  } finally {
+    setButtonBusy(button, false);
+    renderTriageOps();
+  }
+}
+
+async function createDraftResearchCaseFromRecommendation(button = null) {
+  const recommendation = state.triageOps.researchRecommendation?.data;
+  const selectedAlert = selectedTriageOpsAlert();
+  const token = state.researchCases.adminToken || state.triageOps.adminToken;
+  if (!recommendation || recommendation.route !== 'create_draft_case') {
+    setStatus('Resolve the research recommendation blockers before creating a draft case.', true);
+    return;
+  }
+  if (!token) {
+    setStatus('Set the protected research action token before creating a draft case.', true);
+    el('research-cases-admin-token')?.focus();
+    return;
+  }
+  const draft = recommendation.suggested_case || {};
+  if (!(await requestConfirmation(`Create draft Research Case "${draft.title || 'Research lead'}"? It will remain a draft and require human review.`, {
+    title: 'Create research case',
+    context: 'The case will be created as a draft. No disclosure or publication action will occur.',
+    confirmLabel: 'Create draft'
+  }))) return;
+  setButtonBusy(button, true, 'Creating…');
+  try {
+    const created = await runResearchCaseAction('create', {
+      title: draft.title,
+      summary: draft.summary,
+      case_type: draft.case_type || 'supply_chain_campaign',
+      severity: draft.severity || 'medium',
+      confidence: draft.confidence || 'low',
+      owner: draft.owner || 'SecOpsAI Research'
+    }, button);
+    const caseId = created?.result?.case_id || created?.case_id || created?.result?.case?.case_id || created?.case?.case_id;
+    if (!caseId) throw new Error('Draft case was created but no case ID was returned. Refresh Research Cases to locate it.');
+
+    const subjects = Array.isArray(draft.subjects) ? draft.subjects.slice(0, 20) : [];
+    for (const subject of subjects) {
+      await runResearchCaseAction('add-subject', {
+        case_id: caseId,
+        subject_type: subject.subject_type || 'package',
+        ecosystem: subject.ecosystem || '',
+        name: subject.name || '',
+        version: subject.version || '',
+        publisher: subject.publisher || '',
+        actor: 'dashboard-operator'
+      });
+    }
+    if (selectedAlert?.finding_id) {
+      await runResearchCaseAction('link-finding', {
+        case_id: caseId,
+        finding_id: selectedAlert.finding_id,
+        relationship: 'derived_from',
+        actor: 'dashboard-operator'
+      });
+    }
+    state.triageOps.researchRecommendation.dismissed = true;
+    state.researchCases.selectedId = caseId;
+    setStatus(`<span class="dot"></span> Draft ${escapeHtml(caseId)} created${selectedAlert?.finding_id ? ' and source finding linked' : ''}`);
+    setPage('research-cases');
+    await loadResearchCaseDetail(caseId, { render: false });
+    renderResearchCases();
+  } catch (error) {
+    setStatus(`Draft research case creation failed: ${error?.message || error}`, true);
+  } finally {
+    setButtonBusy(button, false);
+    renderTriageOps();
+  }
+}
+
+async function linkExistingResearchCaseFromRecommendation(button = null) {
+  const selectedAlert = selectedTriageOpsAlert();
+  const caseId = el('research-recommendation-existing-case')?.value || '';
+  if (!selectedAlert?.finding_id) {
+    setStatus('Select an SCM finding before linking an existing research case.', true);
+    return;
+  }
+  if (!caseId) {
+    setStatus('Select an existing research case first.', true);
+    return;
+  }
+  const result = await runResearchCaseAction('link-finding', {
+    case_id: caseId,
+    finding_id: selectedAlert.finding_id,
+    relationship: 'derived_from',
+    actor: 'dashboard-operator'
+  }, button);
+  if (result) {
+    state.triageOps.researchRecommendation.dismissed = true;
+    state.researchCases.selectedId = caseId;
+    setStatus(`<span class="dot"></span> ${escapeHtml(selectedAlert.finding_id)} linked to ${escapeHtml(caseId)}`);
+    setPage('research-cases');
+    await loadResearchCaseDetail(caseId, { render: false });
+    renderResearchCases();
+  }
+}
+
 function renderCampaignResearchPanel() {
   const host = el('triage-ops-campaign-research');
   if (!host) return;
@@ -4797,6 +5386,7 @@ function renderCampaignResearchPanel() {
         ${renderCampaignResult(state.triageOps.campaignResult)}
         ${state.triageOps.campaignLastOutput?.cli ? `<details class="campaign-cli-output"><summary>Raw helper output (debug)</summary><pre>${escapeHtml(JSON.stringify(state.triageOps.campaignLastOutput.cli, null, 2))}</pre></details>` : ''}
       </div>
+      ${renderResearchCaseRecommendation()}
     </div>
   `;
   host.querySelectorAll('[data-campaign-package-field="ecosystem"]').forEach(select => {
@@ -4856,6 +5446,18 @@ function renderCampaignResearchPanel() {
     setStatus(`<span class="dot"></span> Loaded campaign fixture: ${escapeHtml(fixture.title || fixture.id)}`);
   });
   el('campaign-run-btn')?.addEventListener('click', event => runCampaignEndpoint('research-campaign', { button: event.currentTarget }));
+  el('research-recommendation-btn')?.addEventListener('click', event => requestResearchCaseRecommendation(event.currentTarget));
+  el('research-recommendation-create-btn')?.addEventListener('click', event => createDraftResearchCaseFromRecommendation(event.currentTarget));
+  el('research-recommendation-link-btn')?.addEventListener('click', event => linkExistingResearchCaseFromRecommendation(event.currentTarget));
+  el('research-recommendation-dismiss-btn')?.addEventListener('click', () => {
+    state.triageOps.researchRecommendation.dismissed = true;
+    renderTriageOps();
+    setStatus('<span class="dot"></span> Research-case recommendation dismissed for this session');
+  });
+  el('research-recommendation-restore-btn')?.addEventListener('click', () => {
+    state.triageOps.researchRecommendation.dismissed = false;
+    renderTriageOps();
+  });
   el('campaign-persist-btn')?.addEventListener('click', event => runCampaignEndpoint('campaign-persist-findings', {
     button: event.currentTarget,
     write: true,
@@ -4869,6 +5471,7 @@ function renderCampaignResearchPanel() {
   el('campaign-copy-cli-btn')?.addEventListener('click', () => copyTextWithStatus(campaignCliFallback(), 'Campaign Research CLI fallback copied'));
   host.querySelectorAll('[data-campaign-candidate-id]').forEach(btn => btn.addEventListener('click', () => {
     state.triageOps.campaignDiscovery.selectedCandidateId = btn.dataset.campaignCandidateId || '';
+    resetResearchCaseRecommendation();
     renderTriageOps();
   }));
   ['campaign-discovery-since', 'campaign-discovery-source', 'campaign-discovery-limit', 'campaign-discovery-min-score', 'campaign-watchlist-kind', 'campaign-watchlist-value'].forEach(id => {
@@ -5396,12 +5999,17 @@ function renderTriageOpsDetail() {
     ${renderTriageOpsOutput(state.triageOps.lastOutput)}
   `;
   host.querySelectorAll('.triage-ops-action-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const action = btn.dataset.triageAction;
       const note = el('triage-ops-note')?.value || closeNote;
       const write = btn.dataset.write === 'true';
       const disposition = el('triage-ops-disposition')?.value || 'false_positive';
-      if (action === 'close' && !confirm(`Close ${alert.finding_id} with disposition "${disposition}"? Review the note before confirming.`)) return;
+      if (action === 'close' && !(await requestConfirmation(`Close ${alert.finding_id} with disposition "${disposition}"? Review the note before confirming.`, {
+        title: 'Close supply-chain finding',
+        context: 'Closing changes the analyst disposition and will be recorded in the audit history.',
+        confirmLabel: 'Close finding',
+        danger: true
+      }))) return;
       const payload = action === 'close'
         ? { disposition, status: 'closed', note }
         : action === 'escalate'
@@ -5915,7 +6523,7 @@ async function runResearchCaseAction(action, payload = {}, button = null) {
     const result = await response.json().catch(() => ({}));
     if (!response.ok || result.ok === false) throw new Error(result.error || result.result?.error || `Research action HTTP ${response.status}`);
     state.researchCases.lastAction = { action, result, at: new Date().toISOString() };
-    const nextId = result.result?.case_id || payload.case_id || state.researchCases.selectedId;
+    const nextId = result.result?.case_id || result.case_id || result.result?.case?.case_id || result.case?.case_id || payload.case_id || state.researchCases.selectedId;
     if (nextId) state.researchCases.selectedId = nextId;
     if (action === 'export' && result.artifact) researchDownloadArtifact(result.artifact);
     await loadResearchCases({ render: false, preserveSelection: true });
@@ -6051,8 +6659,12 @@ function bindResearchCaseDetailActions(researchCase) {
     actor: 'dashboard-operator'
   }, event.currentTarget));
   el('research-export-btn')?.addEventListener('click', event => runResearchCaseAction('export', { case_id: researchCase.case_id }, event.currentTarget));
-  el('research-draft-blog-btn')?.addEventListener('click', event => {
-    if (!confirm(`Create a review-only blog draft for ${researchCase.case_id}? This does not publish it.`)) return;
+  el('research-draft-blog-btn')?.addEventListener('click', async event => {
+    if (!(await requestConfirmation(`Create a review-only blog draft for ${researchCase.case_id}? This does not publish it.`, {
+      title: 'Create publication draft',
+      context: 'The draft remains in review and cannot publish without a separate approval.',
+      confirmLabel: 'Create draft'
+    }))) return;
     runResearchCaseAction('draft-blog', { case_id: researchCase.case_id }, event.currentTarget);
   });
   el('research-intake-preview-btn')?.addEventListener('click', event => runResearchCaseAction('intake-preview', {
@@ -6080,9 +6692,13 @@ function bindResearchCaseDetailActions(researchCase) {
     evidence_ids: (el('research-verdict-evidence')?.value || '').split(',').map(item => item.trim()).filter(Boolean),
     actor: 'dashboard-operator'
   }, event.currentTarget));
-  el('research-publication-approve-btn')?.addEventListener('click', event => {
+  el('research-publication-approve-btn')?.addEventListener('click', async event => {
     const review = (researchCase.publication_reviews || [])[0];
-    if (!review || !confirm('Record final human approval for this publication safety review?')) return;
+    if (!review || !(await requestConfirmation('Record final human approval for this publication safety review?', {
+      title: 'Approve publication safety review',
+      context: 'This records the final human approval gate. It does not deploy the article by itself.',
+      confirmLabel: 'Record approval'
+    }))) return;
     runResearchCaseAction('publication-approve', { case_id: researchCase.case_id, review_id: review.review_id, waivers: [], actor: 'dashboard-publisher' }, event.currentTarget);
   });
   el('research-disclosure-btn')?.addEventListener('click', event => runResearchCaseAction('prepare-disclosure', {
@@ -6102,17 +6718,30 @@ function bindResearchCaseDetailActions(researchCase) {
   }, event.currentTarget));
   document.querySelectorAll('#research-case-detail .research-intake-attach-btn').forEach(button => button.addEventListener('click', event => runResearchCaseAction('intake-attach', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget)));
   document.querySelectorAll('#research-case-detail .research-job-retry-btn').forEach(button => button.addEventListener('click', event => runResearchCaseAction('job-retry', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget)));
-  document.querySelectorAll('#research-case-detail .research-job-cancel-btn').forEach(button => button.addEventListener('click', event => {
-    if (!confirm('Cancel this research job?')) return;
+  document.querySelectorAll('#research-case-detail .research-job-cancel-btn').forEach(button => button.addEventListener('click', async event => {
+    if (!(await requestConfirmation('Cancel this research job?', {
+      title: 'Cancel research job',
+      context: 'The cancellation will be recorded and the job will not continue.',
+      confirmLabel: 'Cancel job',
+      danger: true
+    }))) return;
     runResearchCaseAction('job-cancel', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget);
   }));
-  document.querySelectorAll('#research-case-detail .research-disclosure-status-btn').forEach(button => button.addEventListener('click', event => {
+  document.querySelectorAll('#research-case-detail .research-disclosure-status-btn').forEach(button => button.addEventListener('click', async event => {
     const status = button.dataset.disclosureStatus;
-    if (status === 'sent' && !confirm('Record that this disclosure was sent externally?')) return;
+    if (status === 'sent' && !(await requestConfirmation('Record that this disclosure was sent externally?', {
+      title: 'Record external disclosure',
+      context: 'Only continue after the message has been reviewed and sent through the approved channel.',
+      confirmLabel: 'Record as sent'
+    }))) return;
     runResearchCaseAction('disclosure-status', { case_id: researchCase.case_id, disclosure_id: button.dataset.disclosureId, status, actor: 'dashboard-operator' }, event.currentTarget);
   }));
-  document.querySelectorAll('#research-case-detail .research-sandbox-status-btn').forEach(button => button.addEventListener('click', event => {
-    if (!confirm('Approve this sandbox request? Execution remains unavailable until an isolated provider is configured.')) return;
+  document.querySelectorAll('#research-case-detail .research-sandbox-status-btn').forEach(button => button.addEventListener('click', async event => {
+    if (!(await requestConfirmation('Approve this sandbox request? Execution remains unavailable until an isolated provider is configured.', {
+      title: 'Approve sandbox request',
+      context: 'Approval authorizes the request record only. Execution remains blocked until an isolated provider is configured.',
+      confirmLabel: 'Approve request'
+    }))) return;
     runResearchCaseAction('sandbox-status', { case_id: researchCase.case_id, request_id: button.dataset.requestId, status: button.dataset.sandboxStatus, actor: 'dashboard-operator' }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-retract-btn').forEach(button => button.addEventListener('click', () => {
@@ -6424,14 +7053,18 @@ async function saveTask(options = {}) {
   if (!payload.title) {
     if (saveBtn) saveBtn.disabled = false;
     if (saveRunBtn) saveRunBtn.disabled = false;
-    return alert('Task title is required.');
+    notifyError('Task title is required.');
+    return;
   }
 
   try {
     let item = null;
     if (taskModalState.editingId) {
       const { data, error } = await supabaseClient.from('work_items').update(payload).eq('id', taskModalState.editingId).select().single();
-      if (error) return alert(`Failed to update task: ${error.message}`);
+      if (error) {
+        notifyError(`Failed to update task: ${error.message}`);
+        return;
+      }
       item = data;
       upsertWorkItemInState(item);
       closeTaskModal();
@@ -6448,7 +7081,10 @@ async function saveTask(options = {}) {
       }, 'info')).then(backgroundRefreshOpsData).catch(e => console.warn('task_updated side effects failed', e));
     } else {
       const { data, error } = await supabaseClient.from('work_items').insert(payload).select().single();
-      if (error) return alert(`Failed to create task: ${error.message}`);
+      if (error) {
+        notifyError(`Failed to create task: ${error.message}`);
+        return;
+      }
       item = data;
       upsertWorkItemInState(item);
       closeTaskModal();
@@ -6481,12 +7117,20 @@ async function deleteTask() {
   const item = currentTaskModalItem();
   const taskId = taskModalState.editingId || item?.id || null;
   if (!taskId) {
-    alert('No task is selected for deletion. Close and reopen the task, then try again.');
+    notifyError('No task is selected for deletion. Close and reopen the task, then try again.');
     return;
   }
-  if (!confirm(`Delete this task${item?.title ? `: ${item.title}` : ''}?`)) return;
+  if (!(await requestConfirmation(`Delete this task${item?.title ? `: ${item.title}` : ''}?`, {
+    title: 'Delete work item',
+    context: 'This removes the work item from the active queue and records the deletion event.',
+    confirmLabel: 'Delete task',
+    danger: true
+  }))) return;
   const { error } = await supabaseClient.from('work_items').delete().eq('id', taskId);
-  if (error) return alert(`Failed to delete task: ${error.message}`);
+  if (error) {
+    notifyError(`Failed to delete task: ${error.message}`);
+    return;
+  }
   removeWorkItemFromState(taskId);
   taskModalState.editingId = null;
   taskModalState.sourceFinding = null;
@@ -6508,7 +7152,10 @@ async function moveTaskToStatus(taskId, nextStatus) {
   const item = state.workItems.find(w => w.id === taskId);
   if (!item || item.status === nextStatus) return;
   const { data, error } = await supabaseClient.from('work_items').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', taskId).select().single();
-  if (error) return alert(`Failed to move task: ${error.message}`);
+  if (error) {
+    notifyError(`Failed to move task: ${error.message}`);
+    return;
+  }
   upsertWorkItemInState(data);
   refreshTaskViewsOnly();
   Promise.resolve().then(() => announceTaskChange('task_moved', data, {
@@ -6653,6 +7300,60 @@ function bindEvents() {
   el('auth-signout-btn')?.addEventListener('click', signOutOperator);
   document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
   el('mobile-menu-btn')?.addEventListener('click', toggleMobileNav);
+  el('work-table-view-btn')?.addEventListener('click', () => { workView = 'table'; renderTasks(); });
+  el('work-board-view-btn')?.addEventListener('click', () => { workView = 'board'; renderTasks(); });
+  el('top-search-btn')?.addEventListener('click', openCommandPalette);
+  el('top-help-btn')?.addEventListener('click', () => openHelpDrawer(currentPageFromLocation()));
+  el('top-health-btn')?.addEventListener('click', () => setPage('integrations'));
+  el('workspace-switcher')?.addEventListener('click', () => showToast('This pilot uses one authenticated SecOpsAI workspace. Customer/site switching is available when multi-tenant workspaces are enabled.', 'info'));
+  el('confirm-dialog-confirm')?.addEventListener('click', () => finishConfirmation(true));
+  el('confirm-dialog-cancel')?.addEventListener('click', () => finishConfirmation(false));
+  el('confirm-dialog-close')?.addEventListener('click', () => finishConfirmation(false));
+  el('confirm-dialog')?.addEventListener('click', event => {
+    if (event.target === event.currentTarget) finishConfirmation(false);
+  });
+  el('command-palette-close')?.addEventListener('click', closeCommandPalette);
+  el('command-palette-input')?.addEventListener('input', event => {
+    commandPaletteIndex = 0;
+    renderCommandPalette(event.target.value);
+  });
+  el('command-palette')?.addEventListener('click', event => {
+    if (event.target === event.currentTarget) closeCommandPalette();
+  });
+  el('help-drawer-close')?.addEventListener('click', closeHelpDrawer);
+  document.addEventListener('keydown', event => {
+    const confirmation = el('confirm-dialog');
+    if (confirmation && !confirmation.classList.contains('hidden')) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        finishConfirmation(false);
+      }
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      openCommandPalette();
+      return;
+    }
+    const palette = el('command-palette');
+    if (palette && !palette.classList.contains('hidden')) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCommandPalette();
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const items = [...document.querySelectorAll('#command-palette-list .command-item')];
+        if (!items.length) return;
+        commandPaletteIndex = (commandPaletteIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        renderCommandPalette(el('command-palette-input')?.value || '');
+      } else if (event.key === 'Enter') {
+        const selected = document.querySelector('#command-palette-list .command-item.selected');
+        if (selected) selected.click();
+      }
+    } else if (event.key === 'Escape') {
+      closeHelpDrawer();
+    }
+  });
   el('refresh-btn')?.addEventListener('click', async () => {
     if (bootError) {
       setStatus(bootError, true);
@@ -6701,7 +7402,7 @@ function bindEvents() {
         await deleteTask();
       } catch (e) {
         console.error('deleteTask click failed', e);
-        alert(`Delete failed: ${e?.message || e}`);
+    notifyError(`Delete failed: ${e?.message || e}`);
       }
     });
   }
@@ -6736,6 +7437,14 @@ function bindEvents() {
   });
   ['task-filter-external', 'task-filter-security'].forEach(id => {
     el(id)?.addEventListener('change', renderTasks);
+  });
+  ['finding-search', 'finding-filter-severity', 'finding-filter-status', 'finding-filter-source'].forEach(id => {
+    el(id)?.addEventListener('input', renderFindings);
+    el(id)?.addEventListener('change', renderFindings);
+  });
+  el('finding-clear-filters-btn')?.addEventListener('click', () => {
+    ['finding-search', 'finding-filter-severity', 'finding-filter-status', 'finding-filter-source'].forEach(id => { if (el(id)) el(id).value = ''; });
+    renderFindings();
   });
   el('triage-ops-save-token-btn')?.addEventListener('click', () => {
     state.triageOps.adminToken = el('triage-ops-admin-token')?.value || '';
@@ -6795,7 +7504,11 @@ function bindEvents() {
       setStatus('Select at least one npm watchlist package first.', true);
       return;
     }
-    if (!confirm('Create draft Research Cases for the selected npm watchlist packages?')) return;
+    if (!(await requestConfirmation('Create draft Research Cases for the selected npm watchlist packages?', {
+      title: 'Create research cases',
+      context: 'Selected watchlist leads will become draft cases for human review. No publication or disclosure will occur.',
+      confirmLabel: 'Create drafts'
+    }))) return;
     const result = await runResearchWatchlistAction('create', { packages, select_all: selectAll }, event.currentTarget);
     if (result) {
       state.researchCases.watchlist.result = result;
@@ -6898,7 +7611,10 @@ function bindEvents() {
   });
 }
 
+window.addEventListener('popstate', () => setPage(currentPageFromLocation(), { skipHistory: true }));
+
 window.addEventListener('DOMContentLoaded', () => {
+  setPage(currentPageFromLocation(), { skipHistory: true });
   bindEvents();
   startTopStripClock();
   initializeDashboardAuth();

@@ -634,6 +634,13 @@ function testCampaignResearchUiIsPresent() {
   assert.match(html, /triage-filter-drawer/);
   assert.match(app, /Campaign API/);
   assert.match(app, /Run Campaign Research/);
+  assert.match(app, /Suggest Research Case/);
+  assert.match(app, /Create draft case/);
+  assert.match(app, /Link existing case/);
+  assert.match(app, /Dismiss recommendation/);
+  assert.match(app, /research-recommendation/);
+  assert.match(app, /create_draft_case/);
+  assert.match(app, /does not publish, disclose, close, or change the original finding/);
   assert.match(app, /Import Campaign JSON/);
   assert.match(app, /Persist Findings/);
   assert.match(app, /Create Campaign Blog Draft/);
@@ -663,7 +670,7 @@ function testOkComputerSkinIsPresent() {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
   const audit = readFileSync(new URL("../docs/okcomputer-reference-audit.md", import.meta.url), "utf8");
-  assert.match(html, /class="okcomputer-skin"/);
+  assert.match(html, /class="okcomputer-skin(?: professional-ui)?"/);
   assert.match(html, /<span class="nav-icon" aria-hidden="true"><svg/);
   assert.match(css, /OKComputer_Sec reference skin/);
   assert.match(css, /--void-black: #050507/);
@@ -677,7 +684,7 @@ function testOperatorGuideUiIsPresent() {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
-  assert.match(html, /data-page="operator-guide"/);
+  assert.match(html, /data-route="help"/);
   assert.match(html, /id="page-operator-guide"/);
   assert.match(html, /Operator Guide/);
   assert.match(html, /Automated guide steps/);
@@ -703,7 +710,7 @@ function testOperatorGuideUiIsPresent() {
   assert.match(html, /Autonomous Discovery is a lead generator/);
   assert.match(html, /Discovery write actions are intentionally not shown/);
   assert.match(app, /"operator-guide"/);
-  assert.match(app, /Dashboard operator guide/);
+  assert.match(app, /Help · operator guidance/);
   assert.match(app, /runDailyGuideRefresh/);
   assert.match(app, /runTriageOpsEvidenceBundle/);
   assert.match(app, /runGuideDiscoveryReview/);

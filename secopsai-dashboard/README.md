@@ -72,6 +72,32 @@ It now also reads native local SecOpsAI state through the helper server:
 - guarded native `triage close`
 - Triage Ops SCM alert investigation, advisory checks, local usage checks, mitigation, and blog draft handoff
 
+## Console information architecture
+
+The operator experience is organized around the work a security operator needs
+to complete, rather than around the names of internal services:
+
+- **Overview** — priorities, changes, health, and next actions
+- **Findings** — the canonical security issue queue, including Supply Chain views
+- **Assets** — network inventory, changes, sensors, scans, schedules, and Wi-Fi
+- **Work** — tasks, approvals, investigations, and execution runs
+- **Research** — leads, durable cases, evidence, disclosure, and sandbox jobs
+- **Publications** — news intake, drafts, editorial review, and delivery
+- **System** — health, integrations, credentials, and audit context
+
+Supply Chain Triage, Native Triage, Edge, Blog Ops, and Guide remain available
+through contextual routes and help, but are no longer presented as competing
+top-level products. The browser URL is now a durable route such as
+`#findings`, `#assets`, `#research/cases`, or `#publications`, so a review can be
+shared and restored with browser back/forward navigation.
+
+The redesigned shell is implemented in the existing Cloudflare Pages-compatible
+frontend as a staged migration. Existing helper, Supabase, Edge, Core, research,
+and Blog Ops contracts remain unchanged while individual screens move to shared
+navigation, command search, contextual help, explicit degraded states, and
+common feedback components. See [`docs/dashboard-ia.md`](docs/dashboard-ia.md)
+for the migration boundaries and acceptance rules.
+
 ## Pages
 
 ### Overview

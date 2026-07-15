@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SecOpsAI Triage Dashboard</title>
+  <title>SecOpsAI Console</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/dist/umd/supabase.js" integrity="sha384-yifgV8iFWyp5cgu+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP/NlXVJT3vO" crossorigin="anonymous"></script>
-  <link rel="stylesheet" href="./styles.css?v=20260713-unified-findings" />
+  <link rel="stylesheet" href="./styles.css?v=20260715-professional-console" />
 </head>
-<body class="okcomputer-skin">
+<body class="okcomputer-skin professional-ui">
   <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
     <div class="auth-panel">
       <div class="auth-brand" aria-hidden="true">
@@ -21,7 +21,7 @@
         </svg>
       </div>
       <div class="auth-heading">
-        <div class="brand-overline">SECOPSAI MISSION CONTROL</div>
+        <div class="brand-overline">SECOPSAI CONSOLE</div>
         <h1 id="auth-title">Operator sign in</h1>
         <p id="auth-summary">Authenticate before accessing findings, assets, research cases, or response workflows.</p>
       </div>
@@ -63,9 +63,9 @@
           </svg>
         </div>
         <div class="brand-copy">
-          <div class="brand-overline">LIVE TRIAGE PLANE</div>
+          <div class="brand-overline">SECOPSAI CONSOLE</div>
           <h1>SecOpsAI</h1>
-          <p>Triage Dashboard</p>
+          <p>Security operations</p>
         </div>
         <button class="mobile-menu-btn" id="mobile-menu-btn" type="button" aria-expanded="false" aria-controls="dashboard-nav">
           <span></span>
@@ -75,42 +75,39 @@
         </button>
       </div>
 
-      <nav class="nav-list" id="dashboard-nav">
-        <button class="nav-btn active" data-page="mission-control">
+      <nav class="nav-list" id="dashboard-nav" aria-label="Primary navigation">
+        <div class="nav-group-label">Operations</div>
+        <button class="nav-btn active" data-page="mission-control" data-route="overview">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Z"></path><path d="M14 20h6V4h-6v16Z"></path><path d="M4 20h6v-3H4v3Z"></path></svg></span>
-          <span class="nav-copy"><span class="title">Overview</span><span class="desc">Runs, blockers, review queue</span></span>
+          <span class="nav-copy"><span class="title">Overview</span><span class="desc">What needs attention now</span></span>
         </button>
-        <button class="nav-btn" data-page="tasks">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="m4 6 1 1 2-2"></path><path d="m4 12 1 1 2-2"></path><path d="m4 18 1 1 2-2"></path></svg></span>
-          <span class="nav-copy"><span class="title">Tasks</span><span class="desc">Work queue, ownership, run visibility</span></span>
-        </button>
-        <button class="nav-btn" data-page="findings">
+        <button class="nav-btn" data-page="findings" data-route="findings">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v3"></path><path d="M12 18v3"></path><path d="M3 12h3"></path><path d="M18 12h3"></path><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg></span>
-          <span class="nav-copy"><span class="title">Findings</span><span class="desc">Detection backlog, triage, task linkage</span></span>
+          <span class="nav-copy"><span class="title">Findings</span><span class="desc">Security issues and triage</span></span>
         </button>
-        <button class="nav-btn" data-page="edge">
+        <button class="nav-btn" data-page="edge" data-route="assets">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M8 8h8"></path><path d="M8 12h8"></path><path d="M8 16h5"></path><circle cx="17" cy="16" r="1"></circle></svg></span>
-          <span class="nav-copy"><span class="title">Edge</span><span class="desc">Network assets, sensors, changes</span></span>
+          <span class="nav-copy"><span class="title">Assets</span><span class="desc">Inventory, sensors, and changes</span></span>
         </button>
-        <button class="nav-btn" data-page="integrations">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4Z"></path><path d="M9 12h6"></path><path d="M12 9v6"></path></svg></span>
-          <span class="nav-copy"><span class="title">Native Triage</span><span class="desc">Pending actions, orchestrator history, helper health</span></span>
+        <button class="nav-btn" data-page="tasks" data-route="work">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="m4 6 1 1 2-2"></path><path d="m4 12 1 1 2-2"></path><path d="m4 18 1 1 2-2"></path></svg></span>
+          <span class="nav-copy"><span class="title">Work</span><span class="desc">Tasks, approvals, and runs</span></span>
         </button>
-        <button class="nav-btn" data-page="triage-ops">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M7 7v10a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7"></path><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path><path d="M10 12h4"></path><path d="M12 10v4"></path></svg></span>
-          <span class="nav-copy"><span class="title">Supply Chain Triage</span><span class="desc">SCM alerts, verdicts, response</span></span>
-        </button>
-        <button class="nav-btn" data-page="research-cases">
+
+        <div class="nav-group-label">Research</div>
+        <button class="nav-btn" data-page="research-cases" data-route="research/cases">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6"></path><path d="M10 9h4"></path><path d="M8 3v5l-4 9a3 3 0 0 0 2.7 4h10.6a3 3 0 0 0 2.7-4l-4-9V3"></path><path d="M7 15h10"></path></svg></span>
-          <span class="nav-copy"><span class="title">Research</span><span class="desc">Cases, evidence, IOCs, disclosure</span></span>
+          <span class="nav-copy"><span class="title">Research</span><span class="desc">Cases, evidence, and disclosure</span></span>
         </button>
-        <button class="nav-btn" data-page="blog-ops">
+        <button class="nav-btn" data-page="blog-ops" data-route="publications">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"></path><path d="M8 8h8"></path><path d="M8 12h8"></path><path d="M8 16h5"></path></svg></span>
-          <span class="nav-copy"><span class="title">Blog Ops</span><span class="desc">News drafts, approvals, publishing</span></span>
+          <span class="nav-copy"><span class="title">Publications</span><span class="desc">Newsroom and research output</span></span>
         </button>
-        <button class="nav-btn" data-page="operator-guide">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg></span>
-          <span class="nav-copy"><span class="title">Guide</span><span class="desc">Section walkthroughs, click paths, safety</span></span>
+
+        <div class="nav-group-label">Administration</div>
+        <button class="nav-btn" data-page="integrations" data-route="system">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4Z"></path><path d="M9 12h6"></path><path d="M12 9v6"></path></svg></span>
+          <span class="nav-copy"><span class="title">System</span><span class="desc">Health, access, and integrations</span></span>
         </button>
       </nav>
 
@@ -122,15 +119,23 @@
 
     <main class="main">
       <div class="top-strip">
-        <div class="top-strip-live">
-          <span class="dot"></span>
-          <span>LIVE</span>
+        <div class="topbar-primary">
+          <div class="workspace-context">
+            <span class="top-strip-live"><span class="dot"></span><span>Workspace</span></span>
+            <button class="workspace-switcher" id="workspace-switcher" type="button" title="Workspace selection is single-tenant in this pilot">SecOpsAI pilot <span aria-hidden="true">⌄</span></button>
+          </div>
+          <div class="topbar-actions">
+            <button class="topbar-action" id="top-search-btn" type="button"><span aria-hidden="true">⌕</span> Search <kbd>⌘K</kbd></button>
+            <button class="topbar-action" id="top-health-btn" type="button"><span class="health-dot" aria-hidden="true"></span> Health</button>
+            <button class="topbar-action" id="top-help-btn" type="button">Help</button>
+            <span class="operator-identity" id="operator-identity" hidden></span>
+            <button class="top-strip-action" id="auth-signout-btn" type="button" hidden>Sign out</button>
+          </div>
         </div>
-        <div class="top-strip-meta">
-          <span id="top-strip-context">Mission Control overview</span>
+        <div class="topbar-secondary">
+          <span id="top-strip-context">Overview</span>
+          <div class="context-nav" id="context-nav" aria-label="Section navigation"></div>
           <span id="top-strip-time">--:--:--</span>
-          <span class="operator-identity" id="operator-identity" hidden></span>
-          <button class="top-strip-action" id="auth-signout-btn" type="button" hidden>Sign out</button>
         </div>
       </div>
 
@@ -142,6 +147,7 @@
           </div>
           <div class="status-pill" id="refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh data</div>
         </div>
+        <div class="operations-cockpit" id="mission-attention"></div>
         <div class="grid cols-5" id="mission-stats"></div>
         <div class="grid cols-3" style="margin-top:18px;" id="mission-overview"></div>
         <div class="grid cols-2" style="margin-top:18px;">
@@ -159,10 +165,16 @@
       <section class="page" id="page-tasks">
         <div class="page-header">
           <div>
-            <h2>Tasks</h2>
-            <p>Kanban view over work items with filtering, modal CRUD, drag-drop status updates, and orchestrator audit logging.</p>
+            <h2>Work</h2>
+            <p>Own remediation, approvals, investigations, and execution runs in one operational queue.</p>
           </div>
-          <div class="status-pill" id="new-task-btn" style="cursor:pointer;"><span class="dot"></span> New task</div>
+          <div class="page-actions">
+            <div class="view-switcher" role="group" aria-label="Work view">
+              <button class="view-switch-btn active" id="work-table-view-btn" type="button">Table</button>
+              <button class="view-switch-btn" id="work-board-view-btn" type="button">Board</button>
+            </div>
+            <button class="primary-btn" id="new-task-btn" type="button">New task</button>
+          </div>
         </div>
         <div class="small" style="margin-bottom:12px;">Task changes create dashboard events and orchestrator audit runs. The dashboard manages state and visibility; SecOpsAI/OpenClaw runtimes handle actual execution.</div>
         <div class="grid cols-4" style="margin-bottom:18px;">
@@ -177,7 +189,8 @@
             <label class="checkbox-row" style="margin-top:10px;"><input id="task-filter-security" type="checkbox" /> <span>Security review only</span></label>
           </div>
         </div>
-        <div class="kanban" id="task-board"></div>
+        <div class="work-table" id="work-table"></div>
+        <div class="kanban hidden" id="task-board"></div>
         <div class="small" style="margin-top:14px;">Tip: drag task cards between columns to update status instantly. Use this dashboard to manage state; let OpenClaw-native orchestrators handle actual conversations and dispatch.</div>
       </section>
 
@@ -188,6 +201,13 @@
             <p>One triage queue for canonical SecOpsAI Core findings and dashboard operational records, with task and run correlation.</p>
           </div>
           <div class="status-pill" id="new-finding-task-btn" style="cursor:pointer;"><span class="dot"></span> New investigation task</div>
+        </div>
+        <div class="page-toolbar" aria-label="Finding filters">
+          <label class="toolbar-search"><span class="sr-only">Search findings</span><input id="finding-search" type="search" placeholder="Search title, source, asset, or ID" /></label>
+          <label><span class="sr-only">Finding severity</span><select id="finding-filter-severity"><option value="">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option></select></label>
+          <label><span class="sr-only">Finding status</span><select id="finding-filter-status"><option value="">All statuses</option><option value="open">Open</option><option value="in_review">In review</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+          <label><span class="sr-only">Finding source</span><select id="finding-filter-source"><option value="">All sources</option><option value="secopsai_edge">SecOpsAI Edge</option><option value="secopsai_core">SecOpsAI Core</option><option value="ai_dependency_guard">AI Dependency Guard</option></select></label>
+          <button class="secondary-btn" id="finding-clear-filters-btn" type="button">Clear filters</button>
         </div>
         <div class="grid cols-5" id="finding-summary"></div>
         <div class="grid cols-2" style="margin-top:18px;">
@@ -205,8 +225,8 @@
       <section class="page" id="page-edge">
         <div class="page-header">
           <div>
-            <h2>SecOpsAI Edge</h2>
-            <p>Core-canonical network assets and findings with live sensor, schedule, and scan-job context.</p>
+            <h2>Assets</h2>
+            <p>Understand what is connected, what changed, and whether each sensor and service is healthy.</p>
           </div>
           <div class="page-actions">
             <a class="secondary-btn" id="edge-admin-link" href="#" target="_blank" rel="noopener" hidden>Open sensor admin</a>
@@ -217,25 +237,25 @@
         <div class="grid cols-5" id="edge-stats" style="margin-top:18px;"></div>
         <div class="grid cols-2" style="margin-top:18px;">
           <div class="card">
-            <h3>Sensors & sites</h3>
+            <h3>Sensors</h3>
             <div class="edge-table" id="edge-sensors"></div>
           </div>
           <div class="card">
-            <h3>Schedules & active jobs</h3>
+            <h3>Scans & schedules</h3>
             <div class="edge-table" id="edge-schedules"></div>
           </div>
         </div>
         <div class="card" style="margin-top:18px;">
-          <h3>Network asset inventory</h3>
+          <h3>Inventory</h3>
           <div class="edge-table" id="edge-assets"></div>
         </div>
         <div class="grid cols-2" style="margin-top:18px;">
           <div class="card">
-            <h3>Edge findings in Core triage</h3>
+            <h3>Related findings</h3>
             <div class="edge-table" id="edge-findings"></div>
           </div>
           <div class="card">
-            <h3>Recent graph changes</h3>
+            <h3>Changes since last sync</h3>
             <div id="edge-changes"></div>
           </div>
         </div>
@@ -244,8 +264,8 @@
       <section class="page" id="page-integrations">
         <div class="page-header">
           <div>
-            <h2>Native Triage</h2>
-            <p>First-class view of local SecOpsAI queue state, orchestrator history, findings freshness, and helper/runtime health.</p>
+            <h2>System</h2>
+            <p>Review platform health, runtime integrations, access boundaries, and action history.</p>
           </div>
         </div>
         <div class="grid cols-4" id="integration-summary"></div>
@@ -286,8 +306,8 @@
       <section class="page" id="page-research-cases">
         <div class="page-header">
           <div>
-            <h2>Research Cases</h2>
-            <p>Durable independent investigations with structured evidence, indicators, disclosure gates, and review-only publication handoff. Use Supply Chain Triage for incoming alerts; use Research Cases for work you intend to publish or preserve.</p>
+            <h2>Research</h2>
+            <p>Turn credible leads into durable, evidence-led investigations with explicit disclosure and publication gates.</p>
           </div>
           <div class="research-page-actions">
             <button class="secondary-btn" id="research-cases-new-btn" type="button">New case</button>
@@ -359,8 +379,8 @@
       <section class="page" id="page-blog-ops">
         <div class="page-header">
           <div>
-            <h2>Blog Ops</h2>
-            <p>Protected control plane for SecOpsAI security-blog news ingestion, draft review, approval-gated publishing, feed rebuilds, and Cloudflare deploys.</p>
+            <h2>Publications</h2>
+            <p>Review source-backed news and original research, then approve, stage, and deploy public security content.</p>
           </div>
           <div class="status-pill" id="blog-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh Blog Ops</div>
         </div>
@@ -482,14 +502,14 @@
           <summary>
             <span>
               <strong>Campaign Research & Autonomous Discovery</strong>
-              <small>Advanced campaign intake, correlation, watchlists, and review-only blog draft handoff.</small>
+              <small>Advanced campaign intake, route explanations, research-case handoff, correlation, watchlists, and review-only blog draft handoff.</small>
             </span>
           </summary>
           <div id="triage-ops-campaign-research"></div>
         </details>
       </section>
 
-      <section class="page" id="page-operator-guide">
+      <section class="page" id="page-operator-guide" data-route="help">
         <div class="page-header">
           <div>
             <h2>Operator Guide</h2>
@@ -772,6 +792,52 @@
     </main>
   </div>
 
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="command-palette" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="command-palette-title" aria-hidden="true">
+    <div class="command-palette-card">
+      <div class="command-palette-head">
+        <div>
+          <span class="eyebrow">Quick navigation</span>
+          <h2 id="command-palette-title">Go to</h2>
+        </div>
+        <button class="icon-btn" id="command-palette-close" type="button" aria-label="Close command palette">✕</button>
+      </div>
+      <label class="command-search-label" for="command-palette-input"><span class="sr-only">Search dashboard destinations</span><input id="command-palette-input" type="search" placeholder="Search pages and workflows" autocomplete="off" /></label>
+      <div id="command-palette-list" class="command-palette-list"></div>
+      <div class="command-palette-foot"><span>Use ↑ ↓ to move</span><kbd>Enter</kbd><span>to open</span><kbd>Esc</kbd><span>to close</span></div>
+    </div>
+  </div>
+
+  <aside id="help-drawer" class="help-drawer" aria-labelledby="help-drawer-title" aria-hidden="true" hidden>
+    <div class="help-drawer-head">
+      <div><span class="eyebrow">Contextual help</span><h2 id="help-drawer-title">Using SecOpsAI</h2></div>
+      <button class="icon-btn" id="help-drawer-close" type="button" aria-label="Close help">✕</button>
+    </div>
+    <div class="help-drawer-body" id="help-drawer-body">
+      <p>Start with Overview to see what changed and what needs attention. Open a record to inspect evidence before taking a protected action.</p>
+      <div class="help-drawer-links"><a href="https://docs.secopsai.dev" target="_blank" rel="noopener">Open product docs</a><a href="https://blog.secopsai.dev" target="_blank" rel="noopener">Read security research</a></div>
+    </div>
+  </aside>
+
+  <div id="confirm-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message" aria-hidden="true">
+    <div class="modal-card confirm-dialog-card">
+      <div class="modal-head">
+        <div><span class="eyebrow" id="confirm-dialog-eyebrow">Action review</span><h3 id="confirm-dialog-title">Confirm action</h3></div>
+        <button id="confirm-dialog-close" class="icon-btn" type="button" aria-label="Close confirmation dialog">✕</button>
+      </div>
+      <p id="confirm-dialog-message" class="confirm-dialog-message"></p>
+      <div class="confirm-dialog-context" id="confirm-dialog-context">This action will be recorded in the activity history.</div>
+      <div class="modal-actions">
+        <div class="small">Review the impact before continuing.</div>
+        <div class="modal-actions-right">
+          <button id="confirm-dialog-cancel" class="secondary-btn" type="button">Cancel</button>
+          <button id="confirm-dialog-confirm" class="primary-btn" type="button">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="task-modal" class="modal hidden">
     <div class="modal-card">
       <div class="modal-head">
@@ -827,8 +893,8 @@
     </div>
   </div>
 
-  <script src="./config.js?v=20260713-unified-findings"></script>
-  <script src="./app.js?v=20260713-unified-findings"></script>
+  <script src="./config.js?v=20260715-professional-console"></script>
+  <script src="./app.js?v=20260715-professional-console"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

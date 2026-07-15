@@ -27,6 +27,10 @@ suggestions, and Blog Ops action semantics.
 | Use in Campaign Research | Discovery Inbox | Promote only candidates routed to Campaign Research with no blockers. |
 | Add to Watchlist | Discovery Inbox | Token-gated save of validated package/publisher/IOC/source watch entries. |
 | Run Campaign Research | Campaign Research | Read-only package verdicts, correlation, local usage, mitigation, and references. |
+| Suggest Research Case | Campaign Research | Read-only route evaluation that explains whether a durable draft case is appropriate. |
+| Create draft case | Research handoff | Protected action that creates only a `draft` case, seeds normalized subjects, and links the selected SCM finding when available. |
+| Link existing case | Research handoff | Protected action that links the selected SCM finding to a chosen existing case. |
+| Dismiss recommendation | Research handoff | Session-only UI dismissal; creates no case and changes no finding. |
 | Persist Findings | Campaign Research | Token-gated SOC finding persistence after review. |
 | Create Campaign Blog Draft | Campaign Research | Token-gated review-only draft creation. |
 | Publish approved to blog | Blog Ops | Stage approved drafts into blog posts and feeds; drafts stay Approved. |

@@ -83,6 +83,7 @@ CAMPAIGN_TRIAGE_OPS_ACTIONS = {
     'campaign-promote',
     'campaign-orchestrate',
     'campaign-watchlist',
+    'research-recommendation',
     'research-campaign',
     'campaign-persist-findings',
     'campaign-blog-draft',
@@ -1480,6 +1481,218 @@ def validate_campaign_payload(payload):
     return {key: value for key, value in normalized.items() if not _is_empty_campaign_value(value)}
 
 
+def _recommendation_package_rows(*sources):
+    """Return bounded, normalized package subjects for the read-only route evaluator."""
+    rows = []
+    seen = set()
+    for source in sources:
+        if not isinstance(source, list):
+            continue
+        for item in source[:50]:
+            if not isinstance(item, dict):
+                continue
+            ecosystem = _clean_string(item.get('ecosystem'), 80).lower()
+            package = _clean_string(item.get('package') or item.get('artifact') or item.get('id') or item.get('name'), 260)
+            version = _clean_string(item.get('version') or item.get('revision'), 160)
+            publisher = _clean_string(item.get('publisher') or item.get('maintainer'), 180)
+            if ecosystem not in ALLOWED_CAMPAIGN_ECOSYSTEMS or not package or not PACKAGE_RE.match(package):
+                continue
+            if re.match(r'^(?:https?://|www\.)', package, re.IGNORECASE):
+                continue
+            if re.search(r'\.(?:png|jpe?g|gif|webp|svg|html?|css|js)$', package, re.IGNORECASE):
+                continue
+            if len(package) > 90 and '/' not in package:
+                continue
+            key = (ecosystem, package.lower(), version.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            indicators = _clean_string_list(
+                item.get('behavioral_indicators') or item.get('behavior_notes') or item.get('matched_rules'),
+                limit=20,
+                item_limit=240,
+            )
+            rows.append(
+                {
+                    'ecosystem': ecosystem,
+                    'package': package,
+                    'version': version,
+                    'publisher': publisher,
+                    'behavioral_indicators': indicators,
+                }
+            )
+    return rows[:50]
+
+
+def _recommendation_ioc_values(*sources):
+    values = []
+    seen = set()
+    for source in sources:
+        if isinstance(source, dict):
+            source = [item for group in source.values() for item in (group if isinstance(group, list) else [group])]
+        if not isinstance(source, list):
+            continue
+        for value in source[:100]:
+            clean = _clean_string(value, 240)
+            if not clean or clean.lower() in seen:
+                continue
+            seen.add(clean.lower())
+            values.append(clean)
+    return values[:40]
+
+
+def build_research_case_recommendation(payload):
+    """Classify a lead without making a finding, disclosure, or publication decision."""
+    if not isinstance(payload, dict):
+        raise ValueError('Recommendation payload must be a JSON object')
+    campaign = payload.get('campaign') if isinstance(payload.get('campaign'), dict) else {}
+    candidate_campaign = payload.get('candidate_campaign') if isinstance(payload.get('candidate_campaign'), dict) else {}
+    orchestrator = payload.get('orchestrator') if isinstance(payload.get('orchestrator'), dict) else {}
+    campaign_result = payload.get('campaign_result') if isinstance(payload.get('campaign_result'), dict) else {}
+
+    manual_packages = campaign.get('packages') if isinstance(campaign.get('packages'), list) else []
+    candidate_packages = candidate_campaign.get('packages') if isinstance(candidate_campaign.get('packages'), list) else []
+    validated_packages = orchestrator.get('validated_packages') if isinstance(orchestrator.get('validated_packages'), list) else []
+    result_packages = campaign_result.get('packages') if isinstance(campaign_result.get('packages'), list) else []
+    packages = _recommendation_package_rows(manual_packages, candidate_packages, validated_packages, result_packages)
+
+    references = []
+    for source in (campaign.get('source_urls'), candidate_campaign.get('source_urls'), campaign_result.get('references')):
+        for url in _clean_string_list(source, limit=40, item_limit=500):
+            if SAFE_SOURCE_URL_RE.match(url) and url not in references:
+                references.append(url)
+    references = references[:40]
+
+    behavioral_indicators = _clean_string_list(campaign.get('behavioral_indicators'), limit=60, item_limit=240)
+    for row in packages:
+        for indicator in row.get('behavioral_indicators', []):
+            if indicator not in behavioral_indicators:
+                behavioral_indicators.append(indicator)
+    validated_iocs = _recommendation_ioc_values(
+        orchestrator.get('validated_iocs'),
+        campaign_result.get('validated_iocs'),
+    )
+
+    route = _clean_string(
+        orchestrator.get('recommended_route') or orchestrator.get('route') or payload.get('recommended_route'),
+        80,
+    ).lower()
+    route_blockers = _clean_string_list(orchestrator.get('route_blockers') or payload.get('route_blockers'), limit=20, item_limit=500)
+    if route in {'vulnerability_tracking', 'general_threat_intel', 'malware_tracking', 'news_review'}:
+        route_blockers.append(f'Lead is routed to {route.replace("_", " ")}; do not force it into package research.')
+
+    confidence_hint = _clean_string(
+        orchestrator.get('confidence') or campaign_result.get('confidence') or campaign.get('confidence'),
+        40,
+    ).lower()
+    score = 0
+    reasons = []
+    if packages:
+        score += 2
+        reasons.append(f'{len(packages)} normalized package subject(s) are available for a durable investigation.')
+    else:
+        reasons.append('No validated package or extension subject is available yet.')
+    if len(packages) >= 2:
+        score += 1
+        reasons.append('Multiple package subjects support campaign-level research.')
+    if references:
+        score += 1
+        reasons.append(f'{len(references)} public source reference(s) are available for provenance.')
+    if behavioral_indicators:
+        score += 1
+        reasons.append(f'{len(behavioral_indicators)} behavioral indicator(s) describe a researchable lead.')
+    if validated_iocs:
+        score += 1
+        reasons.append(f'{len(validated_iocs)} IOC value(s) were separated from source references.')
+    if route == 'campaign_research':
+        score += 2
+        reasons.append('The reviewed route is campaign research.')
+    if confidence_hint in {'high', 'confirmed'}:
+        score += 1
+        reasons.append(f'Upstream review confidence is {confidence_hint}.')
+
+    if route and route not in {'campaign_research'}:
+        disposition = 'keep_in_triage'
+        label = 'Keep in Triage Ops'
+    elif not packages:
+        disposition = 'keep_in_triage'
+        label = 'Keep in Triage Ops'
+    elif route_blockers:
+        disposition = 'needs_human_review'
+        label = 'Needs Human Review'
+    elif score >= 5:
+        disposition = 'create_draft_case'
+        label = 'Draft Research Case Recommended'
+    else:
+        disposition = 'needs_human_review'
+        label = 'Needs Human Review'
+
+    blockers = list(dict.fromkeys(route_blockers))
+    if packages and score < 5 and disposition == 'needs_human_review':
+        blockers.append('Evidence is not yet strong enough for an automatic draft recommendation; review the source and package evidence first.')
+    if not packages:
+        blockers.append('Add or validate a package subject before creating a research case.')
+    blockers = blockers[:10]
+
+    title = _clean_string(
+        campaign.get('title') or candidate_campaign.get('title') or campaign.get('campaign_id') or packages[0]['package'] if packages else 'Research lead',
+        240,
+    )
+    case_title = f'Research lead: {title}'[:240]
+    package_labels = ', '.join(f"{row['ecosystem']}:{row['package']}" for row in packages[:8])
+    summary_parts = [f'Lead surfaced by Triage Ops for {package_labels or "an unresolved supply-chain subject"}.']
+    if references:
+        summary_parts.append(f'Provenance includes {len(references)} public source reference(s).')
+    if behavioral_indicators:
+        summary_parts.append('Behavior indicators are recorded for analyst validation; this draft does not assert maliciousness.')
+    summary_parts.append('Created from a triage recommendation. Human review is required before evidence, disclosure, or publication decisions.')
+    subjects = [
+        {
+            'subject_type': 'package' if row['ecosystem'] != 'chrome-web-store' else 'extension',
+            'ecosystem': row['ecosystem'],
+            'name': row['package'],
+            'version': row['version'],
+            'publisher': row['publisher'],
+        }
+        for row in packages[:20]
+    ]
+    severity = _clean_string(campaign.get('severity') or 'medium', 20).lower()
+    if severity not in {'critical', 'high', 'medium', 'low', 'info'}:
+        severity = 'medium'
+    case_confidence = 'high' if confidence_hint in {'high', 'confirmed'} or score >= 7 else 'medium' if score >= 5 else 'low'
+    finding_id = _clean_string(payload.get('finding_id'), 128)
+    if finding_id and not FINDING_ID_RE.match(finding_id):
+        finding_id = ''
+        blockers.append('The supplied source finding identifier is invalid and will not be linked automatically.')
+
+    return {
+        'route': disposition,
+        'label': label,
+        'score': max(0, min(score, 100)),
+        'confidence': case_confidence,
+        'reasons': reasons[:12],
+        'blockers': blockers[:10],
+        'checks': {
+            'package_count': len(packages),
+            'reference_count': len(references),
+            'behavioral_indicator_count': len(behavioral_indicators),
+            'validated_ioc_count': len(validated_iocs),
+            'reviewed_route': route or 'manual_campaign',
+            'source_finding_id': finding_id or None,
+        },
+        'suggested_case': {
+            'title': case_title,
+            'summary': ' '.join(summary_parts)[:8000],
+            'case_type': 'supply_chain_campaign',
+            'severity': severity,
+            'confidence': case_confidence,
+            'owner': 'SecOpsAI Research',
+            'subjects': subjects,
+            'source_urls': references,
+        },
+    }
+
+
 def validate_campaign_search_root(value):
     raw = _clean_string(value, 600)
     if not raw:
@@ -2826,6 +3039,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                             'action': action,
                             'result': parsed_result,
                             'cli': compact_cli_result(result),
+                        },
+                    )
+
+                if action == 'research-recommendation':
+                    recommendation = build_research_case_recommendation(payload)
+                    return json_response(
+                        self,
+                        200,
+                        {
+                            'ok': True,
+                            'action': action,
+                            'recommendation': recommendation,
                         },
                     )
 

@@ -51,3 +51,57 @@ def test_helper_rejects_untrusted_case_arguments():
     except ValueError:
         return
     raise AssertionError("unsafe package input was accepted")
+
+
+def test_research_case_recommendation_is_conservative_and_explains_create_route():
+    recommendation = dashboard_server.build_research_case_recommendation(
+        {
+            "finding_id": "SCM-CASE123",
+            "campaign": {
+                "campaign_id": "payment-skimmer-campaign",
+                "title": "Payment package impersonation",
+                "source_urls": ["https://research.example/report"],
+                "behavioral_indicators": ["credential theft"],
+                "packages": [
+                    {"ecosystem": "npm", "package": "payments-helper", "version": "1.2.3"},
+                    {"ecosystem": "npm", "package": "payments-helper-lite", "version": "1.2.3"},
+                ],
+            },
+            "orchestrator": {
+                "recommended_route": "campaign_research",
+                "confidence": "high",
+                "validated_iocs": {"domains": ["checkout-telemetry.example"]},
+            },
+        }
+    )
+
+    assert recommendation["route"] == "create_draft_case"
+    assert recommendation["suggested_case"]["case_type"] == "supply_chain_campaign"
+    assert len(recommendation["suggested_case"]["subjects"]) == 2
+    assert recommendation["checks"]["source_finding_id"] == "SCM-CASE123"
+    assert any("normalized package subject" in reason for reason in recommendation["reasons"])
+
+
+def test_research_case_recommendation_keeps_non_package_route_in_triage():
+    recommendation = dashboard_server.build_research_case_recommendation(
+        {
+            "campaign": {
+                "title": "CVE tracking lead",
+                "packages": [{"ecosystem": "npm", "package": "example-package", "version": "1.0.0"}],
+            },
+            "orchestrator": {"recommended_route": "vulnerability_tracking"},
+        }
+    )
+
+    assert recommendation["route"] == "keep_in_triage"
+    assert any("vulnerability tracking" in blocker for blocker in recommendation["blockers"])
+
+
+def test_research_case_recommendation_does_not_promote_empty_lead():
+    recommendation = dashboard_server.build_research_case_recommendation(
+        {"campaign": {"title": "Unresolved lead", "packages": []}}
+    )
+
+    assert recommendation["route"] == "keep_in_triage"
+    assert recommendation["suggested_case"]["subjects"] == []
+    assert any("Add or validate a package" in blocker for blocker in recommendation["blockers"])

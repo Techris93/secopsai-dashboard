@@ -53,7 +53,7 @@ def main():
     values = {
         '__SUPABASE_URL__': js_escape(merged.get('SUPABASE_URL', '')),
         '__SUPABASE_ANON_KEY__': js_escape(merged.get('SUPABASE_ANON_KEY', '')),
-        '__APP_NAME__': js_escape(merged.get('APP_NAME', 'SecOpsAI Triage Dashboard')),
+        '__APP_NAME__': js_escape(merged.get('APP_NAME', 'SecOpsAI Console')),
         '__HOSTED_AI_ENABLED__': js_bool(merged.get('HOSTED_AI_ENABLED'), default=False),
         '__HOSTED_AI_MODEL__': js_escape(merged.get('HOSTED_AI_MODEL', 'gpt-5.4-mini')),
         '__HOSTED_AI_MAX_COST_USD__': js_number(merged.get('HOSTED_AI_MAX_COST_USD'), default=3.0),
