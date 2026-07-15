@@ -6055,9 +6055,112 @@ function bindResearchCaseDetailActions(researchCase) {
     if (!confirm(`Create a review-only blog draft for ${researchCase.case_id}? This does not publish it.`)) return;
     runResearchCaseAction('draft-blog', { case_id: researchCase.case_id }, event.currentTarget);
   });
+  el('research-intake-preview-btn')?.addEventListener('click', event => runResearchCaseAction('intake-preview', {
+    case_id: researchCase.case_id,
+    ecosystem: el('research-intake-ecosystem')?.value,
+    package: el('research-intake-package')?.value,
+    version: el('research-intake-version')?.value
+  }, event.currentTarget));
+  el('research-intake-run-btn')?.addEventListener('click', event => runResearchCaseAction('intake-run', {
+    case_id: researchCase.case_id,
+    ecosystem: el('research-intake-ecosystem')?.value,
+    package: el('research-intake-package')?.value,
+    version: el('research-intake-version')?.value,
+    attach: el('research-intake-attach')?.value === 'true',
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-matrix-btn')?.addEventListener('click', event => runResearchCaseAction('evidence-matrix', { case_id: researchCase.case_id, actor: 'dashboard-operator' }, event.currentTarget));
+  el('research-brief-btn')?.addEventListener('click', event => runResearchCaseAction('analyst-brief', { case_id: researchCase.case_id, actor: 'dashboard-operator' }, event.currentTarget));
+  el('research-publication-check-btn')?.addEventListener('click', event => runResearchCaseAction('publication-check', { case_id: researchCase.case_id, actor: 'dashboard-operator' }, event.currentTarget));
+  el('research-verdict-btn')?.addEventListener('click', event => runResearchCaseAction('verdict', {
+    case_id: researchCase.case_id,
+    verdict: el('research-verdict-value')?.value,
+    confidence: el('research-verdict-confidence')?.value,
+    rationale: el('research-verdict-rationale')?.value,
+    evidence_ids: (el('research-verdict-evidence')?.value || '').split(',').map(item => item.trim()).filter(Boolean),
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-publication-approve-btn')?.addEventListener('click', event => {
+    const review = (researchCase.publication_reviews || [])[0];
+    if (!review || !confirm('Record final human approval for this publication safety review?')) return;
+    runResearchCaseAction('publication-approve', { case_id: researchCase.case_id, review_id: review.review_id, waivers: [], actor: 'dashboard-publisher' }, event.currentTarget);
+  });
+  el('research-disclosure-btn')?.addEventListener('click', event => runResearchCaseAction('prepare-disclosure', {
+    case_id: researchCase.case_id,
+    recipient: el('research-disclosure-recipient')?.value,
+    subject: el('research-disclosure-subject')?.value,
+    body: el('research-disclosure-body')?.value,
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  el('research-sandbox-btn')?.addEventListener('click', event => runResearchCaseAction('sandbox-request', {
+    case_id: researchCase.case_id,
+    artifact_sha256: el('research-sandbox-sha256')?.value,
+    justification: el('research-sandbox-justification')?.value,
+    behaviors: ['network behavior', 'filesystem behavior', 'process behavior'],
+    provider: 'manual-result-import',
+    actor: 'dashboard-operator'
+  }, event.currentTarget));
+  document.querySelectorAll('#research-case-detail .research-intake-attach-btn').forEach(button => button.addEventListener('click', event => runResearchCaseAction('intake-attach', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget)));
+  document.querySelectorAll('#research-case-detail .research-job-retry-btn').forEach(button => button.addEventListener('click', event => runResearchCaseAction('job-retry', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget)));
+  document.querySelectorAll('#research-case-detail .research-job-cancel-btn').forEach(button => button.addEventListener('click', event => {
+    if (!confirm('Cancel this research job?')) return;
+    runResearchCaseAction('job-cancel', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget);
+  }));
+  document.querySelectorAll('#research-case-detail .research-disclosure-status-btn').forEach(button => button.addEventListener('click', event => {
+    const status = button.dataset.disclosureStatus;
+    if (status === 'sent' && !confirm('Record that this disclosure was sent externally?')) return;
+    runResearchCaseAction('disclosure-status', { case_id: researchCase.case_id, disclosure_id: button.dataset.disclosureId, status, actor: 'dashboard-operator' }, event.currentTarget);
+  }));
+  document.querySelectorAll('#research-case-detail .research-sandbox-status-btn').forEach(button => button.addEventListener('click', event => {
+    if (!confirm('Approve this sandbox request? Execution remains unavailable until an isolated provider is configured.')) return;
+    runResearchCaseAction('sandbox-status', { case_id: researchCase.case_id, request_id: button.dataset.requestId, status: button.dataset.sandboxStatus, actor: 'dashboard-operator' }, event.currentTarget);
+  }));
   document.querySelectorAll('#research-case-detail .research-retract-btn').forEach(button => button.addEventListener('click', () => {
     openResearchRetractModal(researchCase, button.dataset.itemType, button.dataset.itemId);
   }));
+}
+
+function renderResearchAutomationPanel(researchCase) {
+  const subjects = researchCase.subjects || [];
+  const packageSubject = subjects.find(item => item.subject_type === 'package' && item.status === 'active') || subjects[0] || {};
+  const artifact = (researchCase.evidence || []).find(item => item.evidence_type === 'package_artifact' && item.status === 'active');
+  const jobs = (researchCase.jobs || []).slice(0, 12);
+  const reviews = researchCase.publication_reviews || [];
+  const disclosures = researchCase.disclosures || [];
+  const sandboxes = researchCase.sandbox_requests || [];
+  const ecosystems = ['npm', 'pypi', 'nuget', 'maven', 'rubygems', 'packagist', 'go', 'open-vsx'];
+  return researchDetailSection('Research automation', `
+    <p class="small">Safe intake fetches official metadata and artifacts into quarantine, hashes them, and performs bounded static inspection. It never installs or executes the package.</p>
+    <div class="research-form-grid">
+      <label><span>Ecosystem</span><select id="research-intake-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label>
+      <label><span>Package</span><input id="research-intake-package" value="${escapeHtml(packageSubject.name || '')}" placeholder="package or group:artifact" /></label>
+      <label><span>Version</span><input id="research-intake-version" value="${escapeHtml(packageSubject.version || '')}" placeholder="latest if empty" /></label>
+      <label><span>Attach after collection</span><select id="research-intake-attach"><option value="false">Review first</option><option value="true">Attach immediately</option></select></label>
+    </div>
+    <div class="research-form-actions">
+      <button class="secondary-btn" id="research-intake-preview-btn" type="button">Collect Metadata Preview</button>
+      <button class="primary-btn" id="research-intake-run-btn" type="button">Run Safe Package Intake</button>
+      <button class="secondary-btn" id="research-matrix-btn" type="button">Generate Evidence Matrix</button>
+      <button class="secondary-btn" id="research-brief-btn" type="button">Generate Analyst Brief</button>
+      <button class="secondary-btn" id="research-publication-check-btn" type="button">Run Publication Safety Check</button>
+    </div>
+    <div class="research-form-grid">
+      <label><span>Analyst verdict</span><select id="research-verdict-value"><option value="inconclusive">Inconclusive</option><option value="credible">Credible</option><option value="likely">Likely</option><option value="not_substantiated">Not substantiated</option><option value="benign">Benign</option><option value="retracted">Retracted</option></select></label>
+      <label><span>Confidence</span><input id="research-verdict-confidence" type="number" min="0" max="100" value="50" /></label>
+      <label class="research-span-2"><span>Rationale</span><textarea id="research-verdict-rationale" rows="2" placeholder="Explain the evidence and limitations."></textarea></label>
+      <label class="research-span-2"><span>Evidence IDs</span><input id="research-verdict-evidence" placeholder="EVD-..., EVD-..." /></label>
+    </div>
+    <div class="research-form-actions"><button class="secondary-btn" id="research-verdict-btn" type="button">Record Human Verdict</button><button class="secondary-btn" id="research-publication-approve-btn" type="button" ${reviews[0]?.status === 'needs_approval' ? '' : 'disabled'}>Approve Publication Review</button></div>
+    <details class="research-action-drawer"><summary>Prepare responsible disclosure</summary><div class="research-form-grid"><label><span>Recipient</span><input id="research-disclosure-recipient" placeholder="maintainer or registry contact" /></label><label><span>Subject</span><input id="research-disclosure-subject" /></label><label class="research-span-2"><span>Body</span><textarea id="research-disclosure-body" rows="4" placeholder="Leave empty for the safe template."></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-disclosure-btn" type="button">Prepare Disclosure</button></div></details>
+    <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">This creates an approval record only. Execution is unavailable until a dedicated isolated provider is configured.</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="2"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
+    <div class="research-automation-status">
+      <strong>Jobs and approvals</strong>
+      ${jobs.length ? jobs.map(job => `<div class="feed-item"><code>${escapeHtml(job.job_id)}</code> · ${escapeHtml(statusLabel(job.status))} · ${escapeHtml(job.action)}${job.status === 'awaiting_review' ? ` <button class="mini-btn research-intake-attach-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Attach Verified Evidence</button>` : ''}${['failed','expired','canceled'].includes(job.status) ? ` <button class="mini-btn research-job-retry-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Retry</button>` : ''}${['queued','running','awaiting_review'].includes(job.status) ? ` <button class="mini-btn research-job-cancel-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : ''}</div>`).join('') : '<div class="small">No automated research jobs yet.</div>'}
+      ${reviews.length ? `<div class="small">Latest publication review: <strong>${escapeHtml(statusLabel(reviews[0].status))}</strong>${(reviews[0].blockers || []).length ? ` · ${(reviews[0].blockers || []).length} blocker(s)` : ''}</div>` : ''}
+      ${disclosures.length ? disclosures.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.disclosure_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)} <button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="approved" type="button">Approve</button><button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="sent" type="button">Record Sent</button></div>`).join('') : ''}
+      ${sandboxes.length ? sandboxes.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-status="approved" type="button">Approve</button>` : ''}</div>`).join('') : ''}
+    </div>
+  `);
 }
 
 function renderResearchCaseDetail(researchCase) {
@@ -6087,6 +6190,7 @@ function renderResearchCaseDetail(researchCase) {
       <strong>${readiness.ready ? 'Publication ready' : `${(readiness.blockers || []).length} publication blocker(s)`}</strong>
       ${renderBulletList(readiness.ready ? (readiness.warnings || []) : (readiness.blockers || []), readiness.ready ? 'No readiness warnings.' : 'Run the readiness workflow before publication.')}
     </div>
+    ${renderResearchAutomationPanel(researchCase)}
     ${researchDetailSection('Case workflow', `
       <div class="research-form-grid">
         <label><span>Status</span><select id="research-detail-status">${['draft','investigating','validation','disclosure_pending','ready_to_publish','published','closed'].map(value => researchOption(value, researchCase.status)).join('')}</select></label>

@@ -6004,6 +6004,25 @@ label span,
   margin: 0 0 10px;
 }
 
+.research-automation-status {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--signal-line-soft, rgba(74, 78, 85, 0.45));
+  border-radius: 8px;
+  background: rgba(3, 5, 8, 0.32);
+}
+
+.research-automation-status .feed-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--signal-line-soft, rgba(74, 78, 85, 0.3));
+}
+
 .research-table table {
   min-width: 640px;
 }
