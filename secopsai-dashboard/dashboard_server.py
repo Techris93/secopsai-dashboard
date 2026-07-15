@@ -55,6 +55,7 @@ RESEARCH_CASE_ACTIONS = {
     'add-subject',
     'add-evidence',
     'add-ioc',
+    'add-rule',
     'link-finding',
     'note',
     'retract',
@@ -724,6 +725,13 @@ def build_research_case_args(action, payload):
             ('--last-seen', 'last_seen', 64),
             ('--actor', 'actor', 160),
         ],
+        'add-rule': [
+            ('--rule-type', 'rule_type', 40),
+            ('--name', 'name', 240),
+            ('--purpose', 'purpose', 2000),
+            ('--source-evidence-id', 'source_evidence_id', 32),
+            ('--actor', 'actor', 160),
+        ],
         'link-finding': [
             (None, 'finding_id', 128),
             ('--relationship', 'relationship', 40),
@@ -746,6 +754,11 @@ def build_research_case_args(action, payload):
                 args.append(value)
             else:
                 args.extend([flag, value])
+    if action == 'add-rule':
+        content = _clean_multiline_string(payload.get('content'), 512 * 1024)
+        if not content:
+            raise ValueError('content is required')
+        args.extend(['--content', content])
     if action == 'add-ioc':
         for tag in (payload.get('tags') if isinstance(payload.get('tags'), list) else []):
             value = _clean_string(tag, 80)
@@ -755,6 +768,7 @@ def build_research_case_args(action, payload):
         'add-subject': ['--subject-type', '--name'],
         'add-evidence': ['--evidence-type', '--title'],
         'add-ioc': ['--ioc-type', '--value'],
+        'add-rule': ['--rule-type', '--name'],
         'link-finding': [None],
         'note': ['--note'],
         'retract': ['--item-type', '--item-id', '--reason'],
@@ -1146,6 +1160,15 @@ def compact_cli_result(result, limit=12000):
 
 def _clean_string(value, limit=500):
     return ' '.join(str(value or '').split())[:limit]
+
+
+def _clean_multiline_string(value, limit=500):
+    text = str(value or '').strip()
+    if '\x00' in text:
+        raise ValueError('content contains invalid control characters')
+    if len(text) > limit:
+        raise ValueError(f'content exceeds {limit} characters')
+    return text
 
 
 def _clean_string_list(values, limit=80, item_limit=500):

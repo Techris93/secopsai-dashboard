@@ -526,6 +526,36 @@ class TriageOpsEvidenceTests(unittest.TestCase):
                 {'case_id': 'RSC-ABCDEF123456', 'item_type': 'ioc', 'item_id': 'IOC-ABCDEF1234567890'},
             )
 
+    def test_research_case_rule_builder_preserves_multiline_content(self):
+        content = "title: Suspicious package\nlogsource:\n  product: app\ndetection:\n  selection:\n    EventID: 1\n  condition: selection"
+        args = server.build_research_case_args(
+            'add-rule',
+            {
+                'case_id': 'RSC-ABCDEF123456',
+                'rule_type': 'sigma',
+                'name': 'suspicious-package',
+                'purpose': 'Detect package execution.',
+                'content': content,
+                'actor': 'dashboard-operator',
+            },
+        )
+
+        self.assertEqual(args[:4], ['research', 'case', 'add-rule', 'RSC-ABCDEF123456'])
+        self.assertIn('--content', args)
+        self.assertEqual(args[args.index('--content') + 1], content)
+        self.assertNotIn('  product: app detection:', args)
+
+    def test_research_case_rule_builder_requires_content(self):
+        with self.assertRaisesRegex(ValueError, 'content is required'):
+            server.build_research_case_args(
+                'add-rule',
+                {
+                    'case_id': 'RSC-ABCDEF123456',
+                    'rule_type': 'sigma',
+                    'name': 'missing-content',
+                },
+            )
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1045,6 +1045,8 @@ function testResearchCaseWorkspaceIsPresentAndTokenGated() {
   assert.match(app, /const rules = researchCase\.rules \|\| \[\]/);
   assert.match(app, /researchDetailSection\('Detection rules'/);
   assert.match(app, /research-rule-preview/);
+  assert.match(app, /id=\"research-add-rule-btn\"/);
+  assert.match(app, /runResearchCaseAction\('add-rule'/);
   assert.match(app, /X-Triage-Ops-Admin-Token/);
   assert.match(app, /openResearchRetractModal/);
   assert.equal(html.includes("TRIAGE_OPS_ADMIN_TOKEN="), false);
