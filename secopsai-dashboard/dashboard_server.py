@@ -76,6 +76,22 @@ RESEARCH_CASE_ACTIONS = {
     'disclosure-status',
     'sandbox-request',
     'sandbox-status',
+    'sandbox-approve',
+}
+RESEARCH_DISCOVERY_ACTIONS = {
+    'capabilities',
+    'watchlist-list',
+    'watchlist-add',
+    'monitor-list',
+    'monitor-create',
+    'monitor-run-due',
+    'candidate-list',
+    'candidate-show',
+    'campaign-correlate',
+    'campaign-list',
+    'compare-packages',
+    'alert-list',
+    'alert-deliver',
 }
 CAMPAIGN_TRIAGE_OPS_ACTIONS = {
     'campaign-discover',
@@ -741,6 +757,17 @@ def build_research_case_args(action, payload):
             raise ValueError('status is required')
         return args
 
+    if action == 'sandbox-approve':
+        request_id = _clean_string(payload.get('request_id'), 40).upper()
+        if not request_id:
+            raise ValueError('request_id is required')
+        args = ['research', 'workflow', 'approve-sandbox', request_id]
+        if not payload.get('public_submission_acknowledged'):
+            raise ValueError('public sandbox submission acknowledgment is required')
+        args.append('--public-submission-acknowledged')
+        add(args, '--actor', 'actor', 160)
+        return args
+
     if action == 'jobs':
         args = ['research', 'jobs', 'list']
         add(args, '--case', 'case_id', 32)
@@ -927,6 +954,104 @@ def build_research_case_args(action, payload):
         elif flag not in args:
             raise ValueError(f'{flag[2:].replace("-", "_")} is required')
     return args
+
+
+def build_research_discovery_args(action, payload=None):
+    """Build allowlisted Core discovery commands for dashboard buttons."""
+    payload = payload if isinstance(payload, dict) else {}
+    if action not in RESEARCH_DISCOVERY_ACTIONS:
+        raise ValueError('Unsupported research discovery action')
+    if action == 'capabilities':
+        return ['research', 'ecosystems']
+    if action == 'watchlist-list':
+        args = ['research', 'watchlist', 'list']
+        ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+        if ecosystem:
+            if not ECOSYSTEM_RE.match(ecosystem):
+                raise ValueError('Invalid ecosystem')
+            args.extend(['--ecosystem', ecosystem])
+        return args
+    if action == 'watchlist-add':
+        ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+        identifier = _clean_string(payload.get('identifier'), 512)
+        if not ECOSYSTEM_RE.match(ecosystem) or not identifier or not PACKAGE_RE.match(identifier):
+            raise ValueError('Valid ecosystem and identifier are required')
+        watch_type = _clean_string(payload.get('watch_type') or 'package', 40)
+        if watch_type not in {'package', 'namespace', 'publisher', 'brand', 'repository', 'organization'}:
+            raise ValueError('Invalid watchlist type')
+        args = ['research', 'watchlist', 'add', '--ecosystem', ecosystem, '--watch-type', watch_type, '--identifier', identifier]
+        for value in payload.get('known_publishers', []) if isinstance(payload.get('known_publishers'), list) else []:
+            args.extend(['--known-publisher', _clean_string(value, 240)])
+        for flag, key, limit in [('--brand', 'brand', 240), ('--priority', 'priority', 20), ('--owner', 'owner', 160), ('--reason', 'reason', 2000)]:
+            value = _clean_string(payload.get(key), limit)
+            if value:
+                args.extend([flag, value])
+        threshold = payload.get('threshold')
+        if threshold is not None:
+            try:
+                args.extend(['--threshold', str(max(0, min(float(threshold), 100)))])
+            except (TypeError, ValueError) as exc:
+                raise ValueError('threshold must be numeric') from exc
+        return args
+    if action == 'monitor-list':
+        return ['research', 'monitor', 'list']
+    if action == 'monitor-create':
+        ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+        if not ECOSYSTEM_RE.match(ecosystem):
+            raise ValueError('Invalid ecosystem')
+        args = ['research', 'monitor', 'create', '--ecosystem', ecosystem]
+        for flag, key, limit in [('--watchlist-id', 'watchlist_id', 40), ('--name', 'name', 160), ('--priority', 'priority', 20)]:
+            value = _clean_string(payload.get(key), limit)
+            if value:
+                args.extend([flag, value])
+        if '--watchlist-id' not in args:
+            raise ValueError('Choose a watchlist before creating a monitor')
+        try:
+            args.extend(['--interval-seconds', str(max(900, min(int(payload.get('interval_seconds', 3600)), 86400 * 30)))])
+        except (TypeError, ValueError) as exc:
+            raise ValueError('interval_seconds must be an integer') from exc
+        return args
+    if action == 'monitor-run-due':
+        return ['research', 'monitor', 'run-due', '--limit', str(max(1, min(int(payload.get('limit', 25)), 100)))]
+    if action == 'candidate-list':
+        args = ['research', 'candidate', 'list', '--limit', str(max(1, min(int(payload.get('limit', 100)), 500)))]
+        for flag, key in [('--status', 'status'), ('--ecosystem', 'ecosystem')]:
+            value = _clean_string(payload.get(key), 40)
+            if value:
+                args.extend([flag, value])
+        return args
+    if action == 'candidate-show':
+        candidate_id = _clean_string(payload.get('candidate_id'), 64).upper()
+        if not candidate_id.startswith('CAN-'):
+            raise ValueError('Invalid candidate id')
+        return ['research', 'candidate', 'show', candidate_id]
+    if action == 'campaign-correlate':
+        return ['research', 'campaign', 'correlate']
+    if action == 'campaign-list':
+        return ['research', 'campaign', 'list', '--limit', str(max(1, min(int(payload.get('limit', 100)), 500)))]
+    if action == 'compare-packages':
+        args = ['research', 'compare-packages']
+        for prefix in ('left', 'right'):
+            ecosystem = _clean_string(payload.get(f'{prefix}_ecosystem'), 40).lower()
+            package = _clean_string(payload.get(f'{prefix}_package'), 512)
+            version = _clean_string(payload.get(f'{prefix}_version'), 160)
+            if not ECOSYSTEM_RE.match(ecosystem) or not package or not PACKAGE_RE.match(package):
+                raise ValueError(f'Valid {prefix} ecosystem and package are required')
+            args.extend([f'--{prefix}-ecosystem', ecosystem, f'--{prefix}-package', package])
+            if version:
+                args.extend([f'--{prefix}-version', version])
+        return args
+    if action == 'alert-list':
+        return ['research', 'alert', 'list', '--limit', str(max(1, min(int(payload.get('limit', 100)), 500)))]
+    if action == 'alert-deliver':
+        alert_id = _clean_string(payload.get('alert_id'), 64).upper()
+        if not alert_id.startswith('RAL-'):
+            raise ValueError('Invalid research alert id')
+        channel = _clean_string(payload.get('channel') or 'email', 20).lower()
+        if channel not in {'email', 'webhook'}:
+            raise ValueError('Invalid alert channel')
+        return ['research', 'alert', 'deliver', alert_id, '--channel', channel]
+    raise ValueError('Unsupported research discovery action')
 
 
 def run_cli_json(args, timeout=120):
@@ -2642,6 +2767,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/secopsai/research-discovery':
+            try:
+                qs = urllib.parse.parse_qs(parsed.query or '')
+                view = _clean_string((qs.get('view') or ['candidates'])[0], 40).lower()
+                action = {
+                    'capabilities': 'capabilities',
+                    'watchlists': 'watchlist-list',
+                    'monitors': 'monitor-list',
+                    'candidates': 'candidate-list',
+                    'alerts': 'alert-list',
+                }.get(view, 'candidate-list')
+                payload = {key: value for key, value in [('ecosystem', _clean_string((qs.get('ecosystem') or [''])[0], 40))] if value}
+                result, parsed_result = run_cli_json(build_research_discovery_args(action, payload), timeout=90)
+                return json_response(self, 200 if result['ok'] else 500, {'ok': result['ok'], 'view': view, 'result': parsed_result, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
         if parsed.path.startswith('/api/secopsai/research-cases/'):
             try:
                 case_id = urllib.parse.unquote(parsed.path.rsplit('/', 1)[-1]).strip().upper()
@@ -2836,6 +2978,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         'cli': compact_cli_result(result),
                     },
                 )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/research-discovery':
+            if require_triage_ops_admin(self):
+                return
+            action = _clean_string(payload.get('action'), 40).lower()
+            try:
+                args = build_research_discovery_args(action, payload)
+                result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=180)
+                return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'action': action, 'result': parsed_result, 'cli': compact_cli_result(result)})
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
 

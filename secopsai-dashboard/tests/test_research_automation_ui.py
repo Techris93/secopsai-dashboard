@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 
 import dashboard_server
 
@@ -51,6 +52,26 @@ def test_helper_rejects_untrusted_case_arguments():
     except ValueError:
         return
     raise AssertionError("unsafe package input was accepted")
+
+
+def test_research_discovery_commands_are_allowlisted_and_cross_ecosystem():
+    assert dashboard_server.build_research_discovery_args("capabilities") == ["research", "ecosystems"]
+    args = dashboard_server.build_research_discovery_args(
+        "watchlist-add",
+        {"ecosystem": "nuget", "watch_type": "brand", "identifier": "Braintree", "threshold": 78},
+    )
+    assert args[:6] == ["research", "watchlist", "add", "--ecosystem", "nuget", "--watch-type"]
+    assert "Braintree" in args
+    assert ";" not in " ".join(args)
+    assert dashboard_server.build_research_discovery_args("monitor-run-due", {"limit": 10})[-1] == "10"
+
+
+def test_sandbox_approval_requires_public_acknowledgement():
+    with pytest.raises(ValueError):
+        dashboard_server.build_research_case_args(
+            "sandbox-approve",
+            {"request_id": "SBX-AAAAAAAAAAAAAAAA", "public_submission_acknowledged": False},
+        )
 
 
 def test_research_case_recommendation_is_conservative_and_explains_create_route():

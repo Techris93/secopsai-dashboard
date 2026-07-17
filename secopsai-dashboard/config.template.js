@@ -6,6 +6,7 @@ window.SECOPSAI_CONFIG = {
   runOutputEndpoint: "/api/run-output",
   triageOpsEndpoint: "/api/secopsai/triage-ops",
   researchCasesEndpoint: "/api/secopsai/research-cases",
+  researchDiscoveryEndpoint: "/api/secopsai/research-discovery",
   edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
   edgeDashboardUrl: "__SECOPSAI_EDGE_DASHBOARD_URL__",
   auth: {
