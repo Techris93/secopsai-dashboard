@@ -361,6 +361,32 @@
           <div class="research-watchlist-result" id="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
+        <section class="card research-discovery-panel" aria-labelledby="research-discovery-title">
+          <div class="research-watchlist-head">
+            <div>
+              <h3 id="research-discovery-title">Research discovery</h3>
+              <p class="small">Monitor approved registry sources and review explainable candidates before creating a case. Coverage is shown per ecosystem; a scoped monitor is not a global clean result.</p>
+            </div>
+            <button class="secondary-btn" id="research-discovery-refresh-btn" type="button">Refresh discovery</button>
+          </div>
+          <div class="research-form-grid">
+            <label><span>Ecosystem</span><select id="research-discovery-ecosystem"><option value="npm">npm</option><option value="pypi">PyPI</option><option value="nuget">NuGet</option><option value="maven">Maven</option><option value="rubygems">RubyGems</option><option value="packagist">Packagist</option><option value="go">Go</option><option value="open-vsx">Open VSX</option></select></label>
+            <label><span>Watch type</span><select id="research-discovery-watch-type"><option value="package">Package</option><option value="brand">Brand</option><option value="publisher">Publisher</option><option value="namespace">Namespace</option><option value="repository">Repository</option><option value="organization">Organization</option></select></label>
+            <label class="research-span-2"><span>Identifier</span><input id="research-discovery-identifier" maxlength="512" placeholder="Package, brand, publisher, or namespace" /></label>
+            <label><span>Similarity threshold</span><input id="research-discovery-threshold" type="number" min="0" max="100" value="70" /></label>
+            <label><span>Watchlist for monitor</span><select id="research-discovery-watchlist-id"><option value="">Add a watchlist first</option></select></label>
+            <label><span>Monitor interval</span><select id="research-discovery-interval"><option value="900">15 minutes</option><option value="3600" selected>Hourly</option><option value="86400">Daily</option></select></label>
+          </div>
+          <div class="research-form-actions">
+            <button class="secondary-btn" id="research-discovery-add-watchlist-btn" type="button">Add watchlist</button>
+            <button class="secondary-btn" id="research-discovery-create-monitor-btn" type="button">Create monitor</button>
+            <button class="secondary-btn" id="research-discovery-run-due-btn" type="button">Run due monitors</button>
+            <button class="secondary-btn" id="research-discovery-correlate-btn" type="button">Correlate campaigns</button>
+          </div>
+          <div class="grid cols-3" id="research-discovery-health" style="margin-top:16px;"></div>
+          <div id="research-discovery-candidates" class="research-watchlist-result" role="status" aria-live="polite"></div>
+        </section>
+
         <div class="grid cols-2 research-case-layout">
           <div class="card research-case-list-panel">
             <div class="research-list-head"><div><h3>Case queue</h3><p class="small">Select a case to review its evidence and workflow.</p></div></div>

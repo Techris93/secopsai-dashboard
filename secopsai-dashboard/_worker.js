@@ -117,6 +117,7 @@ function buildBrowserConfig(env) {
     triageOpsEndpoint: "/api/secopsai/triage-ops",
     researchCasesEndpoint: "/api/secopsai/research-cases",
     researchWatchlistEndpoint: "/api/secopsai/research-watchlist",
+    researchDiscoveryEndpoint: "/api/secopsai/research-discovery",
     edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     auth: {
@@ -493,6 +494,7 @@ function requireTriageOpsAdmin(request, env) {
 function isTriageOpsWriteRoute(request, pathname) {
   if (request.method.toUpperCase() !== "POST") return false;
   if (pathname.startsWith("/api/secopsai/research-cases/")) return true;
+  if (pathname === "/api/secopsai/research-discovery") return true;
   const action = pathname.split("/").filter(Boolean).pop() || "";
   return ["close", "escalate", "create-blog-draft", "campaign-persist-findings", "campaign-blog-draft", "campaign-watchlist"].includes(action);
 }
@@ -1079,6 +1081,7 @@ async function proxySecopsaiHelper(request, env) {
     incomingUrl.pathname.startsWith("/api/secopsai/triage-ops/")
     || incomingUrl.pathname.startsWith("/api/secopsai/research-cases/")
     || incomingUrl.pathname === "/api/secopsai/research-watchlist"
+    || incomingUrl.pathname === "/api/secopsai/research-discovery"
   )) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
@@ -1263,6 +1266,10 @@ async function routeRequest(request, env) {
           const writeAuthResponse = requireTriageOpsAdmin(request, env);
           if (writeAuthResponse) return writeAuthResponse;
         }
+      }
+      if (request.method === "POST" && url.pathname === "/api/secopsai/research-discovery") {
+        const writeAuthResponse = requireTriageOpsAdmin(request, env);
+        if (writeAuthResponse) return writeAuthResponse;
       }
       return proxySecopsaiHelper(request, env);
     }

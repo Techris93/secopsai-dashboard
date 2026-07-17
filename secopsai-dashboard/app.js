@@ -142,6 +142,16 @@ const state = {
       error: null,
       result: null
     },
+    discovery: {
+      capabilities: null,
+      watchlists: [],
+      monitors: [],
+      candidates: [],
+      alerts: [],
+      loading: false,
+      error: null,
+      lastAction: null
+    },
     adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
   localTriage: null,
@@ -6503,6 +6513,108 @@ function renderResearchWatchlist() {
   result.innerHTML = `<div class="research-watchlist-summary"><strong>${payload.action === 'create' ? 'Draft-case creation' : 'Preview'}</strong><span>${selected.length} selected</span><span>${created.length} created</span><span>${existing.length} already present</span></div>${selected.length ? `<div class="small">${selected.map(item => escapeHtml(item.package)).join(', ')}</div>` : '<div class="small">No packages matched.</div>'}`;
 }
 
+function researchDiscoveryEndpoint() {
+  return cfg.researchDiscoveryEndpoint || '/api/secopsai/research-discovery';
+}
+
+async function loadResearchDiscovery({ render = true } = {}) {
+  const discovery = state.researchCases.discovery;
+  discovery.loading = true;
+  discovery.error = null;
+  if (render) renderResearchCases();
+  try {
+    const [capabilities, watchlists, monitors, candidates, alerts] = await Promise.all([
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=capabilities`, { cache: 'no-store' }).then(response => response.json()),
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=watchlists`, { cache: 'no-store' }).then(response => response.json()),
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=monitors`, { cache: 'no-store' }).then(response => response.json()),
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=candidates`, { cache: 'no-store' }).then(response => response.json()),
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=alerts`, { cache: 'no-store' }).then(response => response.json())
+    ]);
+    if (capabilities.ok === false || watchlists.ok === false || monitors.ok === false || candidates.ok === false || alerts.ok === false) throw new Error(capabilities.error || watchlists.error || monitors.error || candidates.error || alerts.error || 'Research discovery unavailable');
+    discovery.capabilities = capabilities.result || null;
+    discovery.watchlists = watchlists.result?.watchlists || [];
+    discovery.monitors = monitors.result?.monitors || [];
+    discovery.candidates = candidates.result?.candidates || [];
+    discovery.alerts = alerts.result?.alerts || [];
+  } catch (error) {
+    discovery.error = error?.message || String(error);
+  } finally {
+    discovery.loading = false;
+    if (render) renderResearchCases();
+  }
+}
+
+async function runResearchDiscoveryAction(action, payload = {}, button = null) {
+  const token = state.researchCases.adminToken || state.triageOps.adminToken;
+  if (!token) {
+    setStatus('Use the protected research action token before changing discovery state.', true);
+    el('research-cases-admin-token')?.focus();
+    return null;
+  }
+  setButtonBusy(button, true, 'Working…');
+  try {
+    const response = await dashboardApiFetch(researchDiscoveryEndpoint(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || result.result?.error || `Discovery action HTTP ${response.status}`);
+    state.researchCases.discovery.lastAction = { action, result, at: new Date().toISOString() };
+    await loadResearchDiscovery({ render: false });
+    renderResearchCases();
+    setStatus(`<span class="dot"></span> Research discovery ${escapeHtml(action)} completed`);
+    return result;
+  } catch (error) {
+    state.researchCases.discovery.error = error?.message || String(error);
+    setStatus(`Research discovery failed: ${escapeHtml(state.researchCases.discovery.error)}`, true);
+    notifyError(`Research discovery failed: ${state.researchCases.discovery.error}`);
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function renderResearchDiscovery() {
+  const discovery = state.researchCases.discovery;
+  const health = el('research-discovery-health');
+  const candidatesHost = el('research-discovery-candidates');
+  if (!health || !candidatesHost) return;
+  if (discovery.loading) {
+    health.innerHTML = '<div class="empty-state compact">Loading discovery health…</div>';
+    candidatesHost.innerHTML = '';
+    return;
+  }
+  if (discovery.error) {
+    health.innerHTML = `<div class="error">${escapeHtml(discovery.error)}</div>`;
+    candidatesHost.innerHTML = '<div class="small">Discovery data is unavailable. Check the local Core helper and refresh.</div>';
+    return;
+  }
+  const ecosystems = discovery.capabilities?.ecosystems || [];
+  health.innerHTML = [
+    edgeMetric('Ecosystems', ecosystems.length, 'Capability registry'),
+    edgeMetric('Watchlists', discovery.watchlists.length, 'Active scopes'),
+    edgeMetric('Monitors', discovery.monitors.length, 'Due and scheduled'),
+    edgeMetric('Open alerts', discovery.alerts.filter(item => item.status === 'open').length, 'Candidate delivery queue'),
+  ].join('');
+  const watchlistSelect = el('research-discovery-watchlist-id');
+  if (watchlistSelect) {
+    const current = watchlistSelect.value;
+    const selectedEcosystem = el('research-discovery-ecosystem')?.value || '';
+    const options = discovery.watchlists.filter(item => !selectedEcosystem || item.ecosystem === selectedEcosystem);
+    watchlistSelect.innerHTML = options.length
+      ? options.map(item => `<option value="${escapeHtml(item.watchlist_id)}">${escapeHtml(item.ecosystem)} · ${escapeHtml(item.identifier)}</option>`).join('')
+      : '<option value="">Add a watchlist first</option>';
+    if (options.some(item => item.watchlist_id === current)) watchlistSelect.value = current;
+  }
+  const candidates = discovery.candidates || [];
+  const candidateMarkup = candidates.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Ecosystem</th><th>Score</th><th>Why</th><th>Status</th></tr></thead><tbody>${candidates.slice(0, 25).map(item => `<tr><td><strong>${escapeHtml(item.package)}</strong><div class="small">${escapeHtml(item.version)} vs ${escapeHtml(item.reference_identifier)}</div></td><td>${escapeHtml(item.ecosystem)}</td><td>${escapeHtml(String(item.score))}</td><td>${escapeHtml(item.reason || 'Similarity requires analyst review')}</td><td>${escapeHtml(statusLabel(item.status))}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="empty-state compact">No candidates yet. Add a watchlist, run a monitor, and review the resulting scoped candidates.</div>';
+  const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Delivery</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(item.reason || 'Review candidate')}</td><td><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email alert</button></td></tr>`).join('')}</tbody></table></div>` : '';
+  candidatesHost.innerHTML = candidateMarkup + alertMarkup;
+}
+
 async function runResearchCaseAction(action, payload = {}, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
   if (!token) {
@@ -6681,6 +6793,14 @@ function bindResearchCaseDetailActions(researchCase) {
     attach: el('research-intake-attach')?.value === 'true',
     actor: 'dashboard-operator'
   }, event.currentTarget));
+  el('research-compare-packages-btn')?.addEventListener('click', event => runResearchDiscoveryAction('compare-packages', {
+    left_ecosystem: el('research-compare-left-ecosystem')?.value,
+    left_package: el('research-compare-left-package')?.value,
+    left_version: el('research-compare-left-version')?.value,
+    right_ecosystem: el('research-compare-right-ecosystem')?.value,
+    right_package: el('research-compare-right-package')?.value,
+    right_version: el('research-compare-right-version')?.value
+  }, event.currentTarget));
   el('research-matrix-btn')?.addEventListener('click', event => runResearchCaseAction('evidence-matrix', { case_id: researchCase.case_id, actor: 'dashboard-operator' }, event.currentTarget));
   el('research-brief-btn')?.addEventListener('click', event => runResearchCaseAction('analyst-brief', { case_id: researchCase.case_id, actor: 'dashboard-operator' }, event.currentTarget));
   el('research-publication-check-btn')?.addEventListener('click', event => runResearchCaseAction('publication-check', { case_id: researchCase.case_id, actor: 'dashboard-operator' }, event.currentTarget));
@@ -6742,7 +6862,8 @@ function bindResearchCaseDetailActions(researchCase) {
       context: 'Approval authorizes the request record only. Execution remains blocked until an isolated provider is configured.',
       confirmLabel: 'Approve request'
     }))) return;
-    runResearchCaseAction('sandbox-status', { case_id: researchCase.case_id, request_id: button.dataset.requestId, status: button.dataset.sandboxStatus, actor: 'dashboard-operator' }, event.currentTarget);
+    const action = button.dataset.sandboxAction || 'sandbox-status';
+    runResearchCaseAction(action, { case_id: researchCase.case_id, request_id: button.dataset.requestId, status: button.dataset.sandboxStatus, public_submission_acknowledged: true, actor: 'dashboard-operator' }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-retract-btn').forEach(button => button.addEventListener('click', () => {
     openResearchRetractModal(researchCase, button.dataset.itemType, button.dataset.itemId);
@@ -6773,6 +6894,7 @@ function renderResearchAutomationPanel(researchCase) {
       <button class="secondary-btn" id="research-brief-btn" type="button">Generate Analyst Brief</button>
       <button class="secondary-btn" id="research-publication-check-btn" type="button">Run Publication Safety Check</button>
     </div>
+    <details class="research-action-drawer"><summary>Compare packages</summary><p class="small">Both exact targets are fetched from allowlisted registries, hashed, and inspected statically. Package code is never installed or executed.</p><div class="research-form-grid"><label><span>Left ecosystem</span><select id="research-compare-left-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Left package</span><input id="research-compare-left-package" value="${escapeHtml(packageSubject.name || '')}" placeholder="legitimate package" /></label><label><span>Left version</span><input id="research-compare-left-version" value="${escapeHtml(packageSubject.version || '')}" placeholder="latest if empty" /></label><label><span>Right ecosystem</span><select id="research-compare-right-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Right package</span><input id="research-compare-right-package" placeholder="candidate package" /></label><label><span>Right version</span><input id="research-compare-right-version" placeholder="latest if empty" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-compare-packages-btn" type="button">Compare exact packages</button></div></details>
     <div class="research-form-grid">
       <label><span>Analyst verdict</span><select id="research-verdict-value"><option value="inconclusive">Inconclusive</option><option value="credible">Credible</option><option value="likely">Likely</option><option value="not_substantiated">Not substantiated</option><option value="benign">Benign</option><option value="retracted">Retracted</option></select></label>
       <label><span>Confidence</span><input id="research-verdict-confidence" type="number" min="0" max="100" value="50" /></label>
@@ -6787,7 +6909,7 @@ function renderResearchAutomationPanel(researchCase) {
       ${jobs.length ? jobs.map(job => `<div class="feed-item"><code>${escapeHtml(job.job_id)}</code> · ${escapeHtml(statusLabel(job.status))} · ${escapeHtml(job.action)}${job.status === 'awaiting_review' ? ` <button class="mini-btn research-intake-attach-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Attach Verified Evidence</button>` : ''}${['failed','expired','canceled'].includes(job.status) ? ` <button class="mini-btn research-job-retry-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Retry</button>` : ''}${['queued','running','awaiting_review'].includes(job.status) ? ` <button class="mini-btn research-job-cancel-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : ''}</div>`).join('') : '<div class="small">No automated research jobs yet.</div>'}
       ${reviews.length ? `<div class="small">Latest publication review: <strong>${escapeHtml(statusLabel(reviews[0].status))}</strong>${(reviews[0].blockers || []).length ? ` · ${(reviews[0].blockers || []).length} blocker(s)` : ''}</div>` : ''}
       ${disclosures.length ? disclosures.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.disclosure_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)} <button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="approved" type="button">Approve</button><button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="sent" type="button">Record Sent</button></div>`).join('') : ''}
-      ${sandboxes.length ? sandboxes.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-status="approved" type="button">Approve</button>` : ''}</div>`).join('') : ''}
+      ${sandboxes.length ? sandboxes.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-action="sandbox-approve" data-sandbox-status="approved" type="button">Approve public submission</button>` : ''}</div>`).join('') : ''}
     </div>
   `);
 }
@@ -6864,6 +6986,7 @@ function renderResearchCases() {
     edgeMetric('Detection rules', rules, 'YARA, Sigma, Semgrep')
   ].join('');
   renderResearchWatchlist();
+  renderResearchDiscovery();
   const list = el('research-case-list');
   const filtered = filteredResearchCases();
   if (list) list.innerHTML = state.researchCases.loading && !cases.length
@@ -7279,6 +7402,12 @@ async function boot() {
   }
 
   try {
+    await loadResearchDiscovery({ render: false });
+  } catch (err) {
+    console.warn('loadResearchDiscovery failed during boot', err);
+  }
+
+  try {
     await loadCampaignFixtures({ render: false });
   } catch (err) {
     console.warn('loadCampaignFixtures failed during boot', err);
@@ -7516,6 +7645,27 @@ function bindEvents() {
       renderResearchCases();
     }
   });
+  el('research-discovery-refresh-btn')?.addEventListener('click', async event => {
+    setButtonBusy(event.currentTarget, true, 'Refreshing…');
+    await loadResearchDiscovery();
+    setButtonBusy(event.currentTarget, false);
+  });
+  el('research-discovery-add-watchlist-btn')?.addEventListener('click', event => runResearchDiscoveryAction('watchlist-add', {
+    ecosystem: el('research-discovery-ecosystem')?.value || 'npm',
+    watch_type: el('research-discovery-watch-type')?.value || 'package',
+    identifier: el('research-discovery-identifier')?.value || '',
+    threshold: Number(el('research-discovery-threshold')?.value || 70),
+    reason: 'Added from Research discovery console'
+  }, event.currentTarget));
+  el('research-discovery-create-monitor-btn')?.addEventListener('click', event => runResearchDiscoveryAction('monitor-create', {
+    ecosystem: el('research-discovery-ecosystem')?.value || 'npm',
+    watchlist_id: el('research-discovery-watchlist-id')?.value || '',
+    interval_seconds: Number(el('research-discovery-interval')?.value || 3600),
+    priority: 'normal'
+  }, event.currentTarget));
+  el('research-discovery-run-due-btn')?.addEventListener('click', event => runResearchDiscoveryAction('monitor-run-due', { limit: 25 }, event.currentTarget));
+  el('research-discovery-correlate-btn')?.addEventListener('click', event => runResearchDiscoveryAction('campaign-correlate', {}, event.currentTarget));
+  document.querySelectorAll('.research-alert-deliver-btn').forEach(button => button.addEventListener('click', event => runResearchDiscoveryAction('alert-deliver', { alert_id: button.dataset.alertId, channel: 'email' }, event.currentTarget)));
   el('research-cases-save-token-btn')?.addEventListener('click', () => {
     const token = el('research-cases-admin-token')?.value || '';
     state.researchCases.adminToken = token;

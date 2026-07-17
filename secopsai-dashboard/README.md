@@ -1,5 +1,7 @@
 # SecOpsAI Dashboard
 
+The Research page includes a Core-backed discovery panel for cross-ecosystem watchlists, scoped monitors, due-run execution, candidates, safe exact-package comparison, and campaign correlation. Research writes require the protected research action token; provider credentials remain server-side.
+
 This directory contains the live dashboard app for SecOpsAI.
 
 The dashboard is now intentionally narrow:
