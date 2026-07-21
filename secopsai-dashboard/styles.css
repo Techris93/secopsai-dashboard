@@ -7139,3 +7139,279 @@ body.professional-ui.modal-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .professional-ui * { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   ASD S1000D CONSOLE THEME
+   Technical-publication operator console: flat paper, 1px rules,
+   squared corners, monospace identifiers, color for meaning only.
+   This layer intentionally overrides the decorative theme above.
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  --bg: #FBFAF6;
+  --bg-soft: #FFFFFF;
+  --bg-panel: #FFFFFF;
+  --card: #FFFFFF;
+  --card-muted: #FBFAF6;
+  --border: #C9CDD2;
+  --border-strong: #9BA2AA;
+  --text: #16191D;
+  --muted: #67707B;
+  --muted-strong: #3E4650;
+
+  --cyan: #0F4C81;
+  --blue: #0F4C81;
+  --purple: #3E4650;
+  --indigo: #0F4C81;
+  --amber: #8A5A00;
+  --green: #1E6B3A;
+  --red: #9E1B1B;
+  --shadow-soft: none;
+  --shadow-strong: none;
+
+  --status-queued: #0F4C81;
+  --status-running: #0F4C81;
+  --status-completed: #1E6B3A;
+  --status-failed: #9E1B1B;
+  --status-cancelled: #67707B;
+  --status-blocked: #9E1B1B;
+  --status-review: #8A5A00;
+  --status-picked-up: #3E4650;
+  --status-needs-review: #8A5A00;
+  --status-completed-with-gaps: #8A5A00;
+
+  --asd-note: #0F4C81;
+  --asd-note-bg: #EDF3F9;
+  --asd-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+body {
+  background: var(--bg);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* ── Sidebar: light data-module rail ─────────────────────── */
+.sidebar {
+  background: #FFFFFF;
+  color: var(--text);
+  border-right: 1px solid var(--border-strong);
+  box-shadow: none;
+}
+.brand-badge {
+  border-radius: 2px;
+  background: #16191D;
+  box-shadow: none;
+  font-family: var(--asd-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+}
+.brand h1 { color: var(--text); font-family: var(--asd-mono); letter-spacing: 0.1em; font-size: 0.95rem; }
+.brand p { color: var(--muted); font-family: var(--asd-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.nav-list { gap: 4px; }
+.nav-btn {
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--text);
+  text-align: left;
+}
+.nav-btn:hover { background: var(--asd-note-bg); border-color: transparent; }
+.nav-btn.active {
+  background: #16191D;
+  border-color: #16191D;
+  box-shadow: none;
+  color: #FBFAF6;
+}
+.nav-btn.active .title { color: #FBFAF6; }
+.nav-btn.active .desc { color: rgba(251, 250, 246, 0.72); }
+.nav-btn .title { font-weight: 600; }
+.nav-btn .desc { color: var(--muted); }
+
+.sidebar-footer {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--asd-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+}
+
+/* ── Page chrome ─────────────────────────────────────────── */
+.main { background: var(--bg); }
+.page-header h2 {
+  font-size: 1.4rem;
+  letter-spacing: -0.01em;
+  border-bottom: 1.5px solid var(--text);
+  padding-bottom: 8px;
+  width: 100%;
+}
+.page-header p { font-size: 0.9rem; }
+.page { animation: none; }
+
+/* ── Cards: flat ruled panels ────────────────────────────── */
+.card,
+.metric-card,
+.panel,
+.triage-ops-auth-card {
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--card);
+  box-shadow: none;
+}
+.card:hover { box-shadow: none; }
+.metric-card .metric { color: var(--text); }
+.metric-card .metric-label {
+  font-family: var(--asd-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Buttons: squared functional controls ────────────────── */
+.primary-btn,
+.secondary-btn,
+.mini-btn,
+button {
+  border-radius: 2px;
+  font-family: var(--asd-mono);
+  letter-spacing: 0.06em;
+}
+.primary-btn {
+  background: #16191D;
+  border: 1px solid #16191D;
+  color: #FBFAF6;
+  box-shadow: none;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+.primary-btn:hover { background: var(--asd-note); border-color: var(--asd-note); box-shadow: none; }
+.secondary-btn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  box-shadow: none;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+.secondary-btn:hover { background: var(--asd-note-bg); border-color: var(--asd-note); color: var(--asd-note); box-shadow: none; }
+.mini-btn {
+  border: 1px solid var(--border-strong);
+  background: var(--card);
+  color: var(--muted-strong);
+  font-size: 0.68rem;
+  box-shadow: none;
+}
+.mini-btn:hover { background: var(--asd-note-bg); color: var(--asd-note); border-color: var(--asd-note); }
+
+/* ── Status pills: squared semantic tags ─────────────────── */
+.status-pill {
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: none;
+  font-family: var(--asd-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+}
+.dot { border-radius: 0; box-shadow: none; width: 8px; height: 8px; }
+
+/* ── Forms ───────────────────────────────────────────────── */
+input, select, textarea {
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--card);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--asd-note-bg);
+  border-color: var(--asd-note);
+}
+label .small, .small { color: var(--muted); }
+
+/* ── Tables ──────────────────────────────────────────────── */
+table { font-size: 0.85rem; }
+thead th {
+  font-family: var(--asd-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1.5px solid var(--text);
+  background: var(--card-muted);
+}
+td { border-bottom: 1px solid var(--border); }
+
+/* ── Top strip / context nav / drawers ───────────────────── */
+.top-strip,
+.topbar-primary {
+  background: #FFFFFF;
+  border-bottom: 2px solid var(--text);
+  box-shadow: none;
+}
+.context-nav-btn {
+  border-radius: 2px;
+  font-family: var(--asd-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-strong);
+}
+.context-nav-btn.active, .context-nav-btn:hover {
+  background: #16191D;
+  color: #FBFAF6;
+  border-color: #16191D;
+}
+.help-drawer, .command-palette, .modal, .confirm-dialog {
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  box-shadow: none;
+  background: var(--card);
+}
+.kbd, kbd {
+  font-family: var(--asd-mono);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--card-muted);
+  box-shadow: none;
+}
+code, pre, .mono {
+  font-family: var(--asd-mono);
+}
+pre {
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--card-muted);
+}
+
+/* ── Notices → S1000D callouts ───────────────────────────── */
+.error, .notice-error {
+  border: 1px solid var(--red);
+  border-left-width: 3px;
+  border-radius: 2px;
+  background: #FAECEC;
+  color: var(--red);
+}
+.empty-state, .empty-state.compact {
+  border: 1px dashed var(--border-strong);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* ── Scrollbars & misc ───────────────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 0; }
+::-webkit-scrollbar-track { background: transparent; }
+
+a { color: var(--asd-note); }
+a:hover { text-decoration: underline; }
+
+/* Severity accents stay semantic */
+.severity-critical, .critical { color: #7A1010; }
+.severity-high, .high { color: var(--red); }
+.severity-medium, .medium { color: var(--amber); }
+.severity-low, .low, .info { color: var(--asd-note); }
