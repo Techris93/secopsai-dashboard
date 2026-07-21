@@ -128,6 +128,13 @@ const state = {
     loading: false,
     error: null
   },
+  coverage: {
+    collectors: [],
+    events: [],
+    windows: [],
+    loading: false,
+    error: null
+  },
   researchCases: {
     cases: [],
     selectedId: null,
@@ -214,7 +221,7 @@ const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
 let workView = 'table';
-const pages = ["mission-control", "tasks", "findings", "edge", "integrations", "triage-ops", "research-cases", "blog-ops", "operator-guide"];
+const pages = ["mission-control", "tasks", "findings", "edge", "integrations", "triage-ops", "research-cases", "coverage", "blog-ops", "operator-guide"];
 const PAGE_ROUTES = Object.freeze({
   "mission-control": "overview",
   "tasks": "work",
@@ -223,6 +230,7 @@ const PAGE_ROUTES = Object.freeze({
   "integrations": "system",
   "triage-ops": "findings/supply-chain",
   "research-cases": "research/cases",
+  "coverage": "research/coverage",
   "blog-ops": "publications",
   "operator-guide": "help"
 });
@@ -235,6 +243,7 @@ const TOP_NAV_PAGE = Object.freeze({
   "integrations": "integrations",
   "triage-ops": "findings",
   "research-cases": "research-cases",
+  "coverage": "research-cases",
   "blog-ops": "blog-ops",
   "operator-guide": null
 });
@@ -246,6 +255,7 @@ const PAGE_CONTEXT = {
   "integrations": "System · health and integrations",
   "triage-ops": "Findings · supply-chain review",
   "research-cases": "Research · evidence and disclosure",
+  "coverage": "Research · global registry surveillance",
   "blog-ops": "Publications · newsroom and delivery",
   "operator-guide": "Help · operator guidance"
 };
@@ -274,8 +284,16 @@ const CONTEXT_NAV = Object.freeze({
     ["Inbox", "triage-ops"],
     ["Cases", "research-cases"],
     ["Watchlists", "research-cases"],
+    ["Global coverage", "coverage"],
     ["Disclosure", "research-cases"],
     ["Sandbox jobs", "research-cases"]
+  ],
+  "coverage": [
+    ["Collectors", "coverage"],
+    ["Feed events", "coverage"],
+    ["Coverage windows", "coverage"],
+    ["Candidates", "research-cases"],
+    ["Cases", "research-cases"]
   ],
   "blog-ops": [
     ["News intake", "blog-ops"],
@@ -303,6 +321,7 @@ const COMMANDS = Object.freeze([
   ["Open Assets", "Inspect network inventory and Edge sensors", "edge"],
   ["Open Work", "Manage tasks, approvals, and runs", "tasks"],
   ["Open Research", "Investigate leads and research cases", "research-cases"],
+  ["Open Global Coverage", "Inspect registry collectors, cursor lag, and surveillance health", "coverage"],
   ["Open Publications", "Review and deliver public content", "blog-ops"],
   ["Open System", "Check health, integrations, and audit context", "integrations"],
   ["Open Help", "Read contextual operator guidance", "operator-guide"]
@@ -1106,6 +1125,7 @@ function helpCopyForPage(pageId) {
     tasks: ['Work', 'Work is where humans own remediation, approvals, and investigation outcomes. The dashboard records state; local runtimes perform execution.'],
     'triage-ops': ['Supply-chain review', 'Use read-only evidence actions first. Separate package maliciousness from local impact, then create a Research case only when the lead deserves durable investigation.'],
     'research-cases': ['Research', 'Research cases preserve evidence, indicators, disclosure decisions, and publication readiness. Protected actions always require explicit review.'],
+    coverage: ['Global coverage', 'Registry collectors record every observed package event. Watch cursor lag, coverage gaps, and dead letters here; a paused or degraded collector means surveillance is incomplete, not clean.'],
     'blog-ops': ['Publications', 'Publications are editorial output. Review claims, references, IOCs, and safety blockers before approval, staging, or deployment.'],
     integrations: ['System', 'System explains the health of the dashboard, Core, Edge, helper, and action boundaries. Resolve degraded integrations before relying on their data.'],
     'operator-guide': ['Help', 'Use the operator guide for detailed click paths, safety boundaries, and recovery steps.']
@@ -6615,6 +6635,123 @@ function renderResearchDiscovery() {
   candidatesHost.innerHTML = candidateMarkup + alertMarkup;
 }
 
+function formatCoverageLag(lagSeconds) {
+  if (lagSeconds === null || lagSeconds === undefined) return '—';
+  const seconds = Number(lagSeconds);
+  if (!Number.isFinite(seconds)) return '—';
+  if (seconds < 120) return `${Math.round(seconds)}s`;
+  if (seconds < 7200) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 172800) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
+function coverageCollectorHealth(collector) {
+  if (!collector.enabled) return 'Paused';
+  if (collector.retention?.retention_risk) return 'Retention risk';
+  if (Number(collector.coverage_gaps) > 0) return 'Coverage gap';
+  if (Number(collector.pending_dead_letters) > 0) return 'Dead letters pending';
+  if (collector.last_run && collector.last_run.status === 'failed') return 'Last run failed';
+  return 'Healthy';
+}
+
+async function loadCoverage({ render = true } = {}) {
+  const coverage = state.coverage;
+  coverage.loading = true;
+  coverage.error = null;
+  if (render) renderCoverage();
+  try {
+    const [collectors, events, windows] = await Promise.all([
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=collectors`, { cache: 'no-store' }).then(response => response.json()),
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=feed-events&limit=50`, { cache: 'no-store' }).then(response => response.json()),
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=coverage-windows&days=7`, { cache: 'no-store' }).then(response => response.json())
+    ]);
+    if (collectors.ok === false || events.ok === false || windows.ok === false) throw new Error(collectors.error || events.error || windows.error || 'Coverage data unavailable');
+    coverage.collectors = collectors.result?.collectors || [];
+    coverage.events = events.result?.events || [];
+    coverage.windows = windows.result?.windows || [];
+  } catch (error) {
+    coverage.error = error?.message || String(error);
+  } finally {
+    coverage.loading = false;
+    if (render) renderCoverage();
+  }
+}
+
+async function runCoverageAction(action, payload = {}, button = null) {
+  const result = await runResearchDiscoveryAction(action, payload, button);
+  await loadCoverage({ render: false });
+  renderCoverage();
+  return result;
+}
+
+function renderCoverage() {
+  const statsHost = el('coverage-stats');
+  const collectorsHost = el('coverage-collectors');
+  const eventsHost = el('coverage-events');
+  const windowsHost = el('coverage-windows');
+  if (!statsHost || !collectorsHost || !eventsHost || !windowsHost) return;
+  const coverage = state.coverage;
+  if (coverage.loading) {
+    statsHost.innerHTML = '';
+    collectorsHost.innerHTML = '<div class="empty-state compact">Loading registry coverage…</div>';
+    eventsHost.innerHTML = '';
+    windowsHost.innerHTML = '';
+    return;
+  }
+  if (coverage.error) {
+    statsHost.innerHTML = '';
+    collectorsHost.innerHTML = `<div class="error">${escapeHtml(coverage.error)}</div>`;
+    eventsHost.innerHTML = '<div class="small">Coverage data is unavailable. Check the local Core helper and refresh.</div>';
+    windowsHost.innerHTML = '';
+    return;
+  }
+  const collectors = coverage.collectors || [];
+  const totalEvents = collectors.reduce((sum, item) => sum + (Number(item.events_stored) || 0), 0);
+  const deadLetters = collectors.reduce((sum, item) => sum + (Number(item.pending_dead_letters) || 0), 0);
+  const gaps = collectors.reduce((sum, item) => sum + (Number(item.coverage_gaps) || 0), 0);
+  const paused = collectors.filter(item => !item.enabled).length;
+  const risks = collectors.filter(item => item.retention?.retention_risk).length;
+  statsHost.innerHTML = [
+    edgeMetric('Collectors', collectors.length, paused ? `${paused} paused` : 'Defined global feeds'),
+    edgeMetric('Events stored', totalEvents, 'Append-only ledger'),
+    edgeMetric('Dead letters', deadLetters, deadLetters ? 'Awaiting retry' : 'Queue clear'),
+    edgeMetric('Coverage gaps', gaps, gaps ? 'Replay required' : 'No missing windows'),
+    edgeMetric('Retention risk', risks, risks ? 'Cursor near expiry' : 'Inside retention')
+  ].join('');
+
+  collectorsHost.innerHTML = collectors.length ? collectors.map(collector => {
+    const lastRun = collector.last_run || {};
+    const retention = collector.retention;
+    const snapshot = collector.last_snapshot;
+    return `
+      <div class="coverage-collector">
+        <div class="page-header compact-header">
+          <div>
+            <strong>${escapeHtml(collector.name)}</strong>
+            <p class="small" style="margin:4px 0 0;">${escapeHtml(collector.ecosystem)} · ${escapeHtml(collector.mode)} · cursor <code>${escapeHtml(collector.cursor || '—')}</code></p>
+          </div>
+          <span class="status-pill">${escapeHtml(coverageCollectorHealth(collector))}</span>
+        </div>
+        <div class="small">
+          Lag ${escapeHtml(formatCoverageLag(collector.lag_seconds))} · ${Number(collector.events_stored) || 0} events · ${Number(collector.pending_dead_letters) || 0} dead letters · ${Number(collector.coverage_gaps) || 0} gaps${retention ? ` · cursor age ${escapeHtml(formatCoverageLag(retention.cursor_age_seconds))} of ${escapeHtml(formatCoverageLag(retention.retention_seconds))}` : ''}${snapshot ? ` · snapshot <code>${escapeHtml(snapshot.serial)}</code> (${Number(snapshot.item_count) || 0} items)` : ''}
+        </div>
+        <div class="small">Last run: ${escapeHtml(lastRun.status || 'never')}${lastRun.error_message ? ` · ${escapeHtml(lastRun.error_message)}` : ''}</div>
+        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+          <button class="mini-btn coverage-run-btn" data-ecosystem="${escapeHtml(collector.ecosystem)}" type="button" ${collector.enabled ? '' : 'disabled'}>Run now</button>
+          <button class="mini-btn coverage-toggle-btn" data-ecosystem="${escapeHtml(collector.ecosystem)}" data-enabled="${collector.enabled ? '1' : '0'}" type="button">${collector.enabled ? 'Pause' : 'Resume'}</button>
+        </div>
+      </div>`;
+  }).join('') : '<div class="empty-state compact">No collectors defined yet.</div>';
+
+  eventsHost.innerHTML = coverage.events.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Registry time</th><th>Ecosystem</th><th>Package</th><th>Version</th><th>Event</th><th>State</th></tr></thead><tbody>${coverage.events.map(event => `<tr><td>${escapeHtml(event.registry_timestamp || '')}</td><td>${escapeHtml(event.ecosystem)}</td><td><strong>${escapeHtml(event.package)}</strong></td><td>${escapeHtml(event.version || '—')}</td><td>${escapeHtml(event.event_type)}</td><td>${escapeHtml(statusLabel(event.processing_state))}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="empty-state compact">No feed events recorded yet. Run a collector to start the ledger.</div>';
+
+  windowsHost.innerHTML = coverage.windows.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Window start</th><th>Window end</th><th>Pages</th><th>Events</th><th>State</th></tr></thead><tbody>${coverage.windows.map(window => `<tr><td>${escapeHtml(window.window_start || '')}</td><td>${escapeHtml(window.window_end || '')}</td><td>${Number(window.processed_pages) || 0}/${Number(window.expected_pages) || 0}</td><td>${Number(window.events_stored) || 0}</td><td>${escapeHtml(window.state)}${window.gap_reason ? ` · ${escapeHtml(window.gap_reason)}` : ''}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="empty-state compact">No coverage windows recorded yet.</div>';
+}
+
 async function runResearchCaseAction(action, payload = {}, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
   if (!token) {
@@ -7408,6 +7545,12 @@ async function boot() {
   }
 
   try {
+    await loadCoverage({ render: false });
+  } catch (err) {
+    console.warn('loadCoverage failed during boot', err);
+  }
+
+  try {
     await loadCampaignFixtures({ render: false });
   } catch (err) {
     console.warn('loadCampaignFixtures failed during boot', err);
@@ -7666,6 +7809,19 @@ function bindEvents() {
   el('research-discovery-run-due-btn')?.addEventListener('click', event => runResearchDiscoveryAction('monitor-run-due', { limit: 25 }, event.currentTarget));
   el('research-discovery-correlate-btn')?.addEventListener('click', event => runResearchDiscoveryAction('campaign-correlate', {}, event.currentTarget));
   document.querySelectorAll('.research-alert-deliver-btn').forEach(button => button.addEventListener('click', event => runResearchDiscoveryAction('alert-deliver', { alert_id: button.dataset.alertId, channel: 'email' }, event.currentTarget)));
+  el('coverage-refresh-btn')?.addEventListener('click', () => loadCoverage());
+  el('coverage-score-run-btn')?.addEventListener('click', event => runCoverageAction('score-run', {}, event.currentTarget));
+  el('coverage-retry-btn')?.addEventListener('click', event => runCoverageAction('collect-retry-failures', {}, event.currentTarget));
+  el('coverage-collectors')?.addEventListener('click', event => {
+    const runButton = event.target.closest('.coverage-run-btn');
+    const toggleButton = event.target.closest('.coverage-toggle-btn');
+    if (runButton) {
+      runCoverageAction('collect-run', { ecosystem: runButton.dataset.ecosystem }, runButton);
+    } else if (toggleButton) {
+      const pause = toggleButton.dataset.enabled === '1';
+      runCoverageAction(pause ? 'collect-pause' : 'collect-resume', { ecosystem: toggleButton.dataset.ecosystem }, toggleButton);
+    }
+  });
   el('research-cases-save-token-btn')?.addEventListener('click', () => {
     const token = el('research-cases-admin-token')?.value || '';
     state.researchCases.adminToken = token;

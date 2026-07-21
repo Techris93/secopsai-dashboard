@@ -535,6 +535,57 @@
         </details>
       </section>
 
+      <section class="page" id="page-coverage">
+        <div class="page-header">
+          <div>
+            <h2>Global Registry Coverage</h2>
+            <p>Continuous package-registry surveillance: collector health, cursor lag, coverage gaps, dead letters, and the candidate inbox produced by the detection pipeline.</p>
+          </div>
+          <div class="status-pill" id="coverage-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh coverage</div>
+        </div>
+
+        <div class="card">
+          <div class="page-header compact-header">
+            <div>
+              <h3 style="margin:0;">Pipeline actions</h3>
+              <p class="small" style="margin:6px 0 0;">Protected actions use the research admin token. A degraded or paused collector means surveillance is incomplete, not clean.</p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="secondary-btn" id="coverage-score-run-btn" type="button">Run scoring</button>
+              <button class="secondary-btn" id="coverage-retry-btn" type="button">Retry failures</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid cols-5 triage-ops-stats-grid" id="coverage-stats"></div>
+
+        <div class="card">
+          <h3>Registry collectors</h3>
+          <div id="coverage-collectors"></div>
+        </div>
+
+        <div class="grid cols-2 triage-ops-layout">
+          <div class="card">
+            <div class="page-header compact-header">
+              <div>
+                <h3 style="margin:0;">Latest feed events</h3>
+                <p class="small" style="margin:6px 0 0;">Newest registry events across all collectors. Candidate events link into Research.</p>
+              </div>
+            </div>
+            <div id="coverage-events"></div>
+          </div>
+          <div class="card">
+            <div class="page-header compact-header">
+              <div>
+                <h3 style="margin:0;">Coverage windows</h3>
+                <p class="small" style="margin:6px 0 0;">Gaps first. A gap means the cursor stopped before the window ended and replay is pending.</p>
+              </div>
+            </div>
+            <div id="coverage-windows"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="page" id="page-operator-guide" data-route="help">
         <div class="page-header">
           <div>
