@@ -92,6 +92,14 @@ RESEARCH_DISCOVERY_ACTIONS = {
     'compare-packages',
     'alert-list',
     'alert-deliver',
+    'collect-status',
+    'collect-run',
+    'collect-retry-failures',
+    'collect-coverage',
+    'collect-events',
+    'collect-pause',
+    'collect-resume',
+    'score-run',
 }
 CAMPAIGN_TRIAGE_OPS_ACTIONS = {
     'campaign-discover',
@@ -118,6 +126,7 @@ ALLOWED_CAMPAIGN_ECOSYSTEMS = {
     'rubygems',
 }
 ECOSYSTEM_RE = re.compile(r'^(npm|pypi|crates|chrome-web-store|packagist|go|huggingface|maven|nuget|open-vsx|rubygems)$', re.IGNORECASE)
+COLLECTOR_ID_RE = re.compile(r'^COL-[A-Z0-9-]{3,40}$')
 CAMPAIGN_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,140}$')
 PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._:/-]{1,260}$')
 NPM_WATCHLIST_PACKAGE_RE = re.compile(r'^(?:npm:)?(?:@[a-z0-9._~-]+/)?[a-z0-9._~-]+$', re.IGNORECASE)
@@ -1051,6 +1060,71 @@ def build_research_discovery_args(action, payload=None):
         if channel not in {'email', 'webhook'}:
             raise ValueError('Invalid alert channel')
         return ['research', 'alert', 'deliver', alert_id, '--channel', channel]
+    if action == 'collect-status':
+        args = ['research', 'collect', 'status']
+        ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+        if ecosystem:
+            if not ECOSYSTEM_RE.match(ecosystem):
+                raise ValueError('Invalid ecosystem')
+            args.extend(['--ecosystem', ecosystem])
+        return args
+    if action == 'collect-run':
+        ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+        if not ECOSYSTEM_RE.match(ecosystem):
+            raise ValueError('A valid ecosystem is required to run a collector')
+        args = ['research', 'collect', 'run', '--ecosystem', ecosystem]
+        try:
+            args.extend(['--max-pages', str(max(1, min(int(payload.get('max_pages', 10)), 100)))])
+        except (TypeError, ValueError) as exc:
+            raise ValueError('max_pages must be an integer') from exc
+        return args
+    if action == 'collect-retry-failures':
+        try:
+            limit = str(max(1, min(int(payload.get('limit', 25)), 200)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('limit must be an integer') from exc
+        return ['research', 'collect', 'retry-failures', '--limit', limit]
+    if action == 'collect-coverage':
+        try:
+            days = str(max(1, min(int(payload.get('days', 7)), 90)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('days must be an integer') from exc
+        return ['research', 'collect', 'coverage', '--days', days]
+    if action == 'collect-events':
+        try:
+            limit = str(max(1, min(int(payload.get('limit', 50)), 500)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('limit must be an integer') from exc
+        args = ['research', 'collect', 'events', '--limit', limit]
+        collector_id = _clean_string(payload.get('collector_id'), 48).upper()
+        if collector_id:
+            if not COLLECTOR_ID_RE.match(collector_id):
+                raise ValueError('Invalid collector id')
+            args.extend(['--collector-id', collector_id])
+        package = _clean_string(payload.get('package'), 512)
+        if package:
+            if not PACKAGE_RE.match(package):
+                raise ValueError('Invalid package filter')
+            args.extend(['--package', package])
+        return args
+    if action in {'collect-pause', 'collect-resume'}:
+        ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+        if not ECOSYSTEM_RE.match(ecosystem):
+            raise ValueError('A valid ecosystem is required')
+        verb = 'pause' if action == 'collect-pause' else 'resume'
+        return ['research', 'collect', verb, '--ecosystem', ecosystem]
+    if action == 'score-run':
+        args = ['research', 'score', 'run']
+        ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+        if ecosystem:
+            if not ECOSYSTEM_RE.match(ecosystem):
+                raise ValueError('Invalid ecosystem')
+            args.extend(['--ecosystem', ecosystem])
+        try:
+            args.extend(['--limit', str(max(1, min(int(payload.get('limit', 200)), 2000)))])
+        except (TypeError, ValueError) as exc:
+            raise ValueError('limit must be an integer') from exc
+        return args
     raise ValueError('Unsupported research discovery action')
 
 
@@ -2777,9 +2851,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'monitors': 'monitor-list',
                     'candidates': 'candidate-list',
                     'alerts': 'alert-list',
+                    'collectors': 'collect-status',
+                    'feed-events': 'collect-events',
+                    'coverage-windows': 'collect-coverage',
                 }.get(view, 'candidate-list')
-                payload = {key: value for key, value in [('ecosystem', _clean_string((qs.get('ecosystem') or [''])[0], 40))] if value}
-                result, parsed_result = run_cli_json(build_research_discovery_args(action, payload), timeout=90)
+                payload = {key: value for key, value in [
+                    ('ecosystem', _clean_string((qs.get('ecosystem') or [''])[0], 40)),
+                    ('collector_id', _clean_string((qs.get('collector_id') or [''])[0], 48)),
+                    ('package', _clean_string((qs.get('package') or [''])[0], 512)),
+                    ('limit', _clean_string((qs.get('limit') or [''])[0], 8)),
+                    ('days', _clean_string((qs.get('days') or [''])[0], 4)),
+                ] if value}
+                result, parsed_result = run_cli_json([*build_research_discovery_args(action, payload), *secopsai_db_args()], timeout=90)
                 return json_response(self, 200 if result['ok'] else 500, {'ok': result['ok'], 'view': view, 'result': parsed_result, 'cli': compact_cli_result(result)})
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
