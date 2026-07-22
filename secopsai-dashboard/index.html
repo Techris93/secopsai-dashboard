@@ -287,6 +287,11 @@
                 <span class="status-pill" id="intelligence-bridge-pill">Checking</span>
               </div>
               <div id="intelligence-bridge-detail" class="kv-list"></div>
+              <label class="intelligence-credential-field" id="intelligence-token-field">
+                <span>Local action credential</span>
+                <input id="intelligence-admin-token" type="password" autocomplete="current-password" aria-describedby="intelligence-token-hint" placeholder="Intelligence or Triage Ops credential" />
+              </label>
+              <p class="small" id="intelligence-token-hint">Required for service controls. Existing pilot installations may use the same credential configured for Triage Ops.</p>
               <div class="intelligence-actions" id="intelligence-service-actions">
                 <button class="secondary-btn" data-intelligence-service="install" type="button">Install service</button>
                 <button class="secondary-btn" data-intelligence-service="start" type="button">Start</button>
@@ -317,7 +322,6 @@
             <div class="intelligence-request-grid">
               <label><span>Approved action</span><select id="intelligence-action-select"><option value="prioritize_findings">Prioritize open findings</option><option value="explain_finding">Explain a finding</option><option value="recommend_remediation">Recommend remediation</option><option value="analyze_asset_change">Analyze asset change</option><option value="analyze_research_case">Analyze research case</option><option value="generate_analyst_brief">Generate analyst brief</option><option value="review_publication_safety">Review publication safety</option></select></label>
               <label><span>Finding, asset, or case ID</span><input id="intelligence-target-id" maxlength="240" placeholder="Not required for workspace prioritization" /></label>
-              <label id="intelligence-token-field"><span>Local action credential</span><input id="intelligence-admin-token" type="password" autocomplete="current-password" placeholder="Configured INTELLIGENCE_ADMIN_TOKEN" /></label>
               <button class="primary-btn" id="intelligence-queue-btn" type="button">Queue analysis</button>
             </div>
             <div class="small" id="intelligence-request-hint">Select a target-specific action to use the currently selected finding or research case automatically.</div>

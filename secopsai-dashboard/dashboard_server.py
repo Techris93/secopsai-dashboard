@@ -715,7 +715,15 @@ def require_intelligence_admin(handler):
         return True
     supplied = handler.headers.get('X-SecOpsAI-Intelligence-Token', '').strip()
     if supplied != expected:
-        json_response(handler, 401, {'ok': False, 'error': 'Unauthorized intelligence action'})
+        json_response(
+            handler,
+            401,
+            {
+                'ok': False,
+                'error': 'The local Intelligence action credential was rejected.',
+                'code': 'intelligence_action_unauthorized',
+            },
+        )
         return True
     return False
 

@@ -7463,7 +7463,7 @@ pre {
 
 .intelligence-request-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 1.1fr) minmax(220px, 1.3fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(220px, 1.3fr) auto;
   align-items: end;
   gap: 10px;
   margin-top: 16px;
@@ -7473,13 +7473,23 @@ pre {
   min-width: 0;
 }
 
-.intelligence-request-grid label > span {
+.intelligence-request-grid label > span,
+.intelligence-credential-field > span {
   display: block;
   margin-bottom: 6px;
   color: var(--muted-strong);
   font: 600 0.68rem var(--asd-mono);
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.intelligence-credential-field {
+  display: block;
+  margin-top: 15px;
+}
+
+.intelligence-credential-field input {
+  width: 100%;
 }
 
 .intelligence-request-grid input,

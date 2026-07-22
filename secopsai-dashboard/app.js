@@ -127,7 +127,7 @@ const state = {
     data: null,
     loading: false,
     error: null,
-    adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || '',
+    adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || sessionStorage.getItem('secopsai_triage_ops_admin_token') || '',
     serviceOutput: ''
   },
   edgeWorkspace: {
@@ -349,7 +349,10 @@ async function dashboardApiFetch(input, init = {}) {
   }
   const response = await window.fetch(input, { ...init, headers });
   if (response.status === 401 && dashboardAuthRequired()) {
-    leaveAuthenticatedDashboard('Your operator session expired. Sign in again to continue.');
+    const authFailure = await response.clone().json().catch(() => ({}));
+    if (['operator_session_required', 'operator_session_invalid'].includes(String(authFailure?.code || ''))) {
+      leaveAuthenticatedDashboard('Your operator session expired. Sign in again to continue.');
+    }
   }
   return response;
 }
@@ -3735,6 +3738,12 @@ async function loadIntelligence({ render = true } = {}) {
 async function runIntelligenceAction(action, payload = {}, button = null) {
   const tokenInput = el('intelligence-admin-token');
   state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
+  const localMode = state.intelligence.data?.mode === 'local-helper';
+  if (localMode && !state.intelligence.adminToken) {
+    showToast('Enter the local Intelligence action credential before using bridge controls.', 'error');
+    tokenInput?.focus();
+    return null;
+  }
   if (state.intelligence.adminToken) sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
   setButtonBusy(button, true, 'Working…');
   try {
@@ -3747,7 +3756,12 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
       body: JSON.stringify({ action, ...payload })
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.ok === false) throw new Error(result.error || `Intelligence action HTTP ${response.status}`);
+    if (!response.ok || result.ok === false) {
+      if (result.code === 'intelligence_action_unauthorized') {
+        tokenInput?.focus();
+      }
+      throw new Error(result.error || `Intelligence action HTTP ${response.status}`);
+    }
     state.intelligence.serviceOutput = ['service', 'run-once'].includes(action) ? JSON.stringify(result.result || result, null, 2) : state.intelligence.serviceOutput;
     showToast(`Intelligence action completed: ${humanizeSnake(action)}`, 'success');
     await loadIntelligence({ render: false });
