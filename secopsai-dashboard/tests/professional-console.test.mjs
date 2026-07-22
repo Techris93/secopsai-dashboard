@@ -32,7 +32,7 @@ for (const marker of ['toast-region', 'command-palette', 'help-drawer', 'confirm
   assert.ok((index + styles).includes(marker), `missing ${marker}`);
 }
 
-assert.match(index, /20260715-professional-console/);
+assert.match(index, /20260722-asd-console-theme/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function requestConfirmation/);
 assert.doesNotMatch(app, /\b(?:window\.)?alert\s*\(/);

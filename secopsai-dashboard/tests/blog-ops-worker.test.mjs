@@ -664,6 +664,10 @@ function testCampaignResearchUiIsPresent() {
   assert.match(app, /orchestrate-candidate/);
   assert.match(startScript, /Replacing stale local dashboard helper/);
   assert.match(serveScript, /Replacing stale local dashboard helper/);
+  assert.match(startScript, /SECOPSAI_DASHBOARD_REPLACE_OTHER_CHECKOUT/);
+  assert.match(serveScript, /SECOPSAI_DASHBOARD_REPLACE_OTHER_CHECKOUT/);
+  assert.match(startScript, /is_related_dashboard_checkout/);
+  assert.match(serveScript, /is_related_dashboard_checkout/);
 }
 
 function testOkComputerSkinIsPresent() {
