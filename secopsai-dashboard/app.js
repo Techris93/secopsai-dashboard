@@ -3666,7 +3666,7 @@ function renderIntelligence() {
     <div class="kv-row"><div class="kv-key">Codex</div><div class="kv-val">${escapeHtml(bridge.codex_version || (localMode ? 'Unavailable' : 'Runs on local sensor'))}</div></div>
     <div class="kv-row"><div class="kv-key">Authentication</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.authentication_method || (localMode ? 'unknown' : 'local ChatGPT sign-in')))}</div></div>
     <div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">${escapeHtml(humanizeSnake(service.status || 'unknown'))}</div></div>
-    <div class="kv-row"><div class="kv-key">Credential storage</div><div class="kv-val">Codex-owned; not stored by dashboard</div></div>
+    <div class="kv-row"><div class="kv-key">ChatGPT credentials</div><div class="kv-val">Codex-owned; never stored by SecOpsAI</div></div>
     ${bridge.message ? `<div class="small" style="margin-top:10px;">${escapeHtml(bridge.message)}</div>` : ''}`;
 
   const serviceActions = el('intelligence-service-actions');
