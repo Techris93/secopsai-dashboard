@@ -34,15 +34,15 @@ Blog Ops is the editorial and deployment boundary.
 ### B. Start from a package watchlist
 
 1. Open **Research**.
-2. In **Promote from package watchlist**, click **Refresh watchlist**.
-3. Select one or more npm packages.
-4. Click **Preview selected** and inspect the selected package list.
-5. Click **Create draft cases** only after reviewing the preview.
-
-This workflow is intentionally limited to npm in the current release. It does
-not fetch registry data, download artifacts, unpack packages, or execute
-package code. Other ecosystems use the manual case flow until their
-registry-specific adapters are implemented.
+2. Use **Research discovery** to select npm, PyPI, NuGet, Maven, RubyGems,
+   Packagist, Go, or Open VSX.
+3. Add a package, brand, publisher, namespace, repository, or organization
+   watchlist and create the appropriate scoped monitor.
+4. Review a scored candidate. Coverage labels explain whether the result came
+   from a scoped watchlist or a broader registry collector.
+5. Promote the candidate only after checking its explainable score, registry
+   provenance, and reference package.
+6. Create or open the resulting draft case.
 
 ### C. Start manually
 
@@ -55,7 +55,25 @@ Use manual creation for public reports, malware, typosquatting, dependency
 confusion, infrastructure clustering, vulnerability research, and any case
 that did not begin as an `SCM-*` alert.
 
-## Build The Evidence Record
+## Run The Investigation Pipeline
+
+1. Open the case and verify its active package subject.
+2. Enter a legitimate comparison package only when you have verified that it
+   is the correct reference. SecOpsAI does not infer brand ownership.
+3. Click **Run Investigation Pipeline**.
+4. Wait while Core performs safe static intake and the Local Codex Bridge
+   analyzes minimized context. The page refreshes automatically.
+5. Review every proposal. Edit inaccurate wording, then click **Accept** or
+   **Reject**. Static evidence is attached only after acceptance.
+6. If the bridge fails, click **Retry from checkpoint**. If the reference was
+   missing, enter it and click **Add reference and rerun analysis**.
+7. Continue to the human verdict, sandbox, disclosure, and publication gates.
+
+The bridge never receives the quarantined package artifact or local path. It
+receives normalized metadata, hashes, manifests, static indicators, comparison
+results, and the current evidence matrix.
+
+## Build Or Extend The Evidence Record
 
 Open the case and use the action drawers in this order:
 

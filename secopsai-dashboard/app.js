@@ -215,6 +215,7 @@ const state = {
   nativeFindingOverrides: new Map(),
   outputEvidenceCache: new Map(),
   liveRefreshTimer: null,
+  researchPipelinePollTimer: null,
   nativeEventSource: null,
   nativeStreamStatus: 'disconnected',
   nativeStreamLastEventAt: null,
@@ -422,6 +423,10 @@ function stopDashboardRuntime() {
   if (state.liveRefreshTimer) {
     clearInterval(state.liveRefreshTimer);
     state.liveRefreshTimer = null;
+  }
+  if (state.researchPipelinePollTimer) {
+    clearInterval(state.researchPipelinePollTimer);
+    state.researchPipelinePollTimer = null;
   }
   if (state.nativeEventSource) {
     state.nativeEventSource.close();
@@ -7041,6 +7046,53 @@ function closeResearchRetractModal() {
 }
 
 function bindResearchCaseDetailActions(researchCase) {
+  el('research-pipeline-start-btn')?.addEventListener('click', async event => {
+    if (!(await requestConfirmation(`Run the safe investigation pipeline for ${researchCase.case_id}?`, {
+      title: 'Run investigation pipeline',
+      context: 'SecOpsAI will collect registry artifacts without executing them, queue minimized Local Codex analysis, and stop at human review.',
+      confirmLabel: 'Run pipeline'
+    }))) return;
+    runResearchCaseAction('pipeline-start', {
+      case_id: researchCase.case_id,
+      reference_ecosystem: el('research-pipeline-reference-ecosystem')?.value,
+      reference_package: el('research-pipeline-reference-package')?.value,
+      reference_version: el('research-pipeline-reference-version')?.value,
+      actor: 'dashboard-operator'
+    }, event.currentTarget);
+  });
+  el('research-pipeline-resume-btn')?.addEventListener('click', event => {
+    const pipeline = (researchCase.pipelines || [])[0];
+    if (!pipeline) return;
+    runResearchCaseAction('pipeline-resume', {
+      pipeline_id: pipeline.pipeline_id,
+      reference_ecosystem: el('research-pipeline-reference-ecosystem')?.value,
+      reference_package: el('research-pipeline-reference-package')?.value,
+      reference_version: el('research-pipeline-reference-version')?.value,
+      actor: 'dashboard-operator'
+    }, event.currentTarget);
+  });
+  document.querySelectorAll('#research-case-detail .research-pipeline-review-btn').forEach(button => button.addEventListener('click', async event => {
+    const decision = button.dataset.decision;
+    const itemId = button.dataset.itemId;
+    const pipelineId = button.dataset.pipelineId;
+    const editedContent = el(`research-review-content-${itemId}`)?.value || '';
+    if (!(await requestConfirmation(`${decision === 'accepted' ? 'Accept' : 'Reject'} this proposed ${statusLabel(button.dataset.itemType || 'research item')}?`, {
+      title: `${decision === 'accepted' ? 'Accept' : 'Reject'} research proposal`,
+      context: decision === 'accepted'
+        ? 'Accepted evidence proposals are attached to the case. Accepted model text becomes an immutable analyst-reviewed case note.'
+        : 'Rejected proposals remain auditable and do not change the research case.',
+      confirmLabel: decision === 'accepted' ? 'Accept proposal' : 'Reject proposal',
+      danger: decision === 'rejected'
+    }))) return;
+    runResearchCaseAction('pipeline-review', {
+      pipeline_id: pipelineId,
+      item_id: itemId,
+      decision,
+      edited_content: editedContent,
+      review_note: `Reviewed in Mission Control as ${decision}.`,
+      actor: 'dashboard-operator'
+    }, event.currentTarget);
+  }));
   el('research-save-case-btn')?.addEventListener('click', event => runResearchCaseAction('update', {
     case_id: researchCase.case_id,
     status: el('research-detail-status')?.value,
@@ -7199,6 +7251,72 @@ function bindResearchCaseDetailActions(researchCase) {
   }));
 }
 
+function renderInvestigationPipeline(researchCase, ecosystems) {
+  const pipelines = Array.isArray(researchCase.pipelines) ? researchCase.pipelines : [];
+  const pipeline = pipelines[0] || null;
+  const packageSubject = (researchCase.subjects || []).find(item => item.status === 'active' && ['package', 'extension'].includes(item.subject_type)) || {};
+  const config = pipeline?.config || {};
+  const reference = config.reference || {};
+  const summary = pipeline?.summary || {};
+  const steps = pipeline?.steps || [];
+  const revisionPrefix = pipeline ? `r${pipeline.revision || 1}:` : '';
+  const reviewItems = (pipeline?.review_items || []).filter(item => item.status !== 'superseded' && (!revisionPrefix || String(item.source_key || '').startsWith(revisionPrefix)));
+  const pendingReview = reviewItems.filter(item => ['pending', 'applying'].includes(item.status));
+  const canStart = !pipeline || ['succeeded', 'canceled'].includes(pipeline.status);
+  const comparisonNeeded = Boolean(summary.comparison_input_required || steps.some(step => step.step_key === 'collect_reference' && step.status === 'awaiting_input'));
+  const canResume = pipeline && (pipeline.status === 'failed' || (comparisonNeeded && ['awaiting_input', 'awaiting_review', 'awaiting_ai'].includes(pipeline.status)));
+  const statusCopy = !pipeline
+    ? 'No investigation pipeline has run for this case.'
+    : pipeline.status === 'awaiting_ai'
+      ? 'The Local Codex Bridge is processing minimized case context. This view updates automatically.'
+      : pipeline.status === 'awaiting_review'
+        ? `${pendingReview.length} proposal${pendingReview.length === 1 ? '' : 's'} require an analyst decision.`
+        : pipeline.status === 'failed'
+          ? pipeline.error_message || 'The pipeline stopped safely and can be resumed.'
+          : pipeline.status === 'succeeded'
+            ? 'All pipeline proposals were reviewed. Verdict, disclosure, sandbox, and publication remain separate human gates.'
+            : 'The pipeline is durable and can continue from its recorded step.';
+  const stepRows = steps.length ? steps.map(step => {
+    const jobStatus = step.intelligence_job_id
+      ? ` · job <code>${escapeHtml(step.intelligence_job_id)}</code>`
+      : '';
+    const message = step.error_message || step.result?.message || '';
+    return `<li class="research-pipeline-step ${escapeHtml(step.status)}"><span>${escapeHtml(statusLabel(step.step_key))}</span><span>${renderStatusPill(step.status)}${jobStatus}</span>${message ? `<small>${escapeHtml(message)}</small>` : ''}</li>`;
+  }).join('') : '<li class="research-pipeline-step pending"><span>Waiting to start</span></li>';
+  const reviewCards = reviewItems.length ? reviewItems.map(item => {
+    const editable = pipeline.status === 'awaiting_review' && ['pending', 'applying'].includes(item.status);
+    const content = item.edited_content || item.content || '';
+    const groupedItems = Math.max(0, Number(item.metadata?.grouped_items || 0));
+    return `<article class="research-review-item ${escapeHtml(item.status)}">
+      <div class="research-review-head"><div><span class="detail-eyebrow">${escapeHtml(statusLabel(item.item_type))}</span><code>${escapeHtml(item.item_id)}</code></div>${renderStatusPill(item.status)}</div>
+      <textarea id="research-review-content-${escapeHtml(item.item_id)}" rows="3" ${editable ? '' : 'readonly'}>${escapeHtml(content)}</textarea>
+      <div class="small">Confidence ${escapeHtml(String(item.confidence))}%${groupedItems ? ` · ${escapeHtml(String(groupedItems))} grouped item${groupedItems === 1 ? '' : 's'}` : ''} · source ${escapeHtml((item.evidence_refs || []).join(', ') || 'pipeline')}</div>
+      ${editable ? `<div class="research-form-actions"><button class="primary-btn research-pipeline-review-btn" data-pipeline-id="${escapeHtml(pipeline.pipeline_id)}" data-item-id="${escapeHtml(item.item_id)}" data-item-type="${escapeHtml(item.item_type)}" data-decision="accepted" type="button">Accept</button><button class="secondary-btn research-pipeline-review-btn" data-pipeline-id="${escapeHtml(pipeline.pipeline_id)}" data-item-id="${escapeHtml(item.item_id)}" data-item-type="${escapeHtml(item.item_type)}" data-decision="rejected" type="button">Reject</button></div>` : `<div class="small">Reviewed by ${escapeHtml(item.reviewer || 'operator')}${item.review_note ? ` · ${escapeHtml(item.review_note)}` : ''}</div>`}
+    </article>`;
+  }).join('') : '<div class="empty-state compact">Review proposals appear here after static collection and Local Codex analysis.</div>';
+  return `<section class="research-pipeline-panel" aria-labelledby="research-pipeline-title">
+    <div class="research-pipeline-heading">
+      <div><div class="detail-eyebrow">AUTOMATED, HUMAN-GATED</div><h5 id="research-pipeline-title">Investigation pipeline</h5><p class="small">Collect, compare, analyze, and prepare review proposals without exporting files or copying prompts. Raw artifacts stay local and package code is never executed.</p></div>
+      ${pipeline ? renderStatusPill(pipeline.status) : renderStatusPill('not_started', 'Not started')}
+    </div>
+    <div class="research-pipeline-summary"><strong>${escapeHtml(statusCopy)}</strong>${pipeline ? `<span><code>${escapeHtml(pipeline.pipeline_id)}</code> · revision ${escapeHtml(String(pipeline.revision || 1))}</span>` : ''}</div>
+    <div class="research-form-grid research-pipeline-targets">
+      <label><span>Investigated package</span><input value="${escapeHtml(`${packageSubject.ecosystem || 'unknown'}:${packageSubject.name || 'No package subject'}`)}" readonly /></label>
+      <label><span>Reference ecosystem</span><select id="research-pipeline-reference-ecosystem">${ecosystems.map(value => researchOption(value, reference.ecosystem || packageSubject.ecosystem || 'npm')).join('')}</select></label>
+      <label><span>Legitimate comparison package</span><input id="research-pipeline-reference-package" value="${escapeHtml(reference.package || '')}" placeholder="Required only when a trusted reference is known" /></label>
+      <label><span>Reference version</span><input id="research-pipeline-reference-version" value="${escapeHtml(reference.version || '')}" placeholder="Latest stable when empty" /></label>
+    </div>
+    ${comparisonNeeded ? '<div class="research-pipeline-notice">Comparison is incomplete. SecOpsAI will not guess which package is legitimate. Enter a verified reference and resume.</div>' : ''}
+    <div class="research-form-actions">
+      <button class="primary-btn" id="research-pipeline-start-btn" type="button" ${canStart ? '' : 'disabled'}>Run Investigation Pipeline</button>
+      ${pipeline ? `<button class="secondary-btn" id="research-pipeline-resume-btn" type="button" ${canResume ? '' : 'disabled'}>${pipeline.status === 'failed' ? 'Retry from checkpoint' : 'Add reference and rerun analysis'}</button>` : ''}
+    </div>
+    <ol class="research-pipeline-steps">${stepRows}</ol>
+    <div class="research-review-list"><div class="research-list-head"><div><h5>Analyst review queue</h5><p class="small">Edit proposed text when needed. Acceptance is recorded with your operator identity; rejection leaves canonical case evidence unchanged.</p></div>${pipeline ? `<span class="status-pill">${pendingReview.length} pending</span>` : ''}</div>${reviewCards}</div>
+    <p class="small research-pipeline-boundary">The pipeline cannot record a maliciousness verdict, submit a sandbox artifact, send disclosure, approve publication, or publish an article.</p>
+  </section>`;
+}
+
 function renderResearchAutomationPanel(researchCase) {
   const subjects = researchCase.subjects || [];
   const packageSubject = subjects.find(item => item.subject_type === 'package' && item.status === 'active') || subjects[0] || {};
@@ -7209,6 +7327,7 @@ function renderResearchAutomationPanel(researchCase) {
   const sandboxes = researchCase.sandbox_requests || [];
   const ecosystems = ['npm', 'pypi', 'nuget', 'maven', 'rubygems', 'packagist', 'go', 'open-vsx'];
   return researchDetailSection('Research automation', `
+    ${renderInvestigationPipeline(researchCase, ecosystems)}
     <p class="small">Safe intake fetches official metadata and artifacts into quarantine, hashes them, and performs bounded static inspection. It never installs or executes the package.</p>
     <div class="research-form-grid">
       <label><span>Ecosystem</span><select id="research-intake-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label>
@@ -7338,6 +7457,28 @@ function renderResearchCases() {
     }
   }));
   renderResearchCaseDetail(state.researchCases.selected);
+  syncResearchPipelinePolling();
+}
+
+function syncResearchPipelinePolling() {
+  const pipeline = (state.researchCases.selected?.pipelines || [])[0];
+  const shouldPoll = pipeline && ['running', 'awaiting_ai'].includes(pipeline.status);
+  if (!shouldPoll) {
+    if (state.researchPipelinePollTimer) clearInterval(state.researchPipelinePollTimer);
+    state.researchPipelinePollTimer = null;
+    return;
+  }
+  if (state.researchPipelinePollTimer) return;
+  state.researchPipelinePollTimer = setInterval(async () => {
+    const caseId = state.researchCases.selectedId;
+    if (!caseId) return;
+    try {
+      await loadResearchCaseDetail(caseId, { render: false });
+      renderResearchCases();
+    } catch (error) {
+      console.warn('research pipeline refresh failed', error);
+    }
+  }, 5000);
 }
 
 async function loadIntegrationStatus() {
