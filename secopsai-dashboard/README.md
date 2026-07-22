@@ -227,6 +227,7 @@ These guide automations intentionally do not close findings, persist SOC finding
 - `app.js` — UI logic
 - `styles.css` — styling
 - `config.template.js` — generated config template
+- `config.js` — ignored runtime output generated from local environment values or served dynamically by the Cloudflare Worker; never commit it
 - `generate-config.py` — config generator
 - `dashboard_server.py` — local helper server
 - `serve-dashboard.sh` — simple local serve
