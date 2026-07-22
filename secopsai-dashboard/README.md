@@ -48,6 +48,8 @@ Hosted Cloudflare Pages uses server-side variables instead:
 
 These values belong in Pages secrets/variables, never `config.js` or a `NEXT_PUBLIC_*` value. The Core intelligence and bridge tokens must be different from each other and from the Core read token. Operator email/password access remains Supabase invitation-only and is separate from every integration credential.
 
+Leave `SECOPSAI_MCP_URL` unset until the OAuth-protected MCP service has a successful deployment. The local Codex bridge and hosted Core queue do not depend on it.
+
 The complete OAuth, Render, local-service, and ChatGPT developer-app procedure is in [Intelligence integrations](https://docs.secopsai.dev/intelligence-integrations/).
 
 ## Operator Authentication
