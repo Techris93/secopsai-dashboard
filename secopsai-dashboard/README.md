@@ -249,10 +249,13 @@ python3 generate-config.py
 ```
 
 The launcher replaces an older `dashboard_server.py` process only when it is
-listening from this dashboard directory on the requested local port. That keeps
-Triage Ops Campaign Discovery from accidentally hitting a stale helper route
-that only understands single-finding actions. If you intentionally want to keep
-an existing helper, run with `SECOPSAI_DASHBOARD_REPLACE_STALE_HELPER=0`.
+listening from this dashboard directory, or from another checkout with the same
+Git origin, on the requested local port. It prints both paths before replacing a
+different checkout. That keeps Mission Control from silently serving an older
+UI or helper contract. Unrelated local servers are never stopped. If you
+intentionally want to keep an existing dashboard helper, run with
+`SECOPSAI_DASHBOARD_REPLACE_STALE_HELPER=0`; set
+`SECOPSAI_DASHBOARD_REPLACE_OTHER_CHECKOUT=0` to keep a related checkout.
 
 Optional `.env` values:
 - `DASHBOARD_AUTH_REQUIRED`
