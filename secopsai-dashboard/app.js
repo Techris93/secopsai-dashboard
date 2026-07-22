@@ -6595,6 +6595,19 @@ async function runResearchDiscoveryAction(action, payload = {}, button = null) {
   }
 }
 
+function syncResearchDiscoveryWatchlistOptions() {
+  const discovery = state.researchCases.discovery;
+  const watchlistSelect = el('research-discovery-watchlist-id');
+  if (!watchlistSelect) return;
+  const current = watchlistSelect.value;
+  const selectedEcosystem = el('research-discovery-ecosystem')?.value || '';
+  const options = discovery.watchlists.filter(item => !selectedEcosystem || item.ecosystem === selectedEcosystem);
+  watchlistSelect.innerHTML = options.length
+    ? options.map(item => `<option value="${escapeHtml(item.watchlist_id)}">${escapeHtml(item.ecosystem)} · ${escapeHtml(item.identifier)}</option>`).join('')
+    : `<option value="">Add a ${escapeHtml(selectedEcosystem || 'matching')} watchlist first</option>`;
+  if (options.some(item => item.watchlist_id === current)) watchlistSelect.value = current;
+}
+
 function renderResearchDiscovery() {
   const discovery = state.researchCases.discovery;
   const health = el('research-discovery-health');
@@ -6617,16 +6630,7 @@ function renderResearchDiscovery() {
     edgeMetric('Monitors', discovery.monitors.length, 'Due and scheduled'),
     edgeMetric('Open alerts', discovery.alerts.filter(item => item.status === 'open').length, 'Candidate delivery queue'),
   ].join('');
-  const watchlistSelect = el('research-discovery-watchlist-id');
-  if (watchlistSelect) {
-    const current = watchlistSelect.value;
-    const selectedEcosystem = el('research-discovery-ecosystem')?.value || '';
-    const options = discovery.watchlists.filter(item => !selectedEcosystem || item.ecosystem === selectedEcosystem);
-    watchlistSelect.innerHTML = options.length
-      ? options.map(item => `<option value="${escapeHtml(item.watchlist_id)}">${escapeHtml(item.ecosystem)} · ${escapeHtml(item.identifier)}</option>`).join('')
-      : '<option value="">Add a watchlist first</option>';
-    if (options.some(item => item.watchlist_id === current)) watchlistSelect.value = current;
-  }
+  syncResearchDiscoveryWatchlistOptions();
   const candidates = discovery.candidates || [];
   const candidateMarkup = candidates.length
     ? `<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Ecosystem</th><th>Score</th><th>Why</th><th>Status</th></tr></thead><tbody>${candidates.slice(0, 25).map(item => `<tr><td><strong>${escapeHtml(item.package)}</strong><div class="small">${escapeHtml(item.version)} vs ${escapeHtml(item.reference_identifier)}</div></td><td>${escapeHtml(item.ecosystem)}</td><td>${escapeHtml(String(item.score))}</td><td>${escapeHtml(item.reason || 'Similarity requires analyst review')}</td><td>${escapeHtml(statusLabel(item.status))}</td></tr>`).join('')}</tbody></table></div>`
@@ -7793,6 +7797,7 @@ function bindEvents() {
     await loadResearchDiscovery();
     setButtonBusy(event.currentTarget, false);
   });
+  el('research-discovery-ecosystem')?.addEventListener('change', syncResearchDiscoveryWatchlistOptions);
   el('research-discovery-add-watchlist-btn')?.addEventListener('click', event => runResearchDiscoveryAction('watchlist-add', {
     ecosystem: el('research-discovery-ecosystem')?.value || 'npm',
     watch_type: el('research-discovery-watch-type')?.value || 'package',
@@ -7800,12 +7805,21 @@ function bindEvents() {
     threshold: Number(el('research-discovery-threshold')?.value || 70),
     reason: 'Added from Research discovery console'
   }, event.currentTarget));
-  el('research-discovery-create-monitor-btn')?.addEventListener('click', event => runResearchDiscoveryAction('monitor-create', {
-    ecosystem: el('research-discovery-ecosystem')?.value || 'npm',
-    watchlist_id: el('research-discovery-watchlist-id')?.value || '',
-    interval_seconds: Number(el('research-discovery-interval')?.value || 3600),
-    priority: 'normal'
-  }, event.currentTarget));
+  el('research-discovery-create-monitor-btn')?.addEventListener('click', event => {
+    const ecosystem = el('research-discovery-ecosystem')?.value || 'npm';
+    const watchlistId = el('research-discovery-watchlist-id')?.value || '';
+    const watchlist = state.researchCases.discovery.watchlists.find(item => item.watchlist_id === watchlistId);
+    if (!watchlist || watchlist.ecosystem !== ecosystem) {
+      setStatus(`Select a ${escapeHtml(ecosystem)} watchlist before creating its monitor.`, true);
+      return;
+    }
+    runResearchDiscoveryAction('monitor-create', {
+      ecosystem,
+      watchlist_id: watchlistId,
+      interval_seconds: Number(el('research-discovery-interval')?.value || 3600),
+      priority: 'normal'
+    }, event.currentTarget);
+  });
   el('research-discovery-run-due-btn')?.addEventListener('click', event => runResearchDiscoveryAction('monitor-run-due', { limit: 25 }, event.currentTarget));
   el('research-discovery-correlate-btn')?.addEventListener('click', event => runResearchDiscoveryAction('campaign-correlate', {}, event.currentTarget));
   document.querySelectorAll('.research-alert-deliver-btn').forEach(button => button.addEventListener('click', event => runResearchDiscoveryAction('alert-deliver', { alert_id: button.dataset.alertId, channel: 'email' }, event.currentTarget)));

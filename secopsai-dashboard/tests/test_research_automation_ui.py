@@ -66,6 +66,14 @@ def test_research_discovery_commands_are_allowlisted_and_cross_ecosystem():
     assert dashboard_server.build_research_discovery_args("monitor-run-due", {"limit": 10})[-1] == "10"
 
 
+def test_research_discovery_selector_tracks_the_selected_ecosystem():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "function syncResearchDiscoveryWatchlistOptions()" in source
+    assert "addEventListener('change', syncResearchDiscoveryWatchlistOptions)" in source
+    assert "watchlist.ecosystem !== ecosystem" in source
+    assert "Select a ${escapeHtml(ecosystem)} watchlist" in source
+
+
 def test_sandbox_approval_requires_public_acknowledgement():
     with pytest.raises(ValueError):
         dashboard_server.build_research_case_args(
