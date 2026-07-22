@@ -27,6 +27,8 @@ ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
 APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
 RESEARCH_CASE_ID_RE = re.compile(r'^RSC-[A-F0-9]{12}$')
+RESEARCH_PIPELINE_ID_RE = re.compile(r'^RPL-[A-F0-9]{16}$')
+RESEARCH_REVIEW_ITEM_ID_RE = re.compile(r'^RVI-[A-F0-9]{16}$')
 BLOG_DRAFT_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,260}$')
 ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive', 'not_applicable'}
 ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
@@ -78,6 +80,9 @@ RESEARCH_CASE_ACTIONS = {
     'sandbox-request',
     'sandbox-status',
     'sandbox-approve',
+    'pipeline-start',
+    'pipeline-resume',
+    'pipeline-review',
 }
 RESEARCH_DISCOVERY_ACTIONS = {
     'capabilities',
@@ -891,9 +896,67 @@ def build_research_case_args(action, payload):
         add(args, '--actor', 'actor', 160)
         return args
 
+    if action == 'pipeline-resume':
+        pipeline_id = _clean_string(payload.get('pipeline_id'), 40).upper()
+        if not RESEARCH_PIPELINE_ID_RE.match(pipeline_id):
+            raise ValueError('Invalid research pipeline id')
+        args = ['research', 'pipeline', 'resume', pipeline_id]
+        reference_ecosystem = _clean_string(payload.get('reference_ecosystem'), 40).lower()
+        reference_package = _clean_string(payload.get('reference_package'), 512)
+        reference_version = _clean_string(payload.get('reference_version'), 160)
+        if reference_ecosystem and not ECOSYSTEM_RE.match(reference_ecosystem):
+            raise ValueError('Invalid reference ecosystem')
+        if reference_package and not PACKAGE_RE.match(reference_package):
+            raise ValueError('Invalid reference package')
+        if reference_version and not VERSION_RE.match(reference_version):
+            raise ValueError('Invalid reference version')
+        for flag, value in (
+            ('--reference-ecosystem', reference_ecosystem),
+            ('--reference-package', reference_package),
+            ('--reference-version', reference_version),
+        ):
+            if value:
+                args.extend([flag, value])
+        add(args, '--actor', 'actor', 160)
+        return args
+
+    if action == 'pipeline-review':
+        pipeline_id = _clean_string(payload.get('pipeline_id'), 40).upper()
+        item_id = _clean_string(payload.get('item_id'), 40).upper()
+        decision = _clean_string(payload.get('decision'), 20).lower()
+        if not RESEARCH_PIPELINE_ID_RE.match(pipeline_id) or not RESEARCH_REVIEW_ITEM_ID_RE.match(item_id):
+            raise ValueError('Invalid pipeline review target')
+        if decision not in {'accepted', 'rejected'}:
+            raise ValueError('Invalid pipeline review decision')
+        args = ['research', 'pipeline', 'review', pipeline_id, item_id, '--decision', decision]
+        add(args, '--edited-content', 'edited_content', 12000)
+        add(args, '--review-note', 'review_note', 2000)
+        add(args, '--actor', 'actor', 160)
+        return args
+
     case_id = _clean_string(payload.get('case_id'), 32).upper()
     if not RESEARCH_CASE_ID_RE.match(case_id):
         raise ValueError('Invalid research case id')
+    if action == 'pipeline-start':
+        args = ['research', 'pipeline', 'start', case_id]
+        reference_ecosystem = _clean_string(payload.get('reference_ecosystem'), 40).lower()
+        reference_package = _clean_string(payload.get('reference_package'), 512)
+        reference_version = _clean_string(payload.get('reference_version'), 160)
+        if reference_ecosystem and not ECOSYSTEM_RE.match(reference_ecosystem):
+            raise ValueError('Invalid reference ecosystem')
+        if reference_package and not PACKAGE_RE.match(reference_package):
+            raise ValueError('Invalid reference package')
+        if reference_version and not VERSION_RE.match(reference_version):
+            raise ValueError('Invalid reference version')
+        for flag, value in (
+            ('--reference-ecosystem', reference_ecosystem),
+            ('--reference-package', reference_package),
+            ('--reference-version', reference_version),
+        ):
+            if value:
+                args.extend([flag, value])
+        add(args, '--actor', 'actor', 160)
+        return args
     workflow_commands = {
         'intake-run', 'evidence-matrix', 'analyst-brief', 'verdict', 'publication-check', 'publication-approve',
         'prepare-disclosure', 'disclosure-status', 'sandbox-request', 'sandbox-status',

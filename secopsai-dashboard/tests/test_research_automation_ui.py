@@ -22,10 +22,28 @@ def test_research_actions_are_typed_and_not_shell_commands():
         "sandbox-request",
         "job-retry",
         "job-cancel",
+        "pipeline-start",
+        "pipeline-resume",
+        "pipeline-review",
     ):
         assert f"runResearchCaseAction('{action}'" in source
     assert "Run Safe Package Intake" in source
     assert "Attach Verified Evidence" in source
+    assert "Run Investigation Pipeline" in source
+    assert "Local Codex Bridge" in source
+    assert "This view updates automatically." in source
+    assert "syncResearchPipelinePolling()" in source
+    assert "Add reference and rerun analysis" in source
+    assert "revisionPrefix" in source
+    assert "pipeline.status === 'awaiting_review'" in source
+    assert "groupedItems" in source
+    assert "No export or upload" not in source
+    assert "without exporting files or copying prompts" in source
+    preview = (ROOT / "tests" / "fixtures" / "research-pipeline-preview.html").read_text(encoding="utf-8")
+    assert "AUTOMATED, HUMAN-GATED" in preview
+    assert "Analyst review queue" in preview
+    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+    assert ".research-pipeline-targets {\n  grid-template-columns: repeat(2, minmax(0, 1fr));" in styles
 
 
 def test_helper_research_actions_map_to_allowlisted_cli_args():
@@ -52,6 +70,52 @@ def test_helper_rejects_untrusted_case_arguments():
     except ValueError:
         return
     raise AssertionError("unsafe package input was accepted")
+
+
+def test_pipeline_actions_map_to_typed_core_commands():
+    start = dashboard_server.build_research_case_args(
+        "pipeline-start",
+        {
+            "case_id": "RSC-AAAAAAAAAAAA",
+            "reference_ecosystem": "nuget",
+            "reference_package": "Braintree",
+            "reference_version": "5.30.0",
+            "actor": "dashboard-operator",
+        },
+    )
+    assert start[:4] == ["research", "pipeline", "start", "RSC-AAAAAAAAAAAA"]
+    assert "--reference-package" in start
+
+    resume = dashboard_server.build_research_case_args(
+        "pipeline-resume",
+        {"pipeline_id": "RPL-AAAAAAAAAAAAAAAA", "reference_ecosystem": "npm", "reference_package": "braintree-web"},
+    )
+    assert resume[:4] == ["research", "pipeline", "resume", "RPL-AAAAAAAAAAAAAAAA"]
+
+    review = dashboard_server.build_research_case_args(
+        "pipeline-review",
+        {
+            "pipeline_id": "RPL-AAAAAAAAAAAAAAAA",
+            "item_id": "RVI-BBBBBBBBBBBBBBBB",
+            "decision": "accepted",
+            "edited_content": "Evidence-backed edited proposal.",
+        },
+    )
+    assert review[:5] == ["research", "pipeline", "review", "RPL-AAAAAAAAAAAAAAAA", "RVI-BBBBBBBBBBBBBBBB"]
+    assert "--decision" in review
+
+
+def test_pipeline_gateway_rejects_untrusted_targets_and_decisions():
+    with pytest.raises(ValueError):
+        dashboard_server.build_research_case_args(
+            "pipeline-start",
+            {"case_id": "RSC-AAAAAAAAAAAA", "reference_ecosystem": "npm", "reference_package": "bad; curl evil"},
+        )
+    with pytest.raises(ValueError):
+        dashboard_server.build_research_case_args(
+            "pipeline-review",
+            {"pipeline_id": "RPL-AAAAAAAAAAAAAAAA", "item_id": "RVI-BBBBBBBBBBBBBBBB", "decision": "publish"},
+        )
 
 
 def test_research_discovery_commands_are_allowlisted_and_cross_ecosystem():

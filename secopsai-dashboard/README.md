@@ -174,6 +174,7 @@ expiry and warns when overlap-safe rotation is due.
 
 ### Research Cases
 - Core-backed case queue and full investigation timeline
+- one-click, revisioned investigation pipeline using the local Codex subscription bridge
 - structured subjects, evidence provenance, IOCs, and linked SOC findings
 - deterministic publication readiness and responsible-disclosure state
 - downloadable Markdown case reports
@@ -183,12 +184,15 @@ Research reads are available through the helper without a write token.
 Mutations use `TRIAGE_OPS_ADMIN_TOKEN`; the browser never constructs or runs a
 shell command.
 
-The Research Cases workspace also includes a protected watchlist promotion
-panel. Select one or more npm packages, click **Preview selected**, then click
-**Create draft cases** after reviewing the result. Preview maps directly to
-`research case from-watchlist` without creating records; creation uses the
-admin token and remains idempotent. Package code is never fetched or executed
-by this workflow.
+The Research workspace includes cross-ecosystem watchlists and a protected
+promotion path. After a reviewed candidate becomes a draft case, select the
+case and click **Run Investigation Pipeline**. Core performs bounded static
+intake, optionally compares a verified legitimate package, and queues
+minimized analysis through the installed Local Codex Bridge. Mission Control
+updates automatically and presents every result as an Accept/Reject proposal.
+No artifact upload or copied prompt is required. Package code is never
+executed, and verdict, sandbox, disclosure, and publication controls remain
+separate human gates.
 
 For the complete operator path from a lead to a reviewed publication, see
 [`docs/research-operator-runbook.md`](docs/research-operator-runbook.md). The

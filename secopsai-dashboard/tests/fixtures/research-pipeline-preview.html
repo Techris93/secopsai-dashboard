@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SecOpsAI research pipeline preview</title>
+  <style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#fbfaf6}</style>
+</head>
+<body>
+  <iframe id="preview" title="SecOpsAI research pipeline preview"></iframe>
+  <script>
+    fetch('/index.html').then(response => response.text()).then(source => {
+      const withoutScripts = source
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/href="\.\/styles\.css([^\"]*)"/i, 'href="/styles.css$1"');
+      const frame = document.getElementById('preview');
+      frame.addEventListener('load', () => {
+        const doc = frame.contentDocument;
+        doc.getElementById('auth-gate').hidden = true;
+        doc.getElementById('auth-gate').style.display = 'none';
+        const shell = doc.getElementById('app-shell');
+        shell.classList.remove('auth-pending');
+        shell.removeAttribute('aria-hidden');
+        doc.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+        doc.getElementById('page-research-cases').classList.add('active');
+        doc.querySelectorAll('.nav-btn').forEach(button => button.classList.toggle('active', button.dataset.page === 'research-cases'));
+        doc.getElementById('top-strip-context').textContent = 'Research · investigation pipeline';
+        doc.querySelector('.research-auth-card').hidden = true;
+        doc.querySelector('.research-auth-card').style.display = 'none';
+        doc.getElementById('research-case-create-panel').hidden = true;
+        doc.querySelector('.research-watchlist-panel').hidden = true;
+        doc.querySelector('.research-discovery-panel').hidden = true;
+        doc.getElementById('research-cases-stats').innerHTML = [
+          ['3','Active cases'],['1','Awaiting review'],['7','Evidence records']
+        ].map(([value,label]) => `<div class="metric-card"><div class="metric">${value}</div><div class="metric-label">${label}</div></div>`).join('');
+        doc.getElementById('research-case-list').innerHTML = '<div class="research-case-list"><button class="research-case-row selected" type="button"><span class="research-case-row-head"><strong>NuGet payment SDK impersonation</strong><span class="severity-pill high">High</span></span><span class="small"><code>RSC-2A4C09F8D611</code> · Investigating · confidence 65</span><span class="small">7 evidence · 2 IOCs · 22 Jul, 15:05</span></button><button class="research-case-row" type="button"><span class="research-case-row-head"><strong>PyPI maintainer-change review</strong><span class="severity-pill medium">Medium</span></span><span class="small"><code>RSC-5B1191A2ED42</code> · Draft · confidence 30</span></button></div>';
+        doc.getElementById('research-case-detail').innerHTML = `
+          <div class="research-detail-head"><div><div class="detail-eyebrow"><code>RSC-2A4C09F8D611</code></div><h3>NuGet payment SDK impersonation</h3><p class="small">Updated 22 Jul, 15:05 · malicious package</p></div><div class="research-detail-badges"><span class="severity-pill high">High</span><span class="status-pill">Investigating</span></div></div>
+          <div class="research-readiness blocked"><strong>3 publication blockers</strong><ul><li>Human verdict is not recorded.</li><li>Disclosure is not complete.</li><li>Publication approval is not recorded.</li></ul></div>
+          <section class="research-detail-section"><h4>Research automation</h4>
+            <section class="research-pipeline-panel" aria-labelledby="research-pipeline-title">
+              <div class="research-pipeline-heading"><div><div class="detail-eyebrow">AUTOMATED, HUMAN-GATED</div><h5 id="research-pipeline-title">Investigation pipeline</h5><p class="small">Collect, compare, analyze, and prepare review proposals without exporting files or copying prompts. Raw artifacts stay local and package code is never executed.</p></div><span class="status-pill">Awaiting review</span></div>
+              <div class="research-pipeline-summary"><strong>4 proposals require an analyst decision.</strong><span><code>RPL-9D302A7C1F608B44</code> · revision 2</span></div>
+              <div class="research-form-grid research-pipeline-targets"><label><span>Investigated package</span><input value="nuget:Braintree.Payments" readonly /></label><label><span>Reference ecosystem</span><select><option>NuGet</option></select></label><label><span>Legitimate comparison package</span><input value="Braintree" /></label><label><span>Reference version</span><input value="5.30.0" /></label></div>
+              <div class="research-form-actions"><button class="primary-btn" type="button" disabled>Run Investigation Pipeline</button><button class="secondary-btn" type="button" disabled>Add reference and rerun analysis</button></div>
+              <ol class="research-pipeline-steps"><li class="research-pipeline-step succeeded"><span>Collect subject</span><span><span class="status-pill">Succeeded</span></span><small>Artifact hashed and statically inspected without execution.</small></li><li class="research-pipeline-step succeeded"><span>Compare packages</span><span><span class="status-pill">Succeeded</span></span></li><li class="research-pipeline-step succeeded"><span>Analyze research case</span><span><span class="status-pill">Succeeded</span> · job <code>AIJ-37B8A11F027EEC42</code></span></li><li class="research-pipeline-step queued"><span>Human review</span><span><span class="status-pill">Queued</span></span></li></ol>
+              <div class="research-review-list"><div class="research-list-head"><div><h5>Analyst review queue</h5><p class="small">Edit proposed text when needed. Acceptance is recorded with your operator identity; rejection leaves canonical case evidence unchanged.</p></div><span class="status-pill">4 pending</span></div>
+                <article class="research-review-item pending"><div class="research-review-head"><div><span class="detail-eyebrow">PROPOSED FACT</span><code>RVI-21F65D1D86070C77</code></div><span class="status-pill">Pending</span></div><textarea rows="3">- The collected artifact hash is recorded.\n- The registry version is recorded.</textarea><div class="small">Confidence 80% · 2 grouped items · source AIJ-37B8A11F027EEC42</div><div class="research-form-actions"><button class="primary-btn" type="button">Accept</button><button class="secondary-btn" type="button">Reject</button></div></article>
+                <article class="research-review-item pending"><div class="research-review-head"><div><span class="detail-eyebrow">UNSUPPORTED CLAIM</span><code>RVI-581E05B6DA5D7A22</code></div><span class="status-pill">Pending</span></div><textarea rows="3">Victim impact has not been established by the available evidence.</textarea><div class="small">Confidence 90% · source AIJ-37B8A11F027EEC42</div><div class="research-form-actions"><button class="primary-btn" type="button">Accept</button><button class="secondary-btn" type="button">Reject</button></div></article>
+              </div>
+              <p class="small research-pipeline-boundary">The pipeline cannot record a maliciousness verdict, submit a sandbox artifact, send disclosure, approve publication, or publish an article.</p>
+            </section>
+          </section>`;
+      }, { once: true });
+      frame.srcdoc = withoutScripts;
+    });
+  </script>
+</body>
+</html>

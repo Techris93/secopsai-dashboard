@@ -1,8 +1,12 @@
 # Research Console Workflow
 
-The Research Cases page now exposes the investigation workflow as typed buttons. Use **Run Safe Package Intake** for a selected package subject, review the quarantine result, and then use **Attach Verified Evidence**. The dashboard never sends arbitrary shell commands to Core.
+The primary case action is **Run Investigation Pipeline**. It combines bounded package intake, optional legitimate-package comparison, a preliminary evidence matrix, and structured Local Codex Bridge analysis. Mission Control queues the work in Core, updates the case automatically, and presents all deterministic and model-assisted output as editable Accept/Reject proposals. It does not require a case export, file upload, copied prompt, or model API key.
 
-The automation panel also provides **Collect Metadata Preview**, **Generate Evidence Matrix**, **Record Human Verdict**, **Prepare Disclosure**, **Request Sandbox Approval**, **Run Publication Safety Check**, and **Approve Publication Review**. Blog Ops remains the final draft editing and publication surface.
+Accepted static proposals attach evidence with review provenance. Accepted model text becomes an immutable analyst-reviewed case note. Related list output is bounded, deduplicated, and grouped into editable review cards; each card shows how many items it contains. Rejected proposals remain auditable and leave canonical evidence unchanged. A failed run exposes **Retry from checkpoint**. When a verified comparison package becomes available, **Add reference and rerun analysis** creates a new revision and supersedes stale proposals.
+
+The pipeline never executes package code, guesses package legitimacy, records a maliciousness verdict, submits a sandbox artifact, sends disclosure, approves publication, or publishes an article.
+
+The automation panel retains **Collect Metadata Preview**, **Run Safe Package Intake**, **Attach Verified Evidence**, **Generate Evidence Matrix**, **Record Human Verdict**, **Prepare Disclosure**, **Request Sandbox Approval**, **Run Publication Safety Check**, and **Approve Publication Review** as granular recovery and advanced controls. Blog Ops remains the final draft editing and publication surface.
 
 Triage and Research are intentionally separate. Supply Chain Triage is an inbox for incoming alerts and leads. Research Cases are the durable investigation, disclosure, evidence, and publication record. A lead should move from triage to a case rather than being manually re-entered.
 
