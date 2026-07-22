@@ -37,7 +37,9 @@ openssl rand -hex 32
 # Put the generated value in INTELLIGENCE_ADMIN_TOKEN. Do not commit it.
 ```
 
-Restart `./start-local-dashboard-stack.sh`, open **System**, and use the buttons to install, start, stop, inspect, or run the local bridge. Paste the action credential only when queuing or canceling a job. It is sent to the local helper and is not saved by the page.
+Restart `./start-local-dashboard-stack.sh`, open **System**, and enter the action credential beside the local bridge controls before installing, starting, stopping, inspecting, or running the service. The credential is sent only to the local helper and retained in session storage for the current browser tab.
+
+Existing pilot installations may continue to use `TRIAGE_OPS_ADMIN_TOKEN` when a separate `INTELLIGENCE_ADMIN_TOKEN` is not configured. Enter the credential once in **System → Local Codex bridge**; it is retained only in the current browser tab. A missing or rejected action credential must produce an in-page error and must never sign the operator out. Operator sign-in and local action authorization are separate controls.
 
 Hosted Cloudflare Pages uses server-side variables instead:
 
