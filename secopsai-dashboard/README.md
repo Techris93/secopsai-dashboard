@@ -19,8 +19,36 @@ The dashboard is now intentionally narrow:
 - Blog Ops workflow dispatch and review queue
 - built-in operator guide for dashboard click paths and safety rules
 - Supabase-backed integration status
+- SecOpsAI Intelligence controls for the local Codex bridge and hosted read-only ChatGPT app
 
 It is not a Discord control plane and not a generic multi-agent org shell.
+
+## SecOpsAI Intelligence
+
+The **System** page contains one operator surface for two separate integrations:
+
+- **Local Codex bridge** queues fixed, read-only analysis actions and processes them with the Codex CLI login already owned by the operator. The dashboard never stores a ChatGPT credential.
+- **ChatGPT app** exposes nine read-only SecOpsAI tools through the hosted OAuth MCP endpoint. ChatGPT authenticates the model session; SecOpsAI OAuth independently authorizes access to SecOpsAI data.
+
+For a local dashboard, configure an action credential in `.env`:
+
+```bash
+openssl rand -hex 32
+# Put the generated value in INTELLIGENCE_ADMIN_TOKEN. Do not commit it.
+```
+
+Restart `./start-local-dashboard-stack.sh`, open **System**, and use the buttons to install, start, stop, inspect, or run the local bridge. Paste the action credential only when queuing or canceling a job. It is sent to the local helper and is not saved by the page.
+
+Hosted Cloudflare Pages uses server-side variables instead:
+
+- `SECOPSAI_CORE_API_URL`
+- `SECOPSAI_CORE_READ_TOKEN`
+- `SECOPSAI_CORE_INTELLIGENCE_TOKEN`
+- `SECOPSAI_MCP_URL`
+
+These values belong in Pages secrets/variables, never `config.js` or a `NEXT_PUBLIC_*` value. The Core intelligence and bridge tokens must be different from each other and from the Core read token. Operator email/password access remains Supabase invitation-only and is separate from every integration credential.
+
+The complete OAuth, Render, local-service, and ChatGPT developer-app procedure is in [Intelligence integrations](https://docs.secopsai.dev/intelligence-integrations/).
 
 ## Operator Authentication
 

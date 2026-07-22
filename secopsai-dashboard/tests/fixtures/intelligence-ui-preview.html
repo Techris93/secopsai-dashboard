@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SecOpsAI Intelligence UI preview</title>
+  <style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#fbfaf6}</style>
+</head>
+<body>
+  <iframe id="preview" title="SecOpsAI Intelligence preview"></iframe>
+  <script>
+    fetch('/index.html').then(response => response.text()).then(source => {
+      const withoutScripts = source
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/href="\.\/styles\.css([^\"]*)"/i, 'href="/styles.css$1"');
+      const frame = document.getElementById('preview');
+      frame.addEventListener('load', () => {
+        const doc = frame.contentDocument;
+        doc.getElementById('auth-gate').hidden = true;
+        doc.getElementById('auth-gate').style.display = 'none';
+        const shell = doc.getElementById('app-shell');
+        shell.classList.remove('auth-pending');
+        shell.removeAttribute('aria-hidden');
+        doc.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+        doc.getElementById('page-integrations').classList.add('active');
+        doc.querySelectorAll('.nav-btn').forEach(button => button.classList.toggle('active', button.dataset.page === 'integrations'));
+        doc.getElementById('top-strip-context').textContent = 'System · health and integrations';
+        doc.getElementById('integration-summary').innerHTML = [
+          ['12','Open findings'],['1','Pending approval'],['0','Failed jobs'],['Ready','Core API']
+        ].map(([value,label]) => `<div class="metric-card"><div class="metric">${value}</div><div class="metric-label">${label}</div></div>`).join('');
+        doc.getElementById('integration-config').hidden = true;
+        doc.getElementById('intelligence-summary').innerHTML = [
+          ['4','Recorded jobs'],['1','Queued'],['0','Running'],['0','Failed']
+        ].map(([value,label]) => `<div class="metric-card"><div class="metric">${value}</div><div class="metric-label">${label}</div></div>`).join('');
+        doc.getElementById('intelligence-bridge-pill').textContent = 'Ready';
+        doc.getElementById('intelligence-bridge-detail').innerHTML = '<div class="kv-row"><div class="kv-key">Queue mode</div><div class="kv-val">Local SQLite</div></div><div class="kv-row"><div class="kv-key">Codex</div><div class="kv-val">codex-cli 0.144.6</div></div><div class="kv-row"><div class="kv-key">Authentication</div><div class="kv-val">ChatGPT subscription</div></div><div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">Not installed</div></div><div class="kv-row"><div class="kv-key">Credential storage</div><div class="kv-val">Codex-owned; not stored by dashboard</div></div>';
+        doc.getElementById('intelligence-mcp-pill').textContent = 'Setup required';
+        doc.getElementById('intelligence-mcp-detail').innerHTML = '<div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">Read-only OAuth MCP</div></div><div class="kv-row"><div class="kv-key">Endpoint</div><div class="kv-val">Not configured in this dashboard</div></div><div class="kv-row"><div class="kv-key">Available tools</div><div class="kv-val">9 read-only tools</div></div><div class="kv-row"><div class="kv-key">Write access</div><div class="kv-val">None</div></div>';
+        doc.getElementById('intelligence-jobs-table').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody><tr><td><strong>Explain finding</strong><div class="small mono">AIJ-3F7A2C109A84BC21</div></td><td>FND-EDGE-1042</td><td>Succeeded</td><td>22 Jul, 13:58</td><td><details><summary>Review result</summary></details></td><td></td></tr><tr><td><strong>Prioritize findings</strong><div class="small mono">AIJ-8C3E901DA4B7F122</div></td><td>Workspace</td><td>Queued</td><td>22 Jul, 14:01</td><td><span class="small">Pending</span></td><td><button class="mini-btn">Cancel</button></td></tr></tbody></table></div>';
+        doc.querySelectorAll('#page-integrations > .card').forEach(card => card.hidden = true);
+      }, { once: true });
+      frame.srcdoc = withoutScripts;
+    });
+  </script>
+</body>
+</html>
