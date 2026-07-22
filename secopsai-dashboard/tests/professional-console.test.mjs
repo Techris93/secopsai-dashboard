@@ -32,6 +32,13 @@ for (const marker of ['toast-region', 'command-palette', 'help-drawer', 'confirm
   assert.ok((index + styles).includes(marker), `missing ${marker}`);
 }
 
+for (const marker of ['SecOpsAI Intelligence', 'intelligence-action-select', 'intelligence-jobs-table', 'intelligence-copy-mcp-btn']) {
+  assert.ok(index.includes(marker), `missing intelligence surface: ${marker}`);
+}
+for (const marker of ['loadIntelligence', 'runIntelligenceAction', 'renderIntelligence']) {
+  assert.match(app, new RegExp(`function ${marker}`));
+}
+
 assert.match(index, /20260722-asd-console-theme/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function requestConfirmation/);

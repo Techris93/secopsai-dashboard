@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hmac
 import json
 import os
 import re
@@ -135,6 +136,18 @@ SAFE_SOURCE_URL_RE = re.compile(r'^https?://[^\s<>"\']{3,500}$', re.IGNORECASE)
 PAGES_PROJECT_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$')
 BRANCH_RE = re.compile(r'^[A-Za-z0-9._/-]{1,120}$')
 SECRETISH_RE = re.compile(r'(?i)\b([a-z0-9_ -]*(?:token|secret|api[_ -]?key|password|authorization)[a-z0-9_ -]*)\s*[:=]\s*([^\s,"\']{8,})')
+INTELLIGENCE_JOB_ID_RE = re.compile(r'^AIJ-[A-F0-9]{16}$')
+INTELLIGENCE_TARGET_RE = re.compile(r'^[A-Za-z0-9:._-]{0,240}$')
+INTELLIGENCE_BRIDGE_ACTIONS = {
+    'explain_finding',
+    'prioritize_findings',
+    'analyze_asset_change',
+    'analyze_research_case',
+    'generate_analyst_brief',
+    'review_publication_safety',
+    'recommend_remediation',
+}
+INTELLIGENCE_SERVICE_ACTIONS = {'install', 'start', 'stop', 'status', 'logs', 'uninstall'}
 CAMPAIGN_FIXTURE_PATHS = [
     SECOPSAI_ROOT / 'tests' / 'fixtures' / 'deadcode09284814-campaign.json',
 ]
@@ -630,6 +643,10 @@ def triage_ops_expected_token():
     )
 
 
+def intelligence_expected_token():
+    return os.environ.get('INTELLIGENCE_ADMIN_TOKEN', '').strip() or triage_ops_expected_token()
+
+
 def blog_ops_expected_token():
     return os.environ.get('BLOG_OPS_ADMIN_TOKEN', '').strip()
 
@@ -651,7 +668,7 @@ def require_blog_ops_admin(handler):
     auth = handler.headers.get('Authorization', '').strip()
     if auth.lower().startswith('bearer '):
         supplied = supplied or auth[7:].strip()
-    if supplied != expected:
+    if not hmac.compare_digest(supplied, expected):
         json_response(handler, 401, {'ok': False, 'error': 'Unauthorized Blog Ops action'})
         return True
     return False
@@ -681,6 +698,74 @@ def require_triage_ops_admin(handler):
         json_response(handler, 401, {'ok': False, 'error': 'Unauthorized Triage Ops action'})
         return True
     return False
+
+
+def require_intelligence_admin(handler):
+    expected = intelligence_expected_token()
+    if not expected:
+        json_response(
+            handler,
+            501,
+            {
+                'ok': False,
+                'error': 'Intelligence actions are not configured. Set INTELLIGENCE_ADMIN_TOKEN or TRIAGE_OPS_ADMIN_TOKEN.',
+                'code': 'not_configured',
+            },
+        )
+        return True
+    supplied = handler.headers.get('X-SecOpsAI-Intelligence-Token', '').strip()
+    if supplied != expected:
+        json_response(handler, 401, {'ok': False, 'error': 'Unauthorized intelligence action'})
+        return True
+    return False
+
+
+def build_intelligence_args(action, payload):
+    action = str(action or '').strip().lower()
+    if action == 'enqueue':
+        intelligence_action = str(payload.get('intelligence_action') or '').strip()
+        if intelligence_action not in INTELLIGENCE_BRIDGE_ACTIONS:
+            raise ValueError('Unsupported intelligence action')
+        target_id = str(payload.get('target_id') or '').strip()
+        if not INTELLIGENCE_TARGET_RE.fullmatch(target_id):
+            raise ValueError('Invalid intelligence target')
+        args = ['intelligence', 'enqueue', '--action', intelligence_action, '--requested-by', 'mission-control']
+        if target_id:
+            args.extend(['--target-id', target_id])
+        return [*args, *secopsai_db_args()]
+    if action == 'cancel':
+        job_id = str(payload.get('job_id') or '').strip()
+        if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):
+            raise ValueError('Invalid intelligence job ID')
+        return ['intelligence', 'jobs', 'cancel', job_id, '--actor', 'mission-control', *secopsai_db_args()]
+    if action == 'run-once':
+        return ['intelligence', 'bridge', 'run', '--once', *secopsai_db_args()]
+    if action == 'service':
+        service_action = str(payload.get('service_action') or '').strip().lower()
+        if service_action not in INTELLIGENCE_SERVICE_ACTIONS:
+            raise ValueError('Unsupported bridge service action')
+        args = ['intelligence', 'bridge', 'service', service_action]
+        if service_action == 'install':
+            args.extend(['--db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else [])
+        return args
+    raise ValueError('Unsupported intelligence operation')
+
+
+def collect_intelligence_status():
+    mcp_url = os.environ.get('SECOPSAI_MCP_URL', '').strip()
+    result, parsed = run_cli_json(
+        ['intelligence', 'status', '--limit', '50', *secopsai_db_args()],
+        timeout=45,
+    )
+    if not result.get('ok') or not isinstance(parsed, dict):
+        compact = compact_cli_result(result)
+        raise RuntimeError(compact.get('stderr') or compact.get('stdout') or 'Intelligence status is unavailable')
+    return {
+        'ok': True,
+        'mode': 'local-helper',
+        **parsed,
+        'chatgpt_app': {'mode': 'hosted-mcp', 'configured': bool(mcp_url), 'url': mcp_url},
+    }
 
 
 def validate_triage_ops_target(payload):
@@ -2771,6 +2856,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'secopsai_events_api': True,
                     'secopsai_campaign_api': True,
                     'secopsai_edge_api': True,
+                    'secopsai_intelligence_api': True,
                 },
                 'blog_ops': {
                     'mode': 'local-helper-cli',
@@ -2789,6 +2875,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if parsed.path == '/api/secopsai/triage-state':
             try:
                 return json_response(self, 200, collect_secopsai_triage_state())
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/intelligence':
+            try:
+                payload = collect_intelligence_status()
+                return json_response(self, 200 if payload.get('ok') else 503, payload)
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
@@ -3043,6 +3136,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         payload = read_request_json(self)
+
+        if parsed.path == '/api/secopsai/intelligence':
+            if require_intelligence_admin(self):
+                return
+            action = str(payload.get('action') or '').strip().lower()
+            try:
+                args = build_intelligence_args(action, payload)
+                result, parsed_result = run_cli_json(args, timeout=360 if action == 'run-once' else 90)
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 400,
+                    {
+                        'ok': bool(result.get('ok')),
+                        'action': action,
+                        'result': parsed_result,
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
         if parsed.path == '/api/secopsai/research-watchlist':
             action = str(payload.get('action') or 'preview').strip().lower()

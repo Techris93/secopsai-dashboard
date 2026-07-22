@@ -270,6 +270,66 @@
         </div>
         <div class="grid cols-4" id="integration-summary"></div>
         <div class="grid cols-2" id="integration-config" style="margin-top:18px;"></div>
+        <section class="intelligence-console" aria-labelledby="intelligence-title">
+          <div class="intelligence-console-head">
+            <div>
+              <div class="section-kicker">MODEL ASSISTANCE</div>
+              <h3 id="intelligence-title">SecOpsAI Intelligence</h3>
+              <p>Use approved read-only actions through a local ChatGPT subscription bridge or the hosted SecOpsAI ChatGPT app.</p>
+            </div>
+            <button class="secondary-btn" id="intelligence-refresh-btn" type="button">Refresh status</button>
+          </div>
+          <div class="grid cols-4 intelligence-summary" id="intelligence-summary"></div>
+          <div class="intelligence-grid">
+            <section class="intelligence-module" aria-labelledby="local-bridge-title">
+              <div class="module-head">
+                <div><h4 id="local-bridge-title">Local Codex bridge</h4><p>Uses the ChatGPT sign-in already owned by Codex on this computer.</p></div>
+                <span class="status-pill" id="intelligence-bridge-pill">Checking</span>
+              </div>
+              <div id="intelligence-bridge-detail" class="kv-list"></div>
+              <div class="intelligence-actions" id="intelligence-service-actions">
+                <button class="secondary-btn" data-intelligence-service="install" type="button">Install service</button>
+                <button class="secondary-btn" data-intelligence-service="start" type="button">Start</button>
+                <button class="secondary-btn" data-intelligence-service="stop" type="button">Stop</button>
+                <button class="secondary-btn" data-intelligence-service="logs" type="button">View logs</button>
+                <button class="primary-btn" id="intelligence-run-once-btn" type="button">Process next job</button>
+              </div>
+              <pre class="intelligence-log" id="intelligence-service-output" hidden></pre>
+            </section>
+
+            <section class="intelligence-module" aria-labelledby="chatgpt-app-title">
+              <div class="module-head">
+                <div><h4 id="chatgpt-app-title">ChatGPT app</h4><p>Read authorized SecOpsAI findings, assets, and research from inside ChatGPT.</p></div>
+                <span class="status-pill" id="intelligence-mcp-pill">Checking</span>
+              </div>
+              <div id="intelligence-mcp-detail" class="kv-list"></div>
+              <div class="intelligence-actions">
+                <button class="secondary-btn" id="intelligence-copy-mcp-btn" type="button">Copy MCP URL</button>
+                <a class="secondary-btn" href="https://docs.secopsai.dev/intelligence-integrations/" target="_blank" rel="noopener">Open setup guide</a>
+              </div>
+            </section>
+          </div>
+
+          <section class="intelligence-module intelligence-request" aria-labelledby="intelligence-request-title">
+            <div class="module-head">
+              <div><h4 id="intelligence-request-title">Request analysis</h4><p>Actions use normalized SecOpsAI context. They cannot publish, close findings, run scans, or execute package code.</p></div>
+            </div>
+            <div class="intelligence-request-grid">
+              <label><span>Approved action</span><select id="intelligence-action-select"><option value="prioritize_findings">Prioritize open findings</option><option value="explain_finding">Explain a finding</option><option value="recommend_remediation">Recommend remediation</option><option value="analyze_asset_change">Analyze asset change</option><option value="analyze_research_case">Analyze research case</option><option value="generate_analyst_brief">Generate analyst brief</option><option value="review_publication_safety">Review publication safety</option></select></label>
+              <label><span>Finding, asset, or case ID</span><input id="intelligence-target-id" maxlength="240" placeholder="Not required for workspace prioritization" /></label>
+              <label id="intelligence-token-field"><span>Local action credential</span><input id="intelligence-admin-token" type="password" autocomplete="current-password" placeholder="Configured INTELLIGENCE_ADMIN_TOKEN" /></label>
+              <button class="primary-btn" id="intelligence-queue-btn" type="button">Queue analysis</button>
+            </div>
+            <div class="small" id="intelligence-request-hint">Select a target-specific action to use the currently selected finding or research case automatically.</div>
+          </section>
+
+          <section class="intelligence-module" aria-labelledby="intelligence-jobs-title">
+            <div class="module-head">
+              <div><h4 id="intelligence-jobs-title">Analysis jobs</h4><p>Every request and result is durable, bounded, and reviewable.</p></div>
+            </div>
+            <div id="intelligence-jobs-table"></div>
+          </section>
+        </section>
         <div class="card" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>

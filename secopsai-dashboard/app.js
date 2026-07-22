@@ -123,6 +123,13 @@ const state = {
   channelRoutes: [],
   events: [],
   integrationStatus: null,
+  intelligence: {
+    data: null,
+    loading: false,
+    error: null,
+    adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || '',
+    serviceOutput: ''
+  },
   edgeWorkspace: {
     data: null,
     loading: false,
@@ -3452,6 +3459,7 @@ function renderIntegrations() {
           <div class="kv-row"><div class="kv-key">Sessions API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_sessions_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Research API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_research_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Campaign API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_campaign_api ? 'Ready' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Intelligence API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_intelligence_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Event stream</div><div class="kv-val">${escapeHtml(humanizeSnake(state.nativeStreamStatus || 'disconnected'))}${state.nativeStreamLastEventAt ? ` • ${escapeHtml(fmtDate(state.nativeStreamLastEventAt))}` : ''}</div></div>
           <div class="kv-row"><div class="kv-key">Latest findings artifact</div><div class="kv-val">${escapeHtml(localFindingsArtifact()?.generated_at ? fmtDate(localFindingsArtifact().generated_at) : 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Latest orchestrator run</div><div class="kv-val">${escapeHtml(localTriageLatestRun()?.generated_at ? fmtDate(localTriageLatestRun().generated_at) : 'Unavailable')}</div></div>
@@ -3491,6 +3499,7 @@ function renderIntegrations() {
         <div class="small" style="margin-top:12px;">Supabase remains useful for tasks and run visibility, but native triage queue state now sits above it in the dashboard.</div>
       </div>`;
   }
+  renderIntelligence();
 
   const sessionsTable = el('native-sessions-table');
   if (sessionsTable) {
@@ -3588,6 +3597,170 @@ function renderIntegrations() {
           <td><div class="small">${escapeHtml(compactText(run.findings?.[0]?.summary || 'Native orchestrator run recorded locally.', 160))}</div></td>
         </tr>`).join("")}</tbody>
     </table></div>`;
+}
+
+function intelligenceJobs() {
+  return Array.isArray(state.intelligence.data?.jobs?.jobs) ? state.intelligence.data.jobs.jobs : [];
+}
+
+function intelligenceBridgeActions() {
+  return Array.isArray(state.intelligence.data?.actions?.actions) ? state.intelligence.data.actions.actions.filter(item => item?.requires_bridge) : [];
+}
+
+function intelligenceActionNeedsTarget(action) {
+  return !['prioritize_findings'].includes(String(action || ''));
+}
+
+function suggestedIntelligenceTarget(action) {
+  const normalized = String(action || '');
+  if (['explain_finding', 'recommend_remediation'].includes(normalized)) return String(state.selectedFindingId || '');
+  if (['analyze_research_case', 'generate_analyst_brief', 'review_publication_safety'].includes(normalized)) return String(state.researchCases.selectedId || '');
+  return '';
+}
+
+function syncIntelligenceTarget() {
+  const action = el('intelligence-action-select')?.value || 'prioritize_findings';
+  const target = el('intelligence-target-id');
+  if (!target) return;
+  const suggested = suggestedIntelligenceTarget(action);
+  if (!target.value.trim() || target.dataset.suggested === '1') {
+    target.value = suggested;
+    target.dataset.suggested = suggested ? '1' : '0';
+  }
+  target.required = intelligenceActionNeedsTarget(action);
+  target.placeholder = target.required ? 'Required: select or enter a valid SecOpsAI ID' : 'Not required for workspace prioritization';
+  const hint = el('intelligence-request-hint');
+  if (hint) hint.textContent = target.required
+    ? (suggested ? `Using the currently selected SecOpsAI record: ${suggested}` : 'This action requires a finding, asset, graph node, or research case ID.')
+    : 'This action reviews the current open finding queue and does not need a target ID.';
+}
+
+function renderIntelligence() {
+  const data = state.intelligence.data;
+  const jobs = intelligenceJobs();
+  const bridge = data?.bridge || {};
+  const service = data?.service || {};
+  const mcp = data?.chatgpt_app || {};
+  const localMode = data?.mode === 'local-helper';
+  const counts = jobs.reduce((result, job) => {
+    const status = String(job?.status || 'unknown');
+    result[status] = (result[status] || 0) + 1;
+    return result;
+  }, {});
+
+  const summary = el('intelligence-summary');
+  if (summary) summary.innerHTML = `
+    <div class="metric-card"><div class="metric">${jobs.length}</div><div class="metric-label">Recorded jobs</div></div>
+    <div class="metric-card"><div class="metric">${counts.queued || 0}</div><div class="metric-label">Queued</div></div>
+    <div class="metric-card"><div class="metric">${counts.running || 0}</div><div class="metric-label">Running</div></div>
+    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed</div></div>`;
+
+  const bridgePill = el('intelligence-bridge-pill');
+  if (bridgePill) bridgePill.textContent = state.intelligence.loading ? 'Checking' : humanizeSnake(bridge.status || (data ? 'unavailable' : 'not_checked'));
+  const bridgeDetail = el('intelligence-bridge-detail');
+  if (bridgeDetail) bridgeDetail.innerHTML = `
+    <div class="kv-row"><div class="kv-key">Queue mode</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.queue_mode || data?.mode || 'unknown'))}</div></div>
+    <div class="kv-row"><div class="kv-key">Codex</div><div class="kv-val">${escapeHtml(bridge.codex_version || (localMode ? 'Unavailable' : 'Runs on local sensor'))}</div></div>
+    <div class="kv-row"><div class="kv-key">Authentication</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.authentication_method || (localMode ? 'unknown' : 'local ChatGPT sign-in')))}</div></div>
+    <div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">${escapeHtml(humanizeSnake(service.status || 'unknown'))}</div></div>
+    <div class="kv-row"><div class="kv-key">Credential storage</div><div class="kv-val">Codex-owned; not stored by dashboard</div></div>
+    ${bridge.message ? `<div class="small" style="margin-top:10px;">${escapeHtml(bridge.message)}</div>` : ''}`;
+
+  const serviceActions = el('intelligence-service-actions');
+  if (serviceActions) serviceActions.querySelectorAll('[data-intelligence-service], #intelligence-run-once-btn').forEach(button => {
+    button.hidden = !localMode;
+  });
+  const tokenField = el('intelligence-token-field');
+  if (tokenField) tokenField.hidden = !localMode;
+  const tokenInput = el('intelligence-admin-token');
+  if (tokenInput && tokenInput.value !== state.intelligence.adminToken) tokenInput.value = state.intelligence.adminToken;
+
+  const mcpPill = el('intelligence-mcp-pill');
+  if (mcpPill) mcpPill.textContent = mcp.configured ? 'Configured' : 'Setup required';
+  const mcpDetail = el('intelligence-mcp-detail');
+  if (mcpDetail) mcpDetail.innerHTML = `
+    <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">Read-only OAuth MCP</div></div>
+    <div class="kv-row"><div class="kv-key">Endpoint</div><div class="kv-val">${escapeHtml(mcp.url || 'Not configured in this dashboard')}</div></div>
+    <div class="kv-row"><div class="kv-key">Available tools</div><div class="kv-val">9 read-only tools</div></div>
+    <div class="kv-row"><div class="kv-key">Write access</div><div class="kv-val">None</div></div>
+    <div class="small" style="margin-top:10px;">ChatGPT authenticates the model session. SecOpsAI OAuth separately authorizes workspace data.</div>`;
+  const copyMcp = el('intelligence-copy-mcp-btn');
+  if (copyMcp) copyMcp.disabled = !mcp.url;
+
+  const output = el('intelligence-service-output');
+  if (output) {
+    output.hidden = !state.intelligence.serviceOutput;
+    output.textContent = state.intelligence.serviceOutput;
+  }
+
+  const table = el('intelligence-jobs-table');
+  if (table) {
+    if (state.intelligence.loading && !data) {
+      table.innerHTML = '<div class="empty-state compact">Loading intelligence status…</div>';
+    } else if (state.intelligence.error && !jobs.length) {
+      table.innerHTML = `<div class="error">${escapeHtml(state.intelligence.error)}</div>`;
+    } else if (!jobs.length) {
+      table.innerHTML = '<div class="empty-state compact">No analysis jobs yet. Queue an approved action above.</div>';
+    } else {
+      table.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody>${jobs.map(job => {
+        const result = job?.result?.data || job?.result || {};
+        const summaryText = result.summary || result.executive_summary || job.error_message || '';
+        const cancel = String(job.status || '') === 'queued'
+          ? `<button class="mini-btn" data-intelligence-cancel="${escapeHtml(job.job_id)}" type="button">Cancel</button>`
+          : '';
+        return `<tr><td><strong>${escapeHtml(humanizeSnake(job.action || 'unknown'))}</strong><div class="small mono">${escapeHtml(job.job_id || '')}</div></td><td>${escapeHtml(job.target_id || 'Workspace')}</td><td>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</td><td>${escapeHtml(fmtDate(job.updated_at || job.queued_at))}</td><td>${summaryText ? `<details><summary>Review result</summary><div class="intelligence-job-result">${escapeHtml(compactText(summaryText, 1800))}</div></details>` : '<span class="small">Pending</span>'}</td><td>${cancel}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
+    }
+  }
+  syncIntelligenceTarget();
+}
+
+async function loadIntelligence({ render = true } = {}) {
+  state.intelligence.loading = true;
+  if (render) renderIntelligence();
+  try {
+    const response = await dashboardApiFetch(cfg.intelligenceEndpoint || '/api/secopsai/intelligence');
+    const payload = await response.json().catch(() => ({}));
+    state.intelligence.data = payload;
+    state.intelligence.error = response.ok ? null : (payload.error || `Intelligence status HTTP ${response.status}`);
+  } catch (error) {
+    state.intelligence.error = error?.message || String(error);
+  } finally {
+    state.intelligence.loading = false;
+    if (render) renderIntelligence();
+  }
+  return state.intelligence.data;
+}
+
+async function runIntelligenceAction(action, payload = {}, button = null) {
+  const tokenInput = el('intelligence-admin-token');
+  state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
+  if (state.intelligence.adminToken) sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
+  setButtonBusy(button, true, 'Working…');
+  try {
+    const response = await dashboardApiFetch(cfg.intelligenceEndpoint || '/api/secopsai/intelligence', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(state.intelligence.adminToken ? { 'X-SecOpsAI-Intelligence-Token': state.intelligence.adminToken } : {})
+      },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || `Intelligence action HTTP ${response.status}`);
+    state.intelligence.serviceOutput = ['service', 'run-once'].includes(action) ? JSON.stringify(result.result || result, null, 2) : state.intelligence.serviceOutput;
+    showToast(`Intelligence action completed: ${humanizeSnake(action)}`, 'success');
+    await loadIntelligence({ render: false });
+    renderIntelligence();
+    return result;
+  } catch (error) {
+    showToast(error?.message || String(error), 'error');
+    state.intelligence.error = error?.message || String(error);
+    renderIntelligence();
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
 }
 
 function blogOpsEndpoint(path = '') {
@@ -6070,6 +6243,7 @@ function renderAll() {
   renderEdgeWorkspace();
   renderRunRequests();
   renderIntegrations();
+  renderIntelligence();
   renderTriageOps();
   renderResearchCases();
   renderBlogOps();
@@ -7561,6 +7735,7 @@ async function boot() {
   }
 
   renderAll();
+  loadIntelligence().catch(err => console.warn('deferred intelligence status failed', err));
   startNativeEventStream();
   startLiveExecutionRefreshLoop();
 
@@ -7663,6 +7838,41 @@ function bindEvents() {
     setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
     await loadEdgeWorkspace();
     setButtonBusy(btn, false);
+  });
+  el('intelligence-refresh-btn')?.addEventListener('click', async event => {
+    setButtonBusy(event.currentTarget, true, 'Refreshing…');
+    await loadIntelligence();
+    setButtonBusy(event.currentTarget, false);
+  });
+  el('intelligence-action-select')?.addEventListener('change', syncIntelligenceTarget);
+  el('intelligence-target-id')?.addEventListener('input', event => { event.currentTarget.dataset.suggested = '0'; });
+  el('intelligence-queue-btn')?.addEventListener('click', async event => {
+    const action = el('intelligence-action-select')?.value || 'prioritize_findings';
+    const targetId = el('intelligence-target-id')?.value?.trim() || '';
+    if (intelligenceActionNeedsTarget(action) && !targetId) {
+      showToast('Select or enter the SecOpsAI record ID required by this action.', 'error');
+      el('intelligence-target-id')?.focus();
+      return;
+    }
+    await runIntelligenceAction('enqueue', { intelligence_action: action, target_id: targetId }, event.currentTarget);
+  });
+  el('intelligence-run-once-btn')?.addEventListener('click', event => runIntelligenceAction('run-once', {}, event.currentTarget));
+  document.querySelectorAll('[data-intelligence-service]').forEach(button => button.addEventListener('click', async event => {
+    const serviceAction = event.currentTarget.dataset.intelligenceService;
+    if (serviceAction === 'install' && !(await requestConfirmation(
+      'Install the local Codex bridge as a user-level background service? It will process approved queued analysis jobs while this account is signed in.',
+      { title: 'Install local bridge', confirmLabel: 'Install service' },
+    ))) return;
+    await runIntelligenceAction('service', { service_action: serviceAction }, event.currentTarget);
+  }));
+  el('intelligence-copy-mcp-btn')?.addEventListener('click', async () => {
+    const url = state.intelligence.data?.chatgpt_app?.url || '';
+    if (url) await copyTextWithStatus(url, 'ChatGPT app MCP URL copied');
+  });
+  el('intelligence-jobs-table')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-intelligence-cancel]');
+    if (!button) return;
+    runIntelligenceAction('cancel', { job_id: button.dataset.intelligenceCancel }, button);
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);

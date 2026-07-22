@@ -7387,6 +7387,150 @@ pre {
   background: var(--card-muted);
 }
 
+/* Intelligence integrations: one operator surface for the local bridge and hosted MCP app. */
+.intelligence-console {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  border-top: 3px solid var(--text);
+  background: var(--card);
+}
+
+.intelligence-console-head,
+.intelligence-module .module-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.intelligence-console-head h3,
+.intelligence-module h4 {
+  margin: 0;
+  color: var(--text);
+  letter-spacing: 0;
+}
+
+.intelligence-console-head p,
+.intelligence-module .module-head p {
+  max-width: 760px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.section-kicker {
+  margin-bottom: 7px;
+  color: var(--asd-note);
+  font: 700 0.62rem var(--asd-mono);
+  letter-spacing: 0.12em;
+}
+
+.intelligence-summary {
+  margin-top: 18px;
+}
+
+.intelligence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.intelligence-module {
+  min-width: 0;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  background: var(--card-muted);
+}
+
+.intelligence-grid .intelligence-module {
+  margin-top: 0;
+}
+
+.intelligence-module .kv-list {
+  margin-top: 14px;
+}
+
+.intelligence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.intelligence-request-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(220px, 1.3fr) minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.intelligence-request-grid label {
+  min-width: 0;
+}
+
+.intelligence-request-grid label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted-strong);
+  font: 600 0.68rem var(--asd-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.intelligence-request-grid input,
+.intelligence-request-grid select {
+  width: 100%;
+}
+
+.intelligence-log {
+  max-height: 260px;
+  margin-top: 14px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.intelligence-job-result {
+  max-width: 640px;
+  margin-top: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1120px) {
+  .intelligence-request-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .intelligence-console {
+    padding: 14px;
+  }
+
+  .intelligence-console-head,
+  .intelligence-module .module-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .intelligence-grid,
+  .intelligence-request-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .intelligence-actions > *,
+  .intelligence-request-grid > button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 /* ── Notices → S1000D callouts ───────────────────────────── */
 .error, .notice-error {
   border: 1px solid var(--red);

@@ -50,6 +50,64 @@ async function testConfigExposesTriageOpsEndpoint() {
   assert.equal(body.includes("/api/secopsai/triage-ops"), true);
   assert.equal(body.includes("/api/secopsai/edge-workspace"), true);
   assert.equal(body.includes("/api/secopsai/research-cases"), true);
+  assert.equal(body.includes("/api/secopsai/intelligence"), true);
+}
+
+async function testHostedIntelligenceUsesScopedServerSideCredentials() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const parsed = new URL(String(url));
+    const headers = new Headers(init.headers);
+    calls.push({ path: parsed.pathname, method: init.method || "GET", authorization: headers.get("Authorization"), body: init.body || "" });
+    if (parsed.pathname === "/api/v1/intelligence/actions") {
+      return new Response(JSON.stringify({ schema_version: "secopsai.intelligence.v1", actions: [] }), { status: 200 });
+    }
+    if (parsed.pathname === "/api/v1/intelligence/jobs" && (init.method || "GET") === "GET") {
+      return new Response(JSON.stringify({ jobs: [] }), { status: 200 });
+    }
+    if (parsed.pathname === "/api/v1/intelligence/jobs" && init.method === "POST") {
+      return new Response(JSON.stringify({ job: { job_id: "AIJ-AAAAAAAAAAAAAAAA", action: "prioritize_findings", status: "queued" } }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ detail: "unexpected path" }), { status: 404 });
+  };
+  const env = {
+    DASHBOARD_AUTH_REQUIRED: "true",
+    SUPABASE_URL: "https://test-project.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+    SECOPSAI_CORE_API_URL: "https://core.example",
+    SECOPSAI_CORE_READ_TOKEN: "core-read-secret",
+    SECOPSAI_CORE_INTELLIGENCE_TOKEN: "core-intelligence-secret",
+    SECOPSAI_MCP_URL: "https://mcp.example/mcp",
+  };
+  try {
+    const status = await workerModule.fetch(
+      new Request("https://dashboard.example/api/secopsai/intelligence", { headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}` } }),
+      env,
+    );
+    assert.equal(status.status, 200);
+    const statusPayload = await jsonFrom(status);
+    assert.equal(statusPayload.chatgpt_app.configured, true);
+    assert.equal(JSON.stringify(statusPayload).includes("core-read-secret"), false);
+    assert.equal(JSON.stringify(statusPayload).includes("core-intelligence-secret"), false);
+
+    const queued = await workerModule.fetch(
+      new Request("https://dashboard.example/api/secopsai/intelligence", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "enqueue", intelligence_action: "prioritize_findings", target_id: "" }),
+      }),
+      env,
+    );
+    assert.equal(queued.status, 200);
+    assert.equal((await jsonFrom(queued)).result.status, "queued");
+    assert.equal(calls.filter(call => call.authorization === "Bearer core-read-secret").length, 1);
+    assert.equal(calls.filter(call => call.authorization === "Bearer core-intelligence-secret").length, 2);
+    assert.equal(calls.some(call => String(call.body).includes("core-intelligence-secret")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 async function testConfigRequiresAuthenticationByDefault() {
@@ -1113,6 +1171,7 @@ function testCanonicalCoreFindingsJoinTheOperatorQueue() {
 
 await testStatusWithoutGithubTokenIsSafe();
 await testConfigExposesTriageOpsEndpoint();
+await testHostedIntelligenceUsesScopedServerSideCredentials();
 await testConfigRequiresAuthenticationByDefault();
 await testWorkerAppliesSecurityHeaders();
 await testProtectedWorkspaceRequiresOperatorSession();

@@ -39,6 +39,8 @@ SECOPSAI_HELPER_AUTH_TOKEN=
 # the Pages Worker and are never emitted through config.js.
 SECOPSAI_CORE_API_URL=
 SECOPSAI_CORE_READ_TOKEN=
+SECOPSAI_CORE_INTELLIGENCE_TOKEN=
+SECOPSAI_MCP_URL=https://secopsai-chatgpt-app.onrender.com/mcp
 SECOPSAI_EDGE_API_URL=
 SECOPSAI_EDGE_OPERATIONS_TOKEN=
 # Deprecated local-helper migration fallback only. Hosted mode does not use it.

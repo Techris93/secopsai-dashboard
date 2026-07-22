@@ -7,6 +7,7 @@ It is focused on:
 - triage task management
 - native triage queue visibility
 - helper-backed native investigate/apply-action/guarded close controls
+- approved subscription-backed intelligence actions and ChatGPT app status
 - Supabase-backed operational state
 
 It is not the core execution runtime. Native SecOpsAI and OpenClaw still own investigation, orchestration, and outbound operator messaging, but the local helper can now invoke selected native SecOpsAI triage actions directly.
@@ -17,6 +18,7 @@ It is not the core execution runtime. Native SecOpsAI and OpenClaw still own inv
 - `Tasks` — Kanban workflow for work items
 - `Findings` — findings backlog with task correlation
 - `Native Triage` — local helper health, pending actions, orchestrator history, and selected native action controls
+- `System` — platform health, the local Codex bridge, durable intelligence jobs, and the read-only SecOpsAI ChatGPT app endpoint
 
 ## What was removed
 
@@ -90,6 +92,15 @@ integration tokens → Create dashboard token**. It is workspace-scoped,
 revocable, shown once, and limited to `operations:read`. The legacy
 `SECOPSAI_EDGE_ADMIN_TOKEN` variable is accepted temporarily for migration but
 is intentionally marked as degraded in the operator UI.
+
+## SecOpsAI Intelligence
+
+Open **System → SecOpsAI Intelligence** to use either integration:
+
+- The local Codex bridge uses the Codex CLI's existing ChatGPT sign-in and processes only fixed, read-only SecOpsAI analysis actions. It does not persist ChatGPT credentials.
+- The hosted ChatGPT app exposes nine read-only tools through an OAuth-protected MCP endpoint. SecOpsAI OAuth controls data access independently from the user's ChatGPT account.
+
+Local action controls require `INTELLIGENCE_ADMIN_TOKEN` in `secopsai-dashboard/.env`. Hosted Pages uses server-side `SECOPSAI_CORE_INTELLIGENCE_TOKEN`; neither value belongs in browser configuration. See [the full integration guide](https://docs.secopsai.dev/intelligence-integrations/) for setup and security boundaries.
 
 ## Product fit
 

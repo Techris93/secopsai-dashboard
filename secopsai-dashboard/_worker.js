@@ -10,6 +10,17 @@ const DEFAULT_BLOG_OPS_REPO = "secopsai";
 const DEFAULT_BLOG_OPS_WORKFLOW = "blog-ops.yml";
 const MAX_OPERATOR_PROFILE_BYTES = 64 * 1024;
 const MAX_SECOPSAI_WORKSPACE_BYTES = 5 * 1024 * 1024;
+const INTELLIGENCE_ACTIONS = new Set([
+  "explain_finding",
+  "prioritize_findings",
+  "analyze_asset_change",
+  "analyze_research_case",
+  "generate_analyst_brief",
+  "review_publication_safety",
+  "recommend_remediation",
+]);
+const INTELLIGENCE_JOB_ID_RE = /^AIJ-[A-F0-9]{16}$/;
+const INTELLIGENCE_TARGET_RE = /^[A-Za-z0-9:._-]{0,240}$/;
 const EDGE_OPERATIONS_RESOURCES = {
   sites: ["/api/v1/sites", "list"],
   sensors: ["/api/v1/sensors", "list"],
@@ -118,6 +129,7 @@ function buildBrowserConfig(env) {
     researchCasesEndpoint: "/api/secopsai/research-cases",
     researchWatchlistEndpoint: "/api/secopsai/research-watchlist",
     researchDiscoveryEndpoint: "/api/secopsai/research-discovery",
+    intelligenceEndpoint: "/api/secopsai/intelligence",
     edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     auth: {
@@ -168,6 +180,7 @@ function hasProtectedDashboardBackend(env) {
   return Boolean(getRunOutputBinding(env) || [
     env.SECOPSAI_CORE_API_URL,
     env.SECOPSAI_CORE_READ_TOKEN,
+    env.SECOPSAI_CORE_INTELLIGENCE_TOKEN,
     env.SECOPSAI_EDGE_API_URL,
     env.SECOPSAI_EDGE_OPERATIONS_TOKEN,
     env.SECOPSAI_EDGE_ADMIN_TOKEN,
@@ -302,6 +315,95 @@ async function secopsaiApiJson(baseUrl, path, token, label) {
   if (response.status >= 300 && response.status < 400) throw new Error(`${label} refused an upstream redirect`);
   if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}`);
   return boundedJson(response, MAX_SECOPSAI_WORKSPACE_BYTES, label);
+}
+
+async function secopsaiCoreRequest(baseUrl, path, token, label, { method = "GET", body } = {}) {
+  const url = new URL(path, baseUrl);
+  const response = await timedFetch((input, init) => fetch(input, init), url.toString(), {
+    method,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    redirect: "manual",
+  }, 15000);
+  if (response.status >= 300 && response.status < 400) throw new Error(`${label} refused an upstream redirect`);
+  const payload = await boundedJson(response, MAX_SECOPSAI_WORKSPACE_BYTES, label);
+  if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}: ${sanitizeHelperErrorDetail(payload?.detail || payload?.error || "request failed")}`);
+  return payload;
+}
+
+async function handleHostedIntelligence(request, env) {
+  const rawUrl = String(env.SECOPSAI_CORE_API_URL || "").trim();
+  const readToken = String(env.SECOPSAI_CORE_READ_TOKEN || "").trim();
+  const intelligenceToken = String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim();
+  if (!rawUrl) return jsonResponse({ ok: false, mode: "hosted-core", error: "SECOPSAI_CORE_API_URL is not configured" }, { status: 501 });
+  const baseUrl = serviceBaseUrl(rawUrl, "SECOPSAI_CORE_API_URL");
+  if (request.method === "GET") {
+    const result = {
+      ok: true,
+      mode: "hosted-core",
+      generated_at: new Date().toISOString(),
+      actions: null,
+      jobs: { jobs: [] },
+      bridge: { status: "remote", queue_mode: "hosted_core", message: "A local Codex bridge processes this hosted queue." },
+      service: { status: "managed_on_sensor", manager: "local" },
+      chatgpt_app: {
+        mode: "hosted-mcp",
+        configured: Boolean(String(env.SECOPSAI_MCP_URL || "").trim()),
+        url: String(env.SECOPSAI_MCP_URL || "").trim(),
+      },
+    };
+    const errors = [];
+    if (readToken) {
+      try {
+        result.actions = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/actions", readToken, "Core intelligence actions");
+      } catch (error) {
+        errors.push(sanitizeHelperErrorDetail(error?.message || error));
+      }
+    } else {
+      errors.push("SECOPSAI_CORE_READ_TOKEN is not configured");
+    }
+    if (intelligenceToken) {
+      try {
+        result.jobs = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/jobs?limit=50", intelligenceToken, "Core intelligence jobs");
+      } catch (error) {
+        errors.push(sanitizeHelperErrorDetail(error?.message || error));
+      }
+    } else {
+      errors.push("SECOPSAI_CORE_INTELLIGENCE_TOKEN is not configured");
+    }
+    if (errors.length) {
+      result.ok = false;
+      result.error = errors.join(" ");
+    }
+    return jsonResponse(result, { status: errors.length ? 503 : 200 });
+  }
+  if (request.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed" }, { status: 405 });
+  if (!intelligenceToken) return jsonResponse({ ok: false, error: "SECOPSAI_CORE_INTELLIGENCE_TOKEN is not configured" }, { status: 501 });
+  const body = await parseJsonBody(request);
+  if (!body || typeof body !== "object") return jsonResponse({ ok: false, error: "A JSON object is required" }, { status: 400 });
+  const action = String(body.action || "").trim().toLowerCase();
+  if (action === "enqueue") {
+    const intelligenceAction = String(body.intelligence_action || "").trim();
+    const targetId = String(body.target_id || "").trim();
+    if (!INTELLIGENCE_ACTIONS.has(intelligenceAction)) return jsonResponse({ ok: false, error: "Unsupported intelligence action" }, { status: 400 });
+    if (!INTELLIGENCE_TARGET_RE.test(targetId)) return jsonResponse({ ok: false, error: "Invalid intelligence target" }, { status: 400 });
+    const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/jobs", intelligenceToken, "Queue intelligence job", {
+      method: "POST",
+      body: { action: intelligenceAction, target_id: targetId, requested_by: "mission-control-hosted" },
+    });
+    return jsonResponse({ ok: true, action, result: payload.job });
+  }
+  if (action === "cancel") {
+    const jobId = String(body.job_id || "").trim();
+    if (!INTELLIGENCE_JOB_ID_RE.test(jobId)) return jsonResponse({ ok: false, error: "Invalid intelligence job ID" }, { status: 400 });
+    const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/intelligence/jobs/${encodeURIComponent(jobId)}/cancel`, intelligenceToken, "Cancel intelligence job", { method: "POST" });
+    return jsonResponse({ ok: true, action, result: payload.job });
+  }
+  return jsonResponse({ ok: false, error: "Hosted mode supports queue and cancel only; bridge service controls run on the local sensor." }, { status: 400 });
 }
 
 function unavailableCore(error, configured = false) {
@@ -1016,10 +1118,16 @@ async function handleIntegrationStatus(env) {
       secopsai_campaign_api: Boolean(secopsaiHelperBase),
       secopsai_events_api: Boolean(secopsaiHelperBase),
       secopsai_edge_api: Boolean(secopsaiHelperBase),
+      secopsai_intelligence_api: Boolean(secopsaiHelperBase || String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim()),
     },
     core: {
       mode: String(env.SECOPSAI_CORE_API_URL || "").trim() ? "hosted-api" : "disabled",
       configured: Boolean(String(env.SECOPSAI_CORE_API_URL || "").trim() && String(env.SECOPSAI_CORE_READ_TOKEN || "").trim()),
+    },
+    intelligence: {
+      mode: String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim() ? "hosted-core-queue" : "disabled",
+      configured: Boolean(String(env.SECOPSAI_CORE_API_URL || "").trim() && String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim()),
+      chatgpt_app_configured: Boolean(String(env.SECOPSAI_MCP_URL || "").trim()),
     },
     edge_operations: {
       mode: String(env.SECOPSAI_EDGE_API_URL || "").trim() ? "hosted-api" : "disabled",
@@ -1254,6 +1362,9 @@ async function routeRequest(request, env) {
           env.SECOPSAI_EDGE_OPERATIONS_TOKEN,
         ].some(value => String(value || "").trim()));
         if (directHostedMode) return handleHostedCoreEdgeWorkspace(env);
+      }
+      if (url.pathname === "/api/secopsai/intelligence") {
+        return handleHostedIntelligence(request, env);
       }
       if (isTriageOpsWriteRoute(request, url.pathname)) {
         const writeAuthResponse = requireTriageOpsAdmin(request, env);

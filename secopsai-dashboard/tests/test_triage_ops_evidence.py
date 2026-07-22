@@ -134,7 +134,38 @@ class TriageOpsEvidenceTests(unittest.TestCase):
             server.build_campaign_watchlist_args({'source_url': 'javascript:alert(1)'})
 
     def test_campaign_fixture_loads_without_temp_paths(self):
-        fixtures = server.campaign_fixture_payloads()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fixture_path = Path(temp_dir) / 'campaign.json'
+            fixture_path.write_text(
+                json.dumps(
+                    {
+                        'campaign_id': 'deadcode09284814-infostealer-botnet-campaign',
+                        'title': 'Hermetic campaign fixture',
+                        'summary': 'A bounded local fixture for dashboard contract testing.',
+                        'severity': 'critical',
+                        'confidence': 'high',
+                        'source_names': ['Fixture source'],
+                        'source_urls': ['https://example.test/research'],
+                        'actors': ['deadcode09284814'],
+                        'publishers': ['deadcode09284814'],
+                        'iocs': {'domains': ['example.test']},
+                        'behavioral_indicators': ['credential theft'],
+                        'packages': [
+                            {
+                                'ecosystem': 'npm',
+                                'package': 'chalk-tempalte',
+                                'version': '0.0.1',
+                                'publisher': 'deadcode09284814',
+                                'behavioral_indicators': ['credential theft'],
+                                'files': {'package.json': '{"name":"chalk-tempalte"}'},
+                            }
+                        ],
+                    }
+                ),
+                encoding='utf-8',
+            )
+            with mock.patch.object(server, 'CAMPAIGN_FIXTURE_PATHS', [fixture_path]):
+                fixtures = server.campaign_fixture_payloads()
         self.assertTrue(fixtures)
         self.assertEqual(fixtures[0]['campaign']['campaign_id'], 'deadcode09284814-infostealer-botnet-campaign')
         self.assertNotIn('/tmp/secopsai-campaign', str(fixtures[0]))
