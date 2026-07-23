@@ -35,9 +35,18 @@ for (const marker of ['toast-region', 'command-palette', 'help-drawer', 'confirm
 for (const marker of ['SecOpsAI Intelligence', 'intelligence-action-select', 'intelligence-jobs-table', 'intelligence-copy-mcp-btn']) {
   assert.ok(index.includes(marker), `missing intelligence surface: ${marker}`);
 }
-for (const marker of ['loadIntelligence', 'runIntelligenceAction', 'renderIntelligence']) {
+for (const marker of ['intelligence-model-select', 'intelligence-model-hint']) {
+  assert.ok(index.includes(marker), `missing model selection surface: ${marker}`);
+}
+for (const marker of ['loadIntelligence', 'runIntelligenceAction', 'renderIntelligence', 'intelligenceModels', 'intelligenceSelectedModel', 'renderIntelligenceModelSelect']) {
   assert.match(app, new RegExp(`function ${marker}`));
 }
+assert.match(app, /secopsai_bridge_model/);
+assert.match(app, /runIntelligenceAction\('run-once', model \? \{ model \} : \{\}/);
+assert.match(app, /data-intelligence-requeue/);
+assert.match(app, /runIntelligenceAction\('requeue', \{ job_id: requeueButton\.dataset\.intelligenceRequeue \}/);
+assert.match(app, /id="research-pipeline-auto-review-btn"/);
+assert.match(app, /runResearchCaseAction\('pipeline-auto-review',/);
 
 assert.match(app, /response\.clone\(\)\.json\(\)/);
 assert.match(app, /\['operator_session_required', 'operator_session_invalid'\]/);

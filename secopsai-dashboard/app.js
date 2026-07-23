@@ -128,6 +128,7 @@ const state = {
     loading: false,
     error: null,
     adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || sessionStorage.getItem('secopsai_triage_ops_admin_token') || '',
+    selectedModel: sessionStorage.getItem('secopsai_bridge_model') || '',
     serviceOutput: ''
   },
   edgeWorkspace: {
@@ -3615,6 +3616,57 @@ function intelligenceBridgeActions() {
   return Array.isArray(state.intelligence.data?.actions?.actions) ? state.intelligence.data.actions.actions.filter(item => item?.requires_bridge) : [];
 }
 
+function intelligenceModels() {
+  return Array.isArray(state.intelligence.data?.models?.models) ? state.intelligence.data.models.models : [];
+}
+
+function intelligenceSelectedModel() {
+  const models = intelligenceModels();
+  const ids = models.map(item => String(item?.id || ''));
+  const stored = String(state.intelligence.selectedModel || '');
+  if (stored && ids.includes(stored)) return stored;
+  const defaultModel = String(state.intelligence.data?.models?.default_model || state.intelligence.data?.bridge?.selected_model || '');
+  if (defaultModel && (ids.includes(defaultModel) || !models.length)) return defaultModel;
+  return ids[0] || '';
+}
+
+function renderIntelligenceModelSelect() {
+  const select = el('intelligence-model-select');
+  if (!select) return;
+  const models = intelligenceModels();
+  const selected = intelligenceSelectedModel();
+  const fallback = Array.isArray(state.intelligence.data?.bridge?.fallback_models) ? state.intelligence.data.bridge.fallback_models : [];
+  if (!models.length) {
+    const errorText = state.intelligence.data?.models_error ? `Catalog unavailable — provider default will be used` : 'Catalog loading…';
+    select.innerHTML = `<option value="">${escapeHtml(errorText)}</option>`;
+    select.disabled = true;
+  } else {
+    const groups = {};
+    models.forEach(item => {
+      const provider = String(item?.provider || 'other');
+      if (!groups[provider]) groups[provider] = [];
+      groups[provider].push(item);
+    });
+    const optionHtml = Object.keys(groups).sort().map(provider => {
+      const options = groups[provider].map(item => {
+        const id = String(item?.id || '');
+        const mark = fallback.includes(id) ? ' — fallback' : '';
+        return `<option value="${escapeHtml(id)}"${id === selected ? ' selected' : ''}>${escapeHtml(id)}${escapeHtml(mark)}</option>`;
+      }).join('');
+      return `<optgroup label="${escapeHtml(provider)}">${options}</optgroup>`;
+    }).join('');
+    select.innerHTML = optionHtml;
+    select.disabled = false;
+  }
+  const hint = el('intelligence-model-hint');
+  if (hint) {
+    const fallbackText = fallback.length ? ` Fallback chain: ${fallback.join(' → ')}.` : '';
+    hint.textContent = `Runs the next queued job on this model.${fallbackText}`;
+  }
+  state.intelligence.selectedModel = selected;
+  if (selected) sessionStorage.setItem('secopsai_bridge_model', selected);
+}
+
 function intelligenceActionNeedsTarget(action) {
   return !['prioritize_findings'].includes(String(action || ''));
 }
@@ -3666,8 +3718,12 @@ function renderIntelligence() {
   const bridgePill = el('intelligence-bridge-pill');
   if (bridgePill) bridgePill.textContent = state.intelligence.loading ? 'Checking' : humanizeSnake(bridge.status || (data ? 'unavailable' : 'not_checked'));
   const bridgeDetail = el('intelligence-bridge-detail');
+  renderIntelligenceModelSelect();
+  const selectedModelLabel = intelligenceSelectedModel() || 'Provider default';
   if (bridgeDetail) bridgeDetail.innerHTML = `
     <div class="kv-row"><div class="kv-key">Queue mode</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.queue_mode || data?.mode || 'unknown'))}</div></div>
+    <div class="kv-row"><div class="kv-key">Selected model</div><div class="kv-val">${escapeHtml(selectedModelLabel)}</div></div>
+    <div class="kv-row"><div class="kv-key">Model catalog</div><div class="kv-val">${escapeHtml(String(data?.models?.count || 0))} models from OpenCodex</div></div>
     <div class="kv-row"><div class="kv-key">Codex</div><div class="kv-val">${escapeHtml(bridge.codex_version || (localMode ? 'Unavailable' : 'Runs on local sensor'))}</div></div>
     <div class="kv-row"><div class="kv-key">Authentication</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.authentication_method || (localMode ? 'unknown' : 'local ChatGPT sign-in')))}</div></div>
     <div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">${escapeHtml(humanizeSnake(service.status || 'unknown'))}</div></div>
@@ -3716,7 +3772,11 @@ function renderIntelligence() {
         const cancel = String(job.status || '') === 'queued'
           ? `<button class="mini-btn" data-intelligence-cancel="${escapeHtml(job.job_id)}" type="button">Cancel</button>`
           : '';
-        return `<tr><td><strong>${escapeHtml(humanizeSnake(job.action || 'unknown'))}</strong><div class="small mono">${escapeHtml(job.job_id || '')}</div></td><td>${escapeHtml(job.target_id || 'Workspace')}</td><td>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</td><td>${escapeHtml(fmtDate(job.updated_at || job.queued_at))}</td><td>${summaryText ? `<details><summary>Review result</summary><div class="intelligence-job-result">${escapeHtml(compactText(summaryText, 1800))}</div></details>` : '<span class="small">Pending</span>'}</td><td>${cancel}</td></tr>`;
+        const requeue = String(job.status || '') === 'failed'
+          ? `<button class="mini-btn" data-intelligence-requeue="${escapeHtml(job.job_id)}" type="button">Requeue</button>`
+          : '';
+        const providerLabel = job.provider ? `<div class="small mono">${escapeHtml(String(job.provider))}</div>` : '';
+        return `<tr><td><strong>${escapeHtml(humanizeSnake(job.action || 'unknown'))}</strong><div class="small mono">${escapeHtml(job.job_id || '')}</div>${providerLabel}</td><td>${escapeHtml(job.target_id || 'Workspace')}</td><td>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</td><td>${escapeHtml(fmtDate(job.updated_at || job.queued_at))}</td><td>${summaryText ? `<details><summary>Review result</summary><div class="intelligence-job-result">${escapeHtml(compactText(summaryText, 1800))}</div></details>` : '<span class="small">Pending</span>'}</td><td>${cancel}${requeue}</td></tr>`;
       }).join('')}</tbody></table></div>`;
     }
   }
@@ -7093,6 +7153,18 @@ function bindResearchCaseDetailActions(researchCase) {
       actor: 'dashboard-operator'
     }, event.currentTarget);
   }));
+  el('research-pipeline-auto-review-btn')?.addEventListener('click', async event => {
+    const pipelineId = event.currentTarget.dataset.pipelineId;
+    if (!(await requestConfirmation('AI Auto-Accept all pending review proposals for this pipeline?', {
+      title: 'AI Auto-Accept All',
+      context: 'All pending proposals will be automatically accepted and their findings attached to the case. Only final publication and disclosure gates will remain.',
+      confirmLabel: 'Auto-Accept All'
+    }))) return;
+    runResearchCaseAction('pipeline-auto-review', {
+      pipeline_id: pipelineId,
+      actor: 'dashboard-operator'
+    }, event.currentTarget);
+  });
   el('research-save-case-btn')?.addEventListener('click', event => runResearchCaseAction('update', {
     case_id: researchCase.case_id,
     status: el('research-detail-status')?.value,
@@ -7309,12 +7381,16 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
     ${comparisonNeeded ? '<div class="research-pipeline-notice">Comparison is incomplete. SecOpsAI will not guess which package is legitimate. Enter a verified reference and resume.</div>' : ''}
     <div class="research-form-actions">
       <button class="primary-btn" id="research-pipeline-start-btn" type="button" ${canStart ? '' : 'disabled'}>Run Investigation Pipeline</button>
-      ${pipeline ? `<button class="secondary-btn" id="research-pipeline-resume-btn" type="button" ${canResume ? '' : 'disabled'}>${pipeline.status === 'failed' ? 'Retry from checkpoint' : 'Add reference and rerun analysis'}</button>` : ''}
-    </div>
-    <ol class="research-pipeline-steps">${stepRows}</ol>
-    <div class="research-review-list"><div class="research-list-head"><div><h5>Analyst review queue</h5><p class="small">Edit proposed text when needed. Acceptance is recorded with your operator identity; rejection leaves canonical case evidence unchanged.</p></div>${pipeline ? `<span class="status-pill">${pendingReview.length} pending</span>` : ''}</div>${reviewCards}</div>
-    <p class="small research-pipeline-boundary">The pipeline cannot record a maliciousness verdict, submit a sandbox artifact, send disclosure, approve publication, or publish an article.</p>
-  </section>`;
+    ${pipeline ? `<button class="secondary-btn" id="research-pipeline-resume-btn" type="button" ${canResume ? '' : 'disabled'}>${pipeline.status === 'failed' ? 'Retry from checkpoint' : 'Add reference and rerun analysis'}</button>` : ''}
+  </div>
+  <ol class="research-pipeline-steps">${stepRows}</ol>
+  <div class="research-review-list"><div class="research-list-head"><div><h5>Analyst review queue</h5><p class="small">Edit proposed text when needed. Acceptance is recorded with your operator identity; rejection leaves canonical case evidence unchanged.</p></div>${pipeline ? `
+    <div style="display: flex; gap: 8px; align-items: center;">
+      ${pendingReview.length > 0 ? `<button class="primary-btn mini-btn" id="research-pipeline-auto-review-btn" data-pipeline-id="${escapeHtml(pipeline.pipeline_id)}" type="button">AI Auto-Accept All</button>` : ''}
+      <span class="status-pill">${pendingReview.length} pending</span>
+    </div>` : ''}</div>${reviewCards}</div>
+  <p class="small research-pipeline-boundary">The pipeline cannot record a maliciousness verdict, submit a sandbox artifact, send disclosure, approve publication, or publish an article.</p>
+</section>`;
 }
 
 function renderResearchAutomationPanel(researchCase) {
@@ -8011,7 +8087,15 @@ function bindEvents() {
     }
     await runIntelligenceAction('enqueue', { intelligence_action: action, target_id: targetId }, event.currentTarget);
   });
-  el('intelligence-run-once-btn')?.addEventListener('click', event => runIntelligenceAction('run-once', {}, event.currentTarget));
+  el('intelligence-model-select')?.addEventListener('change', event => {
+    state.intelligence.selectedModel = event.currentTarget.value || '';
+    if (state.intelligence.selectedModel) sessionStorage.setItem('secopsai_bridge_model', state.intelligence.selectedModel);
+    renderIntelligence();
+  });
+  el('intelligence-run-once-btn')?.addEventListener('click', event => {
+    const model = el('intelligence-model-select')?.value || '';
+    runIntelligenceAction('run-once', model ? { model } : {}, event.currentTarget);
+  });
   document.querySelectorAll('[data-intelligence-service]').forEach(button => button.addEventListener('click', async event => {
     const serviceAction = event.currentTarget.dataset.intelligenceService;
     if (serviceAction === 'install' && !(await requestConfirmation(
@@ -8025,9 +8109,14 @@ function bindEvents() {
     if (url) await copyTextWithStatus(url, 'ChatGPT app MCP URL copied');
   });
   el('intelligence-jobs-table')?.addEventListener('click', event => {
-    const button = event.target.closest('[data-intelligence-cancel]');
-    if (!button) return;
-    runIntelligenceAction('cancel', { job_id: button.dataset.intelligenceCancel }, button);
+    const cancelButton = event.target.closest('[data-intelligence-cancel]');
+    if (cancelButton) {
+      runIntelligenceAction('cancel', { job_id: cancelButton.dataset.intelligenceCancel }, cancelButton);
+      return;
+    }
+    const requeueButton = event.target.closest('[data-intelligence-requeue]');
+    if (!requeueButton) return;
+    runIntelligenceAction('requeue', { job_id: requeueButton.dataset.intelligenceRequeue }, requeueButton);
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);

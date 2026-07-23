@@ -83,6 +83,7 @@ RESEARCH_CASE_ACTIONS = {
     'pipeline-start',
     'pipeline-resume',
     'pipeline-review',
+    'pipeline-auto-review',
 }
 RESEARCH_DISCOVERY_ACTIONS = {
     'capabilities',
@@ -143,6 +144,7 @@ BRANCH_RE = re.compile(r'^[A-Za-z0-9._/-]{1,120}$')
 SECRETISH_RE = re.compile(r'(?i)\b([a-z0-9_ -]*(?:token|secret|api[_ -]?key|password|authorization)[a-z0-9_ -]*)\s*[:=]\s*([^\s,"\']{8,})')
 INTELLIGENCE_JOB_ID_RE = re.compile(r'^AIJ-[A-F0-9]{16}$')
 INTELLIGENCE_TARGET_RE = re.compile(r'^[A-Za-z0-9:._-]{0,240}$')
+INTELLIGENCE_MODEL_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._\-/\[\]]{0,159}$')
 INTELLIGENCE_BRIDGE_ACTIONS = {
     'explain_finding',
     'prioritize_findings',
@@ -751,8 +753,19 @@ def build_intelligence_args(action, payload):
         if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):
             raise ValueError('Invalid intelligence job ID')
         return ['intelligence', 'jobs', 'cancel', job_id, '--actor', 'mission-control', *secopsai_db_args()]
+    if action == 'requeue':
+        job_id = str(payload.get('job_id') or '').strip()
+        if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):
+            raise ValueError('Invalid intelligence job ID')
+        return ['intelligence', 'jobs', 'requeue', job_id, '--actor', 'mission-control', *secopsai_db_args()]
     if action == 'run-once':
-        return ['intelligence', 'bridge', 'run', '--once', *secopsai_db_args()]
+        model = str(payload.get('model') or '').strip()
+        args = ['intelligence', 'bridge', 'run', '--once']
+        if model:
+            if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+                raise ValueError('Invalid bridge model')
+            args.extend(['--model', model])
+        return [*args, *secopsai_db_args()]
     if action == 'service':
         service_action = str(payload.get('service_action') or '').strip().lower()
         if service_action not in INTELLIGENCE_SERVICE_ACTIONS:
@@ -773,10 +786,23 @@ def collect_intelligence_status():
     if not result.get('ok') or not isinstance(parsed, dict):
         compact = compact_cli_result(result)
         raise RuntimeError(compact.get('stderr') or compact.get('stdout') or 'Intelligence status is unavailable')
+    models_payload = None
+    models_error = ''
+    try:
+        models_result, models_parsed = run_cli_json(['intelligence', 'bridge', 'models'], timeout=30)
+        if models_result.get('ok') and isinstance(models_parsed, dict):
+            models_payload = models_parsed
+        else:
+            compact = compact_cli_result(models_result)
+            models_error = compact.get('stderr') or compact.get('stdout') or 'Model catalog unavailable'
+    except Exception as exc:
+        models_error = str(exc)[:300]
     return {
         'ok': True,
         'mode': 'local-helper',
         **parsed,
+        'models': models_payload,
+        'models_error': models_error or None,
         'chatgpt_app': {'mode': 'hosted-mcp', 'configured': bool(mcp_url), 'url': mcp_url},
     }
 
@@ -931,6 +957,14 @@ def build_research_case_args(action, payload):
         args = ['research', 'pipeline', 'review', pipeline_id, item_id, '--decision', decision]
         add(args, '--edited-content', 'edited_content', 12000)
         add(args, '--review-note', 'review_note', 2000)
+        add(args, '--actor', 'actor', 160)
+        return args
+
+    if action == 'pipeline-auto-review':
+        pipeline_id = _clean_string(payload.get('pipeline_id'), 40).upper()
+        if not RESEARCH_PIPELINE_ID_RE.match(pipeline_id):
+            raise ValueError('Invalid research pipeline id')
+        args = ['research', 'pipeline', 'auto-review', pipeline_id]
         add(args, '--actor', 'actor', 160)
         return args
 

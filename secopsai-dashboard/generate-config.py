@@ -28,14 +28,14 @@ def js_escape(value: str) -> str:
     return value.replace('\\', '\\\\').replace('"', '\\"')
 
 
-def js_bool(value: str | None, default: bool = False) -> str:
+def js_bool(value, default: bool = False) -> str:
     if value is None:
         return 'true' if default else 'false'
     normalized = str(value).strip().lower()
     return 'true' if normalized in {'1', 'true', 'yes', 'on'} else 'false'
 
 
-def js_number(value: str | None, default: float = 0.0) -> str:
+def js_number(value, default: float = 0.0) -> str:
     try:
         return str(float(str(value).strip()))
     except Exception:

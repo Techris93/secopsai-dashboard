@@ -283,10 +283,15 @@
           <div class="intelligence-grid">
             <section class="intelligence-module" aria-labelledby="local-bridge-title">
               <div class="module-head">
-                <div><h4 id="local-bridge-title">Local Codex bridge</h4><p>Uses the ChatGPT sign-in already owned by Codex on this computer.</p></div>
+                <div><h4 id="local-bridge-title">Local model bridge</h4><p>Runs approved analysis actions through your local OpenCodex catalog or ChatGPT sign-in.</p></div>
                 <span class="status-pill" id="intelligence-bridge-pill">Checking</span>
               </div>
               <div id="intelligence-bridge-detail" class="kv-list"></div>
+              <label class="intelligence-credential-field" id="intelligence-model-field">
+                <span>Analysis model</span>
+                <select id="intelligence-model-select" aria-describedby="intelligence-model-hint"></select>
+              </label>
+              <p class="small" id="intelligence-model-hint">Pick Kimi, Grok, Gemini, or another OpenCodex model. If it hits a usage limit, the bridge falls back to the configured chain automatically.</p>
               <label class="intelligence-credential-field" id="intelligence-token-field">
                 <span>Local action credential</span>
                 <input id="intelligence-admin-token" type="password" autocomplete="current-password" aria-describedby="intelligence-token-hint" placeholder="Intelligence or Triage Ops credential" />
