@@ -6888,7 +6888,7 @@ function renderResearchDiscovery() {
   const candidateMarkup = candidates.length
     ? `<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Ecosystem</th><th>Score</th><th>Why</th><th>Status</th></tr></thead><tbody>${candidates.slice(0, 25).map(item => `<tr><td><strong>${escapeHtml(item.package)}</strong><div class="small">${escapeHtml(item.version)} vs ${escapeHtml(item.reference_identifier)}</div></td><td>${escapeHtml(item.ecosystem)}</td><td>${escapeHtml(String(item.score))}</td><td>${escapeHtml(item.reason || 'Similarity requires analyst review')}</td><td>${escapeHtml(statusLabel(item.status))}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty-state compact">No candidates yet. Add a watchlist, run a monitor, and review the resulting scoped candidates.</div>';
-  const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Delivery</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(item.reason || 'Review candidate')}</td><td><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email alert</button></td></tr>`).join('')}</tbody></table></div>` : '';
+  const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(item.reason || 'Review candidate')}</td><td>${escapeHtml(statusLabel(item.status))}</td><td><div style="display: flex; gap: 8px;"><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email</button>${item.status === 'open' ? `<button class="mini-btn research-alert-resolve-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Resolve</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>` : '';
   candidatesHost.innerHTML = candidateMarkup + alertMarkup;
 }
 
@@ -8276,7 +8276,19 @@ function bindEvents() {
   });
   el('research-discovery-run-due-btn')?.addEventListener('click', event => runResearchDiscoveryAction('monitor-run-due', { limit: 25 }, event.currentTarget));
   el('research-discovery-correlate-btn')?.addEventListener('click', event => runResearchDiscoveryAction('campaign-correlate', {}, event.currentTarget));
-  document.querySelectorAll('.research-alert-deliver-btn').forEach(button => button.addEventListener('click', event => runResearchDiscoveryAction('alert-deliver', { alert_id: button.dataset.alertId, channel: 'email' }, event.currentTarget)));
+  el('research-discovery-candidates')?.addEventListener('click', async event => {
+    const deliverBtn = event.target.closest('.research-alert-deliver-btn');
+    const resolveBtn = event.target.closest('.research-alert-resolve-btn');
+    if (deliverBtn) {
+      runResearchDiscoveryAction('alert-deliver', { alert_id: deliverBtn.dataset.alertId, channel: 'email' }, deliverBtn);
+    } else if (resolveBtn) {
+      if (!(await requestConfirmation(`Mark research alert ${resolveBtn.dataset.alertId} as resolved?`, {
+        title: 'Resolve alert',
+        confirmLabel: 'Resolve'
+      }))) return;
+      runResearchDiscoveryAction('alert-resolve', { alert_id: resolveBtn.dataset.alertId }, resolveBtn);
+    }
+  });
   el('coverage-refresh-btn')?.addEventListener('click', () => loadCoverage());
   el('coverage-score-run-btn')?.addEventListener('click', event => runCoverageAction('score-run', {}, event.currentTarget));
   el('coverage-retry-btn')?.addEventListener('click', event => runCoverageAction('collect-retry-failures', {}, event.currentTarget));

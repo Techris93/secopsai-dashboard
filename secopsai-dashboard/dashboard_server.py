@@ -99,6 +99,7 @@ RESEARCH_DISCOVERY_ACTIONS = {
     'compare-packages',
     'alert-list',
     'alert-deliver',
+    'alert-resolve',
     'collect-status',
     'collect-run',
     'collect-retry-failures',
@@ -1250,6 +1251,11 @@ def build_research_discovery_args(action, payload=None):
         if channel not in {'email', 'webhook'}:
             raise ValueError('Invalid alert channel')
         return ['research', 'alert', 'deliver', alert_id, '--channel', channel]
+    if action == 'alert-resolve':
+        alert_id = _clean_string(payload.get('alert_id'), 64).upper()
+        if not alert_id.startswith('RAL-'):
+            raise ValueError('Invalid research alert id')
+        return ['research', 'alert', 'resolve', alert_id]
     if action == 'collect-status':
         args = ['research', 'collect', 'status']
         ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
