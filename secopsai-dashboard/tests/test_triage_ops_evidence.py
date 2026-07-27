@@ -359,6 +359,29 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertTrue(alert['actionability']['is_actionable'])
         self.assertEqual(alert['display_severity'], 'critical')
 
+    def test_collection_counts_ecosystem_intelligence_as_actionable(self):
+        finding = {
+            'finding_id': 'SCM-COUNT001',
+            'ecosystem': 'npm',
+            'package': 'external-threat',
+            'new_version': '1.0.0',
+            'severity': 'critical',
+            'status': 'open',
+            'verdict': 'malicious',
+            'analysis': 'Deterministic rules flagged credential access.',
+        }
+        with mock.patch.object(server, 'triage_findings_by_status', side_effect=[[finding], []]), mock.patch.object(
+            server,
+            'check_local_dependency_usage',
+            return_value={'present': False, 'matches': []},
+        ):
+            payload = server.collect_triage_ops_alerts()
+
+        self.assertEqual(payload['counts']['actionable'], 1)
+        self.assertEqual(payload['counts']['actionable_critical'], 1)
+        self.assertEqual(payload['counts']['ecosystem_intelligence'], 1)
+        self.assertEqual(payload['counts']['local_response'], 0)
+
     def test_publish_approved_blocked_error_includes_readiness_reasons(self):
         error, hint = server.publish_approved_blocked_error({
             'blocked': [

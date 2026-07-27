@@ -2599,12 +2599,15 @@ def collect_triage_ops_alerts():
         'open': sum(1 for item in alerts if str(item.get('status') or '').lower() == 'open'),
         'in_review': sum(1 for item in alerts if str(item.get('status') or '').lower() == 'in_review'),
         'critical': sum(1 for item in alerts if str(item.get('severity') or '').lower() == 'critical'),
-        'actionable': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'actionable'),
+        'actionable': sum(1 for item in alerts if (item.get('actionability') or {}).get('is_actionable') is not False),
         'actionable_critical': sum(
             1 for item in alerts
-            if (item.get('actionability') or {}).get('bucket') == 'actionable'
+            if (item.get('actionability') or {}).get('is_actionable') is not False
             and str(item.get('severity') or '').lower() == 'critical'
         ),
+        'local_response': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'actionable'),
+        'ecosystem_intelligence': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'ecosystem_intelligence'),
+        'evidence_review': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'evidence_review'),
         'no_local_impact': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'no_local_impact'),
         'review_only': sum(1 for item in alerts if (item.get('actionability') or {}).get('bucket') == 'review_only'),
         'needs_review': sum(1 for item in alerts if item.get('recommendation', {}).get('recommended_disposition') == 'needs_review'),
