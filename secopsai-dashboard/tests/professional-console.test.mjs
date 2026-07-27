@@ -47,6 +47,8 @@ assert.match(app, /data-intelligence-requeue/);
 assert.match(app, /runIntelligenceAction\('requeue', \{ job_id: requeueButton\.dataset\.intelligenceRequeue \}/);
 assert.match(app, /id="research-pipeline-auto-review-btn"/);
 assert.match(app, /runResearchCaseAction\('pipeline-auto-review',/);
+assert.match(app, /Complete Agent Review/);
+assert.match(app, /record an evidence-linked agent verdict/);
 
 assert.match(app, /response\.clone\(\)\.json\(\)/);
 assert.match(app, /\['operator_session_required', 'operator_session_invalid'\]/);

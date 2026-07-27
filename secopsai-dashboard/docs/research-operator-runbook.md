@@ -63,11 +63,14 @@ that did not begin as an `SCM-*` alert.
 3. Click **Run Investigation Pipeline**.
 4. Wait while Core performs safe static intake and the Local Codex Bridge
    analyzes minimized context. The page refreshes automatically.
-5. Review every proposal. Edit inaccurate wording, then click **Accept** or
-   **Reject**. Static evidence is attached only after acceptance.
+5. Click **Complete Agent Review** to accept bounded proposals, attach the
+   pipeline evidence, record a guarded agent verdict, and rerun publication
+   safety. Use individual **Accept** or **Reject** controls only when you need
+   to edit or override a proposal.
 6. If the bridge fails, click **Retry from checkpoint**. If the reference was
    missing, enter it and click **Add reference and rerun analysis**.
-7. Continue to the human verdict, sandbox, disclosure, and publication gates.
+7. Review the resulting verdict and limitations. External sandbox submission,
+   disclosure delivery, and final publication remain human approval gates.
 
 The bridge never receives the quarantined package artifact or local path. It
 receives normalized metadata, hashes, manifests, static indicators, comparison

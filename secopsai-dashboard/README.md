@@ -188,11 +188,12 @@ The Research workspace includes cross-ecosystem watchlists and a protected
 promotion path. After a reviewed candidate becomes a draft case, select the
 case and click **Run Investigation Pipeline**. Core performs bounded static
 intake, optionally compares a verified legitimate package, and queues
-minimized analysis through the installed Local Codex Bridge. Mission Control
-updates automatically and presents every result as an Accept/Reject proposal.
-No artifact upload or copied prompt is required. Package code is never
-executed, and verdict, sandbox, disclosure, and publication controls remain
-separate human gates.
+minimized analysis through the installed Local Codex/OpenCodex Bridge. Mission
+Control updates automatically and can complete bounded evidence review, record
+an evidence-linked agent verdict, and rerun publication safety. No artifact
+upload or copied prompt is required, and package code is never executed.
+External sandbox submission, disclosure delivery, customer-control changes,
+and final publication remain explicit human approvals.
 
 For the complete operator path from a lead to a reviewed publication, see
 [`docs/research-operator-runbook.md`](docs/research-operator-runbook.md). The

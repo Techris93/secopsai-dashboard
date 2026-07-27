@@ -40,8 +40,9 @@ def test_research_actions_are_typed_and_not_shell_commands():
     assert "No export or upload" not in source
     assert "without exporting files or copying prompts" in source
     preview = (ROOT / "tests" / "fixtures" / "research-pipeline-preview.html").read_text(encoding="utf-8")
-    assert "AUTOMATED, HUMAN-GATED" in preview
-    assert "Analyst review queue" in preview
+    assert "GUARDED AGENT REVIEW" in preview
+    assert "Evidence and agent decision queue" in preview
+    assert "Complete Agent Review" in source
     styles = (ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".research-pipeline-targets {\n  grid-template-columns: repeat(2, minmax(0, 1fr));" in styles
 
@@ -103,6 +104,13 @@ def test_pipeline_actions_map_to_typed_core_commands():
     )
     assert review[:5] == ["research", "pipeline", "review", "RPL-AAAAAAAAAAAAAAAA", "RVI-BBBBBBBBBBBBBBBB"]
     assert "--decision" in review
+
+    agent_complete = dashboard_server.build_research_case_args(
+        "pipeline-auto-review",
+        {"pipeline_id": "RPL-AAAAAAAAAAAAAAAA", "actor": "secopsai-agent-autonomy"},
+    )
+    assert agent_complete[:4] == ["research", "pipeline", "agent-complete", "RPL-AAAAAAAAAAAAAAAA"]
+    assert agent_complete[-2:] == ["--actor", "secopsai-agent-autonomy"]
 
 
 def test_pipeline_gateway_rejects_untrusted_targets_and_decisions():
