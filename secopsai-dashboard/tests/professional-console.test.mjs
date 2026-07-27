@@ -32,18 +32,21 @@ for (const marker of ['toast-region', 'command-palette', 'help-drawer', 'confirm
   assert.ok((index + styles).includes(marker), `missing ${marker}`);
 }
 
-for (const marker of ['SecOpsAI Intelligence', 'intelligence-action-select', 'intelligence-jobs-table', 'intelligence-copy-mcp-btn']) {
+for (const marker of ['SecOpsAI Intelligence', 'intelligence-action-select', 'intelligence-jobs-table', 'intelligence-copy-mcp-btn', 'intelligence-result-modal', 'intelligence-result-copy', 'intelligence-result-open-case']) {
   assert.ok(index.includes(marker), `missing intelligence surface: ${marker}`);
 }
 for (const marker of ['intelligence-model-select', 'intelligence-model-hint']) {
   assert.ok(index.includes(marker), `missing model selection surface: ${marker}`);
 }
-for (const marker of ['loadIntelligence', 'runIntelligenceAction', 'renderIntelligence', 'intelligenceModels', 'intelligenceSelectedModel', 'renderIntelligenceModelSelect']) {
+for (const marker of ['loadIntelligence', 'runIntelligenceAction', 'renderIntelligence', 'intelligenceModels', 'intelligenceSelectedModel', 'renderIntelligenceModelSelect', 'intelligenceResultView', 'renderIntelligenceResultModal', 'intelligenceResultMarkdown', 'openIntelligenceResult']) {
   assert.match(app, new RegExp(`function ${marker}`));
 }
 assert.match(app, /secopsai_bridge_model/);
 assert.match(app, /runIntelligenceAction\('run-once', model \? \{ model \} : \{\}/);
 assert.match(app, /data-intelligence-requeue/);
+assert.match(app, /data-intelligence-review/);
+assert.match(app, /Open full analysis/);
+assert.match(app, /Full model analysis copied/);
 assert.match(app, /runIntelligenceAction\('requeue', \{ job_id: requeueButton\.dataset\.intelligenceRequeue \}/);
 assert.match(app, /id="research-pipeline-auto-review-btn"/);
 assert.match(app, /runResearchCaseAction\('pipeline-auto-review',/);

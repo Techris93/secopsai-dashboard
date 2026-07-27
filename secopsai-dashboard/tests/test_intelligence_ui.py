@@ -66,9 +66,29 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "intelligence-queue-btn",
         "intelligence-jobs-table",
         "intelligence-copy-mcp-btn",
+        "intelligence-result-modal",
+        "intelligence-result-body",
+        "intelligence-result-copy",
+        "intelligence-result-open-case",
     ):
         assert f'id="{element}"' in html
     assert "runIntelligenceAction('enqueue'" in app
+    assert "Open full analysis" in app
+    assert "data-intelligence-review" in app
+    assert "function intelligenceResultView" in app
+    assert "function renderIntelligenceResultModal" in app
+    assert "function intelligenceResultMarkdown" in app
+    for section in (
+        "Confirmed facts",
+        "Reasonable inferences",
+        "Unsupported claims",
+        "Missing evidence",
+        "Recommended next steps",
+        "Publication risks",
+        "Job audit history",
+        "Normalized result",
+    ):
+        assert section in app
     assert "data-intelligence-service" in html
     assert "arbitrary prompt" not in html.lower()
 

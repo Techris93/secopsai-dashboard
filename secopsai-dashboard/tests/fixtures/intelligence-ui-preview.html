@@ -36,7 +36,38 @@
         doc.getElementById('intelligence-bridge-detail').innerHTML = '<div class="kv-row"><div class="kv-key">Queue mode</div><div class="kv-val">Local SQLite</div></div><div class="kv-row"><div class="kv-key">Codex</div><div class="kv-val">codex-cli 0.144.6</div></div><div class="kv-row"><div class="kv-key">Authentication</div><div class="kv-val">ChatGPT subscription</div></div><div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">Not installed</div></div><div class="kv-row"><div class="kv-key">Credential storage</div><div class="kv-val">Codex-owned; not stored by dashboard</div></div>';
         doc.getElementById('intelligence-mcp-pill').textContent = 'Setup required';
         doc.getElementById('intelligence-mcp-detail').innerHTML = '<div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">Read-only OAuth MCP</div></div><div class="kv-row"><div class="kv-key">Endpoint</div><div class="kv-val">Not configured in this dashboard</div></div><div class="kv-row"><div class="kv-key">Available tools</div><div class="kv-val">9 read-only tools</div></div><div class="kv-row"><div class="kv-key">Write access</div><div class="kv-val">None</div></div>';
-        doc.getElementById('intelligence-jobs-table').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody><tr><td><strong>Explain finding</strong><div class="small mono">AIJ-3F7A2C109A84BC21</div></td><td>FND-EDGE-1042</td><td>Succeeded</td><td>22 Jul, 13:58</td><td><details><summary>Review result</summary></details></td><td></td></tr><tr><td><strong>Prioritize findings</strong><div class="small mono">AIJ-8C3E901DA4B7F122</div></td><td>Workspace</td><td>Queued</td><td>22 Jul, 14:01</td><td><span class="small">Pending</span></td><td><button class="mini-btn">Cancel</button></td></tr></tbody></table></div>';
+        doc.getElementById('intelligence-jobs-table').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody><tr><td><strong>Analyze Research Case</strong><div class="small mono">AIJ-3356D244D94345D6</div><div class="small mono">opencodex:google-antigravity</div></td><td>RSC-42C6208F1F22</td><td>Succeeded</td><td>25 Jul, 02:28</td><td><button id="preview-open-full-analysis" class="secondary-btn mini-btn" type="button">Open full analysis</button><div class="small">Likely · 85% confidence</div></td><td></td></tr><tr><td><strong>Prioritize findings</strong><div class="small mono">AIJ-8C3E901DA4B7F122</div></td><td>Workspace</td><td>Queued</td><td>22 Jul, 14:01</td><td><span class="small">Pending</span></td><td><button class="mini-btn">Cancel</button></td></tr></tbody></table></div>';
+        const modal = doc.getElementById('intelligence-result-modal');
+        const openResult = () => {
+          doc.getElementById('intelligence-result-title').textContent = 'Analyze Research Case';
+          doc.getElementById('intelligence-result-subtitle').textContent = 'AIJ-3356D244D94345D6 · RSC-42C6208F1F22 · opencodex:google-antigravity';
+          doc.getElementById('intelligence-result-body').innerHTML = `
+            <div class="intelligence-result-meta"><span>Succeeded</span><span>25 Jul, 02:28</span><span>Read-only analysis</span></div>
+            <div class="intelligence-verdict"><span>Agent verdict</span><strong>Likely</strong><b>85% confidence</b></div>
+            <div class="intelligence-result-grid">
+              <section class="intelligence-result-section wide"><h4>Executive summary</h4><p>Independent static validation supports a likely Braintree.Net typosquat with suspicious package behavior. Runtime card-skimming behavior is not yet proven.</p></section>
+              <section class="intelligence-result-section tone-decision"><h4>Verdict rationale</h4><p>Package identity, hashes, lifecycle behavior, network indicators, and comparison evidence support escalation, while the credible threshold remains blocked by missing sandbox or advisory confirmation.</p></section>
+              <section class="intelligence-result-section"><h4>Risk assessment</h4><p>High research priority because the package impersonates a payment library and exposes payment- and browser-related indicators.</p></section>
+              <section class="intelligence-result-section tone-fact"><h4>Confirmed facts</h4><ol class="intelligence-result-list"><li>The suspicious package identity and version were collected from NuGet.</li><li>Artifact hashes and static indicators are recorded with provenance.</li><li>Install-hook, browser-payment-access, and network-endpoint indicators were detected statically.</li></ol></section>
+              <section class="intelligence-result-section"><h4>Reasonable inferences</h4><ol class="intelligence-result-list"><li>The naming pattern is consistent with brand impersonation.</li><li>The indicators justify deeper .NET comparison and sandbox review.</li></ol></section>
+              <section class="intelligence-result-section tone-warning"><h4>Unsupported claims</h4><ol class="intelligence-result-list"><li>Active credit-card skimming is not proven without observed runtime behavior.</li><li>Victims, attribution, and campaign scope are not established.</li></ol></section>
+              <section class="intelligence-result-section tone-gap"><h4>Missing evidence</h4><ol class="intelligence-result-list"><li>Approved isolated sandbox execution and sanitized behavior logs.</li><li>Independent collection of every referenced package version.</li><li>Structured IOC extraction and validation.</li></ol></section>
+              <section class="intelligence-result-section tone-action wide"><h4>Recommended next steps</h4><ol class="intelligence-result-list"><li>Compare suspicious and legitimate assemblies, metadata, resources, strings, and public APIs.</li><li>Request approval-gated sandbox analysis for the exact recorded artifact hash.</li><li>Prepare responsible disclosure for NuGet and the impersonated vendor after evidence review.</li></ol></section>
+              <section class="intelligence-result-section tone-warning"><h4>Publication risks</h4><ol class="intelligence-result-list"><li>Describe static indicators separately from observed behavior.</li><li>Do not claim original discovery or confirmed skimming without source-backed proof.</li></ol></section>
+              <section class="intelligence-result-section wide"><h4>Job audit history</h4><ol class="intelligence-result-list"><li>Queued by dashboard operator.</li><li>Claimed by local bridge.</li><li>Gemini analysis completed and normalized.</li></ol></section>
+            </div>`;
+          modal.classList.remove('hidden');
+          modal.setAttribute('aria-hidden', 'false');
+          doc.body.classList.add('modal-open');
+        };
+        const closeResult = () => {
+          modal.classList.add('hidden');
+          modal.setAttribute('aria-hidden', 'true');
+          doc.body.classList.remove('modal-open');
+        };
+        doc.getElementById('preview-open-full-analysis').addEventListener('click', openResult);
+        doc.getElementById('intelligence-result-close').addEventListener('click', closeResult);
+        doc.getElementById('intelligence-result-done').addEventListener('click', closeResult);
         doc.querySelectorAll('#page-integrations > .card').forEach(card => card.hidden = true);
       }, { once: true });
       frame.srcdoc = withoutScripts;
