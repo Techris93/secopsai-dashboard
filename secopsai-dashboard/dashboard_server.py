@@ -2985,6 +2985,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == '/api/secopsai/research-artifacts':
+            try:
+                qs = urllib.parse.parse_qs(parsed.query or '')
+                ecosystem = _clean_string((qs.get('ecosystem') or [''])[0], 40)
+                args = ['research', 'artifact', 'list', *(['--ecosystem', ecosystem] if ecosystem else []), *secopsai_db_args()]
+                result, parsed_result = run_cli_json(args, timeout=60)
+                return json_response(self, 200 if result['ok'] else 503, {'ok': result['ok'], 'artifacts': (parsed_result or {}).get('artifacts', []), 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'local_helper_unavailable'})
         if parsed.path == '/api/integration-status':
             payload = {
                 'ok': True,
@@ -3276,7 +3285,125 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == '/api/secopsai/research-artifacts/import':
+            if require_triage_ops_admin(self):
+                return
+            content_length = int(self.headers.get('Content-Length', '0') or '0')
+            if content_length <= 0 or content_length > 250 * 1024 * 1024:
+                return json_response(self, 413, {'ok': False, 'error': 'Artifact must be between 1 byte and 250 MiB', 'code': 'artifact_size_limit'})
+            ecosystem = _clean_string(self.headers.get('X-Artifact-Ecosystem') or 'nuget', 40).lower()
+            package = _clean_string(self.headers.get('X-Artifact-Package') or '', 512)
+            version = _clean_string(self.headers.get('X-Artifact-Version') or '', 160)
+            staging = SECOPSAI_ROOT / 'data' / 'research' / 'staging'
+            staging.mkdir(parents=True, exist_ok=True)
+            os.chmod(staging, 0o700)
+            tmp_path = staging / f'.upload-{os.getpid()}-{os.urandom(8).hex()}.bin'
+            try:
+                with tmp_path.open('wb') as handle:
+                    remaining = content_length
+                    while remaining:
+                        chunk = self.rfile.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            raise ValueError('Upload ended before Content-Length')
+                        handle.write(chunk)
+                        remaining -= len(chunk)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                result, parsed_result = run_cli_json([
+                    'research', 'artifact', 'import', '--path', str(tmp_path),
+                    '--ecosystem', ecosystem, '--package', package, '--version', version,
+                    *secopsai_db_args(),
+                ], timeout=300)
+                return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'artifact': parsed_result, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'artifact_import_failed'})
+            finally:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
         payload = read_request_json(self)
+
+        if parsed.path == '/api/secopsai/research-artifacts/analysis':
+            if require_triage_ops_admin(self):
+                return
+            action = _clean_string(payload.get('action') or 'run', 20).lower()
+            try:
+                if action == 'run':
+                    artifact_id = _clean_string(payload.get('artifact_id'), 40).upper()
+                    if not re.fullmatch(r'ART-[A-F0-9]{16}', artifact_id):
+                        raise ValueError('Invalid artifact ID')
+                    args = ['research', 'analysis', 'run', artifact_id, *secopsai_db_args()]
+                elif action == 'compare':
+                    left = _clean_string(payload.get('left_artifact_id'), 40).upper()
+                    right = _clean_string(payload.get('right_artifact_id'), 40).upper()
+                    if not re.fullmatch(r'ART-[A-F0-9]{16}', left) or not re.fullmatch(r'ART-[A-F0-9]{16}', right):
+                        raise ValueError('Invalid artifact ID')
+                    args = ['research', 'analysis', 'compare', left, right, *secopsai_db_args()]
+                else:
+                    raise ValueError('Unsupported artifact analysis action')
+                result, parsed_result = run_cli_json(args, timeout=300)
+                return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'result': parsed_result, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/research-artifacts/ioc-candidates':
+            if require_triage_ops_admin(self):
+                return
+            action = _clean_string(payload.get('action') or 'extract', 20).lower()
+            try:
+                if action == 'extract':
+                    case_id = _clean_string(payload.get('case_id'), 20).upper()
+                    args = ['research', 'ioc-candidates', 'extract', case_id]
+                    artifact_id = _clean_string(payload.get('artifact_id'), 40).upper()
+                    if artifact_id:
+                        args.extend(['--artifact-id', artifact_id])
+                elif action == 'review':
+                    candidate_id = _clean_string(payload.get('candidate_id'), 40).upper()
+                    decision = _clean_string(payload.get('decision'), 20).lower()
+                    if decision not in {'approved', 'rejected'}:
+                        raise ValueError('decision must be approved or rejected')
+                    args = ['research', 'ioc-candidates', 'review', candidate_id, '--decision', decision, '--actor', 'mission-control']
+                else:
+                    raise ValueError('Unsupported IOC candidate action')
+                result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=180)
+                return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'result': parsed_result, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/research-subjects/state':
+            if require_triage_ops_admin(self):
+                return
+            try:
+                subject_id = _clean_string(payload.get('subject_id'), 40).upper()
+                args = ['research', 'subject', 'state', subject_id, '--actor', 'mission-control']
+                for key, flag in [('registry_state', '--registry-state'), ('artifact_state', '--artifact-state'), ('validation_state', '--validation-state'), ('reason', '--reason')]:
+                    value = _clean_string(payload.get(key), 2000 if key == 'reason' else 40)
+                    if value:
+                        args.extend([flag, value])
+                result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=90)
+                return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'case': parsed_result, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/research-partner-requests':
+            if require_triage_ops_admin(self):
+                return
+            try:
+                action = _clean_string(payload.get('action') or 'create', 20).lower()
+                if action == 'create':
+                    args = ['research', 'partner-request', 'create', _clean_string(payload.get('case_id'), 20), '--recipient', _clean_string(payload.get('recipient'), 320), '--reason', _clean_string(payload.get('reason'), 2000), '--actor', 'mission-control']
+                    for key, flag in [('subject_id', '--subject-id'), ('artifact_sha256', '--artifact-sha256')]:
+                        value = _clean_string(payload.get(key), 128)
+                        if value: args.extend([flag, value])
+                elif action == 'status':
+                    args = ['research', 'partner-request', 'status', _clean_string(payload.get('request_id'), 40), '--status', _clean_string(payload.get('status'), 40), '--actor', 'mission-control']
+                else:
+                    args = ['research', 'partner-request', 'list', '--case-id', _clean_string(payload.get('case_id'), 20)]
+                result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=90)
+                return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'result': parsed_result, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
         if parsed.path == '/api/secopsai/intelligence':
             if require_intelligence_admin(self):

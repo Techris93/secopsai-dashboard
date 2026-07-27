@@ -7209,6 +7209,23 @@ async function runResearchCaseAction(action, payload = {}, button = null) {
   }
 }
 
+async function runArtifactCaseAction(action, payload = {}, button = null) {
+  const token = state.researchCases.adminToken || state.triageOps.adminToken;
+  if (!token) { setStatus('Use the protected research action token first.', true); return null; }
+  setButtonBusy(button, true, 'Working…');
+  try {
+    const endpoint = action === 'extract' ? '/api/secopsai/research-artifacts/ioc-candidates' : '/api/secopsai/research-artifacts/analysis';
+    const response = await dashboardApiFetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }, body: JSON.stringify({ action: action === 'analysis' ? 'run' : 'extract', ...payload }) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || result.cli?.stderr || 'Artifact action failed');
+    await loadResearchCaseDetail(state.researchCases.selectedId, { render: false });
+    renderResearchCases();
+    setStatus(`<span class="dot"></span> ${action === 'extract' ? 'IOC candidates extracted' : 'Artifact inspection completed'}`);
+    return result;
+  } catch (error) { setStatus(`Artifact action failed: ${error?.message || error}`, true); return null; }
+  finally { setButtonBusy(button, false); }
+}
+
 async function runResearchWatchlistAction(action, payload = {}, button = null) {
   const headers = { 'Content-Type': 'application/json' };
   if (action === 'create') {
@@ -7269,6 +7286,32 @@ function closeResearchRetractModal() {
 }
 
 function bindResearchCaseDetailActions(researchCase) {
+  el('research-artifact-import-btn')?.addEventListener('click', async event => {
+    const file = el('research-artifact-file')?.files?.[0];
+    const token = state.researchCases.adminToken || state.triageOps.adminToken;
+    if (!file) { setStatus('Choose an authorized package file first.', true); return; }
+    if (!token) { setStatus('Use the protected research action token before importing an artifact.', true); return; }
+    setButtonBusy(event.currentTarget, true, 'Quarantining…');
+    try {
+      const response = await dashboardApiFetch('/api/secopsai/research-artifacts/import', { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream', 'X-Triage-Ops-Admin-Token': token, 'X-Artifact-Ecosystem': el('research-artifact-ecosystem')?.value || 'nuget', 'X-Artifact-Package': el('research-artifact-package')?.value || '', 'X-Artifact-Version': el('research-artifact-version')?.value || '' } });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.ok === false) throw new Error(result.error || result.cli?.stderr || 'Artifact import failed');
+      await runResearchCaseAction('add-evidence', { case_id: researchCase.case_id, evidence_type: 'package_artifact', title: `Authorized artifact ${result.artifact?.artifact_id || ''}`, sha256: result.artifact?.sha256 || '', provenance: 'Mission Control local quarantine', notes: 'Raw bytes retained only in local Core quarantine.', actor: 'dashboard-operator' });
+      if (result.artifact?.artifact_id) await runArtifactCaseAction('analysis', { artifact_id: result.artifact.artifact_id });
+      setStatus('<span class="dot"></span> Artifact quarantined and inspected locally');
+    } catch (error) { setStatus(`Artifact import failed: ${error?.message || error}`, true); }
+    finally { setButtonBusy(event.currentTarget, false); }
+  });
+  el('research-artifact-ioc-btn')?.addEventListener('click', event => runArtifactCaseAction('extract', { case_id: researchCase.case_id }, event.currentTarget));
+  document.querySelectorAll('#research-case-detail .research-artifact-analysis-btn').forEach(button => button.addEventListener('click', event => runArtifactCaseAction('analysis', { artifact_id: button.dataset.artifactId }, event.currentTarget)));
+  document.querySelectorAll('#research-case-detail .research-subject-state-btn').forEach(button => button.addEventListener('click', async event => {
+    const token = state.researchCases.adminToken || state.triageOps.adminToken;
+    if (!token) { setStatus('Use the protected research action token first.', true); return; }
+    const subjectId = button.dataset.subjectId;
+    const response = await dashboardApiFetch('/api/secopsai/research-subjects/state', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }, body: JSON.stringify({ subject_id: subjectId, registry_state: el(`research-subject-registry-${subjectId}`)?.value, artifact_state: el(`research-subject-artifact-${subjectId}`)?.value, validation_state: el(`research-subject-validation-${subjectId}`)?.value, reason: el(`research-subject-reason-${subjectId}`)?.value || '' }) });
+    if (!response.ok) { const payload = await response.json().catch(() => ({})); setStatus(`Subject state update failed: ${payload.error || response.status}`, true); return; }
+    await loadResearchCaseDetail(researchCase.case_id, { render: false }); renderResearchCases(); setStatus('<span class="dot"></span> Subject lifecycle state updated');
+  }));
   el('research-pipeline-start-btn')?.addEventListener('click', async event => {
     if (!(await requestConfirmation(`Run the safe investigation pipeline for ${researchCase.case_id}?`, {
       title: 'Run investigation pipeline',
@@ -7444,6 +7487,18 @@ function bindResearchCaseDetailActions(researchCase) {
     body: el('research-disclosure-body')?.value,
     actor: 'dashboard-operator'
   }, event.currentTarget));
+  el('research-partner-request-btn')?.addEventListener('click', async event => {
+    const token = state.researchCases.adminToken || state.triageOps.adminToken;
+    if (!token) { setStatus('Use the protected research action token first.', true); return; }
+    setButtonBusy(event.currentTarget, true, 'Creating…');
+    try {
+      const response = await dashboardApiFetch('/api/secopsai/research-partner-requests', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }, body: JSON.stringify({ action: 'create', case_id: researchCase.case_id, recipient: el('research-partner-recipient')?.value, reason: el('research-partner-reason')?.value }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.ok === false) throw new Error(result.error || 'Partner request failed');
+      await loadResearchCaseDetail(researchCase.case_id, { render: false }); renderResearchCases(); setStatus('<span class="dot"></span> Partner request draft created');
+    } catch (error) { setStatus(`Partner request failed: ${error?.message || error}`, true); }
+    finally { setButtonBusy(event.currentTarget, false); }
+  });
   el('research-sandbox-btn')?.addEventListener('click', event => runResearchCaseAction('sandbox-request', {
     case_id: researchCase.case_id,
     artifact_sha256: el('research-sandbox-sha256')?.value,
@@ -7570,6 +7625,7 @@ function renderResearchAutomationPanel(researchCase) {
   const disclosures = researchCase.disclosures || [];
   const sandboxes = researchCase.sandbox_requests || [];
   const ecosystems = ['npm', 'pypi', 'nuget', 'maven', 'rubygems', 'packagist', 'go', 'open-vsx'];
+  const artifacts = researchCase.artifacts || [];
   return researchDetailSection('Research automation', `
     ${renderInvestigationPipeline(researchCase, ecosystems)}
     <p class="small">Safe intake fetches official metadata and artifacts into quarantine, hashes them, and performs bounded static inspection. It never installs or executes the package.</p>
@@ -7586,6 +7642,7 @@ function renderResearchAutomationPanel(researchCase) {
       <button class="secondary-btn" id="research-brief-btn" type="button">Generate Analyst Brief</button>
       <button class="secondary-btn" id="research-publication-check-btn" type="button">Run Publication Safety Check</button>
     </div>
+    <details class="research-action-drawer"><summary>Local artifact evidence</summary><p class="small">Artifacts are sent only to the authenticated local helper, hashed, and stored in owner-only quarantine. They are never uploaded to Supabase, Render, Cloudflare, or an AI provider.</p><div class="research-form-grid"><label class="research-span-2"><span>Authorized package file</span><input id="research-artifact-file" type="file" accept=".nupkg,.zip,.vsix,.gem,.whl" /></label><label><span>Ecosystem</span><select id="research-artifact-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'nuget')).join('')}</select></label><label><span>Package</span><input id="research-artifact-package" value="${escapeHtml(packageSubject.name || '')}" /></label><label><span>Version</span><input id="research-artifact-version" value="${escapeHtml(packageSubject.version || '')}" /></label></div><div class="research-form-actions"><button class="primary-btn" id="research-artifact-import-btn" type="button">Import Authorized Artifact</button><button class="secondary-btn" id="research-artifact-ioc-btn" type="button" ${artifacts.length ? '' : 'disabled'}>Extract IOC Candidates</button></div>${artifacts.length ? `<div class="table-wrap"><table><thead><tr><th>Artifact</th><th>Package</th><th>SHA-256</th><th>State</th><th>Actions</th></tr></thead><tbody>${artifacts.map(item => `<tr><td><strong>${escapeHtml(item.artifact_id)}</strong><div class="small">${escapeHtml(item.filename)}</div></td><td>${escapeHtml(item.ecosystem)}:${escapeHtml(item.package_name || '—')}@${escapeHtml(item.version || '—')}</td><td><code>${escapeHtml(item.sha256)}</code></td><td>${escapeHtml(statusLabel(item.state))}</td><td><button class="mini-btn research-artifact-analysis-btn" data-artifact-id="${escapeHtml(item.artifact_id)}" type="button">Inspect safely</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state compact">No local artifacts attached. Import an authorized package file to begin.</div>'}</details>
     <details class="research-action-drawer"><summary>Compare packages</summary><p class="small">Both exact targets are fetched from allowlisted registries, hashed, and inspected statically. Package code is never installed or executed.</p><div class="research-form-grid"><label><span>Left ecosystem</span><select id="research-compare-left-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Left package</span><input id="research-compare-left-package" value="${escapeHtml(packageSubject.name || '')}" placeholder="legitimate package" /></label><label><span>Left version</span><input id="research-compare-left-version" value="${escapeHtml(packageSubject.version || '')}" placeholder="latest if empty" /></label><label><span>Right ecosystem</span><select id="research-compare-right-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Right package</span><input id="research-compare-right-package" placeholder="candidate package" /></label><label><span>Right version</span><input id="research-compare-right-version" placeholder="latest if empty" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-compare-packages-btn" type="button">Compare exact packages</button></div></details>
     <div class="research-form-grid">
       <label><span>Analyst verdict</span><select id="research-verdict-value"><option value="inconclusive">Inconclusive</option><option value="credible">Credible</option><option value="likely">Likely</option><option value="not_substantiated">Not substantiated</option><option value="benign">Benign</option><option value="retracted">Retracted</option></select></label>
@@ -7595,6 +7652,7 @@ function renderResearchAutomationPanel(researchCase) {
     </div>
     <div class="research-form-actions"><button class="secondary-btn" id="research-verdict-btn" type="button">Record Human Verdict</button><button class="secondary-btn" id="research-publication-approve-btn" type="button" ${reviews[0]?.status === 'needs_approval' ? '' : 'disabled'}>Approve Publication Review</button></div>
     <details class="research-action-drawer"><summary>Prepare responsible disclosure</summary><div class="research-form-grid"><label><span>Recipient</span><input id="research-disclosure-recipient" placeholder="maintainer or registry contact" /></label><label><span>Subject</span><input id="research-disclosure-subject" /></label><label class="research-span-2"><span>Body</span><textarea id="research-disclosure-body" rows="4" placeholder="Leave empty for the safe template."></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-disclosure-btn" type="button">Prepare Disclosure</button></div></details>
+    <details class="research-action-drawer"><summary>Acquire an unavailable artifact</summary><p class="small">Use this when an official registry no longer serves the exact version. The request is an auditable draft and does not send email automatically or change the case verdict.</p><div class="research-form-grid"><label><span>Research partner or contact</span><input id="research-partner-recipient" placeholder="security@partner.example" /></label><label class="research-span-2"><span>Reason and requested provenance</span><textarea id="research-partner-reason" rows="3" placeholder="Request the exact package, original source, and chain of custody."></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-partner-request-btn" type="button">Request Artifact From Research Partner</button></div>${(researchCase.partner_requests || []).slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)}</div>`).join('')}</details>
     <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">This creates an approval record only. Execution is unavailable until a dedicated isolated provider is configured.</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="2"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
     <div class="research-automation-status">
       <strong>Jobs and approvals</strong>
@@ -7643,7 +7701,7 @@ function renderResearchCaseDetail(researchCase) {
         <label class="research-span-2"><span>Owner</span><input id="research-detail-owner" value="${escapeHtml(researchCase.owner || '')}" maxlength="160" /></label>
         <label class="research-span-2"><span>Executive summary</span><textarea id="research-detail-summary" rows="5" maxlength="8000">${escapeHtml(researchCase.summary || '')}</textarea></label>
       </div><div class="research-form-actions"><button class="primary-btn" id="research-save-case-btn" type="button">Save workflow</button><button class="secondary-btn" id="research-export-btn" type="button">Download case report</button><button class="secondary-btn" id="research-draft-blog-btn" type="button" ${readiness.ready ? '' : 'disabled'} title="${readiness.ready ? 'Creates a review-only Blog Ops draft.' : 'Resolve publication blockers first.'}">Create review draft</button></div>`)}
-    ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','State'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td>${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
+    ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','Lifecycle state'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td><div class="small">Case: ${escapeHtml(statusLabel(item.status))} · Registry: ${escapeHtml(statusLabel(item.registry_state || 'unknown'))} · Artifact: ${escapeHtml(statusLabel(item.artifact_state || 'missing'))} · Validation: ${escapeHtml(statusLabel(item.validation_state || 'unverified'))}</div><details class="research-inline-state"><summary>Update lifecycle state</summary><div class="research-form-grid"><select id="research-subject-registry-${escapeHtml(item.subject_id)}"><option value="available" ${item.registry_state === 'available' ? 'selected' : ''}>available</option><option value="unlisted" ${item.registry_state === 'unlisted' ? 'selected' : ''}>unlisted</option><option value="removed" ${item.registry_state === 'removed' ? 'selected' : ''}>removed</option><option value="unavailable" ${item.registry_state === 'unavailable' ? 'selected' : ''}>unavailable</option><option value="unknown" ${!item.registry_state || item.registry_state === 'unknown' ? 'selected' : ''}>unknown</option></select><select id="research-subject-artifact-${escapeHtml(item.subject_id)}"><option value="collected">collected</option><option value="missing" selected>missing</option><option value="externally_supplied">externally_supplied</option></select><select id="research-subject-validation-${escapeHtml(item.subject_id)}"><option value="unverified" selected>unverified</option><option value="static_confirmed">static_confirmed</option><option value="sandbox_confirmed">sandbox_confirmed</option></select><input id="research-subject-reason-${escapeHtml(item.subject_id)}" placeholder="Evidence or reason" /><button class="mini-btn research-subject-state-btn" data-subject-id="${escapeHtml(item.subject_id)}" type="button">Save state</button></div></details> ${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
     ${researchDetailSection('Evidence', researchTable(['Evidence','Type','Provenance','Collected','State'], evidence.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td><strong>${escapeHtml(item.title)}</strong><div class="small">${escapeHtml(item.locator || item.sha256 || 'No locator')}</div></td><td>${escapeHtml(statusLabel(item.evidence_type))}</td><td>${escapeHtml(item.provenance || '—')}</td><td>${escapeHtml(fmtDate(item.collected_at))}</td><td>${researchRetractControl('evidence', item)}</td></tr>`), 'No evidence recorded.'))}
     ${researchDetailSection('Indicators', researchTable(['Type','Value','Confidence','Evidence','State'], iocs.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(item.ioc_type)}</td><td><code>${escapeHtml(item.value)}</code></td><td>${escapeHtml(String(item.confidence))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('ioc', item)}</td></tr>`), 'No indicators recorded; explicitly state when none were found.'))}
     ${researchDetailSection('Detection rules', researchTable(['Type','Rule','Validation','Evidence','State'], rules.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(String(item.rule_type || '').toUpperCase())}</td><td><strong>${escapeHtml(item.name)}</strong>${item.purpose ? `<div class="small">${escapeHtml(item.purpose)}</div>` : ''}<pre class="research-rule-preview"><code>${escapeHtml(compactText(item.content || '', 420))}</code></pre></td><td>${escapeHtml(statusLabel(item.validation_status || item.validation?.status || 'unknown'))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('rule', item)}</td></tr>`), 'No detection rules attached.'))}

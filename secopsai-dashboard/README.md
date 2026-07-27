@@ -339,3 +339,6 @@ backend configuration is rejected. Live records are never loaded in this mode.
 ## Cloudflare Pages
 
 For hosted deployment with same-origin backend endpoints, see [CLOUDFLARE_PAGES.md](./CLOUDFLARE_PAGES.md).
+# Mission Control local artifact workflow
+
+Research case detail includes a local-only **Import Authorized Artifact** action. It requires the protected research action token and a running local Core helper. Package bytes are quarantined and analyzed locally; the hosted dashboard never receives raw artifacts.
