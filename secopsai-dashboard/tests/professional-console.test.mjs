@@ -61,7 +61,7 @@ assert.equal((index.match(/id="intelligence-admin-token"/g) || []).length, 1);
 assert.ok(index.indexOf('id="intelligence-admin-token"') < index.indexOf('id="intelligence-service-actions"'));
 assert.ok(index.indexOf('id="intelligence-service-actions"') < index.indexOf('id="intelligence-request-title"'));
 
-assert.match(index, /20260722-asd-console-theme/);
+assert.match(index, /20260727-full-intelligence-results/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function requestConfirmation/);
 assert.doesNotMatch(app, /\b(?:window\.)?alert\s*\(/);
