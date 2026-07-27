@@ -20,6 +20,20 @@ def test_local_intelligence_actions_are_allowlisted():
     assert dashboard_server.build_intelligence_args(
         "service", {"service_action": "status"}
     ) == ["intelligence", "bridge", "service", "status"]
+    install = dashboard_server.build_intelligence_args(
+        "service",
+        {"service_action": "install", "model": "kimi/kimi-k2.7-code-highspeed"},
+    )
+    assert install[:6] == [
+        "intelligence",
+        "bridge",
+        "service",
+        "install",
+        "--model",
+        "kimi/kimi-k2.7-code-highspeed",
+    ]
+    assert "--autonomy-mode" in install
+    assert "agent_review" in install
 
 
 def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
@@ -35,6 +49,11 @@ def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
         )
     with pytest.raises(ValueError):
         dashboard_server.build_intelligence_args("service", {"service_action": "exec"})
+    with pytest.raises(ValueError):
+        dashboard_server.build_intelligence_args(
+            "service",
+            {"service_action": "install", "model": "kimi/model;curl example.invalid"},
+        )
 
 
 def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
