@@ -773,6 +773,12 @@ def build_intelligence_args(action, payload):
             raise ValueError('Unsupported bridge service action')
         args = ['intelligence', 'bridge', 'service', service_action]
         if service_action == 'install':
+            model = str(payload.get('model') or '').strip()
+            if model:
+                if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+                    raise ValueError('Invalid bridge model')
+                args.extend(['--model', model])
+            args.extend(['--autonomy-mode', 'agent_review'])
             args.extend(['--db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else [])
         return args
     raise ValueError('Unsupported intelligence operation')

@@ -8103,11 +8103,12 @@ function bindEvents() {
   });
   document.querySelectorAll('[data-intelligence-service]').forEach(button => button.addEventListener('click', async event => {
     const serviceAction = event.currentTarget.dataset.intelligenceService;
+    const model = el('intelligence-model-select')?.value || '';
     if (serviceAction === 'install' && !(await requestConfirmation(
-      'Install the local Codex bridge as a user-level background service? It will process approved queued analysis jobs while this account is signed in.',
-      { title: 'Install local bridge', confirmLabel: 'Install service' },
+      `Install the local bridge in guarded agent-review mode${model ? ` using ${model}` : ''}? The selected model will persist across browser and workstation restarts.`,
+      { title: 'Install autonomous local bridge', context: 'The service may complete bounded evidence review and record guarded verdicts. It cannot execute packages, send disclosure, submit external sandbox artifacts, change customer controls, or publish content.', confirmLabel: 'Install service' },
     ))) return;
-    await runIntelligenceAction('service', { service_action: serviceAction }, event.currentTarget);
+    await runIntelligenceAction('service', serviceAction === 'install' ? { service_action: serviceAction, model } : { service_action: serviceAction }, event.currentTarget);
   }));
   el('intelligence-copy-mcp-btn')?.addEventListener('click', async () => {
     const url = state.intelligence.data?.chatgpt_app?.url || '';

@@ -8,6 +8,8 @@ The boundary remains explicit: the action cannot execute packages, submit an ext
 
 Verification covers typed command mapping, unsafe-target rejection, confirmation copy, fixture rendering, Python UI tests, JavaScript console contracts, syntax checks, and the full dashboard suite.
 
+The System model picker now feeds **Install service** as well as **Process next job**. Mission Control persists the selected model identifier and `agent_review` mode in the local service command, preventing a background restart from silently reverting to another model. Model identifiers are allowlisted; credentials are never written by the dashboard.
+
 ## Local Codex Investigation Pipeline
 
 Mission Control now provides one primary **Run Investigation Pipeline** action for a selected Research Case. The typed Core gateway starts or resumes a durable pipeline, the local Codex subscription bridge processes minimized context, and the browser automatically polls until structured review proposals are ready.
