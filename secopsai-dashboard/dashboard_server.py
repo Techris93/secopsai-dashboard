@@ -965,7 +965,7 @@ def build_research_case_args(action, payload):
         pipeline_id = _clean_string(payload.get('pipeline_id'), 40).upper()
         if not RESEARCH_PIPELINE_ID_RE.match(pipeline_id):
             raise ValueError('Invalid research pipeline id')
-        args = ['research', 'pipeline', 'auto-review', pipeline_id]
+        args = ['research', 'pipeline', 'agent-complete', pipeline_id]
         add(args, '--actor', 'actor', 160)
         return args
 

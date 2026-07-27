@@ -7155,14 +7155,14 @@ function bindResearchCaseDetailActions(researchCase) {
   }));
   el('research-pipeline-auto-review-btn')?.addEventListener('click', async event => {
     const pipelineId = event.currentTarget.dataset.pipelineId;
-    if (!(await requestConfirmation('AI Auto-Accept all pending review proposals for this pipeline?', {
-      title: 'AI Auto-Accept All',
-      context: 'All pending proposals will be automatically accepted and their findings attached to the case. Only final publication and disclosure gates will remain.',
-      confirmLabel: 'Auto-Accept All'
+    if (!(await requestConfirmation('Complete the guarded agent review for this investigation?', {
+      title: 'Complete Agent Review',
+      context: 'SecOpsAI will accept bounded pipeline evidence, record an evidence-linked agent verdict, and rerun publication safety. It will not execute the package, submit it to a sandbox, send disclosure, or publish content.',
+      confirmLabel: 'Complete Agent Review'
     }))) return;
     runResearchCaseAction('pipeline-auto-review', {
       pipeline_id: pipelineId,
-      actor: 'dashboard-operator'
+      actor: 'secopsai-agent-autonomy'
     }, event.currentTarget);
   });
   el('research-save-case-btn')?.addEventListener('click', event => runResearchCaseAction('update', {
@@ -7337,6 +7337,9 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
   const canStart = !pipeline || ['succeeded', 'canceled'].includes(pipeline.status);
   const comparisonNeeded = Boolean(summary.comparison_input_required || steps.some(step => step.step_key === 'collect_reference' && step.status === 'awaiting_input'));
   const canResume = pipeline && (pipeline.status === 'failed' || (comparisonNeeded && ['awaiting_input', 'awaiting_review', 'awaiting_ai'].includes(pipeline.status)));
+  const agentVerdict = summary.agent_verdict
+    ? `${statusLabel(summary.agent_verdict)} verdict at ${Number(summary.agent_verdict_confidence || 0)}% confidence`
+    : '';
   const statusCopy = !pipeline
     ? 'No investigation pipeline has run for this case.'
     : pipeline.status === 'awaiting_ai'
@@ -7346,7 +7349,9 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
         : pipeline.status === 'failed'
           ? pipeline.error_message || 'The pipeline stopped safely and can be resumed.'
           : pipeline.status === 'succeeded'
-            ? 'All pipeline proposals were reviewed. Verdict, disclosure, sandbox, and publication remain separate human gates.'
+            ? summary.autonomy_mode === 'agent_review'
+              ? `Agent review completed${agentVerdict ? `: ${agentVerdict}` : ''}. External actions remain human-authorized.`
+              : 'All pipeline proposals were reviewed. External sandbox, disclosure, and publication remain separate human gates.'
             : 'The pipeline is durable and can continue from its recorded step.';
   const stepRows = steps.length ? steps.map(step => {
     const jobStatus = step.intelligence_job_id
@@ -7368,7 +7373,7 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
   }).join('') : '<div class="empty-state compact">Review proposals appear here after static collection and Local Codex analysis.</div>';
   return `<section class="research-pipeline-panel" aria-labelledby="research-pipeline-title">
     <div class="research-pipeline-heading">
-      <div><div class="detail-eyebrow">AUTOMATED, HUMAN-GATED</div><h5 id="research-pipeline-title">Investigation pipeline</h5><p class="small">Collect, compare, analyze, and prepare review proposals without exporting files or copying prompts. Raw artifacts stay local and package code is never executed.</p></div>
+      <div><div class="detail-eyebrow">GUARDED AGENT REVIEW</div><h5 id="research-pipeline-title">Investigation pipeline</h5><p class="small">Collect, compare, analyze, and reach an evidence-linked verdict without exporting files or copying prompts. Raw artifacts stay local and package code is never executed.</p></div>
       ${pipeline ? renderStatusPill(pipeline.status) : renderStatusPill('not_started', 'Not started')}
     </div>
     <div class="research-pipeline-summary"><strong>${escapeHtml(statusCopy)}</strong>${pipeline ? `<span><code>${escapeHtml(pipeline.pipeline_id)}</code> · revision ${escapeHtml(String(pipeline.revision || 1))}</span>` : ''}</div>
@@ -7384,12 +7389,12 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
     ${pipeline ? `<button class="secondary-btn" id="research-pipeline-resume-btn" type="button" ${canResume ? '' : 'disabled'}>${pipeline.status === 'failed' ? 'Retry from checkpoint' : 'Add reference and rerun analysis'}</button>` : ''}
   </div>
   <ol class="research-pipeline-steps">${stepRows}</ol>
-  <div class="research-review-list"><div class="research-list-head"><div><h5>Analyst review queue</h5><p class="small">Edit proposed text when needed. Acceptance is recorded with your operator identity; rejection leaves canonical case evidence unchanged.</p></div>${pipeline ? `
+  <div class="research-review-list"><div class="research-list-head"><div><h5>Evidence and agent decision queue</h5><p class="small">Complete the guarded agent review in one action, or inspect and decide individual proposals. Every accepted item and verdict remains auditable.</p></div>${pipeline ? `
     <div style="display: flex; gap: 8px; align-items: center;">
-      ${pendingReview.length > 0 ? `<button class="primary-btn mini-btn" id="research-pipeline-auto-review-btn" data-pipeline-id="${escapeHtml(pipeline.pipeline_id)}" type="button">AI Auto-Accept All</button>` : ''}
+      ${pendingReview.length > 0 ? `<button class="primary-btn mini-btn" id="research-pipeline-auto-review-btn" data-pipeline-id="${escapeHtml(pipeline.pipeline_id)}" type="button">Complete Agent Review</button>` : ''}
       <span class="status-pill">${pendingReview.length} pending</span>
     </div>` : ''}</div>${reviewCards}</div>
-  <p class="small research-pipeline-boundary">The pipeline cannot record a maliciousness verdict, submit a sandbox artifact, send disclosure, approve publication, or publish an article.</p>
+  <p class="small research-pipeline-boundary">Agent review may record a guarded, evidence-linked verdict. External sandbox submission, disclosure delivery, customer-control changes, and final publication still require your approval.</p>
 </section>`;
 }
 
