@@ -4416,7 +4416,7 @@ function triageOpsFilters() {
   return {
     status: el('triage-ops-filter-status')?.value || 'all',
     ecosystem: el('triage-ops-filter-ecosystem')?.value || 'all',
-    actionability: el('triage-ops-filter-actionability')?.value || 'actionable',
+    actionability: el('triage-ops-filter-actionability')?.value || 'all',
     severity: el('triage-ops-filter-severity')?.value || 'all',
     search: (el('triage-ops-filter-search')?.value || '').trim().toLowerCase()
   };
@@ -5850,13 +5850,13 @@ function renderTriageOpsStats() {
   const host = el('triage-ops-stats');
   if (!host) return;
   const alerts = state.triageOps.alerts || [];
-  const actionable = alerts.filter(item => item.actionability?.bucket === 'actionable');
+  const actionable = alerts.filter(item => item.actionability?.is_actionable !== false);
   const cards = [
     ['SCM alerts', alerts.length, 'active supply-chain findings'],
     ['Actionable', actionable.length, 'needs operator work'],
     ['Open', alerts.filter(item => String(item.status || '').toLowerCase() === 'open').length, 'waiting for triage'],
     ['Actionable critical', actionable.filter(item => String(item.severity || '').toLowerCase() === 'critical').length, 'true-priority queue'],
-    ['No local impact', alerts.filter(item => item.actionability?.bucket === 'no_local_impact').length, 'hidden by default'],
+    ['Ecosystem intelligence', alerts.filter(item => item.actionability?.bucket === 'ecosystem_intelligence').length, 'research and exposure checks'],
     ['Needs review', actionable.filter(item => item.recommendation?.recommended_disposition === 'needs_review').length, 'manual decision needed']
   ];
   host.innerHTML = cards.map(([label, value, sub]) => `
@@ -5873,9 +5873,8 @@ function renderTriageOpsAlertList() {
   if (!host) return;
   const alerts = filteredTriageOpsAlerts();
   if (!alerts.length) {
-    const hiddenNoImpact = (state.triageOps.alerts || []).filter(item => item.actionability?.bucket === 'no_local_impact').length;
     state.triageOps.selectedId = null;
-    host.innerHTML = `<div class="empty-state">No actionable SCM alerts match this filter.${hiddenNoImpact ? ` ${escapeHtml(String(hiddenNoImpact))} no-local-impact review record(s) are hidden; switch Actionability to All alerts to audit them.` : ' Refresh evidence or adjust filters.'}</div>`;
+    host.innerHTML = '<div class="empty-state">No active supply-chain intelligence matches this filter. Refresh evidence or adjust the filters.</div>';
     return;
   }
   const visibleIds = new Set(alerts.map(alert => String(alert.finding_id || '')));
@@ -6182,7 +6181,7 @@ function renderTriageOpsDetail() {
   const closeNote = state.triageOps.verdictNotes[alert.finding_id] || rec.recommended_note || `Reviewed ${alert.package}@${alert.version} from Triage Ops dashboard.`;
   const cliCommands = triageOpsCliCommands(alert);
   const actionability = alert.actionability || {};
-  const isActionableAlert = actionability.bucket === 'actionable';
+  const isActionableAlert = actionability.is_actionable !== false;
   const displaySeverity = alert.display_severity || alert.severity || 'critical';
   const blogDraftDisabled = !isActionableAlert;
   host.innerHTML = `
@@ -6199,7 +6198,8 @@ function renderTriageOpsDetail() {
         ${renderRecommendationPill(rec)}
       </div>
     </div>
-    ${!isActionableAlert ? `<div class="triage-actionability-callout">This finding is preserved as scanner evidence, but it is not currently an actionable incident: ${escapeHtml(actionability.reason || 'No local impact or advisory evidence is present.')} Close it as ${escapeHtml(statusLabel(rec.recommended_disposition || 'not_applicable'))} unless new evidence appears.</div>` : ''}
+    ${actionability.bucket === 'ecosystem_intelligence' ? `<div class="triage-actionability-callout">${escapeHtml(actionability.reason || 'Package intelligence remains actionable while organization-wide exposure is checked.')}</div>` : ''}
+    ${!isActionableAlert ? `<div class="triage-actionability-callout">Package evidence currently trends toward a false positive: ${escapeHtml(actionability.reason || 'Review the evidence before closure.')} Local absence is not the reason for this downgrade.</div>` : ''}
     <section class="triage-review-section">
       <div class="triage-section-heading">
         <span>Overview</span>
@@ -6210,7 +6210,7 @@ function renderTriageOpsDetail() {
         <div class="kv-row"><span class="kv-key">Package</span><span class="kv-val">${escapeHtml(alert.package || '—')}</span></div>
         <div class="kv-row"><span class="kv-key">Version</span><span class="kv-val">${escapeHtml(alert.version || '—')}</span></div>
         <div class="kv-row"><span class="kv-key">Advisory match</span><span class="kv-val">${alert.advisory?.matched ? 'yes' : 'no'}</span></div>
-        <div class="kv-row"><span class="kv-key">Local usage</span><span class="kv-val">${alert.local_usage?.present ? `${alert.local_usage.match_count || 0} match(es)` : 'none found'}</span></div>
+        <div class="kv-row"><span class="kv-key">Local exposure</span><span class="kv-val">${alert.local_usage?.present ? `${alert.local_usage.match_count || 0} reference(s) observed` : 'not observed in this repository'}</span></div>
         <div class="kv-row"><span class="kv-key">Actionability</span><span class="kv-val">${escapeHtml(actionability.label || 'Actionable')}</span></div>
         <div class="kv-row"><span class="kv-key">Scanner severity</span><span class="kv-val">${escapeHtml(alert.severity || '—')}</span></div>
         <div class="kv-row"><span class="kv-key">Report</span><span class="kv-val">${escapeHtml(alert.report_path || '—')}</span></div>
@@ -6269,7 +6269,7 @@ function renderTriageOpsDetail() {
         <button class="secondary-btn triage-ops-action-btn" data-triage-action="generate-mitigation">Generate mitigation</button>
         <button class="mini-btn triage-ops-action-btn" data-triage-action="escalate" data-write="true">Move to in review</button>
         <button class="danger-btn triage-ops-action-btn" data-triage-action="close" data-write="true">Close finding</button>
-        <button class="primary-btn triage-ops-action-btn" data-triage-action="create-blog-draft" data-write="true" ${blogDraftDisabled ? 'disabled title="Blog drafts are disabled for no-local-impact or review-only scanner records."' : ''}>Create blog draft</button>
+        <button class="primary-btn triage-ops-action-btn" data-triage-action="create-blog-draft" data-write="true" ${blogDraftDisabled ? 'disabled title="Blog drafts are disabled only when package evidence currently supports a likely false positive."' : ''}>Create blog draft</button>
       </div>
     </section>
 

@@ -221,6 +221,14 @@ The Triage Ops layout is organized around daily alert handling: summary metrics 
 
 The **Run Evidence Verdict** action is read-only. It scores package-level maliciousness separately from local environment impact so advisory-backed ecosystem threats can remain actionable even when this repo does not currently use the package. The scorer checks advisory/denylist matches, known compromised versions, raw report indicators, scanner rules, local manifest usage, known IOCs, and missing evidence. It returns a recommended analyst note, score breakdown, mitigation actions, and copyable operator commands.
 
+The Supply Chain queue shows all active package intelligence by default. A
+missing dependency reference is displayed as **Local exposure: not observed in
+this repository** and never as proof that the package is benign. Source-backed,
+known-bad, suspicious, and unresolved packages remain visible as **Ecosystem
+intelligence** at their original scanner severity while the operator runs Safe
+Package Intake, comparison, Research Case validation, and organization-wide
+exposure checks.
+
 The **Campaign Research** panel is also read-only by default. Use it only when validated package, extension, or supply-chain evidence belongs to the same campaign. Paste/import campaign JSON or build the campaign in the form, click **Run Campaign Research**, then review the campaign verdict, package verdicts, local environment impact, correlations, IOCs, mitigation, and references. Correlation and local usage review are part of that one read-only action. **Persist Findings** and **Create Campaign Blog Draft** are separate protected actions that require the admin token and confirmation. Campaign blog drafts are created as review-only drafts and are never published automatically.
 
 Campaign Research and **Autonomous Discovery** live in a collapsed advanced dock so the alert-review workflow stays readable. Click the dock to expand campaign intake. **Run Discovery** polls trusted SecOpsAI news/source registries and cached source metadata, extracts leads, and shows scored candidates. Each candidate includes an **Orchestrator Review** that classifies the report, separates source references from attacker IOCs, validates real packages/extensions, treats GitHub repos as project context unless package evidence exists, rejects extraction noise, and recommends the right route. **Use in Campaign Research** is available only for candidates routed to package Campaign Research without blockers. **Run Autopilot Dry Run** previews high-scoring orchestrator-approved package candidates without writing findings. Discovery itself does not expose finding persistence or blog-draft write buttons; use those protected actions only from reviewed Campaign Research output.

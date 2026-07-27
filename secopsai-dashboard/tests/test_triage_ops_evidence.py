@@ -324,7 +324,7 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertEqual(payload['counts']['approved_publishable'], 1)
         self.assertEqual(payload['counts']['approved_blocked'], 1)
 
-    def test_triage_ops_no_local_usage_is_no_local_impact_not_actionable(self):
+    def test_triage_ops_no_local_usage_remains_actionable_ecosystem_intelligence(self):
         with mock.patch.object(server, 'check_local_dependency_usage', return_value={'present': False, 'matches': []}):
             alert = server.summarize_triage_ops_alert({
                 'finding_id': 'SCM-UNIT',
@@ -336,10 +336,11 @@ class TriageOpsEvidenceTests(unittest.TestCase):
                 'analysis': 'Deterministic rules flagged: network egress',
             })
 
-        self.assertEqual(alert['recommendation']['recommended_disposition'], 'not_applicable')
-        self.assertEqual(alert['actionability']['bucket'], 'no_local_impact')
-        self.assertFalse(alert['actionability']['is_actionable'])
-        self.assertEqual(alert['display_severity'], 'info')
+        self.assertEqual(alert['recommendation']['recommended_disposition'], 'needs_review')
+        self.assertEqual(alert['recommendation']['environment_impact'], 'not_observed')
+        self.assertEqual(alert['actionability']['bucket'], 'ecosystem_intelligence')
+        self.assertTrue(alert['actionability']['is_actionable'])
+        self.assertEqual(alert['display_severity'], 'critical')
 
     def test_triage_ops_advisory_match_stays_actionable(self):
         with mock.patch.object(server, 'check_local_dependency_usage', return_value={'present': False, 'matches': []}):
@@ -354,7 +355,7 @@ class TriageOpsEvidenceTests(unittest.TestCase):
                 'advisory_ids': ['GHSA-unit'],
             })
 
-        self.assertEqual(alert['actionability']['bucket'], 'actionable')
+        self.assertEqual(alert['actionability']['bucket'], 'ecosystem_intelligence')
         self.assertTrue(alert['actionability']['is_actionable'])
         self.assertEqual(alert['display_severity'], 'critical')
 

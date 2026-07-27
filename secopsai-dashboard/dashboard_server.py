@@ -2390,29 +2390,41 @@ def build_triage_ops_recommendation(finding, advisory=None, local_usage=None):
     advisory_matched = bool((advisory or {}).get('matched') or finding.get('advisory_matches') or finding.get('advisory_ids'))
     is_known_bad = version in set(known_bad_versions)
     rules = str(finding.get('analysis') or finding.get('summary') or '')
+    scanner_verdict = str(finding.get('verdict') or '').strip().lower()
     evidence = []
 
     if advisory_matched:
         disposition = 'true_positive'
+        package_verdict = 'confirmed_true_positive'
         confidence = 'high'
         evidence.append('Emergency advisory matched this exact package/version.')
     elif is_known_bad:
         disposition = 'true_positive'
+        package_verdict = 'confirmed_true_positive'
         confidence = 'high'
         evidence.append(f'{package}@{version} is in the local known-compromised version list.')
     elif package.lower() == 'litellm' and version in {'1.84.0', '1.85.0rc2'} and not local_present:
         disposition = 'false_positive'
+        package_verdict = 'likely_false_positive'
         confidence = 'medium'
         evidence.append('Known public LiteLLM compromise reporting names 1.82.7/1.82.8, not this exact version.')
-        evidence.append('No local dependency reference was found in this repo.')
-    elif not local_present:
-        disposition = 'not_applicable'
+        evidence.append('The exact package version, not local absence, supports this downgrade.')
+    elif scanner_verdict == 'malicious':
+        disposition = 'needs_review'
+        package_verdict = 'likely_true_positive'
         confidence = 'medium'
-        evidence.append('No local dependency reference was found in this repo.')
+        evidence.append('The native scanner recorded a malicious package verdict that requires evidence review.')
     else:
         disposition = 'needs_review'
+        package_verdict = 'needs_review'
         confidence = 'medium'
-        evidence.append('Package appears locally referenced or needs additional analyst review.')
+        evidence.append('Package-level evidence requires review independently of local exposure.')
+
+    environment_impact = 'likely_affected' if local_present else 'not_observed'
+    if not local_present:
+        evidence.append(
+            'No dependency reference was observed in this repository; organization-wide exposure remains unknown.'
+        )
 
     if min_safe and package.lower() == 'litellm':
         evidence.append(f'CVE-2026-42208 mitigation guidance requires {package}>={min_safe}.')
@@ -2422,6 +2434,8 @@ def build_triage_ops_recommendation(finding, advisory=None, local_usage=None):
     note = ' '.join(evidence[:3])
     return {
         'recommended_disposition': disposition,
+        'package_verdict': package_verdict,
+        'environment_impact': environment_impact,
         'confidence': confidence,
         'recommended_note': note,
         'evidence': evidence,
@@ -2485,19 +2499,28 @@ def triage_ops_actionability(recommendation=None, advisory=None, local_usage=Non
     advisory_matched = bool(advisory.get('matched') or recommendation.get('advisory_match'))
     local_present = bool(local_usage.get('present') or recommendation.get('local_dependency_reference'))
     known_bad = bool(recommendation.get('known_bad_version_match'))
-    if advisory_matched or known_bad or disposition in {'true_positive', 'needs_review'}:
+    package_verdict = str(recommendation.get('package_verdict') or 'needs_review')
+    credible_package_intelligence = package_verdict in {
+        'confirmed_true_positive',
+        'likely_true_positive',
+        'needs_review',
+    }
+    if local_present and (advisory_matched or known_bad or credible_package_intelligence):
         return {
             'bucket': 'actionable',
-            'label': 'Actionable',
+            'label': 'Local response',
             'is_actionable': True,
-            'reason': 'Advisory, known-bad version, local usage, or unresolved review evidence requires operator action.',
+            'reason': 'Package-level evidence and a local dependency reference require response.',
         }
-    if disposition == 'not_applicable' and not local_present:
+    if advisory_matched or known_bad or disposition in {'true_positive', 'needs_review'} or credible_package_intelligence:
         return {
-            'bucket': 'no_local_impact',
-            'label': 'No local impact',
-            'is_actionable': False,
-            'reason': 'No matching dependency reference was found in the local repository.',
+            'bucket': 'ecosystem_intelligence',
+            'label': 'Ecosystem intelligence',
+            'is_actionable': True,
+            'reason': (
+                'Package-level evidence remains actionable; no exposure was observed in this repository, '
+                'so organization-wide exposure must be checked separately.'
+            ),
         }
     if disposition in {'false_positive', 'expected_behavior', 'tune_policy', 'not_applicable'}:
         return {
@@ -2507,18 +2530,16 @@ def triage_ops_actionability(recommendation=None, advisory=None, local_usage=Non
             'reason': 'Scanner evidence is preserved for audit, but it is not currently an actionable incident.',
         }
     return {
-        'bucket': 'actionable' if local_present else 'review_only',
-        'label': 'Actionable' if local_present else 'Review only',
-        'is_actionable': bool(local_present),
-        'reason': 'Local usage is present.' if local_present else 'No local impact evidence is present yet.',
+        'bucket': 'evidence_review',
+        'label': 'Evidence review',
+        'is_actionable': True,
+        'reason': 'Package evidence is unresolved; local absence cannot decide the package verdict.',
     }
 
 
 def triage_ops_display_severity(finding, actionability=None):
     severity = str((finding or {}).get('severity') or 'info').lower()
     bucket = str((actionability or {}).get('bucket') or '')
-    if bucket == 'no_local_impact':
-        return 'info'
     if bucket == 'review_only' and severity in {'critical', 'high'}:
         return 'medium'
     return severity
