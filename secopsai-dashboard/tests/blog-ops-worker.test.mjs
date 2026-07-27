@@ -1053,10 +1053,11 @@ function testTriageOpsActionabilityControlsArePresent() {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   assert.match(html, /triage-ops-filter-actionability/);
-  assert.match(html, /Actionable only/);
+  assert.match(html, /All active intelligence/);
+  assert.match(html, /Ecosystem intelligence/);
   assert.match(app, /actionability\.bucket/);
-  assert.match(app, /No actionable SCM alerts match this filter/);
-  assert.match(app, /Blog drafts are disabled for no-local-impact or review-only scanner records/);
+  assert.match(app, /No active supply-chain intelligence matches this filter/);
+  assert.match(app, /Local absence is not the reason for this downgrade/);
 }
 
 function testCampaignDiscoveryActionsAreNotDuplicated() {
