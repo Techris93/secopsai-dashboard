@@ -1,5 +1,11 @@
 # Research Automation Checkpoint
 
+## Full Intelligence Result Review
+
+Mission Control now opens complete structured results from **System → Analysis jobs**. The result workspace separates facts, inferences, contradictions, unsupported claims, missing evidence, next steps, verdict rationale, publication risks, article structure, disclosure text, limitations, and the durable job audit history. Operators can copy a complete Markdown record or open the canonical Research Case directly. The normalized JSON remains available for reproducibility and troubleshooting.
+
+Regression checks prevent a future renderer from collapsing completed frontier-model output back into a generic summary. Browser verification uses a representative Braintree case fixture derived from the normalized result shape and covers modal interaction plus desktop/mobile readability. The production sign-in gate remains fail-closed; authenticated live-case acceptance is a deployment check rather than a test bypass.
+
 ## Guarded Agent Research Completion
 
 Mission Control now exposes **Complete Agent Review** for an investigation pipeline that has finished model analysis. The typed gateway calls Core's `research pipeline agent-complete` action. Core accepts bounded, revision-scoped proposals, attaches pipeline evidence, records a guarded evidence-linked verdict, and reruns publication safety. The UI displays the resulting verdict and confidence instead of implying that every decision still requires manual card review.

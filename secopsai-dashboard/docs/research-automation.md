@@ -8,6 +8,19 @@ In **System → SecOpsAI Intelligence**, choose the model before clicking **Inst
 
 The pipeline never executes package code, guesses a legitimate comparison package, submits a sandbox artifact, sends disclosure, changes customer controls, approves publication, or publishes an article. Agent review may record a guarded case verdict; the actor, model, evidence, confidence, rationale, and pipeline revision remain auditable.
 
+## Review Complete Model Analysis
+
+Open **System → SecOpsAI Intelligence → Analysis jobs**, then select **Open full analysis** for a completed job. Mission Control shows the complete normalized result instead of reducing it to a short summary:
+
+- executive summary and risk assessment;
+- confidence-scored verdict, rationale, and evidence references;
+- confirmed facts, reasonable inferences, contradictions, and unsupported claims;
+- missing evidence, limitations, and prioritized next steps;
+- publication risks, article outline, and disclosure draft when returned;
+- provider, timestamps, job audit history, and the normalized JSON record.
+
+Use **Copy full analysis** to preserve a Markdown review record. Use **Open research case** to move directly to the canonical case and compare the model output with the stored evidence, verdict, disclosure state, and publication gates. Model output is analysis, not proof: accept conclusions only when the cited evidence supports them. A result that identifies missing dynamic evidence must not be rewritten as observed runtime behavior.
+
 The automation panel retains **Collect Metadata Preview**, **Run Safe Package Intake**, **Attach Verified Evidence**, **Generate Evidence Matrix**, **Record Human Verdict**, **Prepare Disclosure**, **Request Sandbox Approval**, **Run Publication Safety Check**, and **Approve Publication Review** as granular recovery and advanced controls. A human verdict can supersede an agent verdict when documented evidence warrants it. Blog Ops remains the final draft editing and publication surface.
 
 Triage and Research are intentionally separate. Supply Chain Triage is an inbox for incoming alerts and leads. Research Cases are the durable investigation, disclosure, evidence, and publication record. A lead should move from triage to a case rather than being manually re-entered.

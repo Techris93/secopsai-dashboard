@@ -129,6 +129,7 @@ const state = {
     error: null,
     adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || sessionStorage.getItem('secopsai_triage_ops_admin_token') || '',
     selectedModel: sessionStorage.getItem('secopsai_bridge_model') || '',
+    selectedJobId: null,
     serviceOutput: ''
   },
   edgeWorkspace: {
@@ -3630,6 +3631,168 @@ function intelligenceSelectedModel() {
   return ids[0] || '';
 }
 
+function intelligenceResultList(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.map(item => {
+    if (typeof item === 'string') return item.trim();
+    if (item && typeof item === 'object') {
+      const statement = String(item.statement || item.title || item.text || '').trim();
+      const refs = Array.isArray(item.evidence_refs || item.evidence) ? (item.evidence_refs || item.evidence) : [];
+      return statement && refs.length ? `${statement} (evidence: ${refs.join(', ')})` : (statement || JSON.stringify(item));
+    }
+    return String(item || '').trim();
+  }).filter(item => {
+    if (!item || seen.has(item)) return false;
+    seen.add(item);
+    return true;
+  });
+}
+
+function intelligenceResultView(job) {
+  const envelope = job?.result && typeof job.result === 'object' ? job.result : {};
+  const data = envelope?.data && typeof envelope.data === 'object' ? envelope.data : envelope;
+  const brief = data?.analyst_brief && typeof data.analyst_brief === 'object' ? data.analyst_brief : {};
+  const mergeLists = (...values) => intelligenceResultList(values.flatMap(value => Array.isArray(value) ? value : []));
+  return {
+    summary: String(data.summary || data.executive_summary || brief.executive_summary || job?.error_message || '').trim(),
+    riskAssessment: String(data.risk_assessment || data.risk || brief.risk_assessment || '').trim(),
+    confirmedFacts: mergeLists(data.confirmed_facts, brief.facts),
+    inferences: mergeLists(data.inferences, brief.inferences),
+    unsupportedClaims: intelligenceResultList(data.unsupported_claims),
+    contradictions: intelligenceResultList(data.contradictions),
+    missingEvidence: intelligenceResultList(data.missing_evidence),
+    evidence: intelligenceResultList(data.evidence),
+    recommendedActions: mergeLists(data.recommended_actions, data.recommendations, data.next_steps, brief.recommended_actions, brief.next_steps),
+    limitations: mergeLists(data.limitations, brief.limitations, envelope.limitations),
+    publicationRisks: intelligenceResultList(data.publication_risks),
+    articleOutline: intelligenceResultList(data.article_outline),
+    disclosureDraft: String(data.disclosure_draft || '').trim(),
+    verdict: String(data.verdict_recommendation || '').trim(),
+    verdictConfidence: Number(data.verdict_confidence || 0),
+    verdictRationale: String(data.verdict_rationale || '').trim(),
+    verdictEvidenceRefs: intelligenceResultList(data.verdict_evidence_refs),
+    provider: String(envelope.provider || job?.provider || '').trim(),
+    generatedAt: String(envelope.generated_at || job?.completed_at || job?.updated_at || '').trim(),
+    readOnly: envelope.read_only !== false,
+    events: Array.isArray(job?.events) ? job.events : [],
+    normalized: envelope
+  };
+}
+
+function renderIntelligenceResultList(items, emptyText) {
+  if (!items.length) return `<p class="small intelligence-result-empty">${escapeHtml(emptyText)}</p>`;
+  return `<ol class="intelligence-result-list">${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ol>`;
+}
+
+function renderIntelligenceResultSection(title, content, { tone = '', wide = false } = {}) {
+  return `<section class="intelligence-result-section ${wide ? 'wide' : ''} ${tone ? `tone-${escapeHtml(tone)}` : ''}"><h4>${escapeHtml(title)}</h4>${content}</section>`;
+}
+
+function intelligenceResultMarkdown(job) {
+  const view = intelligenceResultView(job);
+  const lines = [
+    `# ${humanizeSnake(job?.action || 'analysis')} — ${job?.job_id || ''}`,
+    '',
+    `- Target: ${job?.target_id || 'Workspace'}`,
+    `- Status: ${humanizeSnake(job?.status || 'unknown')}`,
+    `- Provider: ${view.provider || 'Not recorded'}`,
+    `- Generated: ${view.generatedAt || 'Not recorded'}`,
+  ];
+  const textSection = (title, value) => { if (value) lines.push('', `## ${title}`, '', value); };
+  const listSection = (title, values) => { if (values.length) lines.push('', `## ${title}`, '', ...values.map(item => `- ${item}`)); };
+  textSection('Executive Summary', view.summary);
+  if (view.verdict) {
+    lines.push('', '## Verdict', '', `${humanizeSnake(view.verdict)} — ${view.verdictConfidence}% confidence`);
+    textSection('Verdict Rationale', view.verdictRationale);
+    listSection('Verdict Evidence References', view.verdictEvidenceRefs);
+  }
+  textSection('Risk Assessment', view.riskAssessment);
+  listSection('Confirmed Facts', view.confirmedFacts);
+  listSection('Inferences', view.inferences);
+  listSection('Contradictions', view.contradictions);
+  listSection('Unsupported Claims', view.unsupportedClaims);
+  listSection('Missing Evidence', view.missingEvidence);
+  listSection('Recommended Next Steps', view.recommendedActions);
+  listSection('Evidence Cited', view.evidence);
+  listSection('Limitations', view.limitations);
+  listSection('Publication Risks', view.publicationRisks);
+  listSection('Article Outline', view.articleOutline);
+  textSection('Disclosure Draft', view.disclosureDraft);
+  if (view.events.length) lines.push('', '## Job Audit History', '', ...view.events.map(event => `- ${event.created_at || ''} — ${humanizeSnake(event.event_type || '')}: ${event.message || ''}`));
+  return lines.join('\n').trim();
+}
+
+function renderIntelligenceResultModal() {
+  const job = intelligenceJobs().find(item => item.job_id === state.intelligence.selectedJobId);
+  const body = el('intelligence-result-body');
+  if (!job || !body) return;
+  const view = intelligenceResultView(job);
+  if (el('intelligence-result-title')) el('intelligence-result-title').textContent = humanizeSnake(job.action || 'Analysis result');
+  if (el('intelligence-result-subtitle')) el('intelligence-result-subtitle').textContent = `${job.job_id} · ${job.target_id || 'Workspace'} · ${view.provider || 'Provider not recorded'}`;
+  if (el('intelligence-result-open-case')) el('intelligence-result-open-case').hidden = !String(job.target_id || '').startsWith('RSC-');
+  const verdict = view.verdict ? `<div class="intelligence-verdict"><span>Agent verdict</span><strong>${escapeHtml(humanizeSnake(view.verdict))}</strong><b>${escapeHtml(String(view.verdictConfidence))}% confidence</b></div>` : '';
+  const meta = `<div class="intelligence-result-meta"><span>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</span><span>${escapeHtml(fmtDate(view.generatedAt))}</span><span>${view.readOnly ? 'Read-only analysis' : 'Recorded result'}</span></div>`;
+  const sections = [
+    renderIntelligenceResultSection('Executive summary', view.summary ? `<p>${escapeHtml(view.summary)}</p>` : '<p class="small">No executive summary was returned.</p>', { wide: true }),
+    renderIntelligenceResultSection('Verdict rationale', view.verdictRationale ? `<p>${escapeHtml(view.verdictRationale)}</p>${renderIntelligenceResultList(view.verdictEvidenceRefs, 'No verdict evidence references returned.')}` : '<p class="small">This action did not assess a verdict.</p>', { tone: view.verdict ? 'decision' : '' }),
+    renderIntelligenceResultSection('Risk assessment', view.riskAssessment ? `<p>${escapeHtml(view.riskAssessment)}</p>` : '<p class="small">No consolidated risk assessment returned.</p>'),
+    renderIntelligenceResultSection('Confirmed facts', renderIntelligenceResultList(view.confirmedFacts, 'No confirmed facts returned.'), { tone: 'fact' }),
+    renderIntelligenceResultSection('Reasonable inferences', renderIntelligenceResultList(view.inferences, 'No inferences returned.')),
+    renderIntelligenceResultSection('Contradictions', renderIntelligenceResultList(view.contradictions, 'No contradictions identified.'), { tone: 'warning' }),
+    renderIntelligenceResultSection('Unsupported claims', renderIntelligenceResultList(view.unsupportedClaims, 'No unsupported claims identified.'), { tone: 'warning' }),
+    renderIntelligenceResultSection('Missing evidence', renderIntelligenceResultList(view.missingEvidence, 'No missing evidence reported.'), { tone: 'gap' }),
+    renderIntelligenceResultSection('Recommended next steps', renderIntelligenceResultList(view.recommendedActions, 'No recommended actions returned.'), { tone: 'action', wide: true }),
+    renderIntelligenceResultSection('Evidence cited', renderIntelligenceResultList(view.evidence, 'No separate evidence list returned.'), { wide: true }),
+    renderIntelligenceResultSection('Limitations', renderIntelligenceResultList(view.limitations, 'No limitations returned.')),
+    renderIntelligenceResultSection('Publication risks', renderIntelligenceResultList(view.publicationRisks, 'No publication risks returned.'), { tone: 'warning' }),
+    renderIntelligenceResultSection('Technical article outline', renderIntelligenceResultList(view.articleOutline, 'No article outline returned.'), { wide: true }),
+    view.disclosureDraft ? renderIntelligenceResultSection('Disclosure draft', `<pre class="intelligence-result-draft">${escapeHtml(view.disclosureDraft)}</pre>`, { wide: true }) : '',
+    renderIntelligenceResultSection('Job audit history', renderIntelligenceResultList(view.events.map(event => `${fmtDate(event.created_at)} — ${humanizeSnake(event.event_type || '')}: ${event.message || ''}`), 'No job events returned.'), { wide: true }),
+    renderIntelligenceResultSection('Normalized result', `<details><summary>View normalized JSON</summary><pre class="intelligence-result-json">${escapeHtml(JSON.stringify(view.normalized, null, 2))}</pre></details>`, { wide: true })
+  ].filter(Boolean).join('');
+  body.innerHTML = `${meta}${verdict}<div class="intelligence-result-grid">${sections}</div>`;
+}
+
+function openIntelligenceResult(jobId) {
+  state.intelligence.selectedJobId = jobId;
+  renderIntelligenceResultModal();
+  const modal = el('intelligence-result-modal');
+  modal?.classList.remove('hidden');
+  modal?.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
+  el('intelligence-result-close')?.focus();
+}
+
+function closeIntelligenceResult() {
+  const modal = el('intelligence-result-modal');
+  modal?.classList.add('hidden');
+  modal?.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('modal-open');
+  const selectedJobId = state.intelligence.selectedJobId;
+  if (selectedJobId) document.querySelector(`[data-intelligence-review="${CSS.escape(selectedJobId)}"]`)?.focus();
+}
+
+async function openIntelligenceResearchCase() {
+  const job = intelligenceJobs().find(item => item.job_id === state.intelligence.selectedJobId);
+  const caseId = String(job?.target_id || '');
+  if (!caseId.startsWith('RSC-')) return;
+  closeIntelligenceResult();
+  setPage('research-cases');
+  state.researchCases.selectedId = caseId;
+  state.researchCases.loading = true;
+  renderResearchCases();
+  try {
+    await loadResearchCaseDetail(caseId, { render: false });
+    state.researchCases.error = null;
+  } catch (error) {
+    state.researchCases.error = error?.message || String(error);
+  } finally {
+    state.researchCases.loading = false;
+    renderResearchCases();
+  }
+}
+
 function renderIntelligenceModelSelect() {
   const select = el('intelligence-model-select');
   if (!select) return;
@@ -3767,8 +3930,8 @@ function renderIntelligence() {
       table.innerHTML = '<div class="empty-state compact">No analysis jobs yet. Queue an approved action above.</div>';
     } else {
       table.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody>${jobs.map(job => {
-        const result = job?.result?.data || job?.result || {};
-        const summaryText = result.summary || result.executive_summary || job.error_message || '';
+        const resultView = intelligenceResultView(job);
+        const hasResult = Boolean(resultView.summary || resultView.confirmedFacts.length || resultView.publicationRisks.length || job.error_message);
         const cancel = String(job.status || '') === 'queued'
           ? `<button class="mini-btn" data-intelligence-cancel="${escapeHtml(job.job_id)}" type="button">Cancel</button>`
           : '';
@@ -3776,7 +3939,7 @@ function renderIntelligence() {
           ? `<button class="mini-btn" data-intelligence-requeue="${escapeHtml(job.job_id)}" type="button">Requeue</button>`
           : '';
         const providerLabel = job.provider ? `<div class="small mono">${escapeHtml(String(job.provider))}</div>` : '';
-        return `<tr><td><strong>${escapeHtml(humanizeSnake(job.action || 'unknown'))}</strong><div class="small mono">${escapeHtml(job.job_id || '')}</div>${providerLabel}</td><td>${escapeHtml(job.target_id || 'Workspace')}</td><td>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</td><td>${escapeHtml(fmtDate(job.updated_at || job.queued_at))}</td><td>${summaryText ? `<details><summary>Review result</summary><div class="intelligence-job-result">${escapeHtml(compactText(summaryText, 1800))}</div></details>` : '<span class="small">Pending</span>'}</td><td>${cancel}${requeue}</td></tr>`;
+        return `<tr><td><strong>${escapeHtml(humanizeSnake(job.action || 'unknown'))}</strong><div class="small mono">${escapeHtml(job.job_id || '')}</div>${providerLabel}</td><td>${escapeHtml(job.target_id || 'Workspace')}</td><td>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</td><td>${escapeHtml(fmtDate(job.updated_at || job.queued_at))}</td><td>${hasResult ? `<button class="secondary-btn mini-btn" data-intelligence-review="${escapeHtml(job.job_id)}" type="button">Open full analysis</button>${resultView.verdict ? `<div class="small">${escapeHtml(humanizeSnake(resultView.verdict))} · ${escapeHtml(String(resultView.verdictConfidence))}% confidence</div>` : ''}` : '<span class="small">Pending</span>'}</td><td>${cancel}${requeue}</td></tr>`;
       }).join('')}</tbody></table></div>`;
     }
   }
@@ -7999,6 +8162,16 @@ function bindEvents() {
   el('confirm-dialog')?.addEventListener('click', event => {
     if (event.target === event.currentTarget) finishConfirmation(false);
   });
+  el('intelligence-result-close')?.addEventListener('click', closeIntelligenceResult);
+  el('intelligence-result-done')?.addEventListener('click', closeIntelligenceResult);
+  el('intelligence-result-modal')?.addEventListener('click', event => {
+    if (event.target === event.currentTarget) closeIntelligenceResult();
+  });
+  el('intelligence-result-copy')?.addEventListener('click', async () => {
+    const job = intelligenceJobs().find(item => item.job_id === state.intelligence.selectedJobId);
+    if (job) await copyTextWithStatus(intelligenceResultMarkdown(job), 'Full model analysis copied');
+  });
+  el('intelligence-result-open-case')?.addEventListener('click', openIntelligenceResearchCase);
   el('command-palette-close')?.addEventListener('click', closeCommandPalette);
   el('command-palette-input')?.addEventListener('input', event => {
     commandPaletteIndex = 0;
@@ -8015,6 +8188,12 @@ function bindEvents() {
         event.preventDefault();
         finishConfirmation(false);
       }
+      return;
+    }
+    const intelligenceResult = el('intelligence-result-modal');
+    if (intelligenceResult && !intelligenceResult.classList.contains('hidden') && event.key === 'Escape') {
+      event.preventDefault();
+      closeIntelligenceResult();
       return;
     }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -8115,6 +8294,11 @@ function bindEvents() {
     if (url) await copyTextWithStatus(url, 'ChatGPT app MCP URL copied');
   });
   el('intelligence-jobs-table')?.addEventListener('click', event => {
+    const reviewButton = event.target.closest('[data-intelligence-review]');
+    if (reviewButton) {
+      openIntelligenceResult(reviewButton.dataset.intelligenceReview);
+      return;
+    }
     const cancelButton = event.target.closest('[data-intelligence-cancel]');
     if (cancelButton) {
       runIntelligenceAction('cancel', { job_id: cancelButton.dataset.intelligenceCancel }, cancelButton);
