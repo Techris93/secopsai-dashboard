@@ -7215,7 +7215,8 @@ async function runArtifactCaseAction(action, payload = {}, button = null) {
   setButtonBusy(button, true, 'Working…');
   try {
     const endpoint = action === 'extract' ? '/api/secopsai/research-artifacts/ioc-candidates' : '/api/secopsai/research-artifacts/analysis';
-    const response = await dashboardApiFetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }, body: JSON.stringify({ action: action === 'analysis' ? 'run' : 'extract', ...payload }) });
+    const requestedAction = action === 'analysis' && payload.queue ? 'queue' : (action === 'analysis' ? (payload.action || 'run') : 'extract');
+    const response = await dashboardApiFetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }, body: JSON.stringify({ action: requestedAction, ...payload }) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || result.ok === false) throw new Error(result.error || result.cli?.stderr || 'Artifact action failed');
     await loadResearchCaseDetail(state.researchCases.selectedId, { render: false });
@@ -7296,8 +7297,13 @@ function bindResearchCaseDetailActions(researchCase) {
       const response = await dashboardApiFetch('/api/secopsai/research-artifacts/import', { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream', 'X-Triage-Ops-Admin-Token': token, 'X-Artifact-Ecosystem': el('research-artifact-ecosystem')?.value || 'nuget', 'X-Artifact-Package': el('research-artifact-package')?.value || '', 'X-Artifact-Version': el('research-artifact-version')?.value || '' } });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result.ok === false) throw new Error(result.error || result.cli?.stderr || 'Artifact import failed');
+      if (result.artifact?.artifact_id) {
+        const attachResponse = await dashboardApiFetch('/api/secopsai/research-artifacts/attach', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }, body: JSON.stringify({ case_id: researchCase.case_id, artifact_id: result.artifact.artifact_id, role: 'subject' }) });
+        const attachResult = await attachResponse.json().catch(() => ({}));
+        if (!attachResponse.ok || attachResult.ok === false) throw new Error(attachResult.error || 'Artifact attachment failed');
+      }
       await runResearchCaseAction('add-evidence', { case_id: researchCase.case_id, evidence_type: 'package_artifact', title: `Authorized artifact ${result.artifact?.artifact_id || ''}`, sha256: result.artifact?.sha256 || '', provenance: 'Mission Control local quarantine', notes: 'Raw bytes retained only in local Core quarantine.', actor: 'dashboard-operator' });
-      if (result.artifact?.artifact_id) await runArtifactCaseAction('analysis', { artifact_id: result.artifact.artifact_id });
+      if (result.artifact?.artifact_id) await runArtifactCaseAction('analysis', { artifact_id: result.artifact.artifact_id, case_id: researchCase.case_id, queue: true });
       setStatus('<span class="dot"></span> Artifact quarantined and inspected locally');
     } catch (error) { setStatus(`Artifact import failed: ${error?.message || error}`, true); }
     finally { setButtonBusy(event.currentTarget, false); }

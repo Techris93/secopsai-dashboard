@@ -3334,6 +3334,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     if not re.fullmatch(r'ART-[A-F0-9]{16}', artifact_id):
                         raise ValueError('Invalid artifact ID')
                     args = ['research', 'analysis', 'run', artifact_id, *secopsai_db_args()]
+                elif action == 'queue':
+                    artifact_id = _clean_string(payload.get('artifact_id'), 40).upper()
+                    case_id = _clean_string(payload.get('case_id'), 20).upper()
+                    args = ['research', 'artifact-worker', 'run', artifact_id, '--queue-case', case_id, *secopsai_db_args()]
                 elif action == 'compare':
                     left = _clean_string(payload.get('left_artifact_id'), 40).upper()
                     right = _clean_string(payload.get('right_artifact_id'), 40).upper()
@@ -3343,6 +3347,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 else:
                     raise ValueError('Unsupported artifact analysis action')
                 result, parsed_result = run_cli_json(args, timeout=300)
+                return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'result': parsed_result, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/research-artifacts/attach':
+            if require_triage_ops_admin(self):
+                return
+            try:
+                args = ['research', 'artifact', 'attach', _clean_string(payload.get('case_id'), 20).upper(), _clean_string(payload.get('artifact_id'), 40).upper(), '--role', _clean_string(payload.get('role') or 'subject', 40), *secopsai_db_args()]
+                result, parsed_result = run_cli_json(args, timeout=90)
                 return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'result': parsed_result, 'cli': compact_cli_result(result)})
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
