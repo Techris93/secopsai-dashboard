@@ -3653,25 +3653,32 @@ function intelligenceResultView(job) {
   const envelope = job?.result && typeof job.result === 'object' ? job.result : {};
   const data = envelope?.data && typeof envelope.data === 'object' ? envelope.data : envelope;
   const brief = data?.analyst_brief && typeof data.analyst_brief === 'object' ? data.analyst_brief : {};
+  const triage = data?.triage_analysis && typeof data.triage_analysis === 'object' ? data.triage_analysis : {};
+  const handling = data?.handling_proposal && typeof data.handling_proposal === 'object' ? data.handling_proposal : {};
   const mergeLists = (...values) => intelligenceResultList(values.flatMap(value => Array.isArray(value) ? value : []));
   return {
-    summary: String(data.summary || data.executive_summary || brief.executive_summary || job?.error_message || '').trim(),
-    riskAssessment: String(data.risk_assessment || data.risk || brief.risk_assessment || '').trim(),
-    confirmedFacts: mergeLists(data.confirmed_facts, brief.facts),
-    inferences: mergeLists(data.inferences, brief.inferences),
+    summary: String(data.summary || data.automation_note || data.executive_summary || brief.executive_summary || job?.error_message || '').trim(),
+    riskAssessment: String(data.risk_assessment || data.risk || brief.risk_assessment || (data.finding_verdict ? `Model verdict: ${humanizeSnake(data.finding_verdict)} at ${Number(data.finding_confidence || 0)}% confidence.` : '')).trim(),
+    confirmedFacts: mergeLists(data.confirmed_facts, brief.facts, triage.facts),
+    inferences: mergeLists(data.inferences, brief.inferences, triage.inferences),
     unsupportedClaims: intelligenceResultList(data.unsupported_claims),
     contradictions: intelligenceResultList(data.contradictions),
     missingEvidence: intelligenceResultList(data.missing_evidence),
     evidence: intelligenceResultList(data.evidence),
-    recommendedActions: mergeLists(data.recommended_actions, data.recommendations, data.next_steps, brief.recommended_actions, brief.next_steps),
-    limitations: mergeLists(data.limitations, brief.limitations, envelope.limitations),
+    recommendedActions: mergeLists(data.recommended_actions, data.recommendations, data.next_steps, brief.recommended_actions, brief.next_steps, handling.immediate_reversible_steps, handling.containment_if_corroborated, handling.escalation_path ? [handling.escalation_path] : []),
+    limitations: mergeLists(data.limitations, brief.limitations, triage.limitations, envelope.limitations),
     publicationRisks: intelligenceResultList(data.publication_risks),
     articleOutline: intelligenceResultList(data.article_outline),
     disclosureDraft: String(data.disclosure_draft || '').trim(),
-    verdict: String(data.verdict_recommendation || '').trim(),
-    verdictConfidence: Number(data.verdict_confidence || 0),
-    verdictRationale: String(data.verdict_rationale || '').trim(),
-    verdictEvidenceRefs: intelligenceResultList(data.verdict_evidence_refs),
+    verdict: String(data.finding_verdict || data.verdict_recommendation || '').trim(),
+    verdictConfidence: Number(data.finding_confidence ?? data.verdict_confidence ?? 0),
+    verdictRationale: String(data.verdict_rationale || data.summary || '').trim(),
+    verdictEvidenceRefs: intelligenceResultList(data.decision_evidence_refs || data.verdict_evidence_refs),
+    dispositionRecommendation: String(data.disposition_recommendation || '').trim(),
+    exposureAssessment: String(data.exposure_assessment || '').trim(),
+    automationRecommendation: String(data.automation_recommendation || '').trim(),
+    counterarguments: intelligenceResultList(data.counterarguments),
+    tuningProposals: Array.isArray(data.rule_tuning_proposals) ? data.rule_tuning_proposals : [],
     provider: String(envelope.provider || job?.provider || '').trim(),
     generatedAt: String(envelope.generated_at || job?.completed_at || job?.updated_at || '').trim(),
     readOnly: envelope.read_only !== false,
@@ -3706,11 +3713,16 @@ function intelligenceResultMarkdown(job) {
     lines.push('', '## Verdict', '', `${humanizeSnake(view.verdict)} — ${view.verdictConfidence}% confidence`);
     textSection('Verdict Rationale', view.verdictRationale);
     listSection('Verdict Evidence References', view.verdictEvidenceRefs);
+    textSection('Disposition Recommendation', humanizeSnake(view.dispositionRecommendation));
+    textSection('Exposure Assessment', humanizeSnake(view.exposureAssessment));
+    textSection('Automation Recommendation', humanizeSnake(view.automationRecommendation));
   }
   textSection('Risk Assessment', view.riskAssessment);
   listSection('Confirmed Facts', view.confirmedFacts);
   listSection('Inferences', view.inferences);
   listSection('Contradictions', view.contradictions);
+  listSection('Counterarguments', view.counterarguments);
+  listSection('Detection Tuning Proposals', view.tuningProposals.map(item => typeof item === 'string' ? item : `${item.target_id || item.rule || item.target_type || 'Proposal'}: ${item.rationale || item.proposal || item.expected_effect || JSON.stringify(item)}`));
   listSection('Unsupported Claims', view.unsupportedClaims);
   listSection('Missing Evidence', view.missingEvidence);
   listSection('Recommended Next Steps', view.recommendedActions);
@@ -3736,10 +3748,13 @@ function renderIntelligenceResultModal() {
   const sections = [
     renderIntelligenceResultSection('Executive summary', view.summary ? `<p>${escapeHtml(view.summary)}</p>` : '<p class="small">No executive summary was returned.</p>', { wide: true }),
     renderIntelligenceResultSection('Verdict rationale', view.verdictRationale ? `<p>${escapeHtml(view.verdictRationale)}</p>${renderIntelligenceResultList(view.verdictEvidenceRefs, 'No verdict evidence references returned.')}` : '<p class="small">This action did not assess a verdict.</p>', { tone: view.verdict ? 'decision' : '' }),
+    view.dispositionRecommendation ? renderIntelligenceResultSection('Decision recommendation', `<div class="kv-list"><div class="kv-row"><div class="kv-key">Disposition</div><div class="kv-val">${escapeHtml(humanizeSnake(view.dispositionRecommendation))}</div></div><div class="kv-row"><div class="kv-key">Exposure</div><div class="kv-val">${escapeHtml(humanizeSnake(view.exposureAssessment || 'unknown'))}</div></div><div class="kv-row"><div class="kv-key">Automation</div><div class="kv-val">${escapeHtml(humanizeSnake(view.automationRecommendation || 'collect_evidence'))}</div></div></div>`, { tone: 'decision' }) : '',
     renderIntelligenceResultSection('Risk assessment', view.riskAssessment ? `<p>${escapeHtml(view.riskAssessment)}</p>` : '<p class="small">No consolidated risk assessment returned.</p>'),
     renderIntelligenceResultSection('Confirmed facts', renderIntelligenceResultList(view.confirmedFacts, 'No confirmed facts returned.'), { tone: 'fact' }),
     renderIntelligenceResultSection('Reasonable inferences', renderIntelligenceResultList(view.inferences, 'No inferences returned.')),
     renderIntelligenceResultSection('Contradictions', renderIntelligenceResultList(view.contradictions, 'No contradictions identified.'), { tone: 'warning' }),
+    renderIntelligenceResultSection('Counterarguments', renderIntelligenceResultList(view.counterarguments, 'No counterarguments returned.'), { tone: 'warning' }),
+    renderIntelligenceResultSection('Detection tuning proposals', renderIntelligenceResultList(view.tuningProposals.map(item => typeof item === 'string' ? item : `${item.target_id || item.rule || item.target_type || 'Proposal'}: ${item.rationale || item.proposal || item.expected_effect || JSON.stringify(item)}`), 'No tuning proposals returned.'), { tone: 'action', wide: true }),
     renderIntelligenceResultSection('Unsupported claims', renderIntelligenceResultList(view.unsupportedClaims, 'No unsupported claims identified.'), { tone: 'warning' }),
     renderIntelligenceResultSection('Missing evidence', renderIntelligenceResultList(view.missingEvidence, 'No missing evidence reported.'), { tone: 'gap' }),
     renderIntelligenceResultSection('Recommended next steps', renderIntelligenceResultList(view.recommendedActions, 'No recommended actions returned.'), { tone: 'action', wide: true }),
@@ -3836,7 +3851,7 @@ function intelligenceActionNeedsTarget(action) {
 
 function suggestedIntelligenceTarget(action) {
   const normalized = String(action || '');
-  if (['explain_finding', 'recommend_remediation'].includes(normalized)) return String(state.selectedFindingId || '');
+  if (['triage_finding', 'explain_finding', 'recommend_remediation'].includes(normalized)) return String(state.selectedFindingId || '');
   if (['analyze_research_case', 'generate_analyst_brief', 'review_publication_safety'].includes(normalized)) return String(state.researchCases.selectedId || '');
   return '';
 }
@@ -3865,6 +3880,11 @@ function renderIntelligence() {
   const service = data?.service || {};
   const mcp = data?.chatgpt_app || {};
   const localMode = data?.mode === 'local-helper';
+  const autopilot = data?.autopilot || {};
+  const autopilotSettings = autopilot.settings || {};
+  const autopilotSummary = autopilot.summary || {};
+  const autopilotRuns = Array.isArray(autopilot.runs) ? autopilot.runs : [];
+  const tuningProposals = Array.isArray(autopilot.tuning_proposals) ? autopilot.tuning_proposals : [];
   const counts = jobs.reduce((result, job) => {
     const status = String(job?.status || 'unknown');
     result[status] = (result[status] || 0) + 1;
@@ -3918,6 +3938,54 @@ function renderIntelligence() {
   if (output) {
     output.hidden = !state.intelligence.serviceOutput;
     output.textContent = state.intelligence.serviceOutput;
+  }
+
+  const autopilotPill = el('intelligence-autopilot-pill');
+  if (autopilotPill) autopilotPill.textContent = humanizeSnake(autopilotSettings.mode || 'not_configured');
+  const autopilotMode = el('intelligence-autopilot-mode');
+  if (autopilotMode && document.activeElement !== autopilotMode) autopilotMode.value = autopilotSettings.mode || 'advisory';
+  const autopilotConfidence = el('intelligence-autopilot-confidence');
+  if (autopilotConfidence && document.activeElement !== autopilotConfidence) autopilotConfidence.value = String(autopilotSettings.min_auto_close_confidence || 97);
+  const autopilotEvidence = el('intelligence-autopilot-evidence');
+  if (autopilotEvidence && document.activeElement !== autopilotEvidence) autopilotEvidence.value = String(autopilotSettings.min_evidence_refs || 2);
+  const autopilotLimit = el('intelligence-autopilot-limit');
+  if (autopilotLimit && document.activeElement !== autopilotLimit) autopilotLimit.value = String(autopilotSettings.max_records_per_cycle || 10);
+  const autopilotTuning = el('intelligence-autopilot-tuning');
+  if (autopilotTuning && document.activeElement !== autopilotTuning) autopilotTuning.checked = autopilotSettings.auto_create_tuning_proposals !== false;
+  const autopilotActivateTuning = el('intelligence-autopilot-activate-tuning');
+  if (autopilotActivateTuning && document.activeElement !== autopilotActivateTuning) autopilotActivateTuning.checked = Boolean(autopilotSettings.auto_activate_tuning);
+  const autopilotSummaryEl = el('intelligence-autopilot-summary');
+  if (autopilotSummaryEl) autopilotSummaryEl.innerHTML = `
+    <div class="metric-card"><div class="metric">${escapeHtml(String(autopilotSummary.awaiting_model || 0))}</div><div class="metric-label">Awaiting model</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(autopilotSummary.auto_applied || 0))}</div><div class="metric-label">Auto-closed</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(autopilotSummary.escalated || 0))}</div><div class="metric-label">Escalated</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(autopilotSummary.tuning_proposals || 0))}</div><div class="metric-label">Tuning proposals</div></div>`;
+  const autopilotRunsEl = el('intelligence-autopilot-runs');
+  if (autopilotRunsEl) {
+    const recent = autopilotRuns.slice(0, 12);
+    autopilotRunsEl.innerHTML = !recent.length
+      ? '<div class="empty-state compact">No autonomous triage decisions yet. Enable advisory or guarded mode, then review new findings.</div>'
+      : `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Decision</th><th>Model assessment</th><th>Guardrail</th><th>Updated</th><th>Action</th></tr></thead><tbody>${recent.map(run => {
+          const decision = run.decision || {};
+          const reasons = Array.isArray(decision.guardrail_reasons) ? decision.guardrail_reasons : [];
+          const rollback = ['applied', 'escalated'].includes(String(run.status || ''))
+            ? `<button class="mini-btn" data-agent-triage-rollback="${escapeHtml(run.run_id)}" type="button">Rollback</button>`
+            : '';
+          return `<tr><td><strong>${escapeHtml(run.target_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div></td><td><span class="agent-triage-action">${escapeHtml(humanizeSnake(run.final_action || run.status || 'pending'))}</span></td><td>${escapeHtml(humanizeSnake(decision.model_verdict || 'pending'))}${typeof decision.model_confidence === 'number' ? `<div class="small">${escapeHtml(String(decision.model_confidence))}% confidence</div>` : ''}</td><td class="agent-triage-reasons">${reasons.length ? escapeHtml(reasons.join(' · ')) : '<span class="small">Passed applicable gates</span>'}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${rollback}</td></tr>`;
+        }).join('')}</tbody></table></div>`;
+  }
+  const autopilotProposalsEl = el('intelligence-autopilot-proposals');
+  if (autopilotProposalsEl) {
+    const recent = tuningProposals.slice(0, 10);
+    autopilotProposalsEl.innerHTML = !recent.length
+      ? ''
+      : `<div class="module-head compact-header"><div><h4>Detection tuning</h4><p>Model proposals stay in shadow mode until deterministic historical replay proves the exact threshold change.</p></div></div><div class="table-wrap"><table><thead><tr><th>Target</th><th>Change</th><th>Shadow result</th><th>Evidence set</th><th>Action</th></tr></thead><tbody>${recent.map(proposal => {
+          const metrics = proposal.shadow_metrics || {};
+          const rollback = proposal.status === 'active'
+            ? `<button class="mini-btn" data-agent-tuning-rollback="${escapeHtml(proposal.proposal_id)}" type="button">Rollback tuning</button>`
+            : '';
+          return `<tr><td><strong>${escapeHtml(proposal.target_id || proposal.target_type || 'Unknown')}</strong><div class="small mono">${escapeHtml(proposal.proposal_id || '')}</div></td><td>${escapeHtml(humanizeSnake(proposal.change_type || 'proposal'))}<div class="small">${escapeHtml(compactText(proposal.rationale || '', 180))}</div></td><td>${escapeHtml(humanizeSnake(proposal.status || 'unknown'))}<div class="small">Activation ${metrics.activation_allowed ? 'permitted by replay' : 'blocked'}</div></td><td>${escapeHtml(String(metrics.labeled_findings || 0))} labeled<div class="small">${escapeHtml(String(metrics.reviewed_false_positives || 0))} safe · ${escapeHtml(String(metrics.reviewed_true_positives || 0))} risky</div></td><td>${rollback}</td></tr>`;
+        }).join('')}</tbody></table></div>`;
   }
 
   const table = el('intelligence-jobs-table');
@@ -8346,6 +8414,57 @@ function bindEvents() {
   el('intelligence-run-once-btn')?.addEventListener('click', event => {
     const model = el('intelligence-model-select')?.value || '';
     runIntelligenceAction('run-once', model ? { model } : {}, event.currentTarget);
+  });
+  el('intelligence-autopilot-save')?.addEventListener('click', async event => {
+    const mode = el('intelligence-autopilot-mode')?.value || 'advisory';
+    const model = el('intelligence-model-select')?.value || '';
+    const minAutoCloseConfidence = Number(el('intelligence-autopilot-confidence')?.value || 97);
+    const minEvidenceRefs = Number(el('intelligence-autopilot-evidence')?.value || 2);
+    const maxRecordsPerCycle = Number(el('intelligence-autopilot-limit')?.value || 10);
+    const autoCreateTuningProposals = Boolean(el('intelligence-autopilot-tuning')?.checked);
+    const autoActivateTuning = Boolean(el('intelligence-autopilot-activate-tuning')?.checked);
+    if (mode === 'guarded' && !(await requestConfirmation(
+      `Enable guarded autonomous triage with ${model || 'the provider default'}?`,
+      {
+        title: 'Enable guarded triage',
+        context: `The model may auto-close only when independent deterministic evidence supports the same benign disposition. Every decision remains logged and reversible.${autoActivateTuning ? ' Threshold tuning can activate only after high-confidence historical replay proves the exact change; rule condition and weight changes stay shadow-only.' : ''} Publication, disclosure, external sandbox submission, and destructive response remain separately controlled.`,
+        confirmLabel: 'Save guarded policy'
+      },
+    ))) return;
+    await runIntelligenceAction('autopilot-configure', {
+      mode,
+      model,
+      min_auto_close_confidence: minAutoCloseConfidence,
+      min_evidence_refs: minEvidenceRefs,
+      max_records_per_cycle: maxRecordsPerCycle,
+      auto_create_tuning_proposals: autoCreateTuningProposals,
+      auto_activate_tuning: autoActivateTuning
+    }, event.currentTarget);
+  });
+  el('intelligence-autopilot-run')?.addEventListener('click', event => {
+    runIntelligenceAction('autopilot-run-now', {}, event.currentTarget);
+  });
+  el('intelligence-autopilot-runs')?.addEventListener('click', async event => {
+    const button = event.target.closest('[data-agent-triage-rollback]');
+    if (!button) return;
+    const runId = button.dataset.agentTriageRollback;
+    if (!(await requestConfirmation(`Rollback autonomous triage decision ${runId}?`, {
+      title: 'Rollback triage decision',
+      context: 'SecOpsAI will restore the finding status and disposition captured before the model-assisted decision and record the rollback in the audit trail.',
+      confirmLabel: 'Rollback decision'
+    }))) return;
+    await runIntelligenceAction('autopilot-rollback', { run_id: runId }, button);
+  });
+  el('intelligence-autopilot-proposals')?.addEventListener('click', async event => {
+    const button = event.target.closest('[data-agent-tuning-rollback]');
+    if (!button) return;
+    const proposalId = button.dataset.agentTuningRollback;
+    if (!(await requestConfirmation(`Rollback active threshold tuning ${proposalId}?`, {
+      title: 'Rollback threshold tuning',
+      context: 'SecOpsAI will restore the deterministic baseline threshold captured before activation and retain the full replay history.',
+      confirmLabel: 'Rollback tuning'
+    }))) return;
+    await runIntelligenceAction('autopilot-rollback-tuning', { proposal_id: proposalId }, button);
   });
   document.querySelectorAll('[data-intelligence-service]').forEach(button => button.addEventListener('click', async event => {
     const serviceAction = event.currentTarget.dataset.intelligenceService;

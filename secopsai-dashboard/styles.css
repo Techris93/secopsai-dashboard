@@ -7752,6 +7752,61 @@ pre {
   margin-top: 16px;
 }
 
+.intelligence-autopilot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.intelligence-autopilot-grid label:not(.toggle-row) {
+  display: grid;
+  gap: 7px;
+}
+
+.intelligence-autopilot-grid label > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.intelligence-autopilot-grid .toggle-row {
+  grid-column: 1 / -1;
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  min-height: 36px;
+}
+
+.intelligence-boundary-note {
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 14px 0;
+  padding: 8px 12px;
+}
+
+.agent-triage-action {
+  font-weight: 700;
+}
+
+.agent-triage-reasons {
+  max-width: 520px;
+}
+
+@media (max-width: 960px) {
+  .intelligence-autopilot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .intelligence-autopilot-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .intelligence-request-grid label {
   min-width: 0;
 }

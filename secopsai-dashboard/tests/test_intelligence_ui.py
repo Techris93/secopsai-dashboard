@@ -34,6 +34,25 @@ def test_local_intelligence_actions_are_allowlisted():
     ]
     assert "--autonomy-mode" in install
     assert "agent_review" in install
+    configure = dashboard_server.build_intelligence_args(
+        "autopilot-configure",
+        {
+            "mode": "guarded",
+            "model": "kimi/kimi-k2.7-code-highspeed",
+            "min_auto_close_confidence": 98,
+            "min_evidence_refs": 2,
+            "max_records_per_cycle": 10,
+            "auto_create_tuning_proposals": True,
+        },
+    )
+    assert configure[:4] == ["intelligence", "autopilot", "configure", "--mode"]
+    assert "guarded" in configure
+    assert "--auto-activate-tuning" in configure
+    assert dashboard_server.build_intelligence_args("autopilot-run-now", {})[:3] == [
+        "intelligence",
+        "autopilot",
+        "run-now",
+    ]
 
 
 def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
@@ -70,6 +89,11 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "intelligence-result-body",
         "intelligence-result-copy",
         "intelligence-result-open-case",
+        "intelligence-autopilot-mode",
+        "intelligence-autopilot-save",
+        "intelligence-autopilot-run",
+        "intelligence-autopilot-runs",
+        "intelligence-autopilot-proposals",
     ):
         assert f'id="{element}"' in html
     assert "runIntelligenceAction('enqueue'" in app
@@ -78,6 +102,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "function intelligenceResultView" in app
     assert "function renderIntelligenceResultModal" in app
     assert "function intelligenceResultMarkdown" in app
+    assert "autopilot-configure" in app
+    assert "data-agent-triage-rollback" in app
     for section in (
         "Confirmed facts",
         "Reasonable inferences",

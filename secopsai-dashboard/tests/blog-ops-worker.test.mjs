@@ -66,6 +66,9 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     if (parsed.pathname === "/api/v1/intelligence/jobs" && (init.method || "GET") === "GET") {
       return new Response(JSON.stringify({ jobs: [] }), { status: 200 });
     }
+    if (parsed.pathname === "/api/v1/intelligence/autopilot" && (init.method || "GET") === "GET") {
+      return new Response(JSON.stringify({ settings: { mode: "advisory" }, summary: {}, runs: [], tuning_proposals: [] }), { status: 200 });
+    }
     if (parsed.pathname === "/api/v1/intelligence/jobs" && init.method === "POST") {
       return new Response(JSON.stringify({ job: { job_id: "AIJ-AAAAAAAAAAAAAAAA", action: "prioritize_findings", status: "queued" } }), { status: 200 });
     }
@@ -89,6 +92,7 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     assert.equal(status.status, 200);
     const statusPayload = await jsonFrom(status);
     assert.equal(statusPayload.chatgpt_app.configured, true);
+    assert.equal(statusPayload.autopilot.settings.mode, "advisory");
     assert.equal(JSON.stringify(statusPayload).includes("core-read-secret"), false);
     assert.equal(JSON.stringify(statusPayload).includes("core-intelligence-secret"), false);
 
@@ -103,7 +107,7 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     assert.equal(queued.status, 200);
     assert.equal((await jsonFrom(queued)).result.status, "queued");
     assert.equal(calls.filter(call => call.authorization === "Bearer core-read-secret").length, 1);
-    assert.equal(calls.filter(call => call.authorization === "Bearer core-intelligence-secret").length, 2);
+    assert.equal(calls.filter(call => call.authorization === "Bearer core-intelligence-secret").length, 3);
     assert.equal(calls.some(call => String(call.body).includes("core-intelligence-secret")), false);
   } finally {
     globalThis.fetch = originalFetch;

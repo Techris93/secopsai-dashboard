@@ -148,6 +148,7 @@ INTELLIGENCE_TARGET_RE = re.compile(r'^[A-Za-z0-9:._-]{0,240}$')
 INTELLIGENCE_MODEL_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._\-/\[\]]{0,159}$')
 INTELLIGENCE_BRIDGE_ACTIONS = {
     'explain_finding',
+    'triage_finding',
     'prioritize_findings',
     'analyze_asset_change',
     'analyze_research_case',
@@ -779,8 +780,41 @@ def build_intelligence_args(action, payload):
                     raise ValueError('Invalid bridge model')
                 args.extend(['--model', model])
             args.extend(['--autonomy-mode', 'agent_review'])
-            args.extend(['--db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else [])
+        args.extend(['--db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else [])
         return args
+    if action == 'autopilot-configure':
+        mode = str(payload.get('mode') or '').strip().lower()
+        if mode not in {'off', 'advisory', 'guarded'}:
+            raise ValueError('Autopilot mode must be off, advisory, or guarded')
+        args = ['intelligence', 'autopilot', 'configure', '--mode', mode, '--actor', 'mission-control']
+        model = str(payload.get('model') or '').strip()
+        if model:
+            if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+                raise ValueError('Invalid autopilot model')
+            args.extend(['--model', model])
+        confidence = validate_bounded_int(payload.get('min_auto_close_confidence'), default=97, lower=90, upper=100)
+        refs = validate_bounded_int(payload.get('min_evidence_refs'), default=2, lower=1, upper=10)
+        limit = validate_bounded_int(payload.get('max_records_per_cycle'), default=10, lower=1, upper=100)
+        args.extend([
+            '--auto-close-confidence', str(confidence),
+            '--min-evidence-refs', str(refs),
+            '--max-records', str(limit),
+            '--auto-tuning-proposals', 'on' if payload.get('auto_create_tuning_proposals', True) else 'off',
+            '--auto-activate-tuning', 'on' if payload.get('auto_activate_tuning', False) else 'off',
+        ])
+        return [*args, *secopsai_db_args()]
+    if action == 'autopilot-run-now':
+        return ['intelligence', 'autopilot', 'run-now', *secopsai_db_args()]
+    if action == 'autopilot-rollback':
+        run_id = str(payload.get('run_id') or '').strip().upper()
+        if not re.fullmatch(r'ATR-[A-F0-9]{16}', run_id):
+            raise ValueError('Invalid agent triage run ID')
+        return ['intelligence', 'autopilot', 'rollback', run_id, '--actor', 'mission-control', *secopsai_db_args()]
+    if action == 'autopilot-rollback-tuning':
+        proposal_id = str(payload.get('proposal_id') or '').strip().upper()
+        if not re.fullmatch(r'DTP-[A-F0-9]{16}', proposal_id):
+            raise ValueError('Invalid detection tuning proposal ID')
+        return ['intelligence', 'autopilot', 'rollback-tuning', proposal_id, '--actor', 'mission-control', *secopsai_db_args()]
     raise ValueError('Unsupported intelligence operation')
 
 

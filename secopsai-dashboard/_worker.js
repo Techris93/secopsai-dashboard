@@ -12,6 +12,7 @@ const MAX_OPERATOR_PROFILE_BYTES = 64 * 1024;
 const MAX_SECOPSAI_WORKSPACE_BYTES = 5 * 1024 * 1024;
 const INTELLIGENCE_ACTIONS = new Set([
   "explain_finding",
+  "triage_finding",
   "prioritize_findings",
   "analyze_asset_change",
   "analyze_research_case",
@@ -348,6 +349,7 @@ async function handleHostedIntelligence(request, env) {
       generated_at: new Date().toISOString(),
       actions: null,
       jobs: { jobs: [] },
+      autopilot: null,
       bridge: { status: "remote", queue_mode: "hosted_core", message: "A local Codex bridge processes this hosted queue." },
       service: { status: "managed_on_sensor", manager: "local" },
       chatgpt_app: {
@@ -371,6 +373,19 @@ async function handleHostedIntelligence(request, env) {
         result.jobs = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/jobs?limit=50", intelligenceToken, "Core intelligence jobs");
       } catch (error) {
         errors.push(sanitizeHelperErrorDetail(error?.message || error));
+      }
+      try {
+        result.autopilot = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/autopilot", intelligenceToken, "Core autonomous triage");
+      } catch (error) {
+        result.autopilot = {
+          schema_version: "secopsai.agent-triage.v1",
+          degraded: true,
+          error: sanitizeHelperErrorDetail(error?.message || error),
+          settings: { mode: "not_configured" },
+          summary: {},
+          runs: [],
+          tuning_proposals: [],
+        };
       }
     } else {
       errors.push("SECOPSAI_CORE_INTELLIGENCE_TOKEN is not configured");
@@ -403,7 +418,40 @@ async function handleHostedIntelligence(request, env) {
     const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/intelligence/jobs/${encodeURIComponent(jobId)}/cancel`, intelligenceToken, "Cancel intelligence job", { method: "POST" });
     return jsonResponse({ ok: true, action, result: payload.job });
   }
-  return jsonResponse({ ok: false, error: "Hosted mode supports queue and cancel only; bridge service controls run on the local sensor." }, { status: 400 });
+  if (action === "autopilot-configure") {
+    const mode = String(body.mode || "").trim().toLowerCase();
+    if (!["off", "advisory", "guarded"].includes(mode)) return jsonResponse({ ok: false, error: "Invalid autopilot mode" }, { status: 400 });
+    const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/autopilot/configure", intelligenceToken, "Configure autonomous triage", {
+      method: "POST",
+      body: {
+        mode,
+        selected_model: String(body.model || "").trim(),
+        min_auto_close_confidence: Number(body.min_auto_close_confidence || 97),
+        min_evidence_refs: Number(body.min_evidence_refs || 2),
+        max_records_per_cycle: Number(body.max_records_per_cycle || 10),
+        auto_create_tuning_proposals: body.auto_create_tuning_proposals !== false,
+        auto_activate_tuning: body.auto_activate_tuning === true,
+      },
+    });
+    return jsonResponse({ ok: true, action, result: payload.settings });
+  }
+  if (action === "autopilot-run-now") {
+    const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/autopilot/run-now", intelligenceToken, "Run autonomous triage", { method: "POST", body: {} });
+    return jsonResponse({ ok: true, action, result: payload.result });
+  }
+  if (action === "autopilot-rollback") {
+    const runId = String(body.run_id || "").trim().toUpperCase();
+    if (!/^ATR-[A-F0-9]{16}$/.test(runId)) return jsonResponse({ ok: false, error: "Invalid agent triage run ID" }, { status: 400 });
+    const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/intelligence/autopilot/runs/${encodeURIComponent(runId)}/rollback`, intelligenceToken, "Rollback autonomous triage", { method: "POST", body: {} });
+    return jsonResponse({ ok: true, action, result: payload.run });
+  }
+  if (action === "autopilot-rollback-tuning") {
+    const proposalId = String(body.proposal_id || "").trim().toUpperCase();
+    if (!/^DTP-[A-F0-9]{16}$/.test(proposalId)) return jsonResponse({ ok: false, error: "Invalid detection tuning proposal ID" }, { status: 400 });
+    const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/intelligence/autopilot/tuning/${encodeURIComponent(proposalId)}/rollback`, intelligenceToken, "Rollback threshold tuning", { method: "POST", body: {} });
+    return jsonResponse({ ok: true, action, result: payload.proposal });
+  }
+  return jsonResponse({ ok: false, error: "Unsupported hosted intelligence action. Bridge service controls run on the local sensor." }, { status: 400 });
 }
 
 function unavailableCore(error, configured = false) {

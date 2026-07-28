@@ -325,11 +325,34 @@
               <div><h4 id="intelligence-request-title">Request analysis</h4><p>Actions use normalized SecOpsAI context. They cannot publish, close findings, run scans, or execute package code.</p></div>
             </div>
             <div class="intelligence-request-grid">
-              <label><span>Approved action</span><select id="intelligence-action-select"><option value="prioritize_findings">Prioritize open findings</option><option value="explain_finding">Explain a finding</option><option value="recommend_remediation">Recommend remediation</option><option value="analyze_asset_change">Analyze asset change</option><option value="analyze_research_case">Analyze research case</option><option value="generate_analyst_brief">Generate analyst brief</option><option value="review_publication_safety">Review publication safety</option></select></label>
+              <label><span>Approved action</span><select id="intelligence-action-select"><option value="prioritize_findings">Prioritize open findings</option><option value="triage_finding">Triage a finding</option><option value="explain_finding">Explain a finding</option><option value="recommend_remediation">Recommend remediation</option><option value="analyze_asset_change">Analyze asset change</option><option value="analyze_research_case">Analyze research case</option><option value="generate_analyst_brief">Generate analyst brief</option><option value="review_publication_safety">Review publication safety</option></select></label>
               <label><span>Finding, asset, or case ID</span><input id="intelligence-target-id" maxlength="240" placeholder="Not required for workspace prioritization" /></label>
               <button class="primary-btn" id="intelligence-queue-btn" type="button">Queue analysis</button>
             </div>
             <div class="small" id="intelligence-request-hint">Select a target-specific action to use the currently selected finding or research case automatically.</div>
+          </section>
+
+          <section class="intelligence-module intelligence-autopilot" aria-labelledby="intelligence-autopilot-title">
+            <div class="module-head">
+              <div><h4 id="intelligence-autopilot-title">Autonomous triage</h4><p>Continuously reviews new findings with the selected model and applies only evidence-corroborated, reversible decisions.</p></div>
+              <span class="status-pill" id="intelligence-autopilot-pill">Checking</span>
+            </div>
+            <div id="intelligence-autopilot-summary" class="metrics-grid compact-metrics"></div>
+            <div class="intelligence-autopilot-grid">
+              <label><span>Decision mode</span><select id="intelligence-autopilot-mode"><option value="off">Off</option><option value="advisory">Advisory only</option><option value="guarded">Guarded automation</option></select></label>
+              <label><span>Automatic closure confidence</span><input id="intelligence-autopilot-confidence" type="number" min="90" max="100" step="1" value="97" /></label>
+              <label><span>Minimum validated evidence references</span><input id="intelligence-autopilot-evidence" type="number" min="1" max="10" step="1" value="2" /></label>
+              <label><span>Maximum new reviews per cycle</span><input id="intelligence-autopilot-limit" type="number" min="1" max="100" step="1" value="10" /></label>
+              <label class="toggle-row"><input id="intelligence-autopilot-tuning" type="checkbox" checked /><span>Create shadow-mode rule tuning proposals</span></label>
+              <label class="toggle-row"><input id="intelligence-autopilot-activate-tuning" type="checkbox" /><span>Activate only replay-proven threshold tuning automatically</span></label>
+            </div>
+            <div class="intelligence-boundary-note" id="intelligence-autopilot-boundary">Guarded automation can close a finding only when deterministic SecOpsAI evidence independently supports the same benign disposition. Model-only suppression is blocked. Publication, disclosure, sandbox submission, destructive response, and rule activation remain separately controlled.</div>
+            <div class="intelligence-actions">
+              <button class="primary-btn" id="intelligence-autopilot-save" type="button">Save automation policy</button>
+              <button class="secondary-btn" id="intelligence-autopilot-run" type="button">Review new findings now</button>
+            </div>
+            <div id="intelligence-autopilot-runs"></div>
+            <div id="intelligence-autopilot-proposals"></div>
           </section>
 
           <section class="intelligence-module" aria-labelledby="intelligence-jobs-title">

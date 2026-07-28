@@ -214,6 +214,7 @@ duplicate queues.
 - one-click investigate, evidence-based verdict, explain verdict, advisory check, local dependency usage check, raw report preview, and mitigation generation
 - cross-ecosystem Campaign Research panel for campaign JSON import, package/IOC/source entry, correlation, local usage checks, SOC finding persistence, and review-only campaign blog drafts
 - confirmation-gated close as false positive, move to in review, and create blog draft actions
+- evidence-gated autonomous finding triage with selectable OpenCodex models, durable decisions, shadow tuning, and rollback
 - copyable CLI fallback for every selected alert
 
 Triage Ops uses the local/helper-backed `/api/secopsai/triage-ops/*` endpoints. The browser never runs shell commands directly. Read actions can run through the helper; write actions require `TRIAGE_OPS_ADMIN_TOKEN` or `BLOG_OPS_ADMIN_TOKEN`.
