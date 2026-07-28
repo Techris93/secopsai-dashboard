@@ -183,6 +183,7 @@ const state = {
     lastAction: null,
     adminToken: sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
+  integrationView: 'health',
   triageOps: {
     alerts: [],
     selectedId: null,
@@ -260,10 +261,18 @@ const BLOG_VIEW_ROUTES = Object.freeze({
   review: 'publications/review',
   published: 'publications/published'
 });
+const SYSTEM_VIEW_ROUTES = Object.freeze({
+  health: 'system/health',
+  integrations: 'system/integrations',
+  automation: 'system/automation',
+  credentials: 'system/credentials',
+  audit: 'system/audit'
+});
 const ROUTE_PAGES = Object.freeze({
   ...Object.fromEntries(Object.entries(PAGE_ROUTES).map(([page, route]) => [route, page])),
   ...Object.fromEntries(Object.entries(RESEARCH_VIEW_ROUTES).map(([, route]) => [route, 'research-cases'])),
-  ...Object.fromEntries(Object.entries(BLOG_VIEW_ROUTES).map(([, route]) => [route, 'blog-ops']))
+  ...Object.fromEntries(Object.entries(BLOG_VIEW_ROUTES).map(([, route]) => [route, 'blog-ops'])),
+  ...Object.fromEntries(Object.entries(SYSTEM_VIEW_ROUTES).map(([, route]) => [route, 'integrations']))
 });
 const TOP_NAV_PAGE = Object.freeze({
   "mission-control": "mission-control",
@@ -332,10 +341,11 @@ const CONTEXT_NAV = Object.freeze({
     ["Published", "blog-ops", BLOG_VIEW_ROUTES.published]
   ],
   "integrations": [
-    ["Health", "integrations"],
-    ["Integrations", "integrations"],
-    ["Credentials", "integrations"],
-    ["Audit log", "integrations"]
+    ["Health", "integrations", SYSTEM_VIEW_ROUTES.health],
+    ["Integrations", "integrations", SYSTEM_VIEW_ROUTES.integrations],
+    ["Automation", "integrations", SYSTEM_VIEW_ROUTES.automation],
+    ["Credentials", "integrations", SYSTEM_VIEW_ROUTES.credentials],
+    ["Audit log", "integrations", SYSTEM_VIEW_ROUTES.audit]
   ],
   "triage-ops": [
     ["Supply-chain queue", "triage-ops"],
@@ -1143,9 +1153,16 @@ function blogViewForRoute(route) {
   return match?.[0] || 'review';
 }
 
+function systemViewForRoute(route) {
+  const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const match = Object.entries(SYSTEM_VIEW_ROUTES).find(([, value]) => value === normalized);
+  return match?.[0] || 'health';
+}
+
 function routeForPage(pageId) {
   if (pageId === 'research-cases') return RESEARCH_VIEW_ROUTES[state.researchCases.view || 'cases'] || RESEARCH_VIEW_ROUTES.cases;
   if (pageId === 'blog-ops') return BLOG_VIEW_ROUTES[state.blogOps.view || 'review'] || BLOG_VIEW_ROUTES.review;
+  if (pageId === 'integrations') return SYSTEM_VIEW_ROUTES[state.integrationView || 'health'] || SYSTEM_VIEW_ROUTES.health;
   return PAGE_ROUTES[pageId] || PAGE_ROUTES.mission-control;
 }
 
@@ -1156,6 +1173,9 @@ function currentPageFromLocation() {
   }
   if (String(route).replace(/^#\/?/, '').startsWith('publications/')) {
     state.blogOps.view = blogViewForRoute(route);
+  }
+  if (String(route).replace(/^#\/?/, '').startsWith('system/')) {
+    state.integrationView = systemViewForRoute(route);
   }
   return pageIdForRoute(route);
 }
@@ -1271,6 +1291,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   const normalizedPageId = pages.includes(pageId) ? pageId : pageIdForRoute(pageId);
   if (normalizedPageId === 'research-cases' && routeOverride) state.researchCases.view = researchViewForRoute(routeOverride);
   if (normalizedPageId === 'blog-ops' && routeOverride) state.blogOps.view = blogViewForRoute(routeOverride);
+  if (normalizedPageId === 'integrations' && routeOverride) state.integrationView = systemViewForRoute(routeOverride);
   pages.forEach((id) => {
     const page = el(`page-${id}`);
     if (page) page.classList.toggle("active", id === normalizedPageId);
@@ -1285,6 +1306,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   renderContextNav(normalizedPageId);
   if (normalizedPageId === 'research-cases') renderResearchCases();
   if (normalizedPageId === 'blog-ops') renderBlogOps();
+  if (normalizedPageId === 'integrations') renderIntegrations();
   if (!skipHistory && window.history?.pushState) {
     const nextHash = `#${routeOverride || routeForPage(normalizedPageId)}`;
     if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);
@@ -3478,6 +3500,22 @@ function renderSessionDetail(session) {
 }
 
 function renderIntegrations() {
+  const systemView = state.integrationView || 'health';
+  const systemViewCopy = {
+    health: ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'],
+    integrations: ['Integrations', 'Review the runtime connections and data boundaries used by this workspace.'],
+    automation: ['AI and automation', 'Choose the analysis model, review autonomous decisions, and manage reversible automation policy.'],
+    credentials: ['Credentials', 'Review which credentials are required for protected actions and where they are kept.'],
+    audit: ['Audit and jobs', 'Trace queued analysis, native actions, investigation sessions, and orchestrator history.']
+  }[systemView] || ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'];
+  const systemSummary = el('system-view-summary');
+  if (systemSummary) systemSummary.innerHTML = `<span class="eyebrow">System workspace</span><strong>${escapeHtml(systemViewCopy[0])}</strong><span>${escapeHtml(systemViewCopy[1])}</span>`;
+  const systemPage = el('page-integrations');
+  if (systemPage) systemPage.dataset.systemView = systemView;
+  document.querySelectorAll('#page-integrations [data-system-section]').forEach(section => {
+    const allowed = String(section.dataset.systemSection || '').split(/\s+/).filter(Boolean);
+    section.hidden = !allowed.includes(systemView);
+  });
   const summary = el('integration-summary');
   const queuedRequests = state.runRequests.filter(r => r.status === 'queued').length;
   const runningRequests = state.runRequests.filter(r => r.status === 'running').length;

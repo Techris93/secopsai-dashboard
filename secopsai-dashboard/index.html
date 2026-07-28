@@ -268,9 +268,10 @@
             <p>Review platform health, runtime integrations, access boundaries, and action history.</p>
           </div>
         </div>
-        <div class="grid cols-4" id="integration-summary"></div>
-        <div class="grid cols-2" id="integration-config" style="margin-top:18px;"></div>
-        <section class="intelligence-console" aria-labelledby="intelligence-title">
+        <div class="system-view-summary" id="system-view-summary" role="status" aria-live="polite"></div>
+        <div class="grid cols-4" id="integration-summary" data-system-section="health"></div>
+        <div class="grid cols-2" id="integration-config" data-system-section="integrations" style="margin-top:18px;"></div>
+        <section class="intelligence-console" data-system-section="automation" aria-labelledby="intelligence-title">
           <div class="intelligence-console-head">
             <div>
               <div class="section-kicker">MODEL ASSISTANCE</div>
@@ -362,7 +363,7 @@
             <div id="intelligence-jobs-table"></div>
           </section>
         </section>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Native action queue</h3>
@@ -371,7 +372,7 @@
           </div>
           <div id="run-requests-table"></div>
         </div>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Investigation sessions</h3>
@@ -380,7 +381,7 @@
           </div>
           <div id="native-sessions-table"></div>
         </div>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Selected session</h3>
@@ -389,7 +390,7 @@
           </div>
           <div id="native-session-detail"></div>
         </div>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-system-section="audit" style="margin-top:18px;">
           <h3>Recent orchestrator runs</h3>
           <div id="routes-table"></div>
         </div>

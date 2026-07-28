@@ -510,6 +510,21 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
 }
 .professional-ui .publication-view-summary strong { color: #f3f7f9; }
 .professional-ui .publication-view-summary span:last-child { color: #aebbc7; }
+.professional-ui .system-view-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 11px 14px;
+  border: 1px solid #344452;
+  border-left: 3px solid #62b8cf;
+  border-radius: 4px;
+  background: #131d24;
+  color: #cbd7df;
+}
+.professional-ui .system-view-summary strong { color: #f3f7f9; }
+.professional-ui .system-view-summary span:last-child { color: #aebbc7; }
+.professional-ui #page-integrations [hidden] { display: none !important; }
 .professional-ui #page-blog-ops [hidden] { display: none !important; }
 .professional-ui .research-next-action {
   display: flex;
@@ -539,6 +554,8 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
   .professional-ui .research-view-summary > * { display: block; margin: 2px 0; }
   .professional-ui .publication-view-summary { display: block; }
   .professional-ui .publication-view-summary > * { display: block; margin: 2px 0; }
+  .professional-ui .system-view-summary { display: block; }
+  .professional-ui .system-view-summary > * { display: block; margin: 2px 0; }
   .professional-ui .topbar-primary { overflow: hidden; }
   .professional-ui .workspace-context { max-width: 42vw; overflow: hidden; }
   .professional-ui .top-strip .operator-identity { display: none; }

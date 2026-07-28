@@ -31,10 +31,10 @@ for (const marker of ['renderContextNav', 'currentPageFromLocation', 'openComman
 for (const marker of ['toast-region', 'command-palette', 'help-drawer', 'confirm-dialog', 'professional-ui .app-shell', 'context-nav-btn']) {
   assert.ok((index + styles).includes(marker), `missing ${marker}`);
 }
-for (const route of ['research/inbox', 'research/cases', 'research/watchlists', 'research/coverage', 'research/disclosure', 'research/sandbox', 'publications/news', 'publications/drafts', 'publications/review', 'publications/published']) {
+for (const route of ['research/inbox', 'research/cases', 'research/watchlists', 'research/coverage', 'research/disclosure', 'research/sandbox', 'publications/news', 'publications/drafts', 'publications/review', 'publications/published', 'system/health', 'system/integrations', 'system/automation', 'system/credentials', 'system/audit']) {
   assert.match(app, new RegExp(route.replace('/', '\\/')));
 }
-for (const marker of ['research-view-summary', 'publication-view-summary', 'data-research-section="inbox watchlists"', 'data-research-section="cases disclosure sandbox"', 'data-blog-section="news"', 'metric-scope']) {
+for (const marker of ['research-view-summary', 'publication-view-summary', 'system-view-summary', 'data-research-section="inbox watchlists"', 'data-research-section="cases disclosure sandbox"', 'data-blog-section="news"', 'data-system-section="automation"', 'metric-scope']) {
   assert.ok((index + styles + app).includes(marker), `missing redesign contract: ${marker}`);
 }
 
