@@ -145,6 +145,7 @@ const state = {
     error: null
   },
   researchCases: {
+    view: 'cases',
     cases: [],
     selectedId: null,
     selected: null,
@@ -172,6 +173,7 @@ const state = {
   },
   localTriage: null,
   blogOps: {
+    view: 'review',
     status: null,
     drafts: [],
     runs: [],
@@ -181,6 +183,7 @@ const state = {
     lastAction: null,
     adminToken: sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
+  integrationView: 'health',
   triageOps: {
     alerts: [],
     selectedId: null,
@@ -244,7 +247,33 @@ const PAGE_ROUTES = Object.freeze({
   "blog-ops": "publications",
   "operator-guide": "help"
 });
-const ROUTE_PAGES = Object.freeze(Object.fromEntries(Object.entries(PAGE_ROUTES).map(([page, route]) => [route, page])));
+const RESEARCH_VIEW_ROUTES = Object.freeze({
+  inbox: 'research/inbox',
+  cases: 'research/cases',
+  watchlists: 'research/watchlists',
+  coverage: 'research/coverage',
+  disclosure: 'research/disclosure',
+  sandbox: 'research/sandbox'
+});
+const BLOG_VIEW_ROUTES = Object.freeze({
+  news: 'publications/news',
+  drafts: 'publications/drafts',
+  review: 'publications/review',
+  published: 'publications/published'
+});
+const SYSTEM_VIEW_ROUTES = Object.freeze({
+  health: 'system/health',
+  integrations: 'system/integrations',
+  automation: 'system/automation',
+  credentials: 'system/credentials',
+  audit: 'system/audit'
+});
+const ROUTE_PAGES = Object.freeze({
+  ...Object.fromEntries(Object.entries(PAGE_ROUTES).map(([page, route]) => [route, page])),
+  ...Object.fromEntries(Object.entries(RESEARCH_VIEW_ROUTES).map(([, route]) => [route, 'research-cases'])),
+  ...Object.fromEntries(Object.entries(BLOG_VIEW_ROUTES).map(([, route]) => [route, 'blog-ops'])),
+  ...Object.fromEntries(Object.entries(SYSTEM_VIEW_ROUTES).map(([, route]) => [route, 'integrations']))
+});
 const TOP_NAV_PAGE = Object.freeze({
   "mission-control": "mission-control",
   "tasks": "tasks",
@@ -291,12 +320,12 @@ const CONTEXT_NAV = Object.freeze({
     ["Runs", "integrations"]
   ],
   "research-cases": [
-    ["Inbox", "triage-ops"],
-    ["Cases", "research-cases"],
-    ["Watchlists", "research-cases"],
-    ["Global coverage", "coverage"],
-    ["Disclosure", "research-cases"],
-    ["Sandbox jobs", "research-cases"]
+    ["Inbox", "research-cases", RESEARCH_VIEW_ROUTES.inbox],
+    ["Cases", "research-cases", RESEARCH_VIEW_ROUTES.cases],
+    ["Watchlists", "research-cases", RESEARCH_VIEW_ROUTES.watchlists],
+    ["Global coverage", "coverage", RESEARCH_VIEW_ROUTES.coverage],
+    ["Disclosure", "research-cases", RESEARCH_VIEW_ROUTES.disclosure],
+    ["Sandbox jobs", "research-cases", RESEARCH_VIEW_ROUTES.sandbox]
   ],
   "coverage": [
     ["Collectors", "coverage"],
@@ -306,16 +335,17 @@ const CONTEXT_NAV = Object.freeze({
     ["Cases", "research-cases"]
   ],
   "blog-ops": [
-    ["News intake", "blog-ops"],
-    ["Drafts", "blog-ops"],
-    ["Review", "blog-ops"],
-    ["Published", "blog-ops"]
+    ["News intake", "blog-ops", BLOG_VIEW_ROUTES.news],
+    ["Drafts", "blog-ops", BLOG_VIEW_ROUTES.drafts],
+    ["Review", "blog-ops", BLOG_VIEW_ROUTES.review],
+    ["Published", "blog-ops", BLOG_VIEW_ROUTES.published]
   ],
   "integrations": [
-    ["Health", "integrations"],
-    ["Integrations", "integrations"],
-    ["Credentials", "integrations"],
-    ["Audit log", "integrations"]
+    ["Health", "integrations", SYSTEM_VIEW_ROUTES.health],
+    ["Integrations", "integrations", SYSTEM_VIEW_ROUTES.integrations],
+    ["Automation", "integrations", SYSTEM_VIEW_ROUTES.automation],
+    ["Credentials", "integrations", SYSTEM_VIEW_ROUTES.credentials],
+    ["Audit log", "integrations", SYSTEM_VIEW_ROUTES.audit]
   ],
   "triage-ops": [
     ["Supply-chain queue", "triage-ops"],
@@ -1111,26 +1141,57 @@ function pageIdForRoute(route) {
   return ROUTE_PAGES[normalized] || (pages.includes(normalized) ? normalized : 'mission-control');
 }
 
+function researchViewForRoute(route) {
+  const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const match = Object.entries(RESEARCH_VIEW_ROUTES).find(([, value]) => value === normalized);
+  return match?.[0] || 'cases';
+}
+
+function blogViewForRoute(route) {
+  const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const match = Object.entries(BLOG_VIEW_ROUTES).find(([, value]) => value === normalized);
+  return match?.[0] || 'review';
+}
+
+function systemViewForRoute(route) {
+  const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const match = Object.entries(SYSTEM_VIEW_ROUTES).find(([, value]) => value === normalized);
+  return match?.[0] || 'health';
+}
+
 function routeForPage(pageId) {
+  if (pageId === 'research-cases') return RESEARCH_VIEW_ROUTES[state.researchCases.view || 'cases'] || RESEARCH_VIEW_ROUTES.cases;
+  if (pageId === 'blog-ops') return BLOG_VIEW_ROUTES[state.blogOps.view || 'review'] || BLOG_VIEW_ROUTES.review;
+  if (pageId === 'integrations') return SYSTEM_VIEW_ROUTES[state.integrationView || 'health'] || SYSTEM_VIEW_ROUTES.health;
   return PAGE_ROUTES[pageId] || PAGE_ROUTES.mission-control;
 }
 
 function currentPageFromLocation() {
-  return pageIdForRoute(window.location.hash || 'overview');
+  const route = window.location.hash || 'overview';
+  if (String(route).replace(/^#\/?/, '').startsWith('research/')) {
+    state.researchCases.view = researchViewForRoute(route);
+  }
+  if (String(route).replace(/^#\/?/, '').startsWith('publications/')) {
+    state.blogOps.view = blogViewForRoute(route);
+  }
+  if (String(route).replace(/^#\/?/, '').startsWith('system/')) {
+    state.integrationView = systemViewForRoute(route);
+  }
+  return pageIdForRoute(route);
 }
 
 function renderContextNav(pageId) {
   const host = el('context-nav');
   if (!host) return;
   const items = CONTEXT_NAV[pageId] || [];
-  const firstTargetIndex = new Map();
-  items.forEach(([label, target], index) => { if (!firstTargetIndex.has(target)) firstTargetIndex.set(target, index); });
-  host.innerHTML = items.map(([label, target], index) => `
-    <button class="context-nav-btn ${target === pageId && firstTargetIndex.get(target) === index ? 'active' : ''}" type="button" data-context-page="${escapeHtml(target)}">${escapeHtml(label)}</button>
-  `).join('');
+  const currentRoute = String(window.location.hash || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  host.innerHTML = items.map(([label, target, route], index) => {
+    const isActive = route ? route === currentRoute : (target === pageId && index === 0);
+    return `<button class="context-nav-btn ${isActive ? 'active' : ''}" type="button" data-context-page="${escapeHtml(target)}"${route ? ` data-context-route="${escapeHtml(route)}"` : ''}>${escapeHtml(label)}</button>`;
+  }).join('');
   host.hidden = !items.length;
   host.querySelectorAll('[data-context-page]').forEach(button => {
-    button.addEventListener('click', () => setPage(button.dataset.contextPage));
+    button.addEventListener('click', () => setPage(button.dataset.contextPage, { routeOverride: button.dataset.contextRoute || null }));
   });
 }
 
@@ -1226,8 +1287,11 @@ function startTopStripClock() {
   window.setInterval(updateTopStripClock, 1000);
 }
 
-function setPage(pageId, { skipHistory = false } = {}) {
+function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   const normalizedPageId = pages.includes(pageId) ? pageId : pageIdForRoute(pageId);
+  if (normalizedPageId === 'research-cases' && routeOverride) state.researchCases.view = researchViewForRoute(routeOverride);
+  if (normalizedPageId === 'blog-ops' && routeOverride) state.blogOps.view = blogViewForRoute(routeOverride);
+  if (normalizedPageId === 'integrations' && routeOverride) state.integrationView = systemViewForRoute(routeOverride);
   pages.forEach((id) => {
     const page = el(`page-${id}`);
     if (page) page.classList.toggle("active", id === normalizedPageId);
@@ -1240,8 +1304,11 @@ function setPage(pageId, { skipHistory = false } = {}) {
   el('mobile-menu-btn')?.setAttribute('aria-expanded', 'false');
   updateTopStrip(normalizedPageId);
   renderContextNav(normalizedPageId);
+  if (normalizedPageId === 'research-cases') renderResearchCases();
+  if (normalizedPageId === 'blog-ops') renderBlogOps();
+  if (normalizedPageId === 'integrations') renderIntegrations();
   if (!skipHistory && window.history?.pushState) {
-    const nextHash = `#${routeForPage(normalizedPageId)}`;
+    const nextHash = `#${routeOverride || routeForPage(normalizedPageId)}`;
     if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);
   }
 }
@@ -1271,6 +1338,7 @@ function statusLabel(status) {
 
 function getTaskFilters() {
   return {
+    scope: el('task-filter-scope')?.value || 'operator',
     search: (el('task-search')?.value || '').trim().toLowerCase(),
     domain: el('task-filter-domain')?.value || '',
     priority: el('task-filter-priority')?.value || '',
@@ -1285,6 +1353,10 @@ function getTaskFilters() {
 function filteredWorkItems() {
   const filters = getTaskFilters();
   return state.workItems.filter(item => {
+    if (filters.scope === 'operator') {
+      const operatorWork = item.external_facing || item.requires_security_review || item.domain === 'security' || ['blocked', 'review', 'in_progress'].includes(String(item.status || ''));
+      if (!operatorWork) return false;
+    }
     if (filters.domain && item.domain !== filters.domain) return false;
     if (filters.priority && item.priority !== filters.priority) return false;
     if (filters.status && item.status !== filters.status) return false;
@@ -2382,11 +2454,11 @@ function renderMissionControl() {
   const missionStats = el("mission-stats");
   if (missionStats) {
     missionStats.innerHTML = `
-      <div class="card metric-card" data-drill="runs"><div class="metric">${activeRuns}</div><div class="metric-label">Active runs</div></div>
-      <div class="card metric-card" data-drill="blocked"><div class="metric">${blocked}</div><div class="metric-label">Blocked items</div></div>
-      <div class="card metric-card" data-drill="review"><div class="metric">${inReview}</div><div class="metric-label">In review</div></div>
-      <div class="card metric-card" data-drill="done"><div class="metric">${doneToday}</div><div class="metric-label">Done today</div></div>
-      <div class="card metric-card" data-drill="sec"><div class="metric">${secReview}</div><div class="metric-label">Needs security review</div></div>
+      <div class="card metric-card" data-drill="runs"><div class="metric">${activeRuns}</div><div class="metric-label">Active runs</div><div class="metric-scope">Workspace queue · queued or running</div></div>
+      <div class="card metric-card" data-drill="blocked"><div class="metric">${blocked}</div><div class="metric-label">Blocked work</div><div class="metric-scope">Workspace work queue</div></div>
+      <div class="card metric-card" data-drill="review"><div class="metric">${inReview}</div><div class="metric-label">In review</div><div class="metric-scope">Workspace work queue</div></div>
+      <div class="card metric-card" data-drill="done"><div class="metric">${doneToday}</div><div class="metric-label">Completed today</div><div class="metric-scope">Workspace work queue · local time</div></div>
+      <div class="card metric-card" data-drill="sec"><div class="metric">${secReview}</div><div class="metric-label">Needs security review</div><div class="metric-scope">Workspace work queue</div></div>
     `;
 
     missionStats.querySelectorAll('.metric-card').forEach(card => {
@@ -2456,19 +2528,26 @@ function renderMissionControl() {
     el('mc-native-triage')?.addEventListener('click', () => setPage('findings'));
   }
 
-  const recentFeed = [...state.events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 6);
+  const activitySince = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const recentFeed = [...state.events]
+    .filter(event => Number.isFinite(new Date(event.created_at).getTime()) && new Date(event.created_at).getTime() >= activitySince)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 6);
   const eventsEl = el("mission-events");
   if (eventsEl) {
     eventsEl.innerHTML = recentFeed.length ? recentFeed.map(ev => `
       <div class="feed-item" style="border-left-color:${ev.severity === 'error' ? '#ef4444' : ev.severity === 'success' ? '#10b981' : ev.severity === 'warning' ? '#f59e0b' : '#06b6d4'}">
         <div><strong>${escapeHtml(ev.title)}</strong></div>
-        <div class="small">${escapeHtml(ev.body || '')}</div>
+        <div class="small">${escapeHtml(compactText(ev.body || '', 180))}</div>
         <div class="meta">${escapeHtml(ev.event_type)} • ${fmtDate(ev.created_at)}</div>
       </div>
     `).join("") : `<div class="empty">No dashboard events yet.</div>`;
   }
 
-  const recentRuns = [...state.runs].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 6);
+  const recentRuns = [...state.runs]
+    .filter(run => Number.isFinite(new Date(run.created_at).getTime()) && new Date(run.created_at).getTime() >= activitySince)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 6);
   const runsEl = el("mission-runs");
   if (runsEl) {
     runsEl.innerHTML = recentRuns.length ? recentRuns.map(run => `
@@ -2697,18 +2776,18 @@ function renderFindings() {
   }).length;
   if (summary) {
     summary.innerHTML = `
-      <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div></div>
-      <div class="card"><div class="metric">${coreFindingCount}</div><div class="metric-label">Core canonical</div></div>
-      <div class="card"><div class="metric">${dashboardFindingCount}</div><div class="metric-label">Dashboard operational</div></div>
-      <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div></div>
-      <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div></div>
-      <div class="card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div></div>
-      <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With task correlation</div></div>
-      <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Native SecOpsAI open findings</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Native pending actions</div></div>
-      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open investigation sessions</div></div>
-      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending session approvals</div></div>
+      <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${coreFindingCount}</div><div class="metric-label">Core canonical</div><div class="metric-scope">Current filters · Core source</div></div>
+      <div class="card"><div class="metric">${dashboardFindingCount}</div><div class="metric-label">Dashboard operational</div><div class="metric-scope">Current filters · dashboard source</div></div>
+      <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div><div class="metric-scope">Current filters · guard output</div></div>
+      <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With task correlation</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Native SecOpsAI open findings</div><div class="metric-scope">Local Core triage artifact</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Native pending actions</div><div class="metric-scope">Local Core action queue</div></div>
+      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open investigation sessions</div><div class="metric-scope">Local Core session store</div></div>
+      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending session approvals</div><div class="metric-scope">Local Core session store</div></div>
     `;
   }
 
@@ -2734,7 +2813,7 @@ function renderFindings() {
               <td>${renderStatusPill(String(effectiveFindingStatus(f)).toLowerCase(), humanizeSnake(effectiveFindingStatus(f)))}</td>
               <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
               <td>${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
-              <td><div class="task-card-actions"><button class="mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Inspect</button><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-run-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Investigate now</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate</button></div></td>
+              <td><div class="task-card-actions finding-actions"><button class="primary-btn mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Review</button><details class="inline-action-menu"><summary>More</summary><div><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-run-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Investigate now</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate command</button></div></details></div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
@@ -3433,6 +3512,22 @@ function renderSessionDetail(session) {
 }
 
 function renderIntegrations() {
+  const systemView = state.integrationView || 'health';
+  const systemViewCopy = {
+    health: ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'],
+    integrations: ['Integrations', 'Review the runtime connections and data boundaries used by this workspace.'],
+    automation: ['AI and automation', 'Choose the analysis model, review autonomous decisions, and manage reversible automation policy.'],
+    credentials: ['Credentials', 'Review which credentials are required for protected actions and where they are kept.'],
+    audit: ['Audit and jobs', 'Trace queued analysis, native actions, investigation sessions, and orchestrator history.']
+  }[systemView] || ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'];
+  const systemSummary = el('system-view-summary');
+  if (systemSummary) systemSummary.innerHTML = `<span class="eyebrow">System workspace</span><strong>${escapeHtml(systemViewCopy[0])}</strong><span>${escapeHtml(systemViewCopy[1])}</span>`;
+  const systemPage = el('page-integrations');
+  if (systemPage) systemPage.dataset.systemView = systemView;
+  document.querySelectorAll('#page-integrations [data-system-section]').forEach(section => {
+    const allowed = String(section.dataset.systemSection || '').split(/\s+/).filter(Boolean);
+    section.hidden = !allowed.includes(systemView);
+  });
   const summary = el('integration-summary');
   const queuedRequests = state.runRequests.filter(r => r.status === 'queued').length;
   const runningRequests = state.runRequests.filter(r => r.status === 'running').length;
@@ -3508,6 +3603,24 @@ function renderIntegrations() {
         </div>
         <div class="small" style="margin-top:12px;">Supabase remains useful for tasks and run visibility, but native triage queue state now sits above it in the dashboard.</div>
       </div>`;
+  }
+  const credentialsEl = el('system-credentials');
+  if (credentialsEl) {
+    const sessionReady = Boolean(state.auth?.user?.email || state.auth?.session || state.auth?.activeUserId);
+    const researchTokenReady = Boolean(state.researchCases?.adminToken || state.triageOps?.adminToken);
+    const blogTokenReady = Boolean(state.blogOps?.adminToken);
+    credentialsEl.innerHTML = `
+      <div class="page-header compact-header">
+        <div><h3 style="margin:0;">Credential readiness</h3><p class="small" style="margin:6px 0 0;">This view shows status only. Secret values are never displayed or copied.</p></div>
+      </div>
+      <div class="credential-status-grid">
+        <div class="credential-status-row"><span>Operator session</span>${renderStatusPill(sessionReady ? 'ready' : 'missing', sessionReady ? 'Signed in' : 'Sign in required')}</div>
+        <div class="credential-status-row"><span>Research action token</span>${renderStatusPill(researchTokenReady ? 'ready' : 'required', researchTokenReady ? 'Ready for protected research actions' : 'Required for changes')}</div>
+        <div class="credential-status-row"><span>Blog Ops token</span>${renderStatusPill(blogTokenReady ? 'ready' : 'required', blogTokenReady ? 'Ready for publication actions' : 'Required for publishing')}</div>
+        <div class="credential-status-row"><span>Intelligence bridge</span>${renderStatusPill(state.integrationStatus?.helper?.secopsai_intelligence_api ? 'ready' : 'unavailable', state.integrationStatus?.helper?.secopsai_intelligence_api ? 'Server-side bridge available' : 'Unavailable')}</div>
+        <div class="credential-status-row"><span>Sensor credentials</span>${renderStatusPill('server-managed', 'Stored by Edge/Core services')}</div>
+      </div>
+      <p class="small" style="margin:14px 0 0;">Use the Research, Publications, or Automation workspace to enter a session-scoped credential when a protected action requires it. Rotate credentials in the server or local helper, never in this page.</p>`;
   }
   renderIntelligence();
 
@@ -3861,11 +3974,16 @@ function syncIntelligenceTarget() {
   const target = el('intelligence-target-id');
   if (!target) return;
   const suggested = suggestedIntelligenceTarget(action);
-  if (!target.value.trim() || target.dataset.suggested === '1') {
+  const requiresTarget = intelligenceActionNeedsTarget(action);
+  if (!requiresTarget) {
+    // Workspace-wide actions must never inherit a stale finding, case, or arbitrary text.
+    target.value = '';
+    target.dataset.suggested = '0';
+  } else if (!target.value.trim() || target.dataset.suggested === '1') {
     target.value = suggested;
     target.dataset.suggested = suggested ? '1' : '0';
   }
-  target.required = intelligenceActionNeedsTarget(action);
+  target.required = requiresTarget;
   target.placeholder = target.required ? 'Required: select or enter a valid SecOpsAI ID' : 'Not required for workspace prioritization';
   const hint = el('intelligence-request-hint');
   if (hint) hint.textContent = target.required
@@ -4130,10 +4248,24 @@ function blogDraftFilterValue() {
 
 function filteredBlogDrafts() {
   const filter = blogDraftFilterValue();
+  const stream = el('blog-content-filter')?.value || 'all';
   return sortLatestFirst(
-    blogOpsDrafts().filter(draft => filter === 'all' || String(draft.review_status || '') === filter),
+    blogOpsDrafts().filter(draft => {
+      if (filter !== 'all' && String(draft.review_status || '') !== filter) return false;
+      if (stream !== 'all' && blogDraftContentKind(draft) !== stream) return false;
+      return true;
+    }),
     BLOG_DRAFT_LATEST_FIELDS
   );
+}
+
+function blogDraftContentKind(draft = {}) {
+  const explicit = String(draft.content_type || draft.kind || draft.source_type || '').toLowerCase();
+  if (explicit.includes('research') || explicit.includes('advisory')) return 'research';
+  if (draft.research_case_id || draft.case_id || draft.research_case) return 'research';
+  const categories = Array.isArray(draft.categories) ? draft.categories.map(String).join(' ').toLowerCase() : String(draft.categories || '').toLowerCase();
+  if (/research|advisory|malware|supply.?chain/.test(categories)) return 'research';
+  return 'news';
 }
 
 function renderReadinessPill(draft = {}) {
@@ -4550,6 +4682,21 @@ function renderBlogOps() {
   const tokenInput = el('blog-admin-token');
   if (tokenInput && tokenInput.value !== state.blogOps.adminToken) tokenInput.value = state.blogOps.adminToken;
   const status = state.blogOps.status || {};
+  const publicationView = state.blogOps.view || 'review';
+  const publicationViewCopy = {
+    news: ['News intake', 'Collect and prepare external security news. This content is not original SecOpsAI research.'],
+    drafts: ['Drafts', 'Inspect generated editorial drafts and their source references before review.'],
+    review: ['Editorial review', 'Approve, reject, or return public content after checking claims, references, disclosure, and safety.'],
+    published: ['Published output', 'Review delivery state and deployment history for approved public content.']
+  }[publicationView] || ['Editorial review', 'Approve, reject, or return public content after checking claims, references, disclosure, and safety.'];
+  const publicationSummary = el('publication-view-summary');
+  if (publicationSummary) publicationSummary.innerHTML = `<span class="eyebrow">Publication workspace</span><strong>${escapeHtml(publicationViewCopy[0])}</strong><span>${escapeHtml(publicationViewCopy[1])}</span>`;
+  const publicationPage = el('page-blog-ops');
+  if (publicationPage) publicationPage.dataset.publicationView = publicationView;
+  document.querySelectorAll('#page-blog-ops [data-blog-section]').forEach(section => {
+    const allowed = String(section.dataset.blogSection || '').split(/\s+/).filter(Boolean);
+    section.hidden = !allowed.includes(publicationView);
+  });
   renderBlogOpsStats();
   renderBlogDraftList();
   renderBlogDraftPreview();
@@ -7759,6 +7906,9 @@ function renderResearchCaseDetail(researchCase) {
   const rules = researchCase.rules || [];
   const findings = researchCase.findings || [];
   const timeline = researchCase.timeline || [];
+  const pipeline = (researchCase.pipelines || [])[0] || null;
+  const latestReview = (researchCase.publication_reviews || [])[0] || null;
+  const nextAction = researchNextActionForCase(researchCase, pipeline, latestReview);
   host.innerHTML = `
     <div class="research-detail-head">
       <div><div class="detail-eyebrow"><code>${escapeHtml(researchCase.case_id)}</code></div><h3>${escapeHtml(researchCase.title)}</h3><p class="small">Updated ${escapeHtml(fmtDate(researchCase.updated_at))} · ${escapeHtml(statusLabel(researchCase.case_type))}</p></div>
@@ -7767,6 +7917,10 @@ function renderResearchCaseDetail(researchCase) {
     <div class="research-readiness ${readiness.ready ? 'ready' : 'blocked'}">
       <strong>${readiness.ready ? 'Publication ready' : `${(readiness.blockers || []).length} publication blocker(s)`}</strong>
       ${renderBulletList(readiness.ready ? (readiness.warnings || []) : (readiness.blockers || []), readiness.ready ? 'No readiness warnings.' : 'Run the readiness workflow before publication.')}
+    </div>
+    <div class="research-next-action" role="region" aria-labelledby="research-next-action-title">
+      <div><span class="detail-eyebrow">NEXT ACTION</span><h4 id="research-next-action-title">${escapeHtml(nextAction.title)}</h4><p>${escapeHtml(nextAction.reason)}</p></div>
+      ${nextAction.buttonId ? `<button class="primary-btn" id="research-next-action-btn" data-target="${escapeHtml(nextAction.buttonId)}" type="button">${escapeHtml(nextAction.label)}</button>` : ''}
     </div>
     ${renderResearchAutomationPanel(researchCase)}
     ${researchDetailSection('Case workflow', `
@@ -7792,12 +7946,43 @@ function renderResearchCaseDetail(researchCase) {
     ${state.researchCases.lastAction?.error ? `<div class="error">${escapeHtml(state.researchCases.lastAction.error)}</div>` : ''}
   `;
   bindResearchCaseDetailActions(researchCase);
+  el('research-next-action-btn')?.addEventListener('click', () => {
+    const target = el(el('research-next-action-btn').dataset.target);
+    target?.click();
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+
+function researchNextActionForCase(researchCase, pipeline, review) {
+  if (!pipeline) return { title: 'Start evidence collection', label: 'Run investigation pipeline', buttonId: 'research-pipeline-start-btn', reason: 'Collect normalized package metadata, compare the reference, and prepare evidence-linked review items.' };
+  if (pipeline.status === 'awaiting_review') return { title: 'Review agent proposals', label: 'Complete guarded agent review', buttonId: 'research-pipeline-auto-review-btn', reason: 'The pipeline has prepared bounded evidence and an evidence-linked verdict. Review the proposed conclusions before attaching them.' };
+  if (pipeline.status === 'awaiting_input' || pipeline.status === 'failed') return { title: 'Resolve the pipeline blocker', label: pipeline.status === 'failed' ? 'Retry from checkpoint' : 'Add reference and rerun analysis', buttonId: 'research-pipeline-resume-btn', reason: pipeline.error_message || 'The pipeline needs an approved reference package or a retry from its last safe checkpoint.' };
+  if (!review) return { title: 'Generate publication safety review', label: 'Run publication safety check', buttonId: 'research-publication-check-btn', reason: 'Check confidence, evidence completeness, disclosure state, and unsafe disclosure details before drafting public content.' };
+  if (!['reported', 'coordinating', 'disclosed', 'closed', 'not_required'].includes(String(researchCase.disclosure_status || '').toLowerCase())) return { title: 'Prepare responsible disclosure', label: 'Prepare disclosure', buttonId: 'research-disclosure-btn', reason: 'Create a review-only disclosure draft. Sending it remains a separate approval-gated action.' };
+  if (researchCase.status === 'ready_to_publish' && review.status === 'approved') return { title: 'Create the editorial draft', label: 'Create review draft', buttonId: 'research-draft-blog-btn', reason: 'The case has passed its recorded gates. The draft will remain in Blog Ops for final human approval.' };
+  return { title: 'Review the case evidence', label: 'Open evidence matrix', buttonId: 'research-matrix-btn', reason: 'Read the claim-to-evidence mapping and confirm that the current verdict is supported.' };
 }
 
 function renderResearchCases() {
   const tokenInput = el('research-cases-admin-token');
   if (tokenInput && tokenInput.value !== state.researchCases.adminToken) tokenInput.value = state.researchCases.adminToken;
   const cases = state.researchCases.cases || [];
+  const researchView = state.researchCases.view || 'cases';
+  const researchViewCopy = {
+    inbox: ['Discovery inbox', 'Review ranked candidates and decide which leads should become durable investigations.'],
+    cases: ['Research cases', 'Track evidence, analysis, disclosure, publication, and monitoring for each investigation.'],
+    watchlists: ['Watchlists', 'Manage monitored packages, brands, publishers, and namespaces across supported ecosystems.'],
+    disclosure: ['Disclosure', 'Review disclosure state, deadlines, and external communication gates for selected cases.'],
+    sandbox: ['Sandbox jobs', 'Review approval-gated dynamic analysis requests and imported results.']
+  }[researchView] || ['Research cases', 'Track evidence, analysis, disclosure, publication, and monitoring for each investigation.'];
+  const viewSummary = el('research-view-summary');
+  if (viewSummary) viewSummary.innerHTML = `<span class="eyebrow">Research workspace</span><strong>${escapeHtml(researchViewCopy[0])}</strong><span>${escapeHtml(researchViewCopy[1])}</span>`;
+  const page = el('page-research-cases');
+  if (page) page.dataset.researchView = researchView;
+  document.querySelectorAll('#page-research-cases [data-research-section]').forEach(section => {
+    const allowed = String(section.dataset.researchSection || '').split(/\s+/).filter(Boolean);
+    section.hidden = !allowed.includes(researchView);
+  });
   const ready = cases.filter(item => item.status === 'ready_to_publish').length;
   const active = cases.filter(item => !['published', 'closed'].includes(item.status)).length;
   const disclosure = cases.filter(item => ['disclosure_pending'].includes(item.status) || ['reported', 'coordinating'].includes(item.disclosure_status)).length;
@@ -8537,7 +8722,7 @@ function bindEvents() {
   el('blog-edit-modal-close')?.addEventListener('click', closeBlogEditModal);
   el('blog-edit-cancel-btn')?.addEventListener('click', closeBlogEditModal);
   el('blog-edit-save-btn')?.addEventListener('click', (event) => saveBlogDraftEdit(event.currentTarget));
-  ['task-search', 'task-filter-domain', 'task-filter-priority', 'task-filter-status', 'task-filter-owner', 'task-filter-reviewer'].forEach(id => {
+  ['task-filter-scope', 'task-search', 'task-filter-domain', 'task-filter-priority', 'task-filter-status', 'task-filter-owner', 'task-filter-reviewer'].forEach(id => {
     el(id)?.addEventListener('input', renderTasks);
     el(id)?.addEventListener('change', renderTasks);
   });
@@ -8768,6 +8953,7 @@ function bindEvents() {
     setButtonBusy(btn, false);
   });
   el('blog-draft-filter')?.addEventListener('change', renderBlogOps);
+  el('blog-content-filter')?.addEventListener('change', renderBlogOps);
   document.querySelectorAll('.blog-action-btn').forEach(btn => {
     btn.addEventListener('click', () => runBlogOpsAction(btn.dataset.blogAction, { button: btn }));
   });

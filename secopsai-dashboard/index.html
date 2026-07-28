@@ -152,11 +152,11 @@
         <div class="grid cols-3" style="margin-top:18px;" id="mission-overview"></div>
         <div class="grid cols-2" style="margin-top:18px;">
           <div class="card">
-            <h3>Recent dashboard events</h3>
+            <h3>Recent dashboard events <span class="heading-scope">Last 30 days</span></h3>
             <div class="feed" id="mission-events"></div>
           </div>
           <div class="card">
-            <h3>Recent agent runs</h3>
+            <h3>Recent agent runs <span class="heading-scope">Last 30 days</span></h3>
             <div class="feed" id="mission-runs"></div>
           </div>
         </div>
@@ -178,6 +178,7 @@
         </div>
         <div class="small" style="margin-bottom:12px;">Task changes create dashboard events and orchestrator audit runs. The dashboard manages state and visibility; SecOpsAI/OpenClaw runtimes handle actual execution.</div>
         <div class="grid cols-4" style="margin-bottom:18px;">
+          <div class="card"><label><span class="small">Work scope</span><select id="task-filter-scope"><option value="operator" selected>Operator queue</option><option value="all">All work</option></select></label><div class="small" style="margin-top:8px;">Operator queue keeps active, blocked, security, and external work visible. Use All work for delivery history.</div></div>
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
           <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option></select></label></div>
           <div class="card"><label><span class="small">Priority</span><select id="task-filter-priority"><option value="">All</option><option value="urgent">urgent</option><option value="high">high</option><option value="normal">normal</option><option value="low">low</option></select></label></div>
@@ -268,9 +269,11 @@
             <p>Review platform health, runtime integrations, access boundaries, and action history.</p>
           </div>
         </div>
-        <div class="grid cols-4" id="integration-summary"></div>
-        <div class="grid cols-2" id="integration-config" style="margin-top:18px;"></div>
-        <section class="intelligence-console" aria-labelledby="intelligence-title">
+        <div class="system-view-summary" id="system-view-summary" role="status" aria-live="polite"></div>
+        <div class="grid cols-4" id="integration-summary" data-system-section="health"></div>
+        <div class="grid cols-2" id="integration-config" data-system-section="integrations" style="margin-top:18px;"></div>
+        <div class="card" id="system-credentials" data-system-section="credentials" style="margin-top:18px;"></div>
+        <section class="intelligence-console" data-system-section="automation" aria-labelledby="intelligence-title">
           <div class="intelligence-console-head">
             <div>
               <div class="section-kicker">MODEL ASSISTANCE</div>
@@ -362,7 +365,7 @@
             <div id="intelligence-jobs-table"></div>
           </section>
         </section>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Native action queue</h3>
@@ -371,7 +374,7 @@
           </div>
           <div id="run-requests-table"></div>
         </div>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Investigation sessions</h3>
@@ -380,7 +383,7 @@
           </div>
           <div id="native-sessions-table"></div>
         </div>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Selected session</h3>
@@ -389,7 +392,7 @@
           </div>
           <div id="native-session-detail"></div>
         </div>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-system-section="audit" style="margin-top:18px;">
           <h3>Recent orchestrator runs</h3>
           <div id="routes-table"></div>
         </div>
@@ -406,6 +409,7 @@
             <button class="secondary-btn" id="research-cases-refresh-btn" type="button">Refresh cases</button>
           </div>
         </div>
+        <div class="research-view-summary" id="research-view-summary" role="status" aria-live="polite"></div>
 
         <form class="card research-auth-card" onsubmit="return false;">
           <div>
@@ -434,7 +438,7 @@
           <div class="research-form-actions"><button class="primary-btn" id="research-create-submit-btn" type="button">Create case</button></div>
         </details>
 
-        <section class="card research-watchlist-panel" aria-labelledby="research-watchlist-title">
+        <section class="card research-watchlist-panel" data-research-section="inbox watchlists" aria-labelledby="research-watchlist-title">
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-watchlist-title">Promote from package watchlist</h3>
@@ -453,7 +457,7 @@
           <div class="research-watchlist-result" id="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <section class="card research-discovery-panel" aria-labelledby="research-discovery-title">
+        <section class="card research-discovery-panel" data-research-section="inbox watchlists" aria-labelledby="research-discovery-title">
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-discovery-title">Research discovery</h3>
@@ -479,7 +483,7 @@
           <div id="research-discovery-candidates" class="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <div class="grid cols-2 research-case-layout">
+        <div class="grid cols-2 research-case-layout" data-research-section="cases disclosure sandbox">
           <div class="card research-case-list-panel">
             <div class="research-list-head"><div><h3>Case queue</h3><p class="small">Select a case to review its evidence and workflow.</p></div></div>
             <div class="research-case-filters">
@@ -502,6 +506,7 @@
           </div>
           <div class="status-pill" id="blog-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh Blog Ops</div>
         </div>
+        <div class="publication-view-summary" id="publication-view-summary" role="status" aria-live="polite"></div>
 
         <div class="card blog-auth-card">
           <div>
@@ -517,7 +522,7 @@
 
         <div class="grid cols-5" id="blog-ops-stats" style="margin-top:18px;"></div>
 
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-blog-section="news" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Actions</h3>
@@ -535,23 +540,32 @@
           </div>
         </div>
 
-        <div class="grid cols-2" style="margin-top:18px;">
+        <div class="grid cols-2" data-blog-section="drafts review" style="margin-top:18px;">
           <div class="card">
             <div class="page-header compact-header">
               <div>
                 <h3 style="margin:0;">Draft review queue</h3>
                 <p class="small" style="margin:6px 0 0;">Select a draft to preview source-backed content and approve or reject it.</p>
               </div>
-              <label class="blog-filter-label"><span class="small">Status</span>
-                <select id="blog-draft-filter">
-                  <option value="all">All</option>
-                  <option value="needs_review">Needs review</option>
-                  <option value="approved">Approved</option>
-                  <option value="reviewed">Reviewed</option>
-                  <option value="deployed">Deployed</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </label>
+              <div class="blog-filter-group">
+                <label class="blog-filter-label"><span class="small">Content stream</span>
+                  <select id="blog-content-filter">
+                    <option value="all">All streams</option>
+                    <option value="research">Original research</option>
+                    <option value="news">External news</option>
+                  </select>
+                </label>
+                <label class="blog-filter-label"><span class="small">Status</span>
+                  <select id="blog-draft-filter">
+                    <option value="all">All</option>
+                    <option value="needs_review">Needs review</option>
+                    <option value="approved">Approved</option>
+                    <option value="reviewed">Reviewed</option>
+                    <option value="deployed">Deployed</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <div id="blog-draft-list"></div>
           </div>
@@ -561,7 +575,7 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-blog-section="published" style="margin-top:18px;">
           <h3>Recent Blog Ops workflow runs</h3>
           <div id="blog-workflow-runs"></div>
         </div>
