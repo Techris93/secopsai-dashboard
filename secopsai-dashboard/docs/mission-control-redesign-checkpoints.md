@@ -28,6 +28,7 @@ This ledger records the product redesign in verified, reversible checkpoints.
 - Status: in progress
 - Goal: move model selection and autonomous triage into a dedicated Automation surface.
 - Evidence: `system/automation` now isolates model selection, bridge controls, analysis requests, autonomous triage, and tuning proposals from health and audit views.
+- Evidence: Findings rows now expose `Review` as the primary action and place task, investigation, and command-copy actions behind `More`.
 - Acceptance: model decisions, guardrails, reversibility, and audit history are understandable without exposing service internals.
 
 ## Checkpoint 4: Responsive and accessible console

@@ -547,6 +547,33 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
   line-height: 1.35;
   letter-spacing: 0.02em;
 }
+.professional-ui .finding-actions { align-items: flex-start; }
+.professional-ui .inline-action-menu { position: relative; }
+.professional-ui .inline-action-menu summary {
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #40515f;
+  border-radius: 3px;
+  color: #cbd7df;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+.professional-ui .inline-action-menu summary::-webkit-details-marker { display: none; }
+.professional-ui .inline-action-menu > div {
+  position: absolute;
+  right: 0;
+  z-index: 10;
+  display: grid;
+  min-width: 190px;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid #40515f;
+  border-radius: 4px;
+  background: #151e25;
+  box-shadow: 0 12px 26px rgba(0,0,0,.28);
+}
+.professional-ui .inline-action-menu button { width: 100%; text-align: left; }
 .professional-ui #page-research-cases [hidden] { display: none !important; }
 
 @media (max-width: 720px) {

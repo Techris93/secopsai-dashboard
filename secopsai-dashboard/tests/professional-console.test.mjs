@@ -53,6 +53,8 @@ assert.match(app, /Workspace-wide actions must never inherit a stale finding/);
 assert.match(app, /data-intelligence-requeue/);
 assert.match(app, /data-intelligence-review/);
 assert.match(app, /Open full analysis/);
+assert.match(app, /finding-actions/);
+assert.match(app, />Review<\/button>/);
 assert.match(app, /Full model analysis copied/);
 assert.match(app, /runIntelligenceAction\('requeue', \{ job_id: requeueButton\.dataset\.intelligenceRequeue \}/);
 assert.match(app, /id="research-pipeline-auto-review-btn"/);
