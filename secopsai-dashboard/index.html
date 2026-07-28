@@ -89,6 +89,7 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M8 8h8"></path><path d="M8 12h8"></path><path d="M8 16h5"></path><circle cx="17" cy="16" r="1"></circle></svg></span>
           <span class="nav-copy"><span class="title">Assets</span><span class="desc">Inventory, sensors, and changes</span></span>
         </button>
+        <div class="nav-group-label">Administration</div>
         <button class="nav-btn" data-page="tasks" data-route="work">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="m4 6 1 1 2-2"></path><path d="m4 12 1 1 2-2"></path><path d="m4 18 1 1 2-2"></path></svg></span>
           <span class="nav-copy"><span class="title">Work</span><span class="desc">Tasks, approvals, and runs</span></span>
@@ -105,6 +106,10 @@
         </button>
 
         <div class="nav-group-label">Administration</div>
+        <button class="nav-btn" data-page="integrations" data-route="system/automation">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18"></path><path d="M3 12h18"></path><circle cx="12" cy="12" r="7"></circle></svg></span>
+          <span class="nav-copy"><span class="title">Automation</span><span class="desc">Models, policies, and review</span></span>
+        </button>
         <button class="nav-btn" data-page="integrations" data-route="system">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4Z"></path><path d="M9 12h6"></path><path d="M12 9v6"></path></svg></span>
           <span class="nav-copy"><span class="title">System</span><span class="desc">Health, access, and integrations</span></span>
@@ -150,6 +155,10 @@
         <div class="operations-cockpit" id="mission-attention"></div>
         <div class="grid cols-5" id="mission-stats"></div>
         <div class="grid cols-3" style="margin-top:18px;" id="mission-overview"></div>
+        <div class="card mission-queues-card" style="margin-top:18px;">
+          <div class="page-header compact-header"><div><h3 style="margin:0;">Research operations queues</h3><p class="small" style="margin:6px 0 0;">The next decisions for discovery, validation, disclosure, publication, and degraded coverage.</p></div></div>
+          <div class="mission-queues" id="mission-research-queues" role="status" aria-live="polite"></div>
+        </div>
         <div class="grid cols-2" style="margin-top:18px;">
           <div class="card">
             <h3>Recent dashboard events <span class="heading-scope">Last 30 days</span></h3>
@@ -168,7 +177,7 @@
             <h2>Work</h2>
             <p>Own remediation, approvals, investigations, and execution runs in one operational queue.</p>
           </div>
-          <div class="page-actions">
+        <div class="page-actions">
             <div class="view-switcher" role="group" aria-label="Work view">
               <button class="view-switch-btn active" id="work-table-view-btn" type="button">Table</button>
               <button class="view-switch-btn" id="work-board-view-btn" type="button">Board</button>
@@ -232,25 +241,30 @@
           <div class="page-actions">
             <a class="secondary-btn" id="edge-admin-link" href="#" target="_blank" rel="noopener" hidden>Open sensor admin</a>
             <button class="status-pill" id="edge-refresh-btn" type="button"><span class="dot"></span> Refresh Edge</button>
-          </div>
         </div>
+      </div>
+        <div class="asset-view-summary" id="asset-view-summary" role="status" aria-live="polite"></div>
         <div class="card edge-health" id="edge-health"></div>
         <div class="grid cols-5" id="edge-stats" style="margin-top:18px;"></div>
         <div class="grid cols-2" style="margin-top:18px;">
-          <div class="card">
+          <div class="card" data-edge-section="sensors">
             <h3>Sensors</h3>
             <div class="edge-table" id="edge-sensors"></div>
           </div>
-          <div class="card">
+          <div class="card" data-edge-section="schedules">
             <h3>Scans & schedules</h3>
             <div class="edge-table" id="edge-schedules"></div>
           </div>
         </div>
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-edge-section="inventory" style="margin-top:18px;">
           <h3>Inventory</h3>
           <div class="edge-table" id="edge-assets"></div>
         </div>
-        <div class="grid cols-2" style="margin-top:18px;">
+        <div class="card" data-edge-section="inventory" style="margin-top:18px;">
+          <h3>Asset detail</h3>
+          <div id="edge-asset-detail"><div class="empty">Select an asset to inspect its observations, services, findings, and history.</div></div>
+        </div>
+        <div class="grid cols-2" data-edge-section="inventory changes" style="margin-top:18px;">
           <div class="card">
             <h3>Related findings</h3>
             <div class="edge-table" id="edge-findings"></div>
@@ -259,6 +273,16 @@
             <h3>Changes since last sync</h3>
             <div id="edge-changes"></div>
           </div>
+        </div>
+        <div class="card" data-edge-section="changes" style="margin-top:18px;">
+          <h3>Change timeline</h3>
+          <p class="small">A chronological view of new, missing, and changed network observations.</p>
+          <div id="edge-change-timeline"></div>
+        </div>
+        <div class="card" data-edge-section="wifi" style="margin-top:18px;">
+          <h3>Wi-Fi observations</h3>
+          <p class="small">Wireless observations are shown only when the sensor reports them. An empty view is not proof that the network is clean.</p>
+          <div id="edge-wifi"></div>
         </div>
       </section>
 
@@ -483,7 +507,22 @@
           <div id="research-discovery-candidates" class="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <div class="grid cols-2 research-case-layout" data-research-section="cases disclosure sandbox">
+        <section class="card research-stage-panel" data-research-section="inbox" aria-labelledby="research-inbox-title">
+          <div class="page-header compact-header"><div><h3 id="research-inbox-title" style="margin:0;">Discovery inbox</h3><p class="small" style="margin:6px 0 0;">Candidates are ranked by explainable similarity and evidence completeness. Review the reason before creating a case.</p></div><button class="secondary-btn" id="research-inbox-refresh-btn" type="button">Refresh candidates</button></div>
+          <div id="research-inbox-candidates" class="research-inbox-grid" role="status" aria-live="polite"></div>
+        </section>
+
+        <section class="card research-stage-panel" data-research-section="disclosure" aria-labelledby="research-disclosure-title">
+          <div class="page-header compact-header"><div><h3 id="research-disclosure-title" style="margin:0;">Disclosure queue</h3><p class="small" style="margin:6px 0 0;">Prepare and track external communication. Sending remains approval-gated.</p></div></div>
+          <div id="research-disclosure-queue"></div>
+        </section>
+
+        <section class="card research-stage-panel" data-research-section="sandbox" aria-labelledby="research-sandbox-title">
+          <div class="page-header compact-header"><div><h3 id="research-sandbox-title" style="margin:0;">Sandbox jobs</h3><p class="small" style="margin:6px 0 0;">Review dynamic-analysis requests, approvals, provider state, and imported results.</p></div></div>
+          <div id="research-sandbox-queue"></div>
+        </section>
+
+        <div class="grid cols-2 research-case-layout" data-research-section="cases">
           <div class="card research-case-list-panel">
             <div class="research-list-head"><div><h3>Case queue</h3><p class="small">Select a case to review its evidence and workflow.</p></div></div>
             <div class="research-case-filters">
@@ -540,7 +579,7 @@
           </div>
         </div>
 
-        <div class="grid cols-2" data-blog-section="drafts review" style="margin-top:18px;">
+        <div class="grid cols-2" data-blog-section="drafts review research advisories news" style="margin-top:18px;">
           <div class="card">
             <div class="page-header compact-header">
               <div>
@@ -552,6 +591,7 @@
                   <select id="blog-content-filter">
                     <option value="all">All streams</option>
                     <option value="research">Original research</option>
+                    <option value="advisories">Advisories</option>
                     <option value="news">External news</option>
                   </select>
                 </label>

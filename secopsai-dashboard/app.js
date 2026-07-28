@@ -133,6 +133,8 @@ const state = {
     serviceOutput: ''
   },
   edgeWorkspace: {
+    view: 'inventory',
+    selectedAssetId: null,
     data: null,
     loading: false,
     error: null
@@ -256,6 +258,8 @@ const RESEARCH_VIEW_ROUTES = Object.freeze({
   sandbox: 'research/sandbox'
 });
 const BLOG_VIEW_ROUTES = Object.freeze({
+  research: 'publications/research',
+  advisories: 'publications/advisories',
   news: 'publications/news',
   drafts: 'publications/drafts',
   review: 'publications/review',
@@ -268,11 +272,19 @@ const SYSTEM_VIEW_ROUTES = Object.freeze({
   credentials: 'system/credentials',
   audit: 'system/audit'
 });
+const ASSET_VIEW_ROUTES = Object.freeze({
+  inventory: 'assets/inventory',
+  changes: 'assets/changes',
+  sensors: 'assets/sensors',
+  schedules: 'assets/schedules',
+  wifi: 'assets/wifi'
+});
 const ROUTE_PAGES = Object.freeze({
   ...Object.fromEntries(Object.entries(PAGE_ROUTES).map(([page, route]) => [route, page])),
   ...Object.fromEntries(Object.entries(RESEARCH_VIEW_ROUTES).map(([, route]) => [route, 'research-cases'])),
   ...Object.fromEntries(Object.entries(BLOG_VIEW_ROUTES).map(([, route]) => [route, 'blog-ops'])),
-  ...Object.fromEntries(Object.entries(SYSTEM_VIEW_ROUTES).map(([, route]) => [route, 'integrations']))
+  ...Object.fromEntries(Object.entries(SYSTEM_VIEW_ROUTES).map(([, route]) => [route, 'integrations'])),
+  ...Object.fromEntries(Object.entries(ASSET_VIEW_ROUTES).map(([, route]) => [route, 'edge']))
 });
 const TOP_NAV_PAGE = Object.freeze({
   "mission-control": "mission-control",
@@ -306,11 +318,11 @@ const CONTEXT_NAV = Object.freeze({
     ["AI dependencies", "findings"]
   ],
   "edge": [
-    ["Inventory", "edge"],
-    ["Changes", "edge"],
-    ["Sensors", "edge"],
-    ["Scans & schedules", "edge"],
-    ["Wi-Fi", "edge"]
+    ["Inventory", "edge", ASSET_VIEW_ROUTES.inventory],
+    ["Changes", "edge", ASSET_VIEW_ROUTES.changes],
+    ["Sensors", "edge", ASSET_VIEW_ROUTES.sensors],
+    ["Scans & schedules", "edge", ASSET_VIEW_ROUTES.schedules],
+    ["Wi-Fi", "edge", ASSET_VIEW_ROUTES.wifi]
   ],
   "tasks": [
     ["My work", "tasks"],
@@ -335,6 +347,8 @@ const CONTEXT_NAV = Object.freeze({
     ["Cases", "research-cases"]
   ],
   "blog-ops": [
+    ["Original research", "blog-ops", BLOG_VIEW_ROUTES.research],
+    ["Advisories", "blog-ops", BLOG_VIEW_ROUTES.advisories],
     ["News intake", "blog-ops", BLOG_VIEW_ROUTES.news],
     ["Drafts", "blog-ops", BLOG_VIEW_ROUTES.drafts],
     ["Review", "blog-ops", BLOG_VIEW_ROUTES.review],
@@ -1159,10 +1173,17 @@ function systemViewForRoute(route) {
   return match?.[0] || 'health';
 }
 
+function assetViewForRoute(route) {
+  const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const match = Object.entries(ASSET_VIEW_ROUTES).find(([, value]) => value === normalized);
+  return match?.[0] || 'inventory';
+}
+
 function routeForPage(pageId) {
   if (pageId === 'research-cases') return RESEARCH_VIEW_ROUTES[state.researchCases.view || 'cases'] || RESEARCH_VIEW_ROUTES.cases;
   if (pageId === 'blog-ops') return BLOG_VIEW_ROUTES[state.blogOps.view || 'review'] || BLOG_VIEW_ROUTES.review;
   if (pageId === 'integrations') return SYSTEM_VIEW_ROUTES[state.integrationView || 'health'] || SYSTEM_VIEW_ROUTES.health;
+  if (pageId === 'edge') return ASSET_VIEW_ROUTES[state.edgeWorkspace.view || 'inventory'] || ASSET_VIEW_ROUTES.inventory;
   return PAGE_ROUTES[pageId] || PAGE_ROUTES.mission-control;
 }
 
@@ -1176,6 +1197,9 @@ function currentPageFromLocation() {
   }
   if (String(route).replace(/^#\/?/, '').startsWith('system/')) {
     state.integrationView = systemViewForRoute(route);
+  }
+  if (String(route).replace(/^#\/?/, '').startsWith('assets/')) {
+    state.edgeWorkspace.view = assetViewForRoute(route);
   }
   return pageIdForRoute(route);
 }
@@ -1292,13 +1316,22 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   if (normalizedPageId === 'research-cases' && routeOverride) state.researchCases.view = researchViewForRoute(routeOverride);
   if (normalizedPageId === 'blog-ops' && routeOverride) state.blogOps.view = blogViewForRoute(routeOverride);
   if (normalizedPageId === 'integrations' && routeOverride) state.integrationView = systemViewForRoute(routeOverride);
+  if (normalizedPageId === 'edge' && routeOverride) state.edgeWorkspace.view = assetViewForRoute(routeOverride);
   pages.forEach((id) => {
     const page = el(`page-${id}`);
     if (page) page.classList.toggle("active", id === normalizedPageId);
   });
   const activeTopPage = TOP_NAV_PAGE[normalizedPageId] || normalizedPageId;
+  const activeRoute = routeOverride || routeForPage(normalizedPageId);
   document.querySelectorAll(".nav-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.page === activeTopPage);
+    const buttonRoute = String(btn.dataset.route || '');
+    const matchesPage = btn.dataset.page === activeTopPage;
+    const matchesExactRoute = buttonRoute && buttonRoute.includes('/') && buttonRoute === activeRoute;
+    const matchesSystemFallback = buttonRoute === 'system' && activeRoute !== SYSTEM_VIEW_ROUTES.automation;
+    const matchesResearchFallback = buttonRoute === 'research/cases' && activeRoute.startsWith('research/');
+    const matchesPublicationFallback = buttonRoute === 'publications' && activeRoute.startsWith('publications/');
+    const matchesAssetFallback = buttonRoute === 'assets' && activeRoute.startsWith('assets/');
+    btn.classList.toggle("active", matchesPage && (matchesExactRoute || matchesSystemFallback || matchesResearchFallback || matchesPublicationFallback || matchesAssetFallback || !buttonRoute.includes('/')));
   });
   document.body.classList.remove('mobile-nav-open');
   el('mobile-menu-btn')?.setAttribute('aria-expanded', 'false');
@@ -1307,6 +1340,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   if (normalizedPageId === 'research-cases') renderResearchCases();
   if (normalizedPageId === 'blog-ops') renderBlogOps();
   if (normalizedPageId === 'integrations') renderIntegrations();
+  if (normalizedPageId === 'edge') renderEdgeWorkspace();
   if (!skipHistory && window.history?.pushState) {
     const nextHash = `#${routeOverride || routeForPage(normalizedPageId)}`;
     if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);
@@ -2528,6 +2562,25 @@ function renderMissionControl() {
     el('mc-native-triage')?.addEventListener('click', () => setPage('findings'));
   }
 
+  const queueHost = el('mission-research-queues');
+  if (queueHost) {
+    const candidates = Array.isArray(state.researchCases.discovery?.candidates) ? state.researchCases.discovery.candidates : [];
+    const cases = Array.isArray(state.researchCases.cases) ? state.researchCases.cases : [];
+    const validationBlockers = cases.filter(item => ['validation', 'awaiting_input', 'blocked'].includes(String(item.status || '').toLowerCase())).length;
+    const disclosureDeadlines = cases.filter(item => ['disclosure_pending', 'coordinating'].includes(String(item.status || '').toLowerCase())).length;
+    const publishReady = cases.filter(item => String(item.status || '').toLowerCase() === 'ready_to_publish').length;
+    const coverageGaps = Array.isArray(state.coverage.collectors) ? state.coverage.collectors.filter(item => coverageCollectorHealth(item) !== 'Healthy').length : 0;
+    const queueItems = [
+      ['New candidates', candidates.length, 'Review explainable registry leads', 'research/inbox'],
+      ['Validation blockers', validationBlockers, 'Collect or review missing evidence', 'research/cases'],
+      ['Disclosure coordination', disclosureDeadlines, 'Prepare approved external contact', 'research/disclosure'],
+      ['Publication ready', publishReady, 'Open editorial safety review', 'publications/review'],
+      ['Degraded collectors', coverageGaps, 'Inspect registry coverage health', 'research/coverage']
+    ];
+    queueHost.innerHTML = queueItems.map(([label, value, detail, route]) => `<button class="mission-queue" type="button" data-queue-route="${escapeHtml(route)}"><span class="mission-queue-count">${escapeHtml(String(value))}</span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></button>`).join('');
+    queueHost.querySelectorAll('[data-queue-route]').forEach(button => button.addEventListener('click', () => setPage(pageIdForRoute(button.dataset.queueRoute), { routeOverride: button.dataset.queueRoute })));
+  }
+
   const activitySince = Date.now() - (30 * 24 * 60 * 60 * 1000);
   const recentFeed = [...state.events]
     .filter(event => Number.isFinite(new Date(event.created_at).getTime()) && new Date(event.created_at).getTime() >= activitySince)
@@ -2538,8 +2591,7 @@ function renderMissionControl() {
     eventsEl.innerHTML = recentFeed.length ? recentFeed.map(ev => `
       <div class="feed-item" style="border-left-color:${ev.severity === 'error' ? '#ef4444' : ev.severity === 'success' ? '#10b981' : ev.severity === 'warning' ? '#f59e0b' : '#06b6d4'}">
         <div><strong>${escapeHtml(ev.title)}</strong></div>
-        <div class="small">${escapeHtml(compactText(ev.body || '', 180))}</div>
-        <div class="meta">${escapeHtml(ev.event_type)} • ${fmtDate(ev.created_at)}</div>
+        <div class="meta">${escapeHtml(ev.event_type || 'activity')} • ${fmtDate(ev.created_at)}</div>
       </div>
     `).join("") : `<div class="empty">No dashboard events yet.</div>`;
   }
@@ -2800,7 +2852,7 @@ function renderFindings() {
     } else {
       table.innerHTML = `
         ${renderAiDependencyGuardSurface(findings)}
-        <div class="table-wrap"><table>
+        <div class="table-wrap"><table class="mobile-card-table">
           <thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Correlation</th><th>Linked work</th><th>Actions</th></tr></thead>
           <tbody>${findings.map(f => {
             const related = relatedTasksForFinding(f);
@@ -2808,12 +2860,12 @@ function renderFindings() {
             const normalizedFindingId = findingId(f);
             const selected = String(state.selectedFindingId) === String(normalizedFindingId);
             return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(normalizedFindingId || '')}">
-              <td><strong>${escapeHtml(findingTitle(f))}</strong><span class="finding-origin ${findingRecordOrigin(f)}">${findingRecordOrigin(f) === 'core' ? 'Core canonical' : 'Dashboard'}</span><div class="small">${escapeHtml(displayFindingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(compactText(findingBody(f), 120))}</div></td>
-              <td><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
-              <td>${renderStatusPill(String(effectiveFindingStatus(f)).toLowerCase(), humanizeSnake(effectiveFindingStatus(f)))}</td>
-              <td>${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
-              <td>${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
-              <td><div class="task-card-actions finding-actions"><button class="primary-btn mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Review</button><details class="inline-action-menu"><summary>More</summary><div><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-run-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Investigate now</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate command</button></div></details></div></td>
+              <td data-label="Finding"><strong>${escapeHtml(findingTitle(f))}</strong><span class="finding-origin ${findingRecordOrigin(f)}">${findingRecordOrigin(f) === 'core' ? 'Core canonical' : 'Dashboard'}</span><div class="small">${escapeHtml(displayFindingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(compactText(findingBody(f), 120))}</div></td>
+              <td data-label="Severity"><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
+              <td data-label="Status">${renderStatusPill(String(effectiveFindingStatus(f)).toLowerCase(), humanizeSnake(effectiveFindingStatus(f)))}</td>
+              <td data-label="Correlation">${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
+              <td data-label="Linked work">${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
+              <td data-label="Actions"><div class="task-card-actions finding-actions"><button class="primary-btn mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Review</button><details class="inline-action-menu"><summary>More</summary><div><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-run-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Investigate now</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate command</button></div></details></div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
@@ -4261,10 +4313,12 @@ function filteredBlogDrafts() {
 
 function blogDraftContentKind(draft = {}) {
   const explicit = String(draft.content_type || draft.kind || draft.source_type || '').toLowerCase();
-  if (explicit.includes('research') || explicit.includes('advisory')) return 'research';
+  if (explicit.includes('advisory')) return 'advisories';
+  if (explicit.includes('research')) return 'research';
   if (draft.research_case_id || draft.case_id || draft.research_case) return 'research';
   const categories = Array.isArray(draft.categories) ? draft.categories.map(String).join(' ').toLowerCase() : String(draft.categories || '').toLowerCase();
-  if (/research|advisory|malware|supply.?chain/.test(categories)) return 'research';
+  if (/advisory/.test(categories)) return 'advisories';
+  if (/research|malware|supply.?chain/.test(categories)) return 'research';
   return 'news';
 }
 
@@ -4684,6 +4738,8 @@ function renderBlogOps() {
   const status = state.blogOps.status || {};
   const publicationView = state.blogOps.view || 'review';
   const publicationViewCopy = {
+    research: ['Original research', 'Prepare and review evidence-led SecOpsAI investigations for publication.'],
+    advisories: ['Advisories', 'Publish confirmed defensive guidance, indicators, and mitigations with explicit review.'],
     news: ['News intake', 'Collect and prepare external security news. This content is not original SecOpsAI research.'],
     drafts: ['Drafts', 'Inspect generated editorial drafts and their source references before review.'],
     review: ['Editorial review', 'Approve, reject, or return public content after checking claims, references, disclosure, and safety.'],
@@ -4693,6 +4749,8 @@ function renderBlogOps() {
   if (publicationSummary) publicationSummary.innerHTML = `<span class="eyebrow">Publication workspace</span><strong>${escapeHtml(publicationViewCopy[0])}</strong><span>${escapeHtml(publicationViewCopy[1])}</span>`;
   const publicationPage = el('page-blog-ops');
   if (publicationPage) publicationPage.dataset.publicationView = publicationView;
+  const contentFilter = el('blog-content-filter');
+  if (contentFilter && ['research', 'advisories', 'news'].includes(publicationView) && document.activeElement !== contentFilter) contentFilter.value = publicationView === 'news' ? 'news' : publicationView;
   document.querySelectorAll('#page-blog-ops [data-blog-section]').forEach(section => {
     const allowed = String(section.dataset.blogSection || '').split(/\s+/).filter(Boolean);
     section.hidden = !allowed.includes(publicationView);
@@ -6935,8 +6993,46 @@ function flattenCoreGraphNode(node) {
   return { ...properties, ...node, id: node?.source_id || node?.node_id || properties.id };
 }
 
+function edgeAssetKey(asset = {}) {
+  return String(asset.asset_id || asset.id || asset.ip_address || asset.label || '').trim();
+}
+
+function renderEdgeAssetDetail(assets = [], findings = [], changes = {}) {
+  const host = el('edge-asset-detail');
+  if (!host) return;
+  const selected = assets.find(item => edgeAssetKey(item) === String(state.edgeWorkspace.selectedAssetId || ''));
+  if (!selected) {
+    host.innerHTML = '<div class="empty">Select an asset to inspect its observations, services, findings, and history.</div>';
+    return;
+  }
+  const key = edgeAssetKey(selected);
+  const relatedFindings = findings.filter(item => String(item.asset_id || item.ip_address || item.asset || '') === key || String(item.summary || '').includes(key));
+  const assetChanges = [...(Array.isArray(changes.nodes) ? changes.nodes : []), ...(Array.isArray(changes.edges) ? changes.edges : [])].filter(item => String(item.asset_id || item.node_id || item.source_id || item.label || '').includes(key));
+  const services = Array.isArray(selected.services) ? selected.services : (Array.isArray(selected.open_ports) ? selected.open_ports : []);
+  host.innerHTML = `<div class="finding-detail-header"><div><div class="detail-eyebrow">Network asset</div><h4>${escapeHtml(selected.hostname || selected.ip_address || selected.label || key)}</h4><p class="small"><code>${escapeHtml(selected.ip_address || key)}</code> · ${escapeHtml(selected.vendor || 'Unknown vendor')} · ${escapeHtml(selected.device_type || selected.os_guess || 'Unknown type')}</p></div>${renderStatusPill(selected.status || 'active')}</div>
+    <div class="kv-list"><div class="kv-row"><span class="kv-key">Last seen</span><span class="kv-val">${escapeHtml(fmtDate(selected.last_seen || selected.last_seen_at))}</span></div><div class="kv-row"><span class="kv-key">Services</span><span class="kv-val">${escapeHtml(String(services.length || selected.port_count || 0))}</span></div><div class="kv-row"><span class="kv-key">Related findings</span><span class="kv-val">${escapeHtml(String(relatedFindings.length))}</span></div></div>
+    <div class="asset-detail-columns"><div><h5>Services</h5>${services.length ? `<ul class="compact-list">${services.slice(0, 30).map(item => `<li>${escapeHtml(typeof item === 'object' ? `${item.protocol || 'tcp'}/${item.port || item.service || 'unknown'}` : String(item))}</li>`).join('')}</ul>` : '<div class="small">No service observations recorded.</div>'}</div><div><h5>History</h5>${assetChanges.length ? `<ul class="compact-list">${assetChanges.slice(0, 20).map(item => `<li>${escapeHtml(item.type || item.edge_type || 'Observation')} · ${escapeHtml(fmtDate(item.updated_at || item.observed_at || item.created_at))}</li>`).join('')}</ul>` : '<div class="small">No asset-specific changes recorded.</div>'}</div></div>
+    ${relatedFindings.length ? `<h5>Related findings</h5>${relatedFindings.slice(0, 10).map(item => `<div class="feed-item compact-feed-item"><strong>${escapeHtml(item.title || item.rule_name || item.finding_id || 'Finding')}</strong><div class="small">${escapeHtml(statusLabel(item.status || 'open'))} · ${escapeHtml(item.summary || '')}</div></div>`).join('')}` : ''}`;
+}
+
 function renderEdgeWorkspace() {
   const workspace = state.edgeWorkspace.data;
+  const assetView = state.edgeWorkspace.view || 'inventory';
+  const assetViewCopy = {
+    inventory: ['Asset inventory', 'Review the current device inventory and its related Core findings.'],
+    changes: ['Network changes', 'Trace new devices, missing devices, service changes, and observation history.'],
+    sensors: ['Sensors', 'Check sensor connectivity, runtime state, version, and last error.'],
+    schedules: ['Scans and schedules', 'Review recurring scan coverage and active scan jobs.'],
+    wifi: ['Wi-Fi observations', 'Review reported wireless networks, BSSIDs, channels, and encryption state.']
+  }[assetView] || ['Asset inventory', 'Review the current device inventory and its related Core findings.'];
+  const assetSummary = el('asset-view-summary');
+  if (assetSummary) assetSummary.innerHTML = `<span class="eyebrow">Asset workspace</span><strong>${escapeHtml(assetViewCopy[0])}</strong><span>${escapeHtml(assetViewCopy[1])}</span>`;
+  const assetPage = el('page-edge');
+  if (assetPage) assetPage.dataset.assetView = assetView;
+  document.querySelectorAll('#page-edge [data-edge-section]').forEach(section => {
+    const allowed = String(section.dataset.edgeSection || '').split(/\s+/).filter(Boolean);
+    section.hidden = !allowed.includes(assetView);
+  });
   const core = workspace?.core || {};
   const edge = workspace?.edge || {};
   const assets = Array.isArray(core.assets) ? core.assets : [];
@@ -7005,7 +7101,11 @@ function renderEdgeWorkspace() {
   if (scheduleHost) scheduleHost.innerHTML = schedules.length || jobs.length ? `<div class="table-wrap"><table><thead><tr><th>Name / target</th><th>State</th><th>Next / updated</th></tr></thead><tbody>${schedules.map(item => `<tr><td><strong>${escapeHtml(item.name || 'Schedule')}</strong><div class="small">${escapeHtml(item.target_cidr || '')}</div></td><td>${renderStatusPill(item.enabled === false ? 'blocked' : 'completed', item.enabled === false ? 'Disabled' : item.frequency || 'Enabled')}</td><td>${escapeHtml(fmtDate(item.next_run_at))}</td></tr>`).join('')}${jobs.filter(item => ['queued', 'claimed', 'running'].includes(String(item.status || '').toLowerCase())).map(item => `<tr><td><strong>Scan job</strong><div class="small">${escapeHtml(item.target_cidr || item.id)}</div></td><td>${renderStatusPill(item.status || 'queued')}</td><td>${escapeHtml(fmtDate(item.updated_at || item.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No schedules or active scan jobs loaded.</div>';
 
   const assetHost = el('edge-assets');
-  if (assetHost) assetHost.innerHTML = assets.length ? `<div class="table-wrap"><table><thead><tr><th>IP address</th><th>Hostname</th><th>Vendor / type</th><th>Status</th><th>Last seen</th></tr></thead><tbody>${assets.map(asset => `<tr><td><code>${escapeHtml(asset.ip_address || asset.label || 'unknown')}</code></td><td>${escapeHtml(asset.hostname || 'Unknown')}</td><td>${escapeHtml(asset.vendor || 'Unknown')}<div class="small">${escapeHtml(asset.device_type || '')}</div></td><td>${renderStatusPill(asset.status || 'unknown')}</td><td>${escapeHtml(fmtDate(asset.last_seen))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No Edge assets are present in the Core graph yet.</div>';
+  if (assetHost) {
+    assetHost.innerHTML = assets.length ? `<div class="table-wrap"><table class="mobile-card-table"><thead><tr><th>IP address</th><th>Hostname</th><th>Vendor / type</th><th>Status</th><th>Last seen</th><th>Action</th></tr></thead><tbody>${assets.map(asset => `<tr><td data-label="IP address"><code>${escapeHtml(asset.ip_address || asset.label || 'unknown')}</code></td><td data-label="Hostname">${escapeHtml(asset.hostname || 'Unknown')}</td><td data-label="Vendor / type">${escapeHtml(asset.vendor || 'Unknown')}<div class="small">${escapeHtml(asset.device_type || '')}</div></td><td data-label="Status">${renderStatusPill(asset.status || 'unknown')}</td><td data-label="Last seen">${escapeHtml(fmtDate(asset.last_seen))}</td><td data-label="Action"><button class="mini-btn edge-asset-select-btn" data-asset-id="${escapeHtml(edgeAssetKey(asset))}" type="button">Inspect</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No Edge assets are present in the Core graph yet.</div>';
+    assetHost.querySelectorAll('.edge-asset-select-btn').forEach(button => button.addEventListener('click', () => { state.edgeWorkspace.selectedAssetId = button.dataset.assetId; renderEdgeAssetDetail(assets, findings, changes); }));
+  }
+  renderEdgeAssetDetail(assets, findings, changes);
 
   const findingHost = el('edge-findings');
   if (findingHost) findingHost.innerHTML = findings.length ? `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Last seen</th></tr></thead><tbody>${findings.slice(0, 100).map(finding => `<tr><td><strong>${escapeHtml(finding.title || finding.rule_name || finding.finding_id)}</strong><div class="small"><code>${escapeHtml(finding.finding_id || '')}</code> · ${escapeHtml(finding.summary || '')}</div></td><td>${renderSeverityPill(finding.severity)}</td><td>${renderStatusPill(finding.status || 'open')}</td><td>${escapeHtml(fmtDate(finding.last_seen || finding.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No Edge-origin findings are present in Core triage.</div>';
@@ -7014,7 +7114,12 @@ function renderEdgeWorkspace() {
   if (changeHost) {
     const rows = [...(Array.isArray(changes.nodes) ? changes.nodes : []).map(item => ({ kind: 'Node', label: item.label || item.node_id || item.id, at: item.updated_at || item.last_seen || item.created_at })), ...(Array.isArray(changes.edges) ? changes.edges : []).map(item => ({ kind: 'Relationship', label: item.type || item.edge_type || item.id, at: item.updated_at || item.observed_at || item.created_at }))];
     changeHost.innerHTML = rows.length ? `<div class="feed">${rows.slice(0, 30).map(item => `<div class="feed-item"><strong>${escapeHtml(item.kind)}</strong><div>${escapeHtml(item.label || 'Graph change')}</div><div class="meta">${escapeHtml(fmtDate(item.at))}</div></div>`).join('')}</div>` : '<div class="empty">No recent graph changes were returned.</div>';
+    const timeline = el('edge-change-timeline');
+    if (timeline) timeline.innerHTML = rows.length ? `<div class="timeline">${rows.slice(0, 50).map(item => `<div class="timeline-item"><span class="timeline-marker"></span><div><strong>${escapeHtml(item.label || 'Graph change')}</strong><div class="small">${escapeHtml(item.kind)} · ${escapeHtml(fmtDate(item.at))}</div></div></div>`).join('')}</div>` : '<div class="empty">No change timeline is available for this sync window.</div>';
   }
+  const wifiHost = el('edge-wifi');
+  const wifi = Array.isArray(edge.wifi_networks) ? edge.wifi_networks : (Array.isArray(core.wifi_networks) ? core.wifi_networks : []);
+  if (wifiHost) wifiHost.innerHTML = wifi.length ? `<div class="table-wrap"><table><thead><tr><th>SSID</th><th>BSSID</th><th>Channel</th><th>Signal</th><th>Encryption</th><th>Observed</th></tr></thead><tbody>${wifi.slice(0, 100).map(item => `<tr><td><strong>${escapeHtml(item.ssid || 'Hidden SSID')}</strong></td><td><code>${escapeHtml(item.bssid || '—')}</code></td><td>${escapeHtml(String(item.channel || '—'))}</td><td>${escapeHtml(String(item.signal || item.rssi || '—'))}</td><td>${escapeHtml(item.encryption || 'Unknown')}</td><td>${escapeHtml(fmtDate(item.observed_at || item.created_at || item.timestamp))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No Wi-Fi observations were returned by the selected sensor.</div>';
 }
 
 async function loadEdgeWorkspace({ render = true } = {}) {
@@ -7268,6 +7373,27 @@ function renderResearchDiscovery() {
     : '<div class="empty-state compact">No candidates yet. Add a watchlist, run a monitor, and review the resulting scoped candidates.</div>';
   const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(item.reason || 'Review candidate')}</td><td>${escapeHtml(statusLabel(item.status))}</td><td><div style="display: flex; gap: 8px;"><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email</button>${item.status === 'open' ? `<button class="mini-btn research-alert-resolve-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Resolve</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>` : '';
   candidatesHost.innerHTML = candidateMarkup + alertMarkup;
+  renderResearchStageQueues(candidates);
+}
+
+function renderResearchStageQueues(candidates = []) {
+  const inbox = el('research-inbox-candidates');
+  if (inbox) {
+    inbox.innerHTML = candidates.length ? candidates.slice(0, 30).map(item => `
+      <article class="research-inbox-card">
+        <div class="research-inbox-card-head"><strong>${escapeHtml(item.package || item.identifier || 'Candidate')}</strong><span class="status-pill">Score ${escapeHtml(String(item.score ?? '—'))}</span></div>
+        <div class="small">${escapeHtml(item.ecosystem || 'unknown')} · ${escapeHtml(item.version || 'version unknown')} · reference ${escapeHtml(item.reference_identifier || 'not recorded')}</div>
+        <p>${escapeHtml(item.reason || 'Explainable similarity requires analyst review.')}</p>
+        <div class="small">Status: ${escapeHtml(statusLabel(item.status || 'new'))} · coverage: ${escapeHtml(item.coverage || 'scoped')}</div>
+      </article>`).join('') : '<div class="empty-state compact">No candidates are waiting for review. A scoped monitor with no candidates is not a global clean result.</div>';
+  }
+  const cases = state.researchCases.cases || [];
+  const disclosure = el('research-disclosure-queue');
+  const disclosureCases = cases.filter(item => ['disclosure_pending', 'coordinating'].includes(String(item.status || '').toLowerCase()) || ['reported', 'coordinating'].includes(String(item.disclosure_status || '').toLowerCase()));
+  if (disclosure) disclosure.innerHTML = disclosureCases.length ? researchTable(['Case', 'State', 'Owner', 'Updated'], disclosureCases.map(item => `<tr><td><strong>${escapeHtml(item.title || item.case_id)}</strong><div class="small"><code>${escapeHtml(item.case_id)}</code></div></td><td>${escapeHtml(statusLabel(item.disclosure_status || item.status || 'pending'))}</td><td>${escapeHtml(item.owner || 'Unassigned')}</td><td>${escapeHtml(fmtDate(item.updated_at))}</td></tr>`), '') : '<div class="empty-state compact">No cases currently require disclosure coordination.</div>';
+  const sandbox = el('research-sandbox-queue');
+  const sandboxCases = cases.filter(item => Number(item.sandbox_count || 0) > 0 || ['sandbox_pending', 'sandbox_review'].includes(String(item.status || '').toLowerCase()));
+  if (sandbox) sandbox.innerHTML = sandboxCases.length ? researchTable(['Case', 'Sandbox jobs', 'State', 'Updated'], sandboxCases.map(item => `<tr><td><strong>${escapeHtml(item.title || item.case_id)}</strong><div class="small"><code>${escapeHtml(item.case_id)}</code></div></td><td>${escapeHtml(String(item.sandbox_count || 0))}</td><td>${escapeHtml(statusLabel(item.status || 'review'))}</td><td>${escapeHtml(fmtDate(item.updated_at))}</td></tr>`), '') : '<div class="empty-state compact">No sandbox jobs are waiting for approval or review.</div>';
 }
 
 function formatCoverageLag(lagSeconds) {
@@ -7782,6 +7908,25 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
   const agentVerdict = summary.agent_verdict
     ? `${statusLabel(summary.agent_verdict)} verdict at ${Number(summary.agent_verdict_confidence || 0)}% confidence`
     : '';
+  const canonicalStages = [
+    ['lead', 'Lead'],
+    ['intake', 'Safe intake'],
+    ['analysis', 'Analysis'],
+    ['verdict', 'Verdict'],
+    ['disclosure', 'Disclosure'],
+    ['publication', 'Publication'],
+    ['detections', 'Detections'],
+    ['monitoring', 'Monitoring']
+  ];
+  const completedStepKeys = new Set(steps.filter(step => ['succeeded', 'completed', 'accepted'].includes(String(step.status || '').toLowerCase())).map(step => String(step.step_key || '').toLowerCase()));
+  const stageIndex = !pipeline ? -1 : pipeline.status === 'succeeded' ? canonicalStages.length - 1 : Math.max(0, canonicalStages.findIndex(([key]) => {
+    if (key === 'lead') return false;
+    return steps.some(step => String(step.step_key || '').toLowerCase().includes(key) && !['succeeded', 'completed', 'accepted'].includes(String(step.status || '').toLowerCase()));
+  }));
+  const stageStepper = canonicalStages.map(([key, label], index) => {
+    const state = index < stageIndex || (index === stageIndex && completedStepKeys.size > 0) ? 'complete' : index === stageIndex ? 'current' : 'pending';
+    return `<li class="research-stage-step ${state}"><span class="research-stage-index">${index + 1}</span><span>${escapeHtml(label)}</span></li>`;
+  }).join('');
   const statusCopy = !pipeline
     ? 'No investigation pipeline has run for this case.'
     : pipeline.status === 'awaiting_ai'
@@ -7826,10 +7971,11 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
       <label><span>Reference version</span><input id="research-pipeline-reference-version" value="${escapeHtml(reference.version || '')}" placeholder="Latest stable when empty" /></label>
     </div>
     ${comparisonNeeded ? '<div class="research-pipeline-notice">Comparison is incomplete. SecOpsAI will not guess which package is legitimate. Enter a verified reference and resume.</div>' : ''}
-    <div class="research-form-actions">
+  <div class="research-form-actions">
       <button class="primary-btn" id="research-pipeline-start-btn" type="button" ${canStart ? '' : 'disabled'}>Run Investigation Pipeline</button>
     ${pipeline ? `<button class="secondary-btn" id="research-pipeline-resume-btn" type="button" ${canResume ? '' : 'disabled'}>${pipeline.status === 'failed' ? 'Retry from checkpoint' : 'Add reference and rerun analysis'}</button>` : ''}
   </div>
+  <ol class="research-stage-stepper" aria-label="Investigation stages">${stageStepper}</ol>
   <ol class="research-pipeline-steps">${stepRows}</ol>
   <div class="research-review-list"><div class="research-list-head"><div><h5>Evidence and agent decision queue</h5><p class="small">Complete the guarded agent review in one action, or inspect and decide individual proposals. Every accepted item and verdict remains auditable.</p></div>${pipeline ? `
     <div style="display: flex; gap: 8px; align-items: center;">
@@ -7999,6 +8145,7 @@ function renderResearchCases() {
   ].join('');
   renderResearchWatchlist();
   renderResearchDiscovery();
+  renderResearchStageQueues(state.researchCases.discovery.candidates || []);
   const list = el('research-case-list');
   const filtered = filteredResearchCases();
   if (list) list.innerHTML = state.researchCases.loading && !cases.length
@@ -8468,7 +8615,7 @@ function bindEvents() {
   el('auth-reset-request-btn')?.addEventListener('click', requestPasswordReset);
   el('auth-update-form')?.addEventListener('submit', updateRecoveredPassword);
   el('auth-signout-btn')?.addEventListener('click', signOutOperator);
-  document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
+  document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page, { routeOverride: btn.dataset.route || null })));
   el('mobile-menu-btn')?.addEventListener('click', toggleMobileNav);
   el('work-table-view-btn')?.addEventListener('click', () => { workView = 'table'; renderTasks(); });
   el('work-board-view-btn')?.addEventListener('click', () => { workView = 'board'; renderTasks(); });
