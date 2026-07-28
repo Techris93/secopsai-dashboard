@@ -406,6 +406,7 @@
             <button class="secondary-btn" id="research-cases-refresh-btn" type="button">Refresh cases</button>
           </div>
         </div>
+        <div class="research-view-summary" id="research-view-summary" role="status" aria-live="polite"></div>
 
         <form class="card research-auth-card" onsubmit="return false;">
           <div>
@@ -434,7 +435,7 @@
           <div class="research-form-actions"><button class="primary-btn" id="research-create-submit-btn" type="button">Create case</button></div>
         </details>
 
-        <section class="card research-watchlist-panel" aria-labelledby="research-watchlist-title">
+        <section class="card research-watchlist-panel" data-research-section="inbox watchlists" aria-labelledby="research-watchlist-title">
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-watchlist-title">Promote from package watchlist</h3>
@@ -453,7 +454,7 @@
           <div class="research-watchlist-result" id="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <section class="card research-discovery-panel" aria-labelledby="research-discovery-title">
+        <section class="card research-discovery-panel" data-research-section="inbox watchlists" aria-labelledby="research-discovery-title">
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-discovery-title">Research discovery</h3>
@@ -479,7 +480,7 @@
           <div id="research-discovery-candidates" class="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <div class="grid cols-2 research-case-layout">
+        <div class="grid cols-2 research-case-layout" data-research-section="cases disclosure sandbox">
           <div class="card research-case-list-panel">
             <div class="research-list-head"><div><h3>Case queue</h3><p class="small">Select a case to review its evidence and workflow.</p></div></div>
             <div class="research-case-filters">
@@ -502,6 +503,7 @@
           </div>
           <div class="status-pill" id="blog-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh Blog Ops</div>
         </div>
+        <div class="publication-view-summary" id="publication-view-summary" role="status" aria-live="polite"></div>
 
         <div class="card blog-auth-card">
           <div>
@@ -517,7 +519,7 @@
 
         <div class="grid cols-5" id="blog-ops-stats" style="margin-top:18px;"></div>
 
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-blog-section="news" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Actions</h3>
@@ -535,7 +537,7 @@
           </div>
         </div>
 
-        <div class="grid cols-2" style="margin-top:18px;">
+        <div class="grid cols-2" data-blog-section="drafts review" style="margin-top:18px;">
           <div class="card">
             <div class="page-header compact-header">
               <div>
@@ -561,7 +563,7 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:18px;">
+        <div class="card" data-blog-section="published" style="margin-top:18px;">
           <h3>Recent Blog Ops workflow runs</h3>
           <div id="blog-workflow-runs"></div>
         </div>
