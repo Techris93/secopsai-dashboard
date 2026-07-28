@@ -1338,6 +1338,7 @@ function statusLabel(status) {
 
 function getTaskFilters() {
   return {
+    scope: el('task-filter-scope')?.value || 'operator',
     search: (el('task-search')?.value || '').trim().toLowerCase(),
     domain: el('task-filter-domain')?.value || '',
     priority: el('task-filter-priority')?.value || '',
@@ -1352,6 +1353,10 @@ function getTaskFilters() {
 function filteredWorkItems() {
   const filters = getTaskFilters();
   return state.workItems.filter(item => {
+    if (filters.scope === 'operator') {
+      const operatorWork = item.external_facing || item.requires_security_review || item.domain === 'security' || ['blocked', 'review', 'in_progress'].includes(String(item.status || ''));
+      if (!operatorWork) return false;
+    }
     if (filters.domain && item.domain !== filters.domain) return false;
     if (filters.priority && item.priority !== filters.priority) return false;
     if (filters.status && item.status !== filters.status) return false;
@@ -2523,7 +2528,11 @@ function renderMissionControl() {
     el('mc-native-triage')?.addEventListener('click', () => setPage('findings'));
   }
 
-  const recentFeed = [...state.events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 6);
+  const activitySince = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const recentFeed = [...state.events]
+    .filter(event => Number.isFinite(new Date(event.created_at).getTime()) && new Date(event.created_at).getTime() >= activitySince)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 6);
   const eventsEl = el("mission-events");
   if (eventsEl) {
     eventsEl.innerHTML = recentFeed.length ? recentFeed.map(ev => `
@@ -2535,7 +2544,10 @@ function renderMissionControl() {
     `).join("") : `<div class="empty">No dashboard events yet.</div>`;
   }
 
-  const recentRuns = [...state.runs].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 6);
+  const recentRuns = [...state.runs]
+    .filter(run => Number.isFinite(new Date(run.created_at).getTime()) && new Date(run.created_at).getTime() >= activitySince)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 6);
   const runsEl = el("mission-runs");
   if (runsEl) {
     runsEl.innerHTML = recentRuns.length ? recentRuns.map(run => `
@@ -2764,18 +2776,18 @@ function renderFindings() {
   }).length;
   if (summary) {
     summary.innerHTML = `
-      <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div></div>
-      <div class="card"><div class="metric">${coreFindingCount}</div><div class="metric-label">Core canonical</div></div>
-      <div class="card"><div class="metric">${dashboardFindingCount}</div><div class="metric-label">Dashboard operational</div></div>
-      <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div></div>
-      <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div></div>
-      <div class="card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div></div>
-      <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With task correlation</div></div>
-      <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Native SecOpsAI open findings</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Native pending actions</div></div>
-      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open investigation sessions</div></div>
-      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending session approvals</div></div>
+      <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${coreFindingCount}</div><div class="metric-label">Core canonical</div><div class="metric-scope">Current filters · Core source</div></div>
+      <div class="card"><div class="metric">${dashboardFindingCount}</div><div class="metric-label">Dashboard operational</div><div class="metric-scope">Current filters · dashboard source</div></div>
+      <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div><div class="metric-scope">Current filters · guard output</div></div>
+      <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With task correlation</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div><div class="metric-scope">Current filters</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Native SecOpsAI open findings</div><div class="metric-scope">Local Core triage artifact</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Native pending actions</div><div class="metric-scope">Local Core action queue</div></div>
+      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open investigation sessions</div><div class="metric-scope">Local Core session store</div></div>
+      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending session approvals</div><div class="metric-scope">Local Core session store</div></div>
     `;
   }
 
@@ -3592,6 +3604,24 @@ function renderIntegrations() {
         <div class="small" style="margin-top:12px;">Supabase remains useful for tasks and run visibility, but native triage queue state now sits above it in the dashboard.</div>
       </div>`;
   }
+  const credentialsEl = el('system-credentials');
+  if (credentialsEl) {
+    const sessionReady = Boolean(state.auth?.user?.email || state.auth?.session || state.auth?.activeUserId);
+    const researchTokenReady = Boolean(state.researchCases?.adminToken || state.triageOps?.adminToken);
+    const blogTokenReady = Boolean(state.blogOps?.adminToken);
+    credentialsEl.innerHTML = `
+      <div class="page-header compact-header">
+        <div><h3 style="margin:0;">Credential readiness</h3><p class="small" style="margin:6px 0 0;">This view shows status only. Secret values are never displayed or copied.</p></div>
+      </div>
+      <div class="credential-status-grid">
+        <div class="credential-status-row"><span>Operator session</span>${renderStatusPill(sessionReady ? 'ready' : 'missing', sessionReady ? 'Signed in' : 'Sign in required')}</div>
+        <div class="credential-status-row"><span>Research action token</span>${renderStatusPill(researchTokenReady ? 'ready' : 'required', researchTokenReady ? 'Ready for protected research actions' : 'Required for changes')}</div>
+        <div class="credential-status-row"><span>Blog Ops token</span>${renderStatusPill(blogTokenReady ? 'ready' : 'required', blogTokenReady ? 'Ready for publication actions' : 'Required for publishing')}</div>
+        <div class="credential-status-row"><span>Intelligence bridge</span>${renderStatusPill(state.integrationStatus?.helper?.secopsai_intelligence_api ? 'ready' : 'unavailable', state.integrationStatus?.helper?.secopsai_intelligence_api ? 'Server-side bridge available' : 'Unavailable')}</div>
+        <div class="credential-status-row"><span>Sensor credentials</span>${renderStatusPill('server-managed', 'Stored by Edge/Core services')}</div>
+      </div>
+      <p class="small" style="margin:14px 0 0;">Use the Research, Publications, or Automation workspace to enter a session-scoped credential when a protected action requires it. Rotate credentials in the server or local helper, never in this page.</p>`;
+  }
   renderIntelligence();
 
   const sessionsTable = el('native-sessions-table');
@@ -4218,10 +4248,24 @@ function blogDraftFilterValue() {
 
 function filteredBlogDrafts() {
   const filter = blogDraftFilterValue();
+  const stream = el('blog-content-filter')?.value || 'all';
   return sortLatestFirst(
-    blogOpsDrafts().filter(draft => filter === 'all' || String(draft.review_status || '') === filter),
+    blogOpsDrafts().filter(draft => {
+      if (filter !== 'all' && String(draft.review_status || '') !== filter) return false;
+      if (stream !== 'all' && blogDraftContentKind(draft) !== stream) return false;
+      return true;
+    }),
     BLOG_DRAFT_LATEST_FIELDS
   );
+}
+
+function blogDraftContentKind(draft = {}) {
+  const explicit = String(draft.content_type || draft.kind || draft.source_type || '').toLowerCase();
+  if (explicit.includes('research') || explicit.includes('advisory')) return 'research';
+  if (draft.research_case_id || draft.case_id || draft.research_case) return 'research';
+  const categories = Array.isArray(draft.categories) ? draft.categories.map(String).join(' ').toLowerCase() : String(draft.categories || '').toLowerCase();
+  if (/research|advisory|malware|supply.?chain/.test(categories)) return 'research';
+  return 'news';
 }
 
 function renderReadinessPill(draft = {}) {
@@ -8678,7 +8722,7 @@ function bindEvents() {
   el('blog-edit-modal-close')?.addEventListener('click', closeBlogEditModal);
   el('blog-edit-cancel-btn')?.addEventListener('click', closeBlogEditModal);
   el('blog-edit-save-btn')?.addEventListener('click', (event) => saveBlogDraftEdit(event.currentTarget));
-  ['task-search', 'task-filter-domain', 'task-filter-priority', 'task-filter-status', 'task-filter-owner', 'task-filter-reviewer'].forEach(id => {
+  ['task-filter-scope', 'task-search', 'task-filter-domain', 'task-filter-priority', 'task-filter-status', 'task-filter-owner', 'task-filter-reviewer'].forEach(id => {
     el(id)?.addEventListener('input', renderTasks);
     el(id)?.addEventListener('change', renderTasks);
   });
@@ -8909,6 +8953,7 @@ function bindEvents() {
     setButtonBusy(btn, false);
   });
   el('blog-draft-filter')?.addEventListener('change', renderBlogOps);
+  el('blog-content-filter')?.addEventListener('change', renderBlogOps);
   document.querySelectorAll('.blog-action-btn').forEach(btn => {
     btn.addEventListener('click', () => runBlogOpsAction(btn.dataset.blogAction, { button: btn }));
   });

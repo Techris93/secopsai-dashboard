@@ -470,6 +470,10 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
 .modal-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
 .modal-actions-right { display: flex; gap: 10px; }
 .integration-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.blog-filter-group { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.credential-status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.credential-status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; background: rgba(15,23,42,0.025); color: var(--muted-strong); }
+.credential-status-row .status-pill { white-space: nowrap; }
 
 @media (max-width: 720px) {
   .main { padding: 18px; }
@@ -479,6 +483,9 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
   .finding-detail-grid { grid-template-columns: 1fr; }
   .finding-detail-header { flex-direction: column; }
   .detail-status-stack { align-items: flex-start; }
+  .credential-status-grid { grid-template-columns: 1fr; }
+  .blog-filter-group { align-items: stretch; width: 100%; }
+  .blog-filter-group .blog-filter-label { flex: 1 1 150px; }
 }
 
 /* Mission Control redesign: clear workspace context and resilient narrow screens. */
@@ -546,6 +553,16 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
   font-size: 0.68rem;
   line-height: 1.35;
   letter-spacing: 0.02em;
+}
+.professional-ui .heading-scope {
+  display: inline-block;
+  margin-left: 7px;
+  color: #8397a6;
+  font-size: .68rem;
+  font-weight: 500;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  vertical-align: middle;
 }
 .professional-ui .finding-actions { align-items: flex-start; }
 .professional-ui .inline-action-menu { position: relative; }

@@ -37,6 +37,12 @@ for (const route of ['research/inbox', 'research/cases', 'research/watchlists', 
 for (const marker of ['research-view-summary', 'publication-view-summary', 'system-view-summary', 'data-research-section="inbox watchlists"', 'data-research-section="cases disclosure sandbox"', 'data-blog-section="news"', 'data-system-section="automation"', 'metric-scope']) {
   assert.ok((index + styles + app).includes(marker), `missing redesign contract: ${marker}`);
 }
+for (const marker of ['task-filter-scope', 'Operator queue', 'blog-content-filter', 'Original research', 'system-credentials', 'Credential readiness']) {
+  assert.ok(index.includes(marker) || app.includes(marker), `missing operator clarity surface: ${marker}`);
+}
+assert.match(app, /scope: el\('task-filter-scope'\)/);
+assert.match(app, /function blogDraftContentKind/);
+assert.match(app, /Secret values are never displayed/);
 
 for (const marker of ['SecOpsAI Intelligence', 'intelligence-action-select', 'intelligence-jobs-table', 'intelligence-copy-mcp-btn', 'intelligence-result-modal', 'intelligence-result-copy', 'intelligence-result-open-case']) {
   assert.ok(index.includes(marker), `missing intelligence surface: ${marker}`);

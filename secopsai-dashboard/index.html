@@ -152,11 +152,11 @@
         <div class="grid cols-3" style="margin-top:18px;" id="mission-overview"></div>
         <div class="grid cols-2" style="margin-top:18px;">
           <div class="card">
-            <h3>Recent dashboard events</h3>
+            <h3>Recent dashboard events <span class="heading-scope">Last 30 days</span></h3>
             <div class="feed" id="mission-events"></div>
           </div>
           <div class="card">
-            <h3>Recent agent runs</h3>
+            <h3>Recent agent runs <span class="heading-scope">Last 30 days</span></h3>
             <div class="feed" id="mission-runs"></div>
           </div>
         </div>
@@ -178,6 +178,7 @@
         </div>
         <div class="small" style="margin-bottom:12px;">Task changes create dashboard events and orchestrator audit runs. The dashboard manages state and visibility; SecOpsAI/OpenClaw runtimes handle actual execution.</div>
         <div class="grid cols-4" style="margin-bottom:18px;">
+          <div class="card"><label><span class="small">Work scope</span><select id="task-filter-scope"><option value="operator" selected>Operator queue</option><option value="all">All work</option></select></label><div class="small" style="margin-top:8px;">Operator queue keeps active, blocked, security, and external work visible. Use All work for delivery history.</div></div>
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
           <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option></select></label></div>
           <div class="card"><label><span class="small">Priority</span><select id="task-filter-priority"><option value="">All</option><option value="urgent">urgent</option><option value="high">high</option><option value="normal">normal</option><option value="low">low</option></select></label></div>
@@ -271,6 +272,7 @@
         <div class="system-view-summary" id="system-view-summary" role="status" aria-live="polite"></div>
         <div class="grid cols-4" id="integration-summary" data-system-section="health"></div>
         <div class="grid cols-2" id="integration-config" data-system-section="integrations" style="margin-top:18px;"></div>
+        <div class="card" id="system-credentials" data-system-section="credentials" style="margin-top:18px;"></div>
         <section class="intelligence-console" data-system-section="automation" aria-labelledby="intelligence-title">
           <div class="intelligence-console-head">
             <div>
@@ -545,16 +547,25 @@
                 <h3 style="margin:0;">Draft review queue</h3>
                 <p class="small" style="margin:6px 0 0;">Select a draft to preview source-backed content and approve or reject it.</p>
               </div>
-              <label class="blog-filter-label"><span class="small">Status</span>
-                <select id="blog-draft-filter">
-                  <option value="all">All</option>
-                  <option value="needs_review">Needs review</option>
-                  <option value="approved">Approved</option>
-                  <option value="reviewed">Reviewed</option>
-                  <option value="deployed">Deployed</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </label>
+              <div class="blog-filter-group">
+                <label class="blog-filter-label"><span class="small">Content stream</span>
+                  <select id="blog-content-filter">
+                    <option value="all">All streams</option>
+                    <option value="research">Original research</option>
+                    <option value="news">External news</option>
+                  </select>
+                </label>
+                <label class="blog-filter-label"><span class="small">Status</span>
+                  <select id="blog-draft-filter">
+                    <option value="all">All</option>
+                    <option value="needs_review">Needs review</option>
+                    <option value="approved">Approved</option>
+                    <option value="reviewed">Reviewed</option>
+                    <option value="deployed">Deployed</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <div id="blog-draft-list"></div>
           </div>
