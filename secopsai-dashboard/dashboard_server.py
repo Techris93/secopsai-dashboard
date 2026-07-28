@@ -3294,6 +3294,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             ecosystem = _clean_string(self.headers.get('X-Artifact-Ecosystem') or 'nuget', 40).lower()
             package = _clean_string(self.headers.get('X-Artifact-Package') or '', 512)
             version = _clean_string(self.headers.get('X-Artifact-Version') or '', 160)
+            source = _clean_string(self.headers.get('X-Artifact-Source') or '', 512)
+            if not source:
+                return json_response(self, 400, {'ok': False, 'error': 'Source is required to document lawful origin and authorization', 'code': 'artifact_provenance_required'})
+            provenance = json.dumps({'source': source, 'importer': 'mission-control', 'imported_via': 'mission-control'}, sort_keys=True)
             staging = SECOPSAI_ROOT / 'data' / 'research' / 'staging'
             staging.mkdir(parents=True, exist_ok=True)
             os.chmod(staging, 0o700)
@@ -3312,6 +3316,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 result, parsed_result = run_cli_json([
                     'research', 'artifact', 'import', '--path', str(tmp_path),
                     '--ecosystem', ecosystem, '--package', package, '--version', version,
+                    '--provenance', provenance,
                     *secopsai_db_args(),
                 ], timeout=300)
                 return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'artifact': parsed_result, 'cli': compact_cli_result(result)})
