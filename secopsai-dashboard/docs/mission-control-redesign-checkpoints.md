@@ -49,3 +49,11 @@ This ledger records the product redesign in verified, reversible checkpoints.
 - Evidence: `npm test` passed, `PYTHONPATH=. pytest -q tests` passed with 69 tests and 13 subtests, `node --check app.js` passed, and `git diff --check` passed. Static contract coverage now includes work scope, publication stream filters, and credential readiness.
 - Evidence: `npm run build` passed (`npm run check`), and a live signed-in Chrome route check previously verified Research, Publications, and System route isolation. A later forced browser reload hit the existing Supabase key-ring/session recovery error, so no post-reload live assertion is claimed.
 - Acceptance: tests pass, screenshots or DOM evidence are recorded, and the branch is ready for review.
+
+## Checkpoint 6: Complete audit implementation
+
+- Status: complete
+- Goal: finish the remaining structural recommendations from the professional audit instead of treating the first hardening pass as the complete redesign.
+- Implemented: route-specific asset workspaces (`assets/inventory`, `assets/changes`, `assets/sensors`, `assets/schedules`, `assets/wifi`), a selectable asset detail view with services and history, dedicated Research Inbox, Disclosure, and Sandbox queue panels, Original Research and Advisories publication lanes, an operator queue on Overview, and a top-level Automation destination.
+- Verification: `node --check app.js`, `npm test`, `npm run build`, `PYTHONPATH=. pytest -q tests` (69 passed, 13 subtests), and `git diff --check` pass. Signed-in Chrome smoke checks verified Research Inbox, Original Research, Automation, and asset Changes routes; route-specific panels rendered with no ambiguous fallback copy. Mobile card styling keeps data-dense Findings and Assets usable at narrow widths. The research case now exposes an explicit eight-stage stepper: Lead, Safe intake, Analysis, Verdict, Disclosure, Publication, Detections, Monitoring.
+- Acceptance: operator queues are visible from Overview; Research, Publications, Assets, and System have real route-specific workspaces; the dashboard keeps model/credential controls separate from operational work; mobile tables have card alternatives; and the complete test/release checks pass.
