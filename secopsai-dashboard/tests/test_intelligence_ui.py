@@ -59,6 +59,8 @@ def test_local_intelligence_actions_are_allowlisted():
     assert dashboard_server.build_intelligence_args(
         "investigation-retry", {"run_id": "IAR-0123456789ABCDEF"}
     )[:6] == ["intelligence", "autopilot", "investigations", "retry", "--run-id", "IAR-0123456789ABCDEF"]
+    assert dashboard_server.build_intelligence_args("learning-run-cycle", {})[:4] == ["intelligence","autopilot","learning","run-cycle"]
+    assert dashboard_server.build_intelligence_args("learning-deploy", {"proposal_id":"DLP-0123456789ABCDEF","stage":"shadow"})[:8] == ["intelligence","autopilot","learning","deploy","--proposal-id","DLP-0123456789ABCDEF","--stage","shadow"]
 
 
 def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
@@ -106,6 +108,10 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "investigation-autopilot-summary",
         "investigation-autopilot-runs",
         "investigation-run-due",
+        "detection-learning-summary",
+        "detection-learning-proposals",
+        "detection-learning-deployments",
+        "detection-learning-run",
     ):
         assert f'id="{element}"' in html
     assert "runIntelligenceAction('enqueue'" in app
@@ -118,6 +124,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "data-agent-triage-rollback" in app
     assert "Agent finding and alert review" in html
     assert "High-priority investigations" in html
+    assert "Detection Learning" in html
+    assert "learning-deploy" in app
     assert "investigation-retry" in app
     assert "Missing local dependency exposure never proves an external package is safe" in html
     assert "Registry outages and collector failures use deterministic recovery checks" in html

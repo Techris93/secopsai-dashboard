@@ -834,6 +834,22 @@ def build_intelligence_args(action, payload):
                 raise ValueError('Invalid investigation autopilot run ID')
             args.extend(['--run-id', run_id])
         return [*args, *secopsai_db_args()]
+    if action in {'learning-run-cycle', 'learning-deploy', 'learning-rollback', 'learning-observe'}:
+        verb = {'learning-run-cycle':'run-cycle','learning-deploy':'deploy','learning-rollback':'rollback','learning-observe':'observe'}[action]
+        args = ['intelligence','autopilot','learning',verb]
+        if verb in {'deploy','rollback'}:
+            proposal_id = str(payload.get('proposal_id') or '').strip().upper()
+            if not re.fullmatch(r'DLP-[A-F0-9]{16}', proposal_id): raise ValueError('Invalid learning proposal ID')
+            args.extend(['--proposal-id',proposal_id])
+        if verb == 'deploy':
+            stage = str(payload.get('stage') or '').strip().lower()
+            if stage not in {'shadow','canary','active'}: raise ValueError('Invalid learning deployment stage')
+            args.extend(['--stage',stage])
+        if verb == 'observe':
+            deployment_id = str(payload.get('deployment_id') or '').strip().upper(); outcome = str(payload.get('outcome') or '').strip().lower()
+            if not re.fullmatch(r'DLD-[A-F0-9]{16}', deployment_id) or outcome not in {'tp','fp','tn','fn'}: raise ValueError('Invalid learning observation')
+            args.extend(['--deployment-id',deployment_id,'--outcome',outcome])
+        return [*args,*secopsai_db_args()]
     raise ValueError('Unsupported intelligence operation')
 
 
