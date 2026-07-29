@@ -36,6 +36,10 @@ for (const route of ['research/inbox', 'research/cases', 'research/campaigns', '
 for (const marker of ['research-view-summary', 'publication-view-summary', 'system-view-summary', 'asset-view-summary', 'mission-research-queues', 'research-inbox-candidates', 'research-disclosure-queue', 'research-sandbox-queue', 'data-research-section="watchlists"', 'data-research-section="campaigns"', 'data-research-section="cases"', 'data-blog-section="news"', 'data-system-section="automation"', 'data-edge-section="sensors"', 'research-stage-stepper', 'mobile-card-table', 'metric-scope']) {
   assert.ok((index + styles + app).includes(marker), `missing redesign contract: ${marker}`);
 }
+assert.match(app, /research-form-actions research-pipeline-actions/);
+assert.match(styles, /\.research-stage-stepper\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/s);
+assert.match(styles, /\.research-stage-step\s*>\s*span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+assert.match(styles, /\.research-pipeline-actions\s*>\s*button\s*\{[^}]*white-space:\s*normal/s);
 for (const marker of ['task-filter-scope', 'Operator assignments', 'blog-content-filter', 'Original research', 'system-credentials', 'Credential readiness', 'Candidate promotion policy', 'finding-review-drawer']) {
   assert.ok(index.includes(marker) || app.includes(marker), `missing operator clarity surface: ${marker}`);
 }
