@@ -89,6 +89,10 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M8 8h8"></path><path d="M8 12h8"></path><path d="M8 16h5"></path><circle cx="17" cy="16" r="1"></circle></svg></span>
           <span class="nav-copy"><span class="title">Assets</span><span class="desc">Inventory, sensors, and changes</span></span>
         </button>
+        <button class="nav-btn" data-page="tasks" data-route="work">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"></path><path d="M9 6V4h6v2"></path><path d="M4 11h16"></path><path d="M10 14h4"></path></svg></span>
+          <span class="nav-copy"><span class="title">Work</span><span class="desc">Ownership, approvals, and runs</span></span>
+        </button>
         <div class="nav-group-label">Research</div>
         <button class="nav-btn" data-page="research-cases" data-route="research/cases">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6"></path><path d="M10 9h4"></path><path d="M8 3v5l-4 9a3 3 0 0 0 2.7 4h10.6a3 3 0 0 0 2.7-4l-4-9V3"></path><path d="M7 15h10"></path></svg></span>
@@ -100,7 +104,7 @@
         </button>
 
         <div class="nav-group-label">Administration</div>
-        <button class="nav-btn" data-page="integrations" data-route="system/automation">
+        <button class="nav-btn" data-page="automation" data-route="automation">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18"></path><path d="M3 12h18"></path><circle cx="12" cy="12" r="7"></circle></svg></span>
           <span class="nav-copy"><span class="title">Automation</span><span class="desc">Models, policies, and review</span></span>
         </button>
@@ -271,18 +275,15 @@
         </div>
       </section>
 
-      <section class="page" id="page-integrations">
+      <section class="page" id="page-automation">
         <div class="page-header">
           <div>
-            <h2>System</h2>
-            <p>Review platform health, runtime integrations, access boundaries, and action history.</p>
+            <h2>Automation</h2>
+            <p>Configure model assistance, guarded decision policies, investigation pipelines, and detection learning.</p>
           </div>
         </div>
-        <div class="system-view-summary" id="system-view-summary" role="status" aria-live="polite"></div>
-        <div class="grid cols-4" id="integration-summary" data-system-section="health"></div>
-        <div class="grid cols-2" id="integration-config" data-system-section="integrations" style="margin-top:18px;"></div>
-        <div class="card" id="system-credentials" data-system-section="credentials" style="margin-top:18px;"></div>
-        <section class="intelligence-console" data-system-section="automation" aria-labelledby="intelligence-title">
+        <div class="system-view-summary" id="automation-view-summary" role="status" aria-live="polite"></div>
+        <section class="intelligence-console" aria-labelledby="intelligence-title">
           <div class="intelligence-console-head">
             <div>
               <div class="section-kicker">MODEL ASSISTANCE</div>
@@ -396,6 +397,19 @@
             <div id="intelligence-jobs-table"></div>
           </section>
         </section>
+      </section>
+
+      <section class="page" id="page-integrations">
+        <div class="page-header">
+          <div>
+            <h2>System</h2>
+            <p>Review platform health, runtime integrations, access boundaries, credentials, and action history.</p>
+          </div>
+        </div>
+        <div class="system-view-summary" id="system-view-summary" role="status" aria-live="polite"></div>
+        <div class="grid cols-4" id="integration-summary" data-system-section="health"></div>
+        <div class="grid cols-2" id="integration-config" data-system-section="integrations" style="margin-top:18px;"></div>
+        <div class="card" id="system-credentials" data-system-section="credentials" style="margin-top:18px;"></div>
         <div class="card" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>

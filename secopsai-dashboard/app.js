@@ -242,12 +242,13 @@ const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
 let workView = 'table';
-const pages = ["mission-control", "tasks", "findings", "edge", "integrations", "triage-ops", "research-cases", "coverage", "blog-ops", "operator-guide"];
+const pages = ["mission-control", "tasks", "findings", "edge", "automation", "integrations", "triage-ops", "research-cases", "coverage", "blog-ops", "operator-guide"];
 const PAGE_ROUTES = Object.freeze({
   "mission-control": "overview",
   "tasks": "work",
   "findings": "findings",
   "edge": "assets",
+  "automation": "automation",
   "integrations": "system",
   "triage-ops": "findings/supply-chain",
   "research-cases": "research/cases",
@@ -260,7 +261,6 @@ const RESEARCH_VIEW_ROUTES = Object.freeze({
   cases: 'research/cases',
   campaigns: 'research/campaigns',
   watchlists: 'research/watchlists',
-  coverage: 'research/coverage',
   disclosure: 'research/disclosure',
   sandbox: 'research/sandbox',
   resolved: 'research/resolved'
@@ -276,7 +276,6 @@ const BLOG_VIEW_ROUTES = Object.freeze({
 const SYSTEM_VIEW_ROUTES = Object.freeze({
   health: 'system/health',
   integrations: 'system/integrations',
-  automation: 'system/automation',
   credentials: 'system/credentials',
   audit: 'system/audit'
 });
@@ -299,6 +298,7 @@ const TOP_NAV_PAGE = Object.freeze({
   "tasks": "tasks",
   "findings": "findings",
   "edge": "edge",
+  "automation": "automation",
   "integrations": "integrations",
   "triage-ops": "findings",
   "research-cases": "research-cases",
@@ -311,6 +311,7 @@ const PAGE_CONTEXT = {
   "tasks": "Work · ownership, approvals, and runs",
   "findings": "Findings · security issues and triage",
   "edge": "Assets · inventory, sensors, and changes",
+  "automation": "Automation · models, policies, and learning",
   "integrations": "System · health and integrations",
   "triage-ops": "Findings · supply-chain review",
   "research-cases": "Research · evidence and disclosure",
@@ -321,9 +322,8 @@ const PAGE_CONTEXT = {
 const CONTEXT_NAV = Object.freeze({
   "mission-control": [],
   "findings": [
-    ["All findings", "findings"],
-    ["Supply chain", "triage-ops"],
-    ["AI dependencies", "findings"]
+    ["All findings", "findings", PAGE_ROUTES.findings],
+    ["Supply chain", "triage-ops", PAGE_ROUTES['triage-ops']]
   ],
   "edge": [
     ["Inventory", "edge", ASSET_VIEW_ROUTES.inventory],
@@ -332,29 +332,21 @@ const CONTEXT_NAV = Object.freeze({
     ["Scans & schedules", "edge", ASSET_VIEW_ROUTES.schedules],
     ["Wi-Fi", "edge", ASSET_VIEW_ROUTES.wifi]
   ],
-  "tasks": [
-    ["My work", "tasks"],
-    ["Board", "tasks"],
-    ["Approvals", "integrations"],
-    ["Investigations", "integrations"],
-    ["Runs", "integrations"]
-  ],
+  "tasks": [],
   "research-cases": [
     ["Inbox", "research-cases", RESEARCH_VIEW_ROUTES.inbox],
     ["Cases", "research-cases", RESEARCH_VIEW_ROUTES.cases],
     ["Campaigns", "research-cases", RESEARCH_VIEW_ROUTES.campaigns],
     ["Watchlists", "research-cases", RESEARCH_VIEW_ROUTES.watchlists],
-    ["Global coverage", "coverage", RESEARCH_VIEW_ROUTES.coverage],
+    ["Global coverage", "coverage", PAGE_ROUTES.coverage],
     ["Disclosure", "research-cases", RESEARCH_VIEW_ROUTES.disclosure],
     ["Sandbox jobs", "research-cases", RESEARCH_VIEW_ROUTES.sandbox],
     ["Resolved by agents", "research-cases", RESEARCH_VIEW_ROUTES.resolved]
   ],
   "coverage": [
-    ["Collectors", "coverage"],
-    ["Feed events", "coverage"],
-    ["Coverage windows", "coverage"],
-    ["Candidates", "research-cases"],
-    ["Cases", "research-cases"]
+    ["Coverage", "coverage", PAGE_ROUTES.coverage],
+    ["Candidates", "research-cases", RESEARCH_VIEW_ROUTES.inbox],
+    ["Cases", "research-cases", RESEARCH_VIEW_ROUTES.cases]
   ],
   "blog-ops": [
     ["Original research", "blog-ops", BLOG_VIEW_ROUTES.research],
@@ -367,14 +359,13 @@ const CONTEXT_NAV = Object.freeze({
   "integrations": [
     ["Health", "integrations", SYSTEM_VIEW_ROUTES.health],
     ["Integrations", "integrations", SYSTEM_VIEW_ROUTES.integrations],
-    ["Automation", "integrations", SYSTEM_VIEW_ROUTES.automation],
     ["Credentials", "integrations", SYSTEM_VIEW_ROUTES.credentials],
     ["Audit log", "integrations", SYSTEM_VIEW_ROUTES.audit]
   ],
+  "automation": [],
   "triage-ops": [
-    ["Supply-chain queue", "triage-ops"],
-    ["Campaign research", "triage-ops"],
-    ["Discovery inbox", "triage-ops"]
+    ["All findings", "findings", PAGE_ROUTES.findings],
+    ["Supply chain", "triage-ops", PAGE_ROUTES['triage-ops']]
   ],
   "operator-guide": []
 });
@@ -387,6 +378,7 @@ const COMMANDS = Object.freeze([
   ["Open Research", "Investigate leads and research cases", "research-cases"],
   ["Open Global Coverage", "Inspect registry collectors, cursor lag, and surveillance health", "coverage"],
   ["Open Publications", "Review and deliver public content", "blog-ops"],
+  ["Open Automation", "Configure models, policies, and learning", "automation"],
   ["Open System", "Check health, integrations, and audit context", "integrations"],
   ["Open Help", "Read contextual operator guidance", "operator-guide"]
 ]);
@@ -1294,6 +1286,7 @@ function helpCopyForPage(pageId) {
     'research-cases': ['Research', 'Research cases preserve evidence, indicators, disclosure decisions, and publication readiness. Protected actions always require explicit review.'],
     coverage: ['Global coverage', 'Registry collectors record every observed package event. Watch cursor lag, coverage gaps, and dead letters here; a paused or degraded collector means surveillance is incomplete, not clean.'],
     'blog-ops': ['Publications', 'Publications are editorial output. Review claims, references, IOCs, and safety blockers before approval, staging, or deployment.'],
+    automation: ['Automation', 'Automation configures model-assisted analysis, guarded decision policy, investigation pipelines, and detection learning. Review results and policy boundaries here; final publication remains an operator decision.'],
     integrations: ['System', 'System explains the health of the dashboard, Core, Edge, helper, and action boundaries. Resolve degraded integrations before relying on their data.'],
     'operator-guide': ['Help', 'Use the operator guide for detailed click paths, safety boundaries, and recovery steps.']
   };
@@ -1405,7 +1398,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
     const buttonRoute = String(btn.dataset.route || '');
     const matchesPage = btn.dataset.page === activeTopPage;
     const matchesExactRoute = buttonRoute && buttonRoute.includes('/') && buttonRoute === activeRoute;
-    const matchesSystemFallback = buttonRoute === 'system' && activeRoute !== SYSTEM_VIEW_ROUTES.automation;
+    const matchesSystemFallback = buttonRoute === 'system' && activeRoute.startsWith('system');
     const matchesResearchFallback = buttonRoute === 'research/cases' && activeRoute.startsWith('research/');
     const matchesPublicationFallback = buttonRoute === 'publications' && activeRoute.startsWith('publications/');
     const matchesAssetFallback = buttonRoute === 'assets' && activeRoute.startsWith('assets/');
@@ -1417,6 +1410,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   renderContextNav(normalizedPageId);
   if (normalizedPageId === 'research-cases') renderResearchCases();
   if (normalizedPageId === 'blog-ops') renderBlogOps();
+  if (normalizedPageId === 'automation') renderAutomation();
   if (normalizedPageId === 'integrations') renderIntegrations();
   if (normalizedPageId === 'edge') renderEdgeWorkspace();
   if (!skipHistory && window.history?.pushState) {
@@ -3684,12 +3678,19 @@ function renderSessionDetail(session) {
     </div>`;
 }
 
+function renderAutomation() {
+  const summary = el('automation-view-summary');
+  if (summary) {
+    summary.innerHTML = '<span class="eyebrow">Automation workspace</span><strong>Guarded model assistance</strong><span>Review model availability, decision policy, investigation activity, learning proposals, and durable analysis results.</span>';
+  }
+  renderIntelligence();
+}
+
 function renderIntegrations() {
   const systemView = state.integrationView || 'health';
   const systemViewCopy = {
     health: ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'],
     integrations: ['Integrations', 'Review the runtime connections and data boundaries used by this workspace.'],
-    automation: ['AI and automation', 'Choose the analysis model, review autonomous decisions, and manage reversible automation policy.'],
     credentials: ['Credentials', 'Review which credentials are required for protected actions and where they are kept.'],
     audit: ['Audit and jobs', 'Trace queued analysis, native actions, investigation sessions, and orchestrator history.']
   }[systemView] || ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'];
@@ -3795,8 +3796,6 @@ function renderIntegrations() {
       </div>
       <p class="small" style="margin:14px 0 0;">Use the Research, Publications, or Automation workspace to enter a session-scoped credential when a protected action requires it. Rotate credentials in the server or local helper, never in this page.</p>`;
   }
-  renderIntelligence();
-
   const sessionsTable = el('native-sessions-table');
   if (sessionsTable) {
     if (!recentSessions.length) {
@@ -6955,7 +6954,7 @@ function renderAll() {
   renderEdgeWorkspace();
   renderRunRequests();
   renderIntegrations();
-  renderIntelligence();
+  renderAutomation();
   renderTriageOps();
   renderResearchCases();
   renderBlogOps();
@@ -8497,7 +8496,7 @@ function renderResearchResolutions() {
   el('research-resolution-current-btn')?.addEventListener('click', event => runResearchCaseAction('resolution-run', {
     pipeline_id: state.researchCases.selected?.pipelines?.[0]?.pipeline_id || '',
   }, event.currentTarget));
-  el('research-resolution-open-automation-btn')?.addEventListener('click', () => setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.automation }));
+  el('research-resolution-open-automation-btn')?.addEventListener('click', () => setPage('automation'));
   host.querySelectorAll('.research-resolution-review-btn').forEach(button => button.addEventListener('click', async event => {
     const decision = button.dataset.decision;
     if (!(await requestConfirmation(decision === 'reopen' ? 'Reopen this agent-resolved case for analyst review?' : 'Accept this agent resolution?', {
@@ -8868,8 +8867,11 @@ async function refreshActiveSurface({ force = false } = {}) {
       await loadEdgeWorkspace({ render: false });
       renderEdgeWorkspace();
     } else if (page === 'integrations') {
-      await Promise.all([loadIntegrationStatus(), loadLocalTriageState(), loadIntelligence({ render: false })]);
+      await Promise.all([loadIntegrationStatus(), loadLocalTriageState()]);
       renderIntegrations();
+    } else if (page === 'automation') {
+      await Promise.all([loadIntegrationStatus(), loadIntelligence({ render: false })]);
+      renderAutomation();
     } else if (page === 'triage-ops') {
       await loadTriageOpsAlerts({ render: false });
       renderTriageOps();
@@ -9027,7 +9029,7 @@ function bindEvents() {
   el('work-board-view-btn')?.addEventListener('click', () => { workView = 'board'; renderTasks(); });
   el('top-search-btn')?.addEventListener('click', openCommandPalette);
   el('top-help-btn')?.addEventListener('click', () => openHelpDrawer(currentPageFromLocation()));
-  el('top-health-btn')?.addEventListener('click', () => setPage('integrations'));
+  el('top-health-btn')?.addEventListener('click', () => setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.health }));
   el('workspace-switcher')?.addEventListener('click', () => showToast('This pilot uses one authenticated SecOpsAI workspace. Customer/site switching is available when multi-tenant workspaces are enabled.', 'info'));
   el('confirm-dialog-confirm')?.addEventListener('click', () => finishConfirmation(true));
   el('confirm-dialog-cancel')?.addEventListener('click', () => finishConfirmation(false));

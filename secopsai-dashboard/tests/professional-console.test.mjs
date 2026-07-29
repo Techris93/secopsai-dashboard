@@ -14,8 +14,10 @@ for (const [page, route] of [
   ['mission-control', 'overview'],
   ['findings', 'findings'],
   ['edge', 'assets'],
+  ['tasks', 'work'],
   ['research-cases', 'research\\/cases'],
   ['blog-ops', 'publications'],
+  ['automation', 'automation'],
   ['integrations', 'system']
 ]) {
   assert.match(index, new RegExp(`data-page="${page}"`));
@@ -30,12 +32,19 @@ for (const marker of ['renderContextNav', 'currentPageFromLocation', 'openComman
 for (const marker of ['toast-region', 'command-palette', 'help-drawer', 'confirm-dialog', 'professional-ui .app-shell', 'context-nav-btn']) {
   assert.ok((index + styles).includes(marker), `missing ${marker}`);
 }
-for (const route of ['research/inbox', 'research/cases', 'research/campaigns', 'research/watchlists', 'research/coverage', 'research/disclosure', 'research/sandbox', 'publications/research', 'publications/advisories', 'publications/news', 'publications/drafts', 'publications/review', 'publications/published', 'system/health', 'system/integrations', 'system/automation', 'system/credentials', 'system/audit', 'assets/inventory', 'assets/changes', 'assets/sensors', 'assets/schedules', 'assets/wifi']) {
+for (const route of ['research/inbox', 'research/cases', 'research/campaigns', 'research/watchlists', 'research/coverage', 'research/disclosure', 'research/sandbox', 'publications/research', 'publications/advisories', 'publications/news', 'publications/drafts', 'publications/review', 'publications/published', 'system/health', 'system/integrations', 'system/credentials', 'system/audit', 'assets/inventory', 'assets/changes', 'assets/sensors', 'assets/schedules', 'assets/wifi']) {
   assert.match(app, new RegExp(route.replace('/', '\\/')));
 }
-for (const marker of ['research-view-summary', 'publication-view-summary', 'system-view-summary', 'asset-view-summary', 'mission-research-queues', 'research-inbox-candidates', 'research-disclosure-queue', 'research-sandbox-queue', 'data-research-section="watchlists"', 'data-research-section="campaigns"', 'data-research-section="cases"', 'data-blog-section="news"', 'data-system-section="automation"', 'data-edge-section="sensors"', 'research-stage-stepper', 'mobile-card-table', 'metric-scope']) {
+for (const marker of ['research-view-summary', 'publication-view-summary', 'automation-view-summary', 'system-view-summary', 'asset-view-summary', 'mission-research-queues', 'research-inbox-candidates', 'research-disclosure-queue', 'research-sandbox-queue', 'data-research-section="watchlists"', 'data-research-section="campaigns"', 'data-research-section="cases"', 'data-blog-section="news"', 'data-edge-section="sensors"', 'research-stage-stepper', 'mobile-card-table', 'metric-scope']) {
   assert.ok((index + styles + app).includes(marker), `missing redesign contract: ${marker}`);
 }
+assert.match(index, /id="page-automation"[\s\S]*id="intelligence-title"/);
+assert.match(index, /id="page-integrations"[\s\S]*id="system-view-summary"/);
+assert.doesNotMatch(index, /data-system-section="automation"/);
+assert.doesNotMatch(app, /system\/automation/);
+assert.doesNotMatch(app, /\["AI dependencies", "findings"\]/);
+assert.doesNotMatch(app, /\["Approvals", "integrations"\]/);
+assert.equal((app.match(/coverage:\s*'research\/coverage'/g) || []).length, 0, 'coverage must be owned by the standalone page route');
 assert.match(app, /research-form-actions research-pipeline-actions/);
 assert.match(styles, /\.research-stage-stepper\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/s);
 assert.match(styles, /\.research-stage-step\s*>\s*span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);

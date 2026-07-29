@@ -13,7 +13,7 @@ This ledger records the product redesign in verified, reversible checkpoints.
 
 - Status: complete
 - Goal: make each operator destination answer one question and give it one primary next action.
-- Evidence: browser verification confirmed `research/inbox`, `research/cases`, `publications/news`, `publications/review`, and `system/automation` update both the URL and visible section state. Legacy `#publications` and `#research/cases` remain valid.
+- Evidence: browser verification confirmed `research/inbox`, `research/cases`, `publications/news`, `publications/review`, and `automation` update both the URL and visible section state. Legacy `#publications` and `#research/cases` remain valid.
 - Evidence: Findings and Overview cards now label whether counts come from current filters, Core canonical records, dashboard records, or the local Core triage artifact.
 - Acceptance: route labels, metric scopes, research sections, publication queues, and System workspaces are explicit; old links remain compatible.
 
@@ -29,9 +29,9 @@ This ledger records the product redesign in verified, reversible checkpoints.
 
 - Status: complete
 - Goal: move model selection and autonomous triage into a dedicated Automation surface.
-- Evidence: `system/automation` now isolates model selection, bridge controls, analysis requests, autonomous triage, and tuning proposals from health and audit views.
+- Evidence: the standalone `automation` page owns model selection, bridge controls, analysis requests, autonomous triage, investigation pipelines, and tuning proposals. System owns only health, integrations, credentials, and audit history.
 - Evidence: Findings rows now expose `Review` as the primary action and place task, investigation, and command-copy actions behind `More`.
-- Evidence: System now has a dedicated Automation route and a separate Credentials route that reports readiness without displaying secrets. Work defaults to an Operator queue scope, with an explicit All work escape hatch; Publications separates Original research from External news.
+- Evidence: Automation and System are independent primary destinations. System has a Credentials route that reports readiness without displaying secrets. Work defaults to an Operator queue scope, with an explicit All work escape hatch; Publications separates Original research from External news.
 - Acceptance: model decisions, guardrails, reversibility, and audit history are understandable without exposing service internals.
 
 ## Checkpoint 4: Responsive and accessible console
@@ -65,3 +65,11 @@ This ledger records the product redesign in verified, reversible checkpoints.
 - Implemented: independent visible Research workspaces for Inbox, Cases, Campaigns, Watchlists, Disclosure, and Sandbox; durable candidate-promotion policy with preview and audited draft-only application; isolated Original Research, Advisory, and External News approval queues; a fixed finding-review drawer and saved finding views; operator-only work filtering; removal of implementation activity from Overview; removal of CLI fallbacks from normal finding and health workflows; explicit scope on System metrics; automatic mobile-card labels for every dynamic data table; keyboard focus treatment and 44px control targets.
 - Safety: automatic promotion creates draft investigations only. False-positive closures, external sandbox submission, disclosure delivery, attribution, irreversible response, and final publication retain their existing approval boundaries.
 - Verification: dashboard JavaScript, contract tests, production build, Python gateway tests, Core's complete 453-test suite, diff checks, and a 390×844 browser check pass. The browser reported no horizontal overflow, no visible unlabeled controls, and no visible controls under 40px. Signed-in route behavior remains covered by the route contract and the earlier authenticated smoke session; this final browser session reached the enforced sign-in boundary and did not bypass authentication.
+
+## Checkpoint 8: Navigation ownership correction
+
+- Status: complete
+- Goal: ensure that every primary and secondary navigation control owns a real, reload-stable operator destination.
+- Implemented: Automation is an independent Administration page and route; System owns only health, integrations, credentials, and audit history; Work is restored to primary navigation; Global Coverage is no longer overwritten by the Research tab router; Findings and Supply Chain share a consistent two-destination subnavigation; placeholder Work, Findings, Supply Chain, and Coverage tabs that did not change content were removed.
+- Verification: contract tests assert distinct Automation and System DOM ownership, reject the former `system/automation` alias, and reject placeholder secondary links. Browser route checks confirmed `#automation` selects `page-automation`, `#system/credentials` selects only the credentials section in `page-integrations`, and `#research/coverage` selects `page-coverage` after direct navigation.
+- Acceptance: Automation and System cannot appear active together; deep links resolve to the same page before and after reload; every visible secondary tab changes destination; the Health shortcut always opens System Health.
