@@ -41,7 +41,7 @@ for (const marker of ['research-view-summary', 'publication-view-summary', 'auto
 assert.match(index, /id="page-automation"[\s\S]*id="intelligence-title"/);
 assert.match(index, /id="page-integrations"[\s\S]*id="system-view-summary"/);
 assert.doesNotMatch(index, /data-system-section="automation"/);
-assert.doesNotMatch(app, /system\/automation/);
+assert.match(app, /'system\/automation': 'automation'/);
 assert.doesNotMatch(app, /\["AI dependencies", "findings"\]/);
 assert.doesNotMatch(app, /\["Approvals", "integrations"\]/);
 assert.equal((app.match(/coverage:\s*'research\/coverage'/g) || []).length, 0, 'coverage must be owned by the standalone page route');

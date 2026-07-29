@@ -291,7 +291,8 @@ const ROUTE_PAGES = Object.freeze({
   ...Object.fromEntries(Object.entries(RESEARCH_VIEW_ROUTES).map(([, route]) => [route, 'research-cases'])),
   ...Object.fromEntries(Object.entries(BLOG_VIEW_ROUTES).map(([, route]) => [route, 'blog-ops'])),
   ...Object.fromEntries(Object.entries(SYSTEM_VIEW_ROUTES).map(([, route]) => [route, 'integrations'])),
-  ...Object.fromEntries(Object.entries(ASSET_VIEW_ROUTES).map(([, route]) => [route, 'edge']))
+  ...Object.fromEntries(Object.entries(ASSET_VIEW_ROUTES).map(([, route]) => [route, 'edge'])),
+  'system/automation': 'automation'
 });
 const TOP_NAV_PAGE = Object.freeze({
   "mission-control": "mission-control",
@@ -1252,7 +1253,7 @@ function currentPageFromLocation() {
   if (String(route).replace(/^#\/?/, '').startsWith('publications/')) {
     state.blogOps.view = blogViewForRoute(route);
   }
-  if (String(route).replace(/^#\/?/, '').startsWith('system/')) {
+  if (String(route).replace(/^#\/?/, '').startsWith('system/') && String(route).replace(/^#\/?/, '') !== 'system/automation') {
     state.integrationView = systemViewForRoute(route);
   }
   if (String(route).replace(/^#\/?/, '').startsWith('assets/')) {
