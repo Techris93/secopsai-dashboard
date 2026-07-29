@@ -4210,6 +4210,10 @@ function renderIntelligence() {
   const investigations = data?.investigations || {};
   const investigationSummary = investigations.summary || {};
   const investigationRuns = Array.isArray(investigations.runs) ? investigations.runs : [];
+  const learning = data?.learning || {};
+  const learningSummary = learning.summary || {};
+  const learningProposals = Array.isArray(learning.proposals) ? learning.proposals : [];
+  const learningDeployments = Array.isArray(learning.deployments) ? learning.deployments : [];
   const counts = jobs.reduce((result, job) => {
     const status = String(job?.status || 'unknown');
     result[status] = (result[status] || 0) + 1;
@@ -4338,6 +4342,23 @@ function renderIntelligence() {
           return `<tr><td><strong>${escapeHtml(run.finding_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div></td><td><span class="status-pill">${escapeHtml(humanizeSnake(run.status || 'unknown'))}</span><div class="small">${escapeHtml(humanizeSnake(run.current_stage || 'queued'))}</div></td><td>${run.pipeline_id ? `<span class="mono small">${escapeHtml(run.pipeline_id)}</span>` : '<span class="small">Not started</span>'}${blocker}</td><td>${escapeHtml(humanizeSnake(decision.verdict || 'pending'))}${decision.confidence != null ? `<div class="small">${escapeHtml(String(decision.confidence))}% confidence</div>` : ''}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${openCase}${retry}${cancel}</td></tr>`;
         }).join('')}</tbody></table></div>`;
   }
+  const learningSummaryEl = el('detection-learning-summary');
+  if (learningSummaryEl) learningSummaryEl.innerHTML = `
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.examples || 0))}</div><div class="metric-label">Trusted examples</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.experiments || 0))}</div><div class="metric-label">Experiments</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String((learningSummary.shadow || 0) + (learningSummary.canary || 0)))}</div><div class="metric-label">Under evaluation</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.rolled_back || 0))}</div><div class="metric-label">Rolled back</div></div>`;
+  const learningProposalsEl = el('detection-learning-proposals');
+  if (learningProposalsEl) learningProposalsEl.innerHTML = !learningProposals.length
+    ? '<div class="empty-state compact">No learning proposals yet. A cycle remains blocked until both verified true-positive and false-positive labels meet the minimum dataset policy.</div>'
+    : `<div class="table-wrap"><table><thead><tr><th>Proposal</th><th>Stage</th><th>Holdout</th><th>False negatives</th><th>Action</th></tr></thead><tbody>${learningProposals.map(p => {
+        const holdout = p.replay_metrics?.holdout || {};
+        const next = p.status === 'shadow_ready' ? 'shadow' : (p.status === 'shadow' ? 'canary' : (p.status === 'canary' ? 'active' : ''));
+        return `<tr><td><strong>${escapeHtml(humanizeSnake(p.proposal_type || 'risk_ranker'))}</strong><div class="small mono">${escapeHtml(p.proposal_id || '')}</div></td><td><span class="status-pill">${escapeHtml(humanizeSnake(p.status || 'unknown'))}</span></td><td>${escapeHtml(String(Math.round(Number(holdout.precision || 0)*100)))}% precision<div class="small">${escapeHtml(String(Math.round(Number(holdout.recall || 0)*100)))}% recall</div></td><td>${escapeHtml(String(holdout.fn || 0))}</td><td>${next ? `<button class="mini-btn" data-learning-deploy="${escapeHtml(p.proposal_id)}" data-learning-stage="${next}" type="button">Promote to ${escapeHtml(next)}</button>` : ''}${['shadow','canary','active'].includes(p.status) ? `<button class="mini-btn" data-learning-rollback="${escapeHtml(p.proposal_id)}" type="button">Rollback</button>` : ''}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
+  const learningDeploymentsEl = el('detection-learning-deployments');
+  if (learningDeploymentsEl) learningDeploymentsEl.innerHTML = learningDeployments.length
+    ? `<h5>Deployment observations</h5><div class="table-wrap"><table><thead><tr><th>Stage</th><th>Traffic</th><th>Observed</th><th>Status</th></tr></thead><tbody>${learningDeployments.slice(0,10).map(d => `<tr><td>${escapeHtml(humanizeSnake(d.stage || ''))}<div class="small mono">${escapeHtml(d.deployment_id || '')}</div></td><td>${escapeHtml(String(d.traffic_percent || 0))}%</td><td>TP ${escapeHtml(String(d.observations?.tp || 0))} · FP ${escapeHtml(String(d.observations?.fp || 0))} · TN ${escapeHtml(String(d.observations?.tn || 0))} · FN ${escapeHtml(String(d.observations?.fn || 0))}</td><td>${escapeHtml(humanizeSnake(d.status || ''))}</td></tr>`).join('')}</tbody></table></div>` : '';
 
   const table = el('intelligence-jobs-table');
   if (table) {
@@ -9199,6 +9220,12 @@ function bindEvents() {
     if (cancel && await requestConfirmation('Cancel this evidence investigation?', { title: 'Cancel investigation', context: 'Collected evidence remains in quarantine and the run can be retried.', confirmLabel: 'Cancel investigation' })) {
       await runIntelligenceAction('investigation-cancel', { run_id: cancel.dataset.investigationCancel }, cancel);
     }
+  });
+  el('detection-learning-run')?.addEventListener('click', event => runIntelligenceAction('learning-run-cycle', {}, event.currentTarget));
+  el('detection-learning-proposals')?.addEventListener('click', async event => {
+    const deploy = event.target.closest('[data-learning-deploy]'); const rollback = event.target.closest('[data-learning-rollback]');
+    if (deploy) await runIntelligenceAction('learning-deploy', { proposal_id: deploy.dataset.learningDeploy, stage: deploy.dataset.learningStage }, deploy);
+    if (rollback && await requestConfirmation('Rollback this learned detection policy?', { title: 'Rollback learned policy', context: 'SecOpsAI will stop active shadow or canary evaluation and preserve the experiment and observations for audit.', confirmLabel: 'Rollback policy' })) await runIntelligenceAction('learning-rollback', { proposal_id: rollback.dataset.learningRollback }, rollback);
   });
   document.querySelectorAll('[data-intelligence-service]').forEach(button => button.addEventListener('click', async event => {
     const serviceAction = event.currentTarget.dataset.intelligenceService;
