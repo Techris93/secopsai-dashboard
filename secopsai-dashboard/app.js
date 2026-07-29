@@ -8084,7 +8084,7 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
       <label><span>Reference version</span><input id="research-pipeline-reference-version" value="${escapeHtml(reference.version || '')}" placeholder="Latest stable when empty" /></label>
     </div>
     ${comparisonNeeded ? '<div class="research-pipeline-notice">Comparison is incomplete. SecOpsAI will not guess which package is legitimate. Enter a verified reference and resume.</div>' : ''}
-  <div class="research-form-actions">
+  <div class="research-form-actions research-pipeline-actions">
       <button class="primary-btn" id="research-pipeline-start-btn" type="button" ${canStart ? '' : 'disabled'}>Run Investigation Pipeline</button>
     ${pipeline ? `<button class="secondary-btn" id="research-pipeline-resume-btn" type="button" ${canResume ? '' : 'disabled'}>${pipeline.status === 'failed' ? 'Retry from checkpoint' : 'Add reference and rerun analysis'}</button>` : ''}
   </div>
