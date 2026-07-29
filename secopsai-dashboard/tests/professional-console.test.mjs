@@ -88,6 +88,15 @@ assert.ok(index.indexOf('id="intelligence-service-actions"') < index.indexOf('id
 
 assert.match(index, /20260727-full-intelligence-results/);
 assert.match(app, /window\.addEventListener\('popstate'/);
+assert.match(app, /function humanizeMachineText/);
+assert.match(app, /function runRefreshAction/);
+assert.match(app, /const currentButton = buttonId \? el\(buttonId\) : originalButton/);
+assert.match(app, /function refreshActiveSurface/);
+assert.match(app, /surfaceRefreshInFlight/);
+assert.match(app, /setInterval\(\(\) => \{\s*refreshActiveSurface\(\);\s*\}, 15000\)/s);
+assert.match(app, /window\.addEventListener\('focus', \(\) => refreshActiveSurface\(\{ force: true \}\)\)/);
+assert.match(app, /renderBulletList[\s\S]*humanizeMachineText\(item\)/);
+assert.doesNotMatch(index, />missing_or_hallucinated</);
 assert.match(app, /function requestConfirmation/);
 assert.doesNotMatch(app, /\b(?:window\.)?alert\s*\(/);
 assert.doesNotMatch(app, /\bconfirm\s*\(/);

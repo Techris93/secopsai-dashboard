@@ -224,6 +224,9 @@ const state = {
   nativeFindingOverrides: new Map(),
   outputEvidenceCache: new Map(),
   liveRefreshTimer: null,
+  surfaceRefreshTimer: null,
+  surfaceRefreshInFlight: false,
+  lastSurfaceRefreshAt: 0,
   researchPipelinePollTimer: null,
   nativeEventSource: null,
   nativeStreamStatus: 'disconnected',
@@ -473,6 +476,10 @@ function stopDashboardRuntime() {
   if (state.liveRefreshTimer) {
     clearInterval(state.liveRefreshTimer);
     state.liveRefreshTimer = null;
+  }
+  if (state.surfaceRefreshTimer) {
+    clearInterval(state.surfaceRefreshTimer);
+    state.surfaceRefreshTimer = null;
   }
   if (state.researchPipelinePollTimer) {
     clearInterval(state.researchPipelinePollTimer);
@@ -1071,18 +1078,58 @@ function escapeHtml(str = "") {
     .replaceAll("'", "&#039;");
 }
 
+function humanizeMachineText(value) {
+  return String(value || '')
+    .replace(/\b[a-z0-9]+(?:_[a-z0-9]+)+\b/gi, token => token.replace(/_+/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function setButtonBusy(buttonOrId, busy, busyLabel = 'Working…') {
   const btn = typeof buttonOrId === 'string' ? el(buttonOrId) : buttonOrId;
   if (!btn) return;
   if (busy) {
     if (!btn.dataset.originalLabel) btn.dataset.originalLabel = btn.innerHTML;
     btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
     btn.classList.add('is-loading');
     btn.innerHTML = busyLabel;
   } else {
     btn.disabled = false;
+    btn.removeAttribute('aria-busy');
     btn.classList.remove('is-loading');
-    if (btn.dataset.originalLabel) btn.innerHTML = btn.dataset.originalLabel;
+    if (btn.dataset.originalLabel) {
+      btn.innerHTML = btn.dataset.originalLabel;
+      delete btn.dataset.originalLabel;
+    }
+  }
+}
+
+async function runRefreshAction(buttonOrId, action, {
+  busyLabel = 'Refreshing…',
+  successMessage = 'Data refreshed',
+  errorMessage = 'Refresh failed'
+} = {}) {
+  const originalButton = typeof buttonOrId === 'string' ? el(buttonOrId) : buttonOrId;
+  const buttonId = originalButton?.id || (typeof buttonOrId === 'string' ? buttonOrId : '');
+  const originalLabel = originalButton?.innerHTML || '';
+  setButtonBusy(originalButton, true, busyLabel);
+  try {
+    const result = await action();
+    showToast(successMessage, 'success', 2600);
+    return result;
+  } catch (error) {
+    const detail = error?.message || String(error);
+    console.error(`${errorMessage.toLowerCase()}:`, error);
+    setStatus(`${errorMessage}: ${detail}`, true);
+    showToast(`${errorMessage}: ${detail}`, 'error');
+    return null;
+  } finally {
+    const currentButton = buttonId ? el(buttonId) : originalButton;
+    if (currentButton && !currentButton.dataset.originalLabel && originalLabel) {
+      currentButton.dataset.originalLabel = originalLabel;
+    }
+    setButtonBusy(currentButton, false);
   }
 }
 
@@ -1384,7 +1431,7 @@ function latestRunByRole(runs) {
 }
 
 function statusLabel(status) {
-  return String(status || '').replace(/[_-]+/g, ' ');
+  return humanizeMachineText(String(status || '').replace(/-+/g, ' '));
 }
 
 function getTaskFilters() {
@@ -2653,7 +2700,7 @@ function renderMissionControl() {
     eventsEl.innerHTML = recentFeed.length ? recentFeed.map(ev => `
       <div class="feed-item" style="border-left-color:${ev.severity === 'error' ? '#ef4444' : ev.severity === 'success' ? '#10b981' : ev.severity === 'warning' ? '#f59e0b' : '#06b6d4'}">
         <div><strong>${escapeHtml(ev.title)}</strong></div>
-        <div class="meta">${escapeHtml(ev.event_type || 'activity')} • ${fmtDate(ev.created_at)}</div>
+        <div class="meta">${escapeHtml(statusLabel(ev.event_type || 'activity'))} • ${fmtDate(ev.created_at)}</div>
       </div>
     `).join("") : `<div class="empty">No dashboard events yet.</div>`;
   }
@@ -2668,7 +2715,7 @@ function renderMissionControl() {
     runsEl.innerHTML = recentRuns.length ? recentRuns.map(run => `
       <div class="feed-item" style="border-left-color:${cfg.departments[roleDepartment(run.role_label)] || '#06b6d4'}">
         <div><strong>${escapeHtml(run.role_label)}</strong> — ${escapeHtml(run.task_summary)}</div>
-        <div class="meta">${escapeHtml(run.status)} • ${escapeHtml(run.runtime || '—')} • ${fmtDate(run.created_at)}</div>
+        <div class="meta">${escapeHtml(statusLabel(run.status))} • ${escapeHtml(run.runtime || '—')} • ${fmtDate(run.created_at)}</div>
       </div>
     `).join("") : `<div class="empty">No agent runs yet.</div>`;
   }
@@ -3515,7 +3562,7 @@ function renderRunRequests() {
       <tbody>${[...pending, ...applied].map(action => `
         <tr>
           <td>${renderStatusPill(String(action.status || 'unknown').toLowerCase(), humanizeSnake(action.status || 'unknown'))}</td>
-          <td><strong>${escapeHtml(action.action_type || 'unknown')}</strong><div class="small">${escapeHtml(action.action_id || '—')}</div></td>
+          <td><strong>${escapeHtml(statusLabel(action.action_type || 'unknown'))}</strong><div class="small">${escapeHtml(action.action_id || '—')}</div></td>
           <td><div class="small">${escapeHtml(action.finding_id || '—')}</div></td>
           <td><div class="small rr-result">${escapeHtml(compactText(action.summary || action.note || 'No action summary available.', 180))}</div></td>
           <td><div class="task-card-actions rr-actions">${action.status === 'pending' ? `<button class="mini-btn native-action-run-btn" data-action-id="${escapeHtml(action.action_id || '')}">Apply now</button><button class="mini-btn native-action-copy-btn" data-command="${escapeHtml(nativeActionCommand(action))}">Copy apply-action</button>` : '<span class="small">Already applied</span>'}</div></td>
@@ -3609,7 +3656,7 @@ function renderSessionDetail(session) {
           ${artifacts.length ? artifacts.map(artifact => `
             <div class="feed-item compact-feed-item">
               <div><strong>${escapeHtml(artifact.label || humanizeSnake(artifact.kind || 'artifact'))}</strong></div>
-              <div class="small">${escapeHtml(artifact.kind || 'artifact')} • ${escapeHtml(fmtDate(artifact.created_at))}</div>
+              <div class="small">${escapeHtml(statusLabel(artifact.kind || 'artifact'))} • ${escapeHtml(fmtDate(artifact.created_at))}</div>
               <div class="small">${escapeHtml(compactText(artifact.path || 'No artifact path recorded.', 220))}</div>
             </div>
           `).join('') : '<div class="empty compact-empty">No artifacts attached yet.</div>'}
@@ -4403,8 +4450,8 @@ function renderCompactChips(values, empty = 'None found') {
 
 function renderBulletList(values, empty = 'None') {
   const items = compactValues(values, 10);
-  if (!items.length) return `<p class="small">${escapeHtml(empty)}</p>`;
-  return `<ul class="blog-blocker-list">${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
+  if (!items.length) return `<p class="small">${escapeHtml(humanizeMachineText(empty))}</p>`;
+  return `<ul class="blog-blocker-list">${items.map(item => `<li>${escapeHtml(humanizeMachineText(item))}</li>`).join('')}</ul>`;
 }
 
 function blogOpsAdminTokenHint() {
@@ -4669,7 +4716,7 @@ function renderBlogDraftPreview() {
     <div class="kv-list">
       <div class="kv-row"><span class="kv-key">Source</span><span class="kv-val">${escapeHtml(draft.source_name || 'SecOpsAI')}</span></div>
       <div class="kv-row"><span class="kv-key">Severity</span><span class="kv-val">${escapeHtml(draft.severity || 'info')}</span></div>
-      <div class="kv-row"><span class="kv-key">Trust</span><span class="kv-val">${escapeHtml(sourceMetadata.source_trust_level || 'unknown')}</span></div>
+      <div class="kv-row"><span class="kv-key">Trust</span><span class="kv-val">${escapeHtml(statusLabel(sourceMetadata.source_trust_level || 'unknown'))}</span></div>
       <div class="kv-row"><span class="kv-key">Published</span><span class="kv-val">${escapeHtml(fmtDate(sourceMetadata.published_at))}</span></div>
       <div class="kv-row"><span class="kv-key">Fetched</span><span class="kv-val">${escapeHtml(fmtDate(sourceMetadata.fetched_at))}</span></div>
       <div class="kv-row"><span class="kv-key">Path</span><span class="kv-val">${escapeHtml(draft.path || draft.slug || '')}</span></div>
@@ -5061,16 +5108,11 @@ async function runDailyGuideRefresh(button = null) {
     setStatus(bootError, true);
     return;
   }
-  setButtonBusy(button, true, 'Refreshing…');
   setStatus('<span class="dot"></span> Running read-only daily dashboard refresh…');
-  try {
-    await boot();
-    setStatus('<span class="dot"></span> Daily dashboard refresh completed');
-  } catch (error) {
-    setStatus(`Daily dashboard refresh failed: ${error.message || error}`, true);
-  } finally {
-    setButtonBusy(button, false);
-  }
+  await runRefreshAction(button, boot, {
+    successMessage: 'Daily dashboard refresh completed',
+    errorMessage: 'Daily dashboard refresh failed'
+  });
 }
 
 async function runTriageOpsEvidenceBundle(button = null) {
@@ -5703,7 +5745,7 @@ function renderOrchestratorReview(candidate = null) {
         <div class="campaign-result-section"><h4>Confidence</h4><p class="small">${escapeHtml(review.confidence || 'unknown')}</p></div>
         <div class="campaign-result-section"><h4>Next action</h4><p class="small">${escapeHtml(review.recommended_next_action || 'Review candidate evidence before taking write actions.')}</p></div>
       </div>
-      ${blockers.length ? `<div class="evidence-notice warning"><strong>Blocked:</strong> ${escapeHtml(blockers.join('; '))}</div>` : ''}
+      ${blockers.length ? `<div class="evidence-notice warning"><strong>Blocked:</strong> ${escapeHtml(humanizeMachineText(blockers.join('; ')))}</div>` : ''}
       <div class="campaign-result-columns">
         <div class="campaign-result-section"><h4>Package artifacts</h4>${renderCompactChips(packageArtifacts.map(row => `${row.ecosystem}:${row.package}@${row.version || 'unknown'}`), 'No package artifacts validated.')}</div>
         <div class="campaign-result-section"><h4>Projects / repos</h4>${renderCompactChips(githubRepos.map(repo => `github:${repo}`), 'No project repositories identified.')}</div>
@@ -7447,7 +7489,7 @@ function renderResearchDiscovery() {
   const candidateMarkup = candidates.length
     ? `<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Ecosystem</th><th>Score</th><th>Why</th><th>Status</th></tr></thead><tbody>${candidates.slice(0, 25).map(item => `<tr><td><strong>${escapeHtml(item.package)}</strong><div class="small">${escapeHtml(item.version)} vs ${escapeHtml(item.reference_identifier)}</div></td><td>${escapeHtml(item.ecosystem)}</td><td>${escapeHtml(String(item.score))}</td><td>${escapeHtml(item.reason || 'Similarity requires analyst review')}</td><td>${escapeHtml(statusLabel(item.status))}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty-state compact">No candidates yet. Add a watchlist, run a monitor, and review the resulting scoped candidates.</div>';
-  const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(item.reason || 'Review candidate')}</td><td>${escapeHtml(statusLabel(item.status))}</td><td><div style="display: flex; gap: 8px;"><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email</button>${item.status === 'open' ? `<button class="mini-btn research-alert-resolve-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Resolve</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>` : '';
+  const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(humanizeMachineText(item.reason || 'Review candidate'))}</td><td>${escapeHtml(statusLabel(item.status))}</td><td><div style="display: flex; gap: 8px;"><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email</button>${item.status === 'open' ? `<button class="mini-btn research-alert-resolve-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Resolve</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>` : '';
   candidatesHost.innerHTML = candidateMarkup + alertMarkup;
   renderResearchStageQueues(candidates);
   renderResearchPromotionPolicy();
@@ -7618,11 +7660,11 @@ function renderCoverage() {
   }).join('') : '<div class="empty-state compact">No collectors defined yet.</div>';
 
   eventsHost.innerHTML = coverage.events.length
-    ? `<div class="table-wrap"><table><thead><tr><th>Registry time</th><th>Ecosystem</th><th>Package</th><th>Version</th><th>Event</th><th>State</th></tr></thead><tbody>${coverage.events.map(event => `<tr><td>${escapeHtml(event.registry_timestamp || '')}</td><td>${escapeHtml(event.ecosystem)}</td><td><strong>${escapeHtml(event.package)}</strong></td><td>${escapeHtml(event.version || '—')}</td><td>${escapeHtml(event.event_type)}</td><td>${escapeHtml(statusLabel(event.processing_state))}</td></tr>`).join('')}</tbody></table></div>`
+    ? `<div class="table-wrap"><table><thead><tr><th>Registry time</th><th>Ecosystem</th><th>Package</th><th>Version</th><th>Event</th><th>State</th></tr></thead><tbody>${coverage.events.map(event => `<tr><td>${escapeHtml(event.registry_timestamp || '')}</td><td>${escapeHtml(event.ecosystem)}</td><td><strong>${escapeHtml(event.package)}</strong></td><td>${escapeHtml(event.version || '—')}</td><td>${escapeHtml(statusLabel(event.event_type))}</td><td>${escapeHtml(statusLabel(event.processing_state))}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty-state compact">No feed events recorded yet. Run a collector to start the ledger.</div>';
 
   windowsHost.innerHTML = coverage.windows.length
-    ? `<div class="table-wrap"><table><thead><tr><th>Window start</th><th>Window end</th><th>Pages</th><th>Events</th><th>State</th></tr></thead><tbody>${coverage.windows.map(window => `<tr><td>${escapeHtml(window.window_start || '')}</td><td>${escapeHtml(window.window_end || '')}</td><td>${Number(window.processed_pages) || 0}/${Number(window.expected_pages) || 0}</td><td>${Number(window.events_stored) || 0}</td><td>${escapeHtml(window.state)}${window.gap_reason ? ` · ${escapeHtml(window.gap_reason)}` : ''}</td></tr>`).join('')}</tbody></table></div>`
+    ? `<div class="table-wrap"><table><thead><tr><th>Window start</th><th>Window end</th><th>Pages</th><th>Events</th><th>State</th></tr></thead><tbody>${coverage.windows.map(window => `<tr><td>${escapeHtml(window.window_start || '')}</td><td>${escapeHtml(window.window_end || '')}</td><td>${Number(window.processed_pages) || 0}/${Number(window.expected_pages) || 0}</td><td>${Number(window.events_stored) || 0}</td><td>${escapeHtml(statusLabel(window.state))}${window.gap_reason ? ` · ${escapeHtml(humanizeMachineText(window.gap_reason))}` : ''}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty-state compact">No coverage windows recorded yet.</div>';
 }
 
@@ -8160,7 +8202,7 @@ function renderResearchAutomationPanel(researchCase) {
     <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">This creates an approval record only. Execution is unavailable until a dedicated isolated provider is configured.</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="2"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
     <div class="research-automation-status">
       <strong>Jobs and approvals</strong>
-      ${jobs.length ? jobs.map(job => `<div class="feed-item"><code>${escapeHtml(job.job_id)}</code> · ${escapeHtml(statusLabel(job.status))} · ${escapeHtml(job.action)}${job.status === 'awaiting_review' ? ` <button class="mini-btn research-intake-attach-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Attach Verified Evidence</button>` : ''}${['failed','expired','canceled'].includes(job.status) ? ` <button class="mini-btn research-job-retry-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Retry</button>` : ''}${['queued','running','awaiting_review'].includes(job.status) ? ` <button class="mini-btn research-job-cancel-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : ''}</div>`).join('') : '<div class="small">No automated research jobs yet.</div>'}
+      ${jobs.length ? jobs.map(job => `<div class="feed-item"><code>${escapeHtml(job.job_id)}</code> · ${escapeHtml(statusLabel(job.status))} · ${escapeHtml(statusLabel(job.action))}${job.status === 'awaiting_review' ? ` <button class="mini-btn research-intake-attach-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Attach Verified Evidence</button>` : ''}${['failed','expired','canceled'].includes(job.status) ? ` <button class="mini-btn research-job-retry-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Retry</button>` : ''}${['queued','running','awaiting_review'].includes(job.status) ? ` <button class="mini-btn research-job-cancel-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : ''}</div>`).join('') : '<div class="small">No automated research jobs yet.</div>'}
       ${reviews.length ? `<div class="small">Latest publication review: <strong>${escapeHtml(statusLabel(reviews[0].status))}</strong>${(reviews[0].blockers || []).length ? ` · ${(reviews[0].blockers || []).length} blocker(s)` : ''}</div>` : ''}
       ${disclosures.length ? disclosures.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.disclosure_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)} <button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="approved" type="button">Approve</button><button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="sent" type="button">Record Sent</button></div>`).join('') : ''}
       ${sandboxes.length ? sandboxes.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-action="sandbox-approve" data-sandbox-status="approved" type="button">Approve public submission</button>` : ''}</div>`).join('') : ''}
@@ -8213,7 +8255,7 @@ function renderResearchCaseDetail(researchCase) {
         <label class="research-span-2"><span>Owner</span><input id="research-detail-owner" value="${escapeHtml(researchCase.owner || '')}" maxlength="160" /></label>
         <label class="research-span-2"><span>Executive summary</span><textarea id="research-detail-summary" rows="5" maxlength="8000">${escapeHtml(researchCase.summary || '')}</textarea></label>
       </div><div class="research-form-actions"><button class="primary-btn" id="research-save-case-btn" type="button">Save workflow</button><button class="secondary-btn" id="research-export-btn" type="button">Download case report</button><button class="secondary-btn" id="research-draft-blog-btn" type="button" ${readiness.ready ? '' : 'disabled'} title="${readiness.ready ? 'Creates a review-only Blog Ops draft.' : 'Resolve publication blockers first.'}">Create review draft</button></div>`)}
-    ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','Lifecycle state'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td><div class="small">Case: ${escapeHtml(statusLabel(item.status))} · Registry: ${escapeHtml(statusLabel(item.registry_state || 'unknown'))} · Artifact: ${escapeHtml(statusLabel(item.artifact_state || 'missing'))} · Validation: ${escapeHtml(statusLabel(item.validation_state || 'unverified'))}</div><details class="research-inline-state"><summary>Update lifecycle state</summary><div class="research-form-grid"><select id="research-subject-registry-${escapeHtml(item.subject_id)}"><option value="available" ${item.registry_state === 'available' ? 'selected' : ''}>available</option><option value="unlisted" ${item.registry_state === 'unlisted' ? 'selected' : ''}>unlisted</option><option value="removed" ${item.registry_state === 'removed' ? 'selected' : ''}>removed</option><option value="unavailable" ${item.registry_state === 'unavailable' ? 'selected' : ''}>unavailable</option><option value="unknown" ${!item.registry_state || item.registry_state === 'unknown' ? 'selected' : ''}>unknown</option></select><select id="research-subject-artifact-${escapeHtml(item.subject_id)}"><option value="collected">collected</option><option value="missing" selected>missing</option><option value="externally_supplied">externally_supplied</option></select><select id="research-subject-validation-${escapeHtml(item.subject_id)}"><option value="unverified" selected>unverified</option><option value="static_confirmed">static_confirmed</option><option value="sandbox_confirmed">sandbox_confirmed</option></select><input id="research-subject-reason-${escapeHtml(item.subject_id)}" placeholder="Evidence or reason" /><button class="mini-btn research-subject-state-btn" data-subject-id="${escapeHtml(item.subject_id)}" type="button">Save state</button></div></details> ${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
+    ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','Lifecycle state'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td><div class="small">Case: ${escapeHtml(statusLabel(item.status))} · Registry: ${escapeHtml(statusLabel(item.registry_state || 'unknown'))} · Artifact: ${escapeHtml(statusLabel(item.artifact_state || 'missing'))} · Validation: ${escapeHtml(statusLabel(item.validation_state || 'unverified'))}</div><details class="research-inline-state"><summary>Update lifecycle state</summary><div class="research-form-grid"><select id="research-subject-registry-${escapeHtml(item.subject_id)}">${['available','unlisted','removed','unavailable','unknown'].map(value => researchOption(value, item.registry_state || 'unknown')).join('')}</select><select id="research-subject-artifact-${escapeHtml(item.subject_id)}">${['collected','missing','externally_supplied'].map(value => researchOption(value, item.artifact_state || 'missing')).join('')}</select><select id="research-subject-validation-${escapeHtml(item.subject_id)}">${['unverified','static_confirmed','sandbox_confirmed'].map(value => researchOption(value, item.validation_state || 'unverified')).join('')}</select><input id="research-subject-reason-${escapeHtml(item.subject_id)}" placeholder="Evidence or reason" /><button class="mini-btn research-subject-state-btn" data-subject-id="${escapeHtml(item.subject_id)}" type="button">Save state</button></div></details> ${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
     ${researchDetailSection('Evidence', researchTable(['Evidence','Type','Provenance','Collected','State'], evidence.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td><strong>${escapeHtml(item.title)}</strong><div class="small">${escapeHtml(item.locator || item.sha256 || 'No locator')}</div></td><td>${escapeHtml(statusLabel(item.evidence_type))}</td><td>${escapeHtml(item.provenance || '—')}</td><td>${escapeHtml(fmtDate(item.collected_at))}</td><td>${researchRetractControl('evidence', item)}</td></tr>`), 'No evidence recorded.'))}
     ${researchDetailSection('Indicators', researchTable(['Type','Value','Confidence','Evidence','State'], iocs.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(item.ioc_type)}</td><td><code>${escapeHtml(item.value)}</code></td><td>${escapeHtml(String(item.confidence))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('ioc', item)}</td></tr>`), 'No indicators recorded; explicitly state when none were found.'))}
     ${researchDetailSection('Detection rules', `
@@ -8638,11 +8680,79 @@ async function backgroundRefreshLiveExecutionState() {
   }
 }
 
+async function refreshOperationalWorkspace() {
+  const [runs, workItems, events, runRequests, findings] = await Promise.all([
+    loadTable('agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }),
+    loadTable('work_items', { orderBy: { column: 'updated_at', ascending: false }, limit: 200 }),
+    loadTable('dashboard_events', { orderBy: { column: 'created_at', ascending: false }, limit: 100 }),
+    optionalLoadTable('run_requests', { orderBy: { column: 'created_at', ascending: false }, limit: 100 }),
+    optionalLoadTable('findings', { orderBy: { column: 'created_at', ascending: false }, limit: 100 })
+  ]);
+  state.runs = runs;
+  state.workItems = workItems;
+  state.events = events;
+  state.runRequests = runRequests;
+  state.findings = sortLatestFirst(findings, FINDING_LATEST_FIELDS);
+  await Promise.all([loadIntegrationStatus(), loadLocalTriageState()]);
+  await hydrateRunRequestOutputEvidence();
+  await synchronizeSuccessfulTaskTransitions();
+  renderTasks();
+  renderMissionControl();
+  renderFindings();
+  renderIntegrations();
+  return true;
+}
+
+async function refreshActiveSurface({ force = false } = {}) {
+  const now = Date.now();
+  if (state.surfaceRefreshInFlight || document.hidden) return false;
+  if (!force && now - state.lastSurfaceRefreshAt < 12000) return false;
+  state.surfaceRefreshInFlight = true;
+  try {
+    const page = currentPageFromLocation();
+    if (['mission-control', 'tasks', 'findings'].includes(page)) {
+      await refreshOperationalWorkspace();
+    } else if (page === 'edge') {
+      await loadEdgeWorkspace({ render: false });
+      renderEdgeWorkspace();
+    } else if (page === 'integrations') {
+      await Promise.all([loadIntegrationStatus(), loadLocalTriageState(), loadIntelligence({ render: false })]);
+      renderIntegrations();
+    } else if (page === 'triage-ops') {
+      await loadTriageOpsAlerts({ render: false });
+      renderTriageOps();
+    } else if (page === 'research-cases') {
+      await Promise.all([
+        loadResearchCases({ render: false, preserveSelection: true }),
+        loadResearchDiscovery({ render: false })
+      ]);
+      renderResearchCases();
+    } else if (page === 'coverage') {
+      await loadCoverage({ render: false });
+      renderCoverage();
+    } else if (page === 'blog-ops') {
+      await loadBlogOpsStatus({ render: false });
+      renderBlogOps();
+    }
+    state.lastSurfaceRefreshAt = Date.now();
+    return true;
+  } catch (error) {
+    console.warn('active surface refresh failed', error);
+    return false;
+  } finally {
+    state.surfaceRefreshInFlight = false;
+  }
+}
+
 function startLiveExecutionRefreshLoop() {
   if (state.liveRefreshTimer) clearInterval(state.liveRefreshTimer);
   state.liveRefreshTimer = setInterval(() => {
     backgroundRefreshLiveExecutionState();
   }, 5000);
+  if (state.surfaceRefreshTimer) clearInterval(state.surfaceRefreshTimer);
+  state.surfaceRefreshTimer = setInterval(() => {
+    refreshActiveSurface();
+  }, 15000);
 }
 
 async function boot() {
@@ -8837,14 +8947,11 @@ function bindEvents() {
       setStatus(bootError, true);
       return;
     }
-    const btn = el('refresh-btn');
-    setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
     setStatus('<span class="dot"></span> Refreshing dashboard data…');
-    try {
-      await boot();
-    } finally {
-      setButtonBusy(btn, false);
-    }
+    await runRefreshAction('refresh-btn', refreshOperationalWorkspace, {
+      busyLabel: '<span class="dot"></span> Refreshing…',
+      successMessage: 'Overview data refreshed'
+    });
   });
   el('new-task-btn')?.addEventListener('click', () => {
     if (bootError) {
@@ -8862,15 +8969,15 @@ function bindEvents() {
   });
   el('finding-review-close-btn')?.addEventListener('click', closeFindingReview);
   el('edge-refresh-btn')?.addEventListener('click', async (event) => {
-    const btn = event.currentTarget;
-    setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
-    await loadEdgeWorkspace();
-    setButtonBusy(btn, false);
+    await runRefreshAction(event.currentTarget, () => loadEdgeWorkspace(), {
+      busyLabel: '<span class="dot"></span> Refreshing…',
+      successMessage: 'Assets and sensors refreshed'
+    });
   });
   el('intelligence-refresh-btn')?.addEventListener('click', async event => {
-    setButtonBusy(event.currentTarget, true, 'Refreshing…');
-    await loadIntelligence();
-    setButtonBusy(event.currentTarget, false);
+    await runRefreshAction(event.currentTarget, () => loadIntelligence(), {
+      successMessage: 'Model assistance status refreshed'
+    });
   });
   el('intelligence-action-select')?.addEventListener('change', syncIntelligenceTarget);
   el('intelligence-target-id')?.addEventListener('input', event => { event.currentTarget.dataset.suggested = '0'; });
@@ -9068,14 +9175,14 @@ function bindEvents() {
     }
   });
   el('research-cases-refresh-btn')?.addEventListener('click', async event => {
-    setButtonBusy(event.currentTarget, true, 'Refreshing…');
-    await loadResearchCases();
-    setButtonBusy(event.currentTarget, false);
+    await runRefreshAction(event.currentTarget, () => loadResearchCases(), {
+      successMessage: 'Research cases refreshed'
+    });
   });
   el('research-watchlist-refresh-btn')?.addEventListener('click', async event => {
-    setButtonBusy(event.currentTarget, true, 'Refreshing…');
-    await loadResearchWatchlist();
-    setButtonBusy(event.currentTarget, false);
+    await runRefreshAction(event.currentTarget, () => loadResearchWatchlist(), {
+      successMessage: 'Research watchlist refreshed'
+    });
   });
   el('research-watchlist-preview-btn')?.addEventListener('click', async event => {
     const packages = selectedResearchWatchlistPackages();
@@ -9106,9 +9213,9 @@ function bindEvents() {
     }
   });
   el('research-discovery-refresh-btn')?.addEventListener('click', async event => {
-    setButtonBusy(event.currentTarget, true, 'Refreshing…');
-    await loadResearchDiscovery();
-    setButtonBusy(event.currentTarget, false);
+    await runRefreshAction(event.currentTarget, () => loadResearchDiscovery(), {
+      successMessage: 'Research discovery refreshed'
+    });
   });
   el('research-discovery-ecosystem')?.addEventListener('change', syncResearchDiscoveryWatchlistOptions);
   el('research-discovery-add-watchlist-btn')?.addEventListener('click', event => runResearchDiscoveryAction('watchlist-add', {
@@ -9135,7 +9242,9 @@ function bindEvents() {
   });
   el('research-discovery-run-due-btn')?.addEventListener('click', event => runResearchDiscoveryAction('monitor-run-due', { limit: 25 }, event.currentTarget));
   el('research-discovery-correlate-btn')?.addEventListener('click', event => runResearchDiscoveryAction('campaign-correlate', {}, event.currentTarget));
-  el('research-campaigns-refresh-btn')?.addEventListener('click', () => loadResearchDiscovery());
+  el('research-campaigns-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadResearchDiscovery(), {
+    successMessage: 'Research campaigns refreshed'
+  }));
   el('research-promotion-ecosystem')?.addEventListener('change', event => loadPromotionPolicyForEcosystem(event.currentTarget.value));
   el('research-promotion-save-btn')?.addEventListener('click', event => runResearchDiscoveryAction('promotion-policy-set', {
     ecosystem: el('research-promotion-ecosystem')?.value || 'all',
@@ -9165,7 +9274,10 @@ function bindEvents() {
       runResearchDiscoveryAction('alert-resolve', { alert_id: resolveBtn.dataset.alertId }, resolveBtn);
     }
   });
-  el('coverage-refresh-btn')?.addEventListener('click', () => loadCoverage());
+  el('coverage-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadCoverage(), {
+    busyLabel: '<span class="dot"></span> Refreshing…',
+    successMessage: 'Global coverage refreshed'
+  }));
   el('coverage-score-run-btn')?.addEventListener('click', event => runCoverageAction('score-run', {}, event.currentTarget));
   el('coverage-retry-btn')?.addEventListener('click', event => runCoverageAction('collect-retry-failures', {}, event.currentTarget));
   el('coverage-collectors')?.addEventListener('click', event => {
@@ -9262,10 +9374,10 @@ function bindEvents() {
     setStatus('Blog Ops admin token cleared');
   });
   el('blog-refresh-btn')?.addEventListener('click', async () => {
-    const btn = el('blog-refresh-btn');
-    setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
-    await loadBlogOpsStatus();
-    setButtonBusy(btn, false);
+    await runRefreshAction('blog-refresh-btn', () => loadBlogOpsStatus(), {
+      busyLabel: '<span class="dot"></span> Refreshing…',
+      successMessage: 'Publications refreshed'
+    });
   });
   el('blog-draft-filter')?.addEventListener('change', renderBlogOps);
   el('blog-content-filter')?.addEventListener('change', renderBlogOps);
@@ -9276,6 +9388,10 @@ function bindEvents() {
 }
 
 window.addEventListener('popstate', () => setPage(currentPageFromLocation(), { skipHistory: true }));
+window.addEventListener('focus', () => refreshActiveSurface({ force: true }));
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshActiveSurface({ force: true });
+});
 
 window.addEventListener('DOMContentLoaded', () => {
   setPage(currentPageFromLocation(), { skipHistory: true });
