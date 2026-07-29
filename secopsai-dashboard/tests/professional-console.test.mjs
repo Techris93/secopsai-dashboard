@@ -14,7 +14,6 @@ for (const [page, route] of [
   ['mission-control', 'overview'],
   ['findings', 'findings'],
   ['edge', 'assets'],
-  ['tasks', 'work'],
   ['research-cases', 'research\\/cases'],
   ['blog-ops', 'publications'],
   ['integrations', 'system']
@@ -31,13 +30,13 @@ for (const marker of ['renderContextNav', 'currentPageFromLocation', 'openComman
 for (const marker of ['toast-region', 'command-palette', 'help-drawer', 'confirm-dialog', 'professional-ui .app-shell', 'context-nav-btn']) {
   assert.ok((index + styles).includes(marker), `missing ${marker}`);
 }
-for (const route of ['research/inbox', 'research/cases', 'research/watchlists', 'research/coverage', 'research/disclosure', 'research/sandbox', 'publications/research', 'publications/advisories', 'publications/news', 'publications/drafts', 'publications/review', 'publications/published', 'system/health', 'system/integrations', 'system/automation', 'system/credentials', 'system/audit', 'assets/inventory', 'assets/changes', 'assets/sensors', 'assets/schedules', 'assets/wifi']) {
+for (const route of ['research/inbox', 'research/cases', 'research/campaigns', 'research/watchlists', 'research/coverage', 'research/disclosure', 'research/sandbox', 'publications/research', 'publications/advisories', 'publications/news', 'publications/drafts', 'publications/review', 'publications/published', 'system/health', 'system/integrations', 'system/automation', 'system/credentials', 'system/audit', 'assets/inventory', 'assets/changes', 'assets/sensors', 'assets/schedules', 'assets/wifi']) {
   assert.match(app, new RegExp(route.replace('/', '\\/')));
 }
-for (const marker of ['research-view-summary', 'publication-view-summary', 'system-view-summary', 'asset-view-summary', 'mission-research-queues', 'research-inbox-candidates', 'research-disclosure-queue', 'research-sandbox-queue', 'data-research-section="inbox watchlists"', 'data-research-section="cases"', 'data-blog-section="news"', 'data-system-section="automation"', 'data-edge-section="sensors"', 'research-stage-stepper', 'mobile-card-table', 'metric-scope']) {
+for (const marker of ['research-view-summary', 'publication-view-summary', 'system-view-summary', 'asset-view-summary', 'mission-research-queues', 'research-inbox-candidates', 'research-disclosure-queue', 'research-sandbox-queue', 'data-research-section="watchlists"', 'data-research-section="campaigns"', 'data-research-section="cases"', 'data-blog-section="news"', 'data-system-section="automation"', 'data-edge-section="sensors"', 'research-stage-stepper', 'mobile-card-table', 'metric-scope']) {
   assert.ok((index + styles + app).includes(marker), `missing redesign contract: ${marker}`);
 }
-for (const marker of ['task-filter-scope', 'Operator queue', 'blog-content-filter', 'Original research', 'system-credentials', 'Credential readiness']) {
+for (const marker of ['task-filter-scope', 'Operator assignments', 'blog-content-filter', 'Original research', 'system-credentials', 'Credential readiness', 'Candidate promotion policy', 'finding-review-drawer']) {
   assert.ok(index.includes(marker) || app.includes(marker), `missing operator clarity surface: ${marker}`);
 }
 assert.match(app, /scope: el\('task-filter-scope'\)/);

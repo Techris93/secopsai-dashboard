@@ -347,6 +347,13 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
   grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
 }
 .finding-detail-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:14px; }
+.finding-review-drawer { position: fixed; z-index: 120; top: 0; right: 0; width: min(620px, 94vw); height: 100dvh; overflow: auto; padding: 22px; border-left: 1px solid var(--border); background: var(--bg); box-shadow: -24px 0 70px rgba(2,6,23,.28); transform: translateX(105%); transition: transform .2s ease; }
+.finding-review-drawer.open { transform: translateX(0); }
+.finding-review-drawer-head { position: sticky; top: -22px; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin: -22px -22px 18px; padding: 18px 22px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.finding-review-drawer-head h3 { margin: 4px 0 0; }
+.professional-ui :is(button, a, input, select, textarea, summary):focus-visible { outline: 3px solid rgba(6,182,212,.72); outline-offset: 2px; }
+.publication-lane-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.saved-view-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .finding-detail-card { padding:16px; }
 .detail-summary {
   margin-top: 12px;
@@ -480,6 +487,8 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
 .research-stage-step.complete { border-color: rgba(16,185,129,.45); color: var(--text); background: rgba(16,185,129,.08); }
 .research-stage-step.current { border-color: rgba(6,182,212,.55); color: var(--text); background: rgba(6,182,212,.1); box-shadow: inset 0 0 0 1px rgba(6,182,212,.18); }
 .research-stage-index { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; border: 1px solid currentColor; font-size: .72rem; }
+.research-candidate-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.research-candidate-facts span { padding: 4px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-soft); color: var(--muted); font-size: .72rem; }
 .mission-queue { display: flex; align-items: center; gap: 10px; min-height: 76px; text-align: left; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft); color: var(--text); padding: 12px; cursor: pointer; }
 .mission-queue:hover { border-color: rgba(37,99,235,0.35); box-shadow: var(--shadow-soft); }
 .mission-queue-count { font-size: 1.55rem; font-weight: 750; color: var(--accent); }
@@ -511,6 +520,7 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
   .credential-status-grid { grid-template-columns: 1fr; }
   .mission-queues, .research-inbox-grid { grid-template-columns: 1fr; }
   .research-stage-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .publication-lane-grid { grid-template-columns: 1fr; }
   .asset-detail-columns { grid-template-columns: 1fr; }
   .asset-view-summary { display: block; }
   .asset-view-summary > * { display: block; margin: 2px 0; }

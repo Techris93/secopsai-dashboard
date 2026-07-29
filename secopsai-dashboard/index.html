@@ -89,12 +89,6 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M8 8h8"></path><path d="M8 12h8"></path><path d="M8 16h5"></path><circle cx="17" cy="16" r="1"></circle></svg></span>
           <span class="nav-copy"><span class="title">Assets</span><span class="desc">Inventory, sensors, and changes</span></span>
         </button>
-        <div class="nav-group-label">Administration</div>
-        <button class="nav-btn" data-page="tasks" data-route="work">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="m4 6 1 1 2-2"></path><path d="m4 12 1 1 2-2"></path><path d="m4 18 1 1 2-2"></path></svg></span>
-          <span class="nav-copy"><span class="title">Work</span><span class="desc">Tasks, approvals, and runs</span></span>
-        </button>
-
         <div class="nav-group-label">Research</div>
         <button class="nav-btn" data-page="research-cases" data-route="research/cases">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6"></path><path d="M10 9h4"></path><path d="M8 3v5l-4 9a3 3 0 0 0 2.7 4h10.6a3 3 0 0 0 2.7-4l-4-9V3"></path><path d="M7 15h10"></path></svg></span>
@@ -148,7 +142,7 @@
         <div class="page-header">
           <div>
             <h2>Overview</h2>
-            <p>High-level operational view of findings, tasks, run requests, and recent SecOpsAI activity.</p>
+            <p>Prioritized queues for discovery, validation, disclosure, publication, findings, and operational blockers.</p>
           </div>
           <div class="status-pill" id="refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh data</div>
         </div>
@@ -158,16 +152,6 @@
         <div class="card mission-queues-card" style="margin-top:18px;">
           <div class="page-header compact-header"><div><h3 style="margin:0;">Research operations queues</h3><p class="small" style="margin:6px 0 0;">The next decisions for discovery, validation, disclosure, publication, and degraded coverage.</p></div></div>
           <div class="mission-queues" id="mission-research-queues" role="status" aria-live="polite"></div>
-        </div>
-        <div class="grid cols-2" style="margin-top:18px;">
-          <div class="card">
-            <h3>Recent dashboard events <span class="heading-scope">Last 30 days</span></h3>
-            <div class="feed" id="mission-events"></div>
-          </div>
-          <div class="card">
-            <h3>Recent agent runs <span class="heading-scope">Last 30 days</span></h3>
-            <div class="feed" id="mission-runs"></div>
-          </div>
         </div>
       </section>
 
@@ -185,9 +169,9 @@
             <button class="primary-btn" id="new-task-btn" type="button">New task</button>
           </div>
         </div>
-        <div class="small" style="margin-bottom:12px;">Task changes create dashboard events and orchestrator audit runs. The dashboard manages state and visibility; SecOpsAI/OpenClaw runtimes handle actual execution.</div>
+        <div class="small" style="margin-bottom:12px;">The default queue contains assignments linked to findings, research, approvals, or external work. Internal delivery history is available only through All work.</div>
         <div class="grid cols-4" style="margin-bottom:18px;">
-          <div class="card"><label><span class="small">Work scope</span><select id="task-filter-scope"><option value="operator" selected>Operator queue</option><option value="all">All work</option></select></label><div class="small" style="margin-top:8px;">Operator queue keeps active, blocked, security, and external work visible. Use All work for delivery history.</div></div>
+          <div class="card"><label><span class="small">Work scope</span><select id="task-filter-scope"><option value="operator" selected>Operator assignments</option><option value="all">Internal delivery history</option></select></label><div class="small" style="margin-top:8px;">Operator assignments exclude implementation and dashboard-development records.</div></div>
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
           <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option></select></label></div>
           <div class="card"><label><span class="small">Priority</span><select id="task-filter-priority"><option value="">All</option><option value="urgent">urgent</option><option value="high">high</option><option value="normal">normal</option><option value="low">low</option></select></label></div>
@@ -214,21 +198,22 @@
         </div>
         <div class="page-toolbar" aria-label="Finding filters">
           <label class="toolbar-search"><span class="sr-only">Search findings</span><input id="finding-search" type="search" placeholder="Search title, source, asset, or ID" /></label>
-          <label><span class="sr-only">Finding severity</span><select id="finding-filter-severity"><option value="">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option></select></label>
+          <label><span class="sr-only">Finding severity</span><select id="finding-filter-severity"><option value="">All severities</option><option value="priority">High and critical</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option></select></label>
           <label><span class="sr-only">Finding status</span><select id="finding-filter-status"><option value="">All statuses</option><option value="open">Open</option><option value="in_review">In review</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
-          <label><span class="sr-only">Finding source</span><select id="finding-filter-source"><option value="">All sources</option><option value="secopsai_edge">SecOpsAI Edge</option><option value="secopsai_core">SecOpsAI Core</option><option value="ai_dependency_guard">AI Dependency Guard</option></select></label>
+          <label><span class="sr-only">Finding source</span><select id="finding-filter-source"><option value="">All sources</option><option value="secopsai_edge">SecOpsAI Edge</option><option value="secopsai_core">SecOpsAI Core</option><option value="supply_chain_all">Supply-chain findings</option><option value="ai_dependency_guard">AI Dependency Guard</option></select></label>
           <button class="secondary-btn" id="finding-clear-filters-btn" type="button">Clear filters</button>
         </div>
+        <div class="saved-view-bar" role="group" aria-label="Saved finding views"><span class="small">Saved views</span><button class="mini-btn finding-view-btn" data-finding-view="open" type="button">Open</button><button class="mini-btn finding-view-btn" data-finding-view="priority" type="button">High and critical</button><button class="mini-btn finding-view-btn" data-finding-view="edge" type="button">Edge</button><button class="mini-btn finding-view-btn" data-finding-view="supply-chain" type="button">Supply chain</button><button class="mini-btn finding-view-btn" data-finding-view="all" type="button">All</button></div>
         <div class="grid cols-5" id="finding-summary"></div>
-        <div class="grid cols-2" style="margin-top:18px;">
+        <div style="margin-top:18px;">
           <div class="card">
             <h3>Findings queue</h3>
             <div id="findings-table"></div>
           </div>
-          <div class="card">
-            <h3>Finding detail</h3>
+          <aside class="finding-review-drawer" id="finding-review-drawer" aria-hidden="true" aria-labelledby="finding-review-title">
+            <div class="finding-review-drawer-head"><div><span class="eyebrow">Finding review</span><h3 id="finding-review-title">Evidence and decision</h3></div><button class="icon-btn" id="finding-review-close-btn" type="button" aria-label="Close finding review">×</button></div>
             <div id="intel-summary"></div>
-          </div>
+          </aside>
         </div>
       </section>
 
@@ -428,7 +413,7 @@
             <h2>Research</h2>
             <p>Turn credible leads into durable, evidence-led investigations with explicit disclosure and publication gates.</p>
           </div>
-          <div class="research-page-actions">
+          <div class="research-page-actions" data-research-section="cases">
             <button class="secondary-btn" id="research-cases-new-btn" type="button">New case</button>
             <button class="secondary-btn" id="research-cases-refresh-btn" type="button">Refresh cases</button>
           </div>
@@ -447,9 +432,9 @@
           </div>
         </form>
 
-        <div class="grid cols-3" id="research-cases-stats" style="margin-top:18px;"></div>
+        <div class="grid cols-3" id="research-cases-stats" data-research-section="cases" style="margin-top:18px;"></div>
 
-        <details class="card research-create-panel" id="research-case-create-panel">
+        <details class="card research-create-panel" id="research-case-create-panel" data-research-section="cases">
           <summary>Create research case</summary>
           <div class="research-form-grid">
             <label class="research-span-2"><span>Title</span><input id="research-create-title" maxlength="240" placeholder="Specific investigation title" /></label>
@@ -462,7 +447,7 @@
           <div class="research-form-actions"><button class="primary-btn" id="research-create-submit-btn" type="button">Create case</button></div>
         </details>
 
-        <section class="card research-watchlist-panel" data-research-section="inbox watchlists" aria-labelledby="research-watchlist-title">
+        <section class="card research-watchlist-panel" data-research-section="watchlists" aria-labelledby="research-watchlist-title">
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-watchlist-title">Promote from package watchlist</h3>
@@ -481,7 +466,7 @@
           <div class="research-watchlist-result" id="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <section class="card research-discovery-panel" data-research-section="inbox watchlists" aria-labelledby="research-discovery-title">
+        <section class="card research-discovery-panel" data-research-section="watchlists" aria-labelledby="research-discovery-title">
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-discovery-title">Research discovery</h3>
@@ -510,6 +495,25 @@
         <section class="card research-stage-panel" data-research-section="inbox" aria-labelledby="research-inbox-title">
           <div class="page-header compact-header"><div><h3 id="research-inbox-title" style="margin:0;">Discovery inbox</h3><p class="small" style="margin:6px 0 0;">Candidates are ranked by explainable similarity and evidence completeness. Review the reason before creating a case.</p></div><button class="secondary-btn" id="research-inbox-refresh-btn" type="button">Refresh candidates</button></div>
           <div id="research-inbox-candidates" class="research-inbox-grid" role="status" aria-live="polite"></div>
+        </section>
+
+        <section class="card research-stage-panel" data-research-section="inbox" aria-labelledby="research-promotion-title">
+          <div class="page-header compact-header"><div><h3 id="research-promotion-title" style="margin:0;">Candidate promotion policy</h3><p class="small" style="margin:6px 0 0;">Deterministic gates may create draft investigations. They never declare a package malicious or publish content.</p></div><span class="status-pill" id="research-promotion-state">Disabled</span></div>
+          <div class="research-form-grid">
+            <label><span>Policy ecosystem</span><select id="research-promotion-ecosystem"><option value="all">All ecosystems</option><option value="npm">npm</option><option value="pypi">PyPI</option><option value="nuget">NuGet</option><option value="maven">Maven</option><option value="rubygems">RubyGems</option><option value="packagist">Packagist</option><option value="go">Go</option><option value="open-vsx">Open VSX</option></select></label>
+            <label><span>Promotion mode</span><select id="research-promotion-mode"><option value="draft_case">Create draft research case</option><option value="review_only">Review only</option></select></label>
+            <label><span>Minimum score</span><input id="research-promotion-score" type="number" min="70" max="100" value="90" /></label>
+            <label><span>Minimum evidence references</span><input id="research-promotion-evidence" type="number" min="1" max="8" value="2" /></label>
+            <label class="checkbox-row"><input id="research-promotion-enabled" type="checkbox" /><span>Enable policy</span></label>
+            <label class="checkbox-row"><input id="research-promotion-publisher" type="checkbox" /><span>Require publisher evidence</span></label>
+          </div>
+          <div class="research-form-actions"><button class="secondary-btn" id="research-promotion-save-btn" type="button">Save policy</button><button class="secondary-btn" id="research-promotion-preview-btn" type="button">Preview eligible candidates</button><button class="primary-btn" id="research-promotion-apply-btn" type="button">Create eligible draft cases</button></div>
+          <div id="research-promotion-result" class="research-watchlist-result" role="status" aria-live="polite"></div>
+        </section>
+
+        <section class="card research-stage-panel" data-research-section="campaigns" aria-labelledby="research-campaigns-title">
+          <div class="page-header compact-header"><div><h3 id="research-campaigns-title" style="margin:0;">Campaigns</h3><p class="small" style="margin:6px 0 0;">Review deterministic package, publisher, dependency, infrastructure, and timeline relationships. Shared infrastructure alone is not attribution.</p></div><button class="secondary-btn" id="research-campaigns-refresh-btn" type="button">Refresh campaigns</button></div>
+          <div id="research-campaigns-list"></div>
         </section>
 
         <section class="card research-stage-panel" data-research-section="disclosure" aria-labelledby="research-disclosure-title">
@@ -579,7 +583,12 @@
           </div>
         </div>
 
-        <div class="grid cols-2" data-blog-section="drafts review research advisories news" style="margin-top:18px;">
+        <div class="card" data-blog-section="review" style="margin-top:18px;">
+          <div class="page-header compact-header"><div><h3 style="margin:0;">Choose an editorial queue</h3><p class="small" style="margin:6px 0 0;">Original research, advisories, and external news have separate review queues and never share an approval list.</p></div></div>
+          <div class="publication-lane-grid"><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/research"><span><strong>Original research</strong><small>Evidence-led SecOpsAI investigations</small></span></button><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/advisories"><span><strong>Advisories</strong><small>Confirmed mitigations and indicators</small></span></button><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/news"><span><strong>External news</strong><small>Source-backed third-party reporting</small></span></button></div>
+        </div>
+
+        <div class="grid cols-2" data-blog-section="drafts research advisories news" style="margin-top:18px;">
           <div class="card">
             <div class="page-header compact-header">
               <div>
