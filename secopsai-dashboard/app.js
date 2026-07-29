@@ -1411,9 +1411,25 @@ function isInternalDevelopmentRecord(item = {}) {
 }
 
 function isOperatorWorkItem(item = {}) {
-  if (isInternalDevelopmentRecord(item)) return false;
   const linkedSecurityRecord = Boolean(item.finding_id || item.research_case_id || item.case_id || item.alert_id || item.asset_id);
+  if (linkedSecurityRecord) return true;
+  if (isInternalDevelopmentRecord(item)) return false;
   return linkedSecurityRecord || Boolean(item.external_facing) || Boolean(item.requires_security_review) || ['blocked', 'review'].includes(String(item.status || ''));
+}
+
+function applyFindingSavedView(view = 'all', { persist = false } = {}) {
+  ['finding-search', 'finding-filter-severity', 'finding-filter-status', 'finding-filter-source'].forEach(id => { if (el(id)) el(id).value = ''; });
+  if (view === 'open' && el('finding-filter-status')) el('finding-filter-status').value = 'open';
+  if (view === 'priority' && el('finding-filter-severity')) el('finding-filter-severity').value = 'priority';
+  if (view === 'edge' && el('finding-filter-source')) el('finding-filter-source').value = 'secopsai_edge';
+  if (view === 'supply-chain' && el('finding-filter-source')) el('finding-filter-source').value = 'supply_chain_all';
+  if (persist) localStorage.setItem('secopsai_findings_saved_view', view || 'all');
+}
+
+function restoreFindingSavedView() {
+  const allowed = new Set(['open', 'priority', 'edge', 'supply-chain', 'all']);
+  const saved = localStorage.getItem('secopsai_findings_saved_view') || 'all';
+  applyFindingSavedView(allowed.has(saved) ? saved : 'all');
 }
 
 function filteredWorkItems() {
@@ -8985,13 +9001,8 @@ function bindEvents() {
     renderFindings();
   });
   document.querySelectorAll('.finding-view-btn').forEach(button => button.addEventListener('click', () => {
-    ['finding-search', 'finding-filter-severity', 'finding-filter-status', 'finding-filter-source'].forEach(id => { if (el(id)) el(id).value = ''; });
     const view = button.dataset.findingView;
-    if (view === 'open' && el('finding-filter-status')) el('finding-filter-status').value = 'open';
-    if (view === 'priority' && el('finding-filter-severity')) el('finding-filter-severity').value = 'priority';
-    if (view === 'edge' && el('finding-filter-source')) el('finding-filter-source').value = 'secopsai_edge';
-    if (view === 'supply-chain' && el('finding-filter-source')) el('finding-filter-source').value = 'supply_chain_all';
-    localStorage.setItem('secopsai_findings_saved_view', view || 'all');
+    applyFindingSavedView(view, { persist: true });
     renderFindings();
   }));
   el('triage-ops-save-token-btn')?.addEventListener('click', () => {
@@ -9239,6 +9250,7 @@ window.addEventListener('popstate', () => setPage(currentPageFromLocation(), { s
 window.addEventListener('DOMContentLoaded', () => {
   setPage(currentPageFromLocation(), { skipHistory: true });
   bindEvents();
+  restoreFindingSavedView();
   startTopStripClock();
   initializeDashboardAuth();
   enhanceResponsiveTables();

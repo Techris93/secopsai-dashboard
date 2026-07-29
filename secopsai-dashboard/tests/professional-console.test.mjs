@@ -41,6 +41,9 @@ for (const marker of ['task-filter-scope', 'Operator assignments', 'blog-content
 }
 assert.match(app, /scope: el\('task-filter-scope'\)/);
 assert.match(app, /function blogDraftContentKind/);
+assert.match(app, /function applyFindingSavedView/);
+assert.match(app, /function restoreFindingSavedView/);
+assert.match(app, /if \(linkedSecurityRecord\) return true/);
 assert.match(app, /Secret values are never displayed/);
 
 for (const marker of ['SecOpsAI Intelligence', 'intelligence-action-select', 'intelligence-jobs-table', 'intelligence-copy-mcp-btn', 'intelligence-result-modal', 'intelligence-result-copy', 'intelligence-result-open-case']) {
