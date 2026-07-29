@@ -7999,6 +7999,12 @@ pre {
   gap: 7px;
 }
 
+.investigation-autopilot .table-wrap { margin-top: 14px; }
+.investigation-autopilot td { vertical-align: top; }
+.investigation-blocker { color: var(--warning, #8a5a00); max-width: 42rem; margin-top: 4px; }
+.investigation-autopilot td:last-child { white-space: normal; min-width: 10rem; }
+.investigation-autopilot td:last-child .mini-btn { margin: 0 6px 6px 0; }
+
 .intelligence-autopilot-grid label > span {
   color: var(--muted);
   font-size: 12px;

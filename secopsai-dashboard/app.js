@@ -4207,6 +4207,9 @@ function renderIntelligence() {
   const autopilotSummary = autopilot.summary || {};
   const autopilotRuns = Array.isArray(autopilot.runs) ? autopilot.runs : [];
   const tuningProposals = Array.isArray(autopilot.tuning_proposals) ? autopilot.tuning_proposals : [];
+  const investigations = data?.investigations || {};
+  const investigationSummary = investigations.summary || {};
+  const investigationRuns = Array.isArray(investigations.runs) ? investigations.runs : [];
   const counts = jobs.reduce((result, job) => {
     const status = String(job?.status || 'unknown');
     result[status] = (result[status] || 0) + 1;
@@ -4311,6 +4314,28 @@ function renderIntelligence() {
             ? `<button class="mini-btn" data-agent-tuning-rollback="${escapeHtml(proposal.proposal_id)}" type="button">Rollback tuning</button>`
             : '';
           return `<tr><td><strong>${escapeHtml(proposal.target_id || proposal.target_type || 'Unknown')}</strong><div class="small mono">${escapeHtml(proposal.proposal_id || '')}</div></td><td>${escapeHtml(humanizeSnake(proposal.change_type || 'proposal'))}<div class="small">${escapeHtml(compactText(proposal.rationale || '', 180))}</div></td><td>${escapeHtml(humanizeSnake(proposal.status || 'unknown'))}<div class="small">Activation ${metrics.activation_allowed ? 'permitted by replay' : 'blocked'}</div></td><td>${escapeHtml(String(metrics.labeled_findings || 0))} labeled<div class="small">${escapeHtml(String(metrics.reviewed_false_positives || 0))} safe · ${escapeHtml(String(metrics.reviewed_true_positives || 0))} risky</div></td><td>${rollback}</td></tr>`;
+        }).join('')}</tbody></table></div>`;
+  }
+
+  const investigationSummaryEl = el('investigation-autopilot-summary');
+  if (investigationSummaryEl) investigationSummaryEl.innerHTML = `
+    <div class="metric-card"><div class="metric">${escapeHtml(String((investigationSummary.queued || 0) + (investigationSummary.collecting || 0) + (investigationSummary.analyzing || 0)))}</div><div class="metric-label">Collecting evidence</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(investigationSummary.awaiting_model || 0))}</div><div class="metric-label">Awaiting model</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(investigationSummary.escalated || 0))}</div><div class="metric-label">Threats escalated</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String((investigationSummary.evidence_gap || 0) + (investigationSummary.failed || 0)))}</div><div class="metric-label">Needs recovery</div></div>`;
+  const investigationRunsEl = el('investigation-autopilot-runs');
+  if (investigationRunsEl) {
+    investigationRunsEl.innerHTML = !investigationRuns.length
+      ? '<div class="empty-state compact">No high-priority evidence investigations yet. Eligible high and critical package findings enter this queue automatically.</div>'
+      : `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Stage</th><th>Evidence state</th><th>Decision</th><th>Updated</th><th>Recovery</th></tr></thead><tbody>${investigationRuns.slice(0, 25).map(run => {
+          const decision = run.decision || {};
+          const blocker = run.blocker_message ? `<div class="small investigation-blocker">${escapeHtml(humanizeMachineText(run.blocker_message))}</div>` : '';
+          const retry = run.retryable && ['failed', 'evidence_gap', 'canceled'].includes(String(run.status || ''))
+            ? `<button class="mini-btn" data-investigation-retry="${escapeHtml(run.run_id)}" type="button">Retry</button>` : '';
+          const cancel = ['queued', 'collecting', 'analyzing', 'awaiting_model', 'awaiting_input'].includes(String(run.status || ''))
+            ? `<button class="mini-btn" data-investigation-cancel="${escapeHtml(run.run_id)}" type="button">Cancel</button>` : '';
+          const openCase = run.case_id ? `<button class="mini-btn" data-investigation-case="${escapeHtml(run.case_id)}" type="button">Open case</button>` : '';
+          return `<tr><td><strong>${escapeHtml(run.finding_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div></td><td><span class="status-pill">${escapeHtml(humanizeSnake(run.status || 'unknown'))}</span><div class="small">${escapeHtml(humanizeSnake(run.current_stage || 'queued'))}</div></td><td>${run.pipeline_id ? `<span class="mono small">${escapeHtml(run.pipeline_id)}</span>` : '<span class="small">Not started</span>'}${blocker}</td><td>${escapeHtml(humanizeSnake(decision.verdict || 'pending'))}${decision.confidence != null ? `<div class="small">${escapeHtml(String(decision.confidence))}% confidence</div>` : ''}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${openCase}${retry}${cancel}</td></tr>`;
         }).join('')}</tbody></table></div>`;
   }
 
@@ -9156,6 +9181,24 @@ function bindEvents() {
       confirmLabel: 'Rollback tuning'
     }))) return;
     await runIntelligenceAction('autopilot-rollback-tuning', { proposal_id: proposalId }, button);
+  });
+  el('investigation-run-due')?.addEventListener('click', event => {
+    runIntelligenceAction('investigation-run-due', {}, event.currentTarget);
+  });
+  el('investigation-autopilot-runs')?.addEventListener('click', async event => {
+    const retry = event.target.closest('[data-investigation-retry]');
+    const cancel = event.target.closest('[data-investigation-cancel]');
+    const openCase = event.target.closest('[data-investigation-case]');
+    if (openCase) {
+      navigateTo('research/cases');
+      state.researchCases.selectedId = openCase.dataset.investigationCase;
+      await loadResearchCases();
+      return;
+    }
+    if (retry) await runIntelligenceAction('investigation-retry', { run_id: retry.dataset.investigationRetry }, retry);
+    if (cancel && await requestConfirmation('Cancel this evidence investigation?', { title: 'Cancel investigation', context: 'Collected evidence remains in quarantine and the run can be retried.', confirmLabel: 'Cancel investigation' })) {
+      await runIntelligenceAction('investigation-cancel', { run_id: cancel.dataset.investigationCancel }, cancel);
+    }
   });
   document.querySelectorAll('[data-intelligence-service]').forEach(button => button.addEventListener('click', async event => {
     const serviceAction = event.currentTarget.dataset.intelligenceService;

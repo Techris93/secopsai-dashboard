@@ -53,6 +53,12 @@ def test_local_intelligence_actions_are_allowlisted():
         "autopilot",
         "run-now",
     ]
+    assert dashboard_server.build_intelligence_args("investigation-run-due", {})[:4] == [
+        "intelligence", "autopilot", "investigations", "run-due"
+    ]
+    assert dashboard_server.build_intelligence_args(
+        "investigation-retry", {"run_id": "IAR-0123456789ABCDEF"}
+    )[:6] == ["intelligence", "autopilot", "investigations", "retry", "--run-id", "IAR-0123456789ABCDEF"]
 
 
 def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
@@ -61,6 +67,8 @@ def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
             "enqueue",
             {"intelligence_action": "run_shell", "target_id": "FND-ABC123"},
         )
+    with pytest.raises(ValueError):
+        dashboard_server.build_intelligence_args("investigation-cancel", {"run_id": "../../bad"})
     with pytest.raises(ValueError):
         dashboard_server.build_intelligence_args(
             "enqueue",
@@ -95,6 +103,9 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "intelligence-autopilot-run",
         "intelligence-autopilot-runs",
         "intelligence-autopilot-proposals",
+        "investigation-autopilot-summary",
+        "investigation-autopilot-runs",
+        "investigation-run-due",
     ):
         assert f'id="{element}"' in html
     assert "runIntelligenceAction('enqueue'" in app
@@ -106,6 +117,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "autopilot-configure" in app
     assert "data-agent-triage-rollback" in app
     assert "Agent finding and alert review" in html
+    assert "High-priority investigations" in html
+    assert "investigation-retry" in app
     assert "Missing local dependency exposure never proves an external package is safe" in html
     assert "Registry outages and collector failures use deterministic recovery checks" in html
     assert "target.source" in app

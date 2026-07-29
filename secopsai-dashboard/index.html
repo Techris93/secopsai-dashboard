@@ -368,6 +368,16 @@
             <div id="intelligence-autopilot-proposals"></div>
           </section>
 
+          <section class="intelligence-module investigation-autopilot" aria-labelledby="investigation-autopilot-title">
+            <div class="module-head">
+              <div><h4 id="investigation-autopilot-title">High-priority investigations</h4><p>Collects exact package evidence, performs bounded static analysis, compares verified releases, extracts IOC candidates, and requests an evidence-complete model verdict.</p></div>
+              <button class="secondary-btn" id="investigation-run-due" type="button">Run due investigations</button>
+            </div>
+            <div id="investigation-autopilot-summary" class="metrics-grid compact-metrics"></div>
+            <div class="intelligence-boundary-note">The pipeline may resolve evidence-proven false positives and escalate corroborated threats. It cannot approve sandbox submission, send disclosure, or publish research.</div>
+            <div id="investigation-autopilot-runs"></div>
+          </section>
+
           <section class="intelligence-module" aria-labelledby="intelligence-jobs-title">
             <div class="module-head">
               <div><h4 id="intelligence-jobs-title">Analysis jobs</h4><p>Every request and result is durable, bounded, and reviewable.</p></div>
@@ -671,7 +681,7 @@
               <div class="triage-ops-filters">
                 <label><span class="small">Status</span><select id="triage-ops-filter-status"><option value="all">All</option><option value="open">Open</option><option value="in_review">In review</option></select></label>
                 <label><span class="small">Ecosystem</span><select id="triage-ops-filter-ecosystem"><option value="all">All</option><option value="pypi">PyPI</option><option value="npm">npm</option><option value="crates">crates.io</option><option value="chrome-web-store">Chrome Web Store</option><option value="packagist">Packagist</option><option value="go">Go Modules</option><option value="huggingface">Hugging Face</option><option value="maven">Maven</option><option value="nuget">NuGet</option><option value="open-vsx">Open VSX</option><option value="rubygems">RubyGems</option></select></label>
-                <label><span class="small">Work type</span><select id="triage-ops-filter-actionability"><option value="all" selected>All active intelligence</option><option value="actionable">Local response</option><option value="ecosystem_intelligence">Ecosystem intelligence</option><option value="evidence_review">Evidence review</option><option value="review_only">Likely false positive</option></select></label>
+                <label><span class="small">Work type</span><select id="triage-ops-filter-actionability"><option value="all" selected>All active intelligence</option><option value="actionable">Local response</option><option value="ecosystem_intelligence">Ecosystem intelligence</option><option value="evidence_review">Evidence review</option><option value="review_only">Evidence incomplete / no local exposure</option></select></label>
                 <label><span class="small">Severity</span><select id="triage-ops-filter-severity"><option value="all">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option></select></label>
                 <label><span class="small">Package/version search</span><input id="triage-ops-filter-search" type="text" placeholder="litellm, 1.84.0, SCM-..." /></label>
               </div>

@@ -825,6 +825,15 @@ def build_intelligence_args(action, payload):
         if not re.fullmatch(r'DTP-[A-F0-9]{16}', proposal_id):
             raise ValueError('Invalid detection tuning proposal ID')
         return ['intelligence', 'autopilot', 'rollback-tuning', proposal_id, '--actor', 'mission-control', *secopsai_db_args()]
+    if action in {'investigation-run-due', 'investigation-retry', 'investigation-cancel'}:
+        verb = {'investigation-run-due': 'run-due', 'investigation-retry': 'retry', 'investigation-cancel': 'cancel'}[action]
+        args = ['intelligence', 'autopilot', 'investigations', verb]
+        if verb in {'retry', 'cancel'}:
+            run_id = str(payload.get('run_id') or '').strip().upper()
+            if not re.fullmatch(r'IAR-[A-F0-9]{16}', run_id):
+                raise ValueError('Invalid investigation autopilot run ID')
+            args.extend(['--run-id', run_id])
+        return [*args, *secopsai_db_args()]
     raise ValueError('Unsupported intelligence operation')
 
 
@@ -848,12 +857,22 @@ def collect_intelligence_status():
             models_error = compact.get('stderr') or compact.get('stdout') or 'Model catalog unavailable'
     except Exception as exc:
         models_error = str(exc)[:300]
+    investigations = {}
+    try:
+        investigation_result, investigation_payload = run_cli_json(
+            ['intelligence', 'autopilot', 'investigations', 'status', *secopsai_db_args()], timeout=45,
+        )
+        if investigation_result.get('ok') and isinstance(investigation_payload, dict):
+            investigations = investigation_payload
+    except Exception as exc:
+        investigations = {'error': str(exc)[:300], 'runs': [], 'summary': {}}
     return {
         'ok': True,
         'mode': 'local-helper',
         **parsed,
         'models': models_payload,
         'models_error': models_error or None,
+        'investigations': investigations,
         'chatgpt_app': {'mode': 'hosted-mcp', 'configured': bool(mcp_url), 'url': mcp_url},
     }
 
