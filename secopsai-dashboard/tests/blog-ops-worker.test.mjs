@@ -1123,6 +1123,11 @@ function testResearchCaseWorkspaceIsPresentAndTokenGated() {
   assert.match(app, /const rules = researchCase\.rules \|\| \[\]/);
   assert.match(app, /researchDetailSection\('Detection rules'/);
   assert.match(app, /research-rule-preview/);
+  assert.match(app, /id="research-rule-propose-btn"/);
+  assert.match(app, /research-rule-review-btn/);
+  assert.match(app, /runResearchCaseAction\('rule-propose'/);
+  assert.match(app, /runResearchCaseAction\('rule-review'/);
+  assert.match(app, /Case-linked rules/);
   assert.match(app, /id=\"research-add-rule-btn\"/);
   assert.match(app, /runResearchCaseAction\('add-rule'/);
   assert.match(html, /id=\"research-watchlist-preview-btn\"/);

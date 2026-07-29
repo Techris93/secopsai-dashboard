@@ -29,6 +29,7 @@ APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
 RESEARCH_CASE_ID_RE = re.compile(r'^RSC-[A-F0-9]{12}$')
 RESEARCH_PIPELINE_ID_RE = re.compile(r'^RPL-[A-F0-9]{16}$')
 RESEARCH_REVIEW_ITEM_ID_RE = re.compile(r'^RVI-[A-F0-9]{16}$')
+RESEARCH_RULE_PROPOSAL_ID_RE = re.compile(r'^RRP-[A-F0-9]{16}$')
 BLOG_DRAFT_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,260}$')
 ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive', 'not_applicable'}
 ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
@@ -59,6 +60,8 @@ RESEARCH_CASE_ACTIONS = {
     'add-evidence',
     'add-ioc',
     'add-rule',
+    'rule-propose',
+    'rule-review',
     'link-finding',
     'note',
     'retract',
@@ -1016,6 +1019,21 @@ def build_research_case_args(action, payload):
     case_id = _clean_string(payload.get('case_id'), 32).upper()
     if not RESEARCH_CASE_ID_RE.match(case_id):
         raise ValueError('Invalid research case id')
+    if action == 'rule-propose':
+        args = ['research', 'rule', 'propose', case_id]
+        add(args, '--actor', 'actor', 160)
+        return args
+    if action == 'rule-review':
+        proposal_id = _clean_string(payload.get('proposal_id'), 40).upper()
+        decision = _clean_string(payload.get('decision'), 20).lower()
+        if not RESEARCH_RULE_PROPOSAL_ID_RE.match(proposal_id):
+            raise ValueError('Invalid rule proposal id')
+        if decision not in {'accepted', 'rejected'}:
+            raise ValueError('Invalid rule proposal decision')
+        args = ['research', 'rule', 'review', case_id, proposal_id, '--decision', decision]
+        add(args, '--review-note', 'review_note', 2000)
+        add(args, '--actor', 'actor', 160)
+        return args
     if action == 'pipeline-start':
         args = ['research', 'pipeline', 'start', case_id]
         reference_ecosystem = _clean_string(payload.get('reference_ecosystem'), 40).lower()

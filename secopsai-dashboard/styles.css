@@ -6256,6 +6256,26 @@ label span,
   white-space: normal;
 }
 
+.research-rule-workflow-head {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.research-rule-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.research-rule-history {
+  margin-top: 16px;
+}
+
+.research-rule-history > summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+
 .research-case-layout {
   align-items: start;
   margin-top: 18px;
@@ -6518,6 +6538,13 @@ label span,
   .research-form-actions,
   .research-form-actions > *,
   .research-watchlist-head > * {
+    width: 100%;
+  }
+
+  .research-rule-workflow-head,
+  .research-rule-workflow-head > *,
+  .research-rule-review-actions,
+  .research-rule-review-actions > * {
     width: 100%;
   }
 
