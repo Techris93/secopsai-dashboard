@@ -73,6 +73,10 @@ assert.match(app, /id="research-pipeline-auto-review-btn"/);
 assert.match(app, /runResearchCaseAction\('pipeline-auto-review',/);
 assert.match(app, /Complete Agent Review/);
 assert.match(app, /record an evidence-linked agent verdict/);
+assert.match(app, /Generate detection proposals/);
+assert.match(app, /Reference artifacts and low-confidence indicators are excluded/);
+assert.match(app, /Activate detection rule/);
+assert.match(styles, /\.research-rule-review-actions/);
 
 assert.match(app, /response\.clone\(\)\.json\(\)/);
 assert.match(app, /\['operator_session_required', 'operator_session_invalid'\]/);

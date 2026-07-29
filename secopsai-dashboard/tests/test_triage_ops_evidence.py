@@ -611,6 +611,30 @@ class TriageOpsEvidenceTests(unittest.TestCase):
                 },
             )
 
+    def test_research_rule_proposal_actions_are_fixed_and_review_gated(self):
+        propose = server.build_research_case_args(
+            'rule-propose',
+            {'case_id': 'RSC-ABCDEF123456', 'actor': 'dashboard-operator'},
+        )
+        review = server.build_research_case_args(
+            'rule-review',
+            {
+                'case_id': 'RSC-ABCDEF123456',
+                'proposal_id': 'RRP-ABCDEF1234567890',
+                'decision': 'accepted',
+                'actor': 'dashboard-operator',
+            },
+        )
+
+        self.assertEqual(propose[:4], ['research', 'rule', 'propose', 'RSC-ABCDEF123456'])
+        self.assertEqual(review[:5], ['research', 'rule', 'review', 'RSC-ABCDEF123456', 'RRP-ABCDEF1234567890'])
+        self.assertIn('--decision', review)
+        with self.assertRaisesRegex(ValueError, 'Invalid rule proposal decision'):
+            server.build_research_case_args(
+                'rule-review',
+                {'case_id': 'RSC-ABCDEF123456', 'proposal_id': 'RRP-ABCDEF1234567890', 'decision': 'publish'},
+            )
+
     def test_research_watchlist_builder_is_preview_first_and_npm_scoped(self):
         preview = server.build_research_watchlist_args(
             {'action': 'preview', 'ecosystem': 'npm', 'packages': ['npm:chalk-tempalte']}
