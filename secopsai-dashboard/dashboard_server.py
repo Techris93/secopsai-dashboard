@@ -87,6 +87,9 @@ RESEARCH_CASE_ACTIONS = {
     'pipeline-resume',
     'pipeline-review',
     'pipeline-auto-review',
+    'resolution-configure',
+    'resolution-run',
+    'resolution-review',
 }
 RESEARCH_DISCOVERY_ACTIONS = {
     'capabilities',
@@ -1015,6 +1018,36 @@ def build_research_case_args(action, payload):
         args = ['research', 'pipeline', 'agent-complete', pipeline_id]
         add(args, '--actor', 'actor', 160)
         return args
+
+    if action == 'resolution-configure':
+        mode = _clean_string(payload.get('mode'), 20).lower()
+        if mode not in {'off', 'advisory', 'guarded'}:
+            raise ValueError('Resolution mode must be off, advisory, or guarded')
+        confidence = validate_bounded_int(payload.get('min_confidence'), default=90, lower=85, upper=100)
+        refs = validate_bounded_int(payload.get('min_evidence_refs'), default=4, lower=2, upper=20)
+        limit = validate_bounded_int(payload.get('max_cases_per_cycle'), default=10, lower=1, upper=100)
+        return [
+            'research', 'resolution', 'configure', '--mode', mode,
+            '--min-confidence', str(confidence), '--min-evidence-refs', str(refs),
+            '--max-cases', str(limit), '--auto-retract-rules',
+            'on' if payload.get('auto_retract_rules', True) else 'off',
+            '--actor', 'mission-control',
+        ]
+
+    if action == 'resolution-run':
+        pipeline_id = _clean_string(payload.get('pipeline_id'), 40).upper()
+        if not RESEARCH_PIPELINE_ID_RE.match(pipeline_id):
+            raise ValueError('Invalid research pipeline id')
+        return ['research', 'resolution', 'run', pipeline_id, '--actor', 'mission-control']
+
+    if action == 'resolution-review':
+        run_id = _clean_string(payload.get('run_id'), 40).upper()
+        decision = _clean_string(payload.get('decision'), 20).lower()
+        if not re.fullmatch(r'ARR-[A-F0-9]{16}', run_id):
+            raise ValueError('Invalid agent research resolution ID')
+        if decision not in {'accept', 'reopen'}:
+            raise ValueError('Resolution review must accept or reopen')
+        return ['research', 'resolution', 'review', run_id, '--decision', decision, '--actor', 'mission-control']
 
     case_id = _clean_string(payload.get('case_id'), 32).upper()
     if not RESEARCH_CASE_ID_RE.match(case_id):
@@ -3133,12 +3166,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if case_type:
                     args.extend(['--type', case_type])
                 result, parsed_result = run_cli_json(args, timeout=60)
+                resolution_result, resolution_payload = run_cli_json(
+                    ['research', 'resolution', 'status', *secopsai_db_args()], timeout=60,
+                )
                 return json_response(
                     self,
                     200 if result['ok'] else 500,
                     {
                         'ok': result['ok'],
                         'cases': (parsed_result or {}).get('cases', []),
+                        'resolution': resolution_payload if resolution_result['ok'] and isinstance(resolution_payload, dict) else {},
                         'cli': compact_cli_result(result),
                     },
                 )

@@ -90,6 +90,7 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "intelligence-result-copy",
         "intelligence-result-open-case",
         "intelligence-autopilot-mode",
+        "intelligence-autopilot-model",
         "intelligence-autopilot-save",
         "intelligence-autopilot-run",
         "intelligence-autopilot-runs",
@@ -104,6 +105,14 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "function intelligenceResultMarkdown" in app
     assert "autopilot-configure" in app
     assert "data-agent-triage-rollback" in app
+    assert "Agent finding and alert review" in html
+    assert "Missing local dependency exposure never proves an external package is safe" in html
+    assert "Registry outages and collector failures use deterministic recovery checks" in html
+    assert "target.source" in app
+    assert "function renderAutopilotModelSelect" in app
+    assert "el('intelligence-autopilot-model')?.value" in app
+    assert "function securitySourceLabel" in app
+    assert "SecOpsAI Supply Chain" in app
     for section in (
         "Confirmed facts",
         "Reasonable inferences",

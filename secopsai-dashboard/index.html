@@ -346,19 +346,20 @@
 
           <section class="intelligence-module intelligence-autopilot" aria-labelledby="intelligence-autopilot-title">
             <div class="module-head">
-              <div><h4 id="intelligence-autopilot-title">Autonomous triage</h4><p>Continuously reviews new findings with the selected model and applies only evidence-corroborated, reversible decisions.</p></div>
+              <div><h4 id="intelligence-autopilot-title">Agent finding and alert review</h4><p>Continuously reviews host, Edge, supply-chain, and registry-research alerts with the selected model. Only evidence-corroborated, reversible decisions can be applied.</p></div>
               <span class="status-pill" id="intelligence-autopilot-pill">Checking</span>
             </div>
             <div id="intelligence-autopilot-summary" class="metrics-grid compact-metrics"></div>
             <div class="intelligence-autopilot-grid">
               <label><span>Decision mode</span><select id="intelligence-autopilot-mode"><option value="off">Off</option><option value="advisory">Advisory only</option><option value="guarded">Guarded automation</option></select></label>
+              <label><span>Alert review model</span><select id="intelligence-autopilot-model"><option value="">Loading model catalog…</option></select></label>
               <label><span>Automatic closure confidence</span><input id="intelligence-autopilot-confidence" type="number" min="90" max="100" step="1" value="97" /></label>
               <label><span>Minimum validated evidence references</span><input id="intelligence-autopilot-evidence" type="number" min="1" max="10" step="1" value="2" /></label>
               <label><span>Maximum new reviews per cycle</span><input id="intelligence-autopilot-limit" type="number" min="1" max="100" step="1" value="10" /></label>
               <label class="toggle-row"><input id="intelligence-autopilot-tuning" type="checkbox" checked /><span>Create shadow-mode rule tuning proposals</span></label>
               <label class="toggle-row"><input id="intelligence-autopilot-activate-tuning" type="checkbox" /><span>Activate only replay-proven threshold tuning automatically</span></label>
             </div>
-            <div class="intelligence-boundary-note" id="intelligence-autopilot-boundary">Guarded automation can close a finding only when deterministic SecOpsAI evidence independently supports the same benign disposition. Model-only suppression is blocked. Publication, disclosure, sandbox submission, destructive response, and rule activation remain separately controlled.</div>
+            <div class="intelligence-boundary-note" id="intelligence-autopilot-boundary">Guarded automation can close an alert only when deterministic SecOpsAI evidence independently supports the same benign disposition. Missing local dependency exposure never proves an external package is safe. Registry outages and collector failures use deterministic recovery checks, not model verdicts. Publication, disclosure, sandbox submission, destructive response, and rule activation remain separately controlled.</div>
             <div class="intelligence-actions">
               <button class="primary-btn" id="intelligence-autopilot-save" type="button">Save automation policy</button>
               <button class="secondary-btn" id="intelligence-autopilot-run" type="button">Review new findings now</button>
@@ -524,6 +525,10 @@
         <section class="card research-stage-panel" data-research-section="sandbox" aria-labelledby="research-sandbox-title">
           <div class="page-header compact-header"><div><h3 id="research-sandbox-title" style="margin:0;">Sandbox jobs</h3><p class="small" style="margin:6px 0 0;">Review dynamic-analysis requests, approvals, provider state, and imported results.</p></div></div>
           <div id="research-sandbox-queue"></div>
+        </section>
+
+        <section class="card research-stage-panel" data-research-section="resolved" aria-labelledby="research-resolution-title">
+          <div id="research-agent-resolution"></div>
         </section>
 
         <div class="grid cols-2 research-case-layout" data-research-section="cases">
