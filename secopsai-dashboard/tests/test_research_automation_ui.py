@@ -25,6 +25,9 @@ def test_research_actions_are_typed_and_not_shell_commands():
         "pipeline-start",
         "pipeline-resume",
         "pipeline-review",
+        "resolution-configure",
+        "resolution-run",
+        "resolution-review",
     ):
         assert f"runResearchCaseAction('{action}'" in source
     assert "Run Safe Package Intake" in source
@@ -43,6 +46,8 @@ def test_research_actions_are_typed_and_not_shell_commands():
     assert "GUARDED AGENT REVIEW" in preview
     assert "Evidence and agent decision queue" in preview
     assert "Complete Agent Review" in source
+    assert "Resolved by agents" in source
+    assert "Agent resolution policy" in source
     styles = (ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".research-pipeline-targets {\n  grid-template-columns: repeat(2, minmax(0, 1fr));" in styles
 
@@ -111,6 +116,38 @@ def test_pipeline_actions_map_to_typed_core_commands():
     )
     assert agent_complete[:4] == ["research", "pipeline", "agent-complete", "RPL-AAAAAAAAAAAAAAAA"]
     assert agent_complete[-2:] == ["--actor", "secopsai-agent-autonomy"]
+
+
+def test_agent_resolution_actions_are_typed_guarded_and_reversible():
+    configure = dashboard_server.build_research_case_args(
+        "resolution-configure",
+        {
+            "mode": "guarded",
+            "min_confidence": 92,
+            "min_evidence_refs": 4,
+            "max_cases_per_cycle": 10,
+            "auto_retract_rules": True,
+        },
+    )
+    assert configure[:4] == ["research", "resolution", "configure", "--mode"]
+    assert "guarded" in configure
+    assert "--auto-retract-rules" in configure
+
+    run = dashboard_server.build_research_case_args(
+        "resolution-run", {"pipeline_id": "RPL-AAAAAAAAAAAAAAAA"}
+    )
+    assert run[:4] == ["research", "resolution", "run", "RPL-AAAAAAAAAAAAAAAA"]
+
+    reopen = dashboard_server.build_research_case_args(
+        "resolution-review", {"run_id": "ARR-BBBBBBBBBBBBBBBB", "decision": "reopen"}
+    )
+    assert reopen[:4] == ["research", "resolution", "review", "ARR-BBBBBBBBBBBBBBBB"]
+    assert reopen[-4:] == ["--decision", "reopen", "--actor", "mission-control"]
+
+    with pytest.raises(ValueError):
+        dashboard_server.build_research_case_args(
+            "resolution-review", {"run_id": "ARR-BBBBBBBBBBBBBBBB", "decision": "publish"}
+        )
 
 
 def test_pipeline_gateway_rejects_untrusted_targets_and_decisions():

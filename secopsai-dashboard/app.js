@@ -154,6 +154,7 @@ const state = {
     loading: false,
     error: null,
     lastAction: null,
+    resolution: { settings: {}, summary: {}, runs: [] },
     retractTarget: null,
     watchlist: {
       packages: [],
@@ -261,7 +262,8 @@ const RESEARCH_VIEW_ROUTES = Object.freeze({
   watchlists: 'research/watchlists',
   coverage: 'research/coverage',
   disclosure: 'research/disclosure',
-  sandbox: 'research/sandbox'
+  sandbox: 'research/sandbox',
+  resolved: 'research/resolved'
 });
 const BLOG_VIEW_ROUTES = Object.freeze({
   research: 'publications/research',
@@ -344,7 +346,8 @@ const CONTEXT_NAV = Object.freeze({
     ["Watchlists", "research-cases", RESEARCH_VIEW_ROUTES.watchlists],
     ["Global coverage", "coverage", RESEARCH_VIEW_ROUTES.coverage],
     ["Disclosure", "research-cases", RESEARCH_VIEW_ROUTES.disclosure],
-    ["Sandbox jobs", "research-cases", RESEARCH_VIEW_ROUTES.sandbox]
+    ["Sandbox jobs", "research-cases", RESEARCH_VIEW_ROUTES.sandbox],
+    ["Resolved by agents", "research-cases", RESEARCH_VIEW_ROUTES.resolved]
   ],
   "coverage": [
     ["Collectors", "coverage"],
@@ -1083,6 +1086,17 @@ function humanizeMachineText(value) {
     .replace(/\b[a-z0-9]+(?:_[a-z0-9]+)+\b/gi, token => token.replace(/_+/g, ' '))
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function securitySourceLabel(value) {
+  const raw = String(value || '').trim();
+  const known = {
+    'secopsai-supply-chain': 'SecOpsAI Supply Chain',
+    'secopsai_research': 'SecOpsAI Research',
+    'secopsai_edge': 'SecOpsAI Edge',
+    'secopsai-edge': 'SecOpsAI Edge',
+  };
+  return known[raw] || humanizeSnake(raw.replace(/-+/g, ' ')) || 'Unknown source';
 }
 
 function setButtonBusy(buttonOrId, busy, busyLabel = 'Working…') {
@@ -4117,6 +4131,37 @@ function renderIntelligenceModelSelect() {
   if (selected) sessionStorage.setItem('secopsai_bridge_model', selected);
 }
 
+function renderAutopilotModelSelect(settings = {}) {
+  const select = el('intelligence-autopilot-model');
+  if (!select) return;
+  const models = intelligenceModels();
+  const configured = String(settings.selected_model || '').trim();
+  if (!models.length) {
+    select.innerHTML = `<option value="${escapeHtml(configured)}">${escapeHtml(configured || 'Model catalog unavailable')}</option>`;
+    select.disabled = true;
+    return;
+  }
+  const ids = models.map(item => String(item?.id || '')).filter(Boolean);
+  const selected = ids.includes(configured) ? configured : (configured || intelligenceSelectedModel());
+  const groups = {};
+  models.forEach(item => {
+    const provider = String(item?.provider || 'other');
+    if (!groups[provider]) groups[provider] = [];
+    groups[provider].push(item);
+  });
+  const missing = configured && !ids.includes(configured)
+    ? `<option value="${escapeHtml(configured)}" selected>${escapeHtml(configured)} — configured, unavailable</option>`
+    : '';
+  select.innerHTML = missing + Object.keys(groups).sort().map(provider => {
+    const options = groups[provider].map(item => {
+      const id = String(item?.id || '');
+      return `<option value="${escapeHtml(id)}"${id === selected ? ' selected' : ''}>${escapeHtml(id)}</option>`;
+    }).join('');
+    return `<optgroup label="${escapeHtml(provider)}">${options}</optgroup>`;
+  }).join('');
+  select.disabled = false;
+}
+
 function intelligenceActionNeedsTarget(action) {
   return !['prioritize_findings'].includes(String(action || ''));
 }
@@ -4219,6 +4264,7 @@ function renderIntelligence() {
 
   const autopilotPill = el('intelligence-autopilot-pill');
   if (autopilotPill) autopilotPill.textContent = humanizeSnake(autopilotSettings.mode || 'not_configured');
+  renderAutopilotModelSelect(autopilotSettings);
   const autopilotMode = el('intelligence-autopilot-mode');
   if (autopilotMode && document.activeElement !== autopilotMode) autopilotMode.value = autopilotSettings.mode || 'advisory';
   const autopilotConfidence = el('intelligence-autopilot-confidence');
@@ -4242,13 +4288,16 @@ function renderIntelligence() {
     const recent = autopilotRuns.slice(0, 12);
     autopilotRunsEl.innerHTML = !recent.length
       ? '<div class="empty-state compact">No autonomous triage decisions yet. Enable advisory or guarded mode, then review new findings.</div>'
-      : `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Decision</th><th>Model assessment</th><th>Guardrail</th><th>Updated</th><th>Action</th></tr></thead><tbody>${recent.map(run => {
+      : `<div class="table-wrap"><table><thead><tr><th>Finding or alert</th><th>Source</th><th>Decision</th><th>Model assessment</th><th>Guardrail</th><th>Updated</th><th>Action</th></tr></thead><tbody>${recent.map(run => {
           const decision = run.decision || {};
+          const target = run.target || {};
           const reasons = Array.isArray(decision.guardrail_reasons) ? decision.guardrail_reasons : [];
           const rollback = ['applied', 'escalated'].includes(String(run.status || ''))
             ? `<button class="mini-btn" data-agent-triage-rollback="${escapeHtml(run.run_id)}" type="button">Rollback</button>`
             : '';
-          return `<tr><td><strong>${escapeHtml(run.target_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div></td><td><span class="agent-triage-action">${escapeHtml(humanizeSnake(run.final_action || run.status || 'pending'))}</span></td><td>${escapeHtml(humanizeSnake(decision.model_verdict || 'pending'))}${typeof decision.model_confidence === 'number' ? `<div class="small">${escapeHtml(String(decision.model_confidence))}% confidence</div>` : ''}</td><td class="agent-triage-reasons">${reasons.length ? escapeHtml(reasons.join(' · ')) : '<span class="small">Passed applicable gates</span>'}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${rollback}</td></tr>`;
+          const source = securitySourceLabel(target.source);
+          const context = [target.ecosystem, target.package].filter(Boolean).join(' · ');
+          return `<tr><td><strong>${escapeHtml(target.title || run.target_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.target_id || '')}</div>${context ? `<div class="small">${escapeHtml(context)}</div>` : ''}</td><td>${escapeHtml(source)}</td><td><span class="agent-triage-action">${escapeHtml(humanizeSnake(run.final_action || run.status || 'pending'))}</span></td><td>${escapeHtml(humanizeSnake(decision.model_verdict || 'pending'))}${typeof decision.model_confidence === 'number' ? `<div class="small">${escapeHtml(String(decision.model_confidence))}% confidence</div>` : ''}</td><td class="agent-triage-reasons">${reasons.length ? escapeHtml(humanizeMachineText(reasons.join(' · '))) : '<span class="small">Passed applicable gates</span>'}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${rollback}</td></tr>`;
         }).join('')}</tbody></table></div>`;
   }
   const autopilotProposalsEl = el('intelligence-autopilot-proposals');
@@ -7300,6 +7349,9 @@ async function loadResearchCases({ render = true, preserveSelection = true } = {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.ok === false) throw new Error(payload.error || `Research cases HTTP ${response.status}`);
     state.researchCases.cases = Array.isArray(payload.cases) ? payload.cases : [];
+    state.researchCases.resolution = payload.resolution && typeof payload.resolution === 'object'
+      ? payload.resolution
+      : { settings: {}, summary: {}, runs: [] };
     const retained = preserveSelection && state.researchCases.cases.some(item => item.case_id === state.researchCases.selectedId);
     state.researchCases.selectedId = retained ? state.researchCases.selectedId : (state.researchCases.cases[0]?.case_id || null);
     if (state.researchCases.selectedId) await loadResearchCaseDetail(state.researchCases.selectedId, { render: false });
@@ -8304,7 +8356,8 @@ function renderResearchCases() {
     campaigns: ['Campaigns', 'Review related packages, publishers, dependencies, infrastructure, and timelines without inferring attribution.'],
     watchlists: ['Watchlists', 'Manage monitored packages, brands, publishers, and namespaces across supported ecosystems.'],
     disclosure: ['Disclosure', 'Review disclosure state, deadlines, and external communication gates for selected cases.'],
-    sandbox: ['Sandbox jobs', 'Review approval-gated dynamic analysis requests and imported results.']
+    sandbox: ['Sandbox jobs', 'Review approval-gated dynamic analysis requests and imported results.'],
+    resolved: ['Resolved by agents', 'Review reversible case resolutions and reopen any decision that needs human investigation.']
   }[researchView] || ['Research cases', 'Track evidence, analysis, disclosure, publication, and monitoring for each investigation.'];
   const viewSummary = el('research-view-summary');
   if (viewSummary) viewSummary.innerHTML = `<span class="eyebrow">Research workspace</span><strong>${escapeHtml(researchViewCopy[0])}</strong><span>${escapeHtml(researchViewCopy[1])}</span>`;
@@ -8331,6 +8384,7 @@ function renderResearchCases() {
   ].join('');
   renderResearchWatchlist();
   renderResearchDiscovery();
+  renderResearchResolutions();
   renderResearchStageQueues(state.researchCases.discovery.candidates || []);
   const list = el('research-case-list');
   const filtered = filteredResearchCases();
@@ -8355,6 +8409,58 @@ function renderResearchCases() {
   }));
   renderResearchCaseDetail(state.researchCases.selected);
   syncResearchPipelinePolling();
+}
+
+function renderResearchResolutions() {
+  const host = el('research-agent-resolution');
+  if (!host) return;
+  const resolution = state.researchCases.resolution || {};
+  const settings = resolution.settings || {};
+  const summary = resolution.summary || {};
+  const runs = Array.isArray(resolution.runs) ? resolution.runs : [];
+  host.innerHTML = `
+    <div class="module-head"><div><h3>Agent resolution policy</h3><p>Models may close only evidence-complete, reversible benign or not-substantiated cases. Likely or confirmed threats are escalated. Publication, disclosure, rule activation, and destructive response remain human-approved.</p></div>${renderStatusPill(settings.mode === 'guarded' ? 'completed' : settings.mode === 'off' ? 'blocked' : 'in_review', settings.mode || 'advisory')}</div>
+    <div class="grid cols-4">
+      ${edgeMetric('Awaiting review', summary.awaiting_review || 0, 'Applied or recommended')}
+      ${edgeMetric('Applied', summary.applied || 0, 'Reversible closures')}
+      ${edgeMetric('Blocked', summary.blocked || 0, 'Guardrails prevented action')}
+      ${edgeMetric('Rolled back', summary.rolled_back || 0, 'Reopened by an operator')}
+    </div>
+    <div class="research-form-grid" style="margin-top:18px;">
+      <label><span>Mode</span><select id="research-resolution-mode">${['off','advisory','guarded'].map(value => researchOption(value, settings.mode || 'advisory')).join('')}</select></label>
+      <label><span>Minimum confidence</span><input id="research-resolution-confidence" type="number" min="85" max="100" value="${escapeHtml(String(settings.min_confidence || 90))}" /></label>
+      <label><span>Minimum evidence references</span><input id="research-resolution-evidence" type="number" min="2" max="20" value="${escapeHtml(String(settings.min_evidence_refs || 4))}" /></label>
+      <label><span>Cases per cycle</span><input id="research-resolution-limit" type="number" min="1" max="100" value="${escapeHtml(String(settings.max_cases_per_cycle || 10))}" /></label>
+      <label class="checkbox-row"><input id="research-resolution-retract-rules" type="checkbox" ${settings.auto_retract_rules !== false ? 'checked' : ''} /><span>Retract active rules when a case closes</span></label>
+    </div>
+    <div class="research-form-actions"><button class="primary-btn" id="research-resolution-save-btn" type="button">Save policy</button><button class="secondary-btn" id="research-resolution-current-btn" type="button" ${state.researchCases.selected?.pipelines?.[0]?.pipeline_id ? '' : 'disabled'}>Evaluate selected case</button><button class="secondary-btn" id="research-resolution-open-automation-btn" type="button">Review all finding and alert decisions</button></div>
+    <h4 style="margin-top:20px;">Resolution review queue</h4>
+    ${runs.length ? researchTable(['Case','Verdict','Decision','Guardrails','Updated','Review'], runs.map(run => {
+      const reasons = run.decision?.guardrail_reasons || [];
+      const reviewable = ['applied','recommended'].includes(run.status);
+      return `<tr><td><strong>${escapeHtml(run.case_id)}</strong><div class="small"><code>${escapeHtml(run.run_id)}</code></div></td><td>${escapeHtml(statusLabel(run.verdict))}<div class="small">${escapeHtml(String(run.confidence))}% confidence</div></td><td>${renderStatusPill(run.status)}</td><td>${reasons.length ? escapeHtml(humanizeMachineText(reasons.join('; '))) : 'Passed all closure gates'}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${reviewable ? `<div class="research-rule-review-actions"><button class="mini-btn primary-btn research-resolution-review-btn" data-run-id="${escapeHtml(run.run_id)}" data-decision="accept" type="button">Accept</button><button class="mini-btn secondary-btn research-resolution-review-btn" data-run-id="${escapeHtml(run.run_id)}" data-decision="reopen" type="button">Reopen</button></div>` : escapeHtml(statusLabel(run.status))}</td></tr>`;
+    }), 'No agent case resolutions yet.') : '<div class="empty-state compact">No agent case resolutions yet. Completed pipelines appear here after the configured policy evaluates them.</div>'}
+  `;
+  el('research-resolution-save-btn')?.addEventListener('click', event => runResearchCaseAction('resolution-configure', {
+    mode: el('research-resolution-mode')?.value || 'advisory',
+    min_confidence: Number(el('research-resolution-confidence')?.value || 90),
+    min_evidence_refs: Number(el('research-resolution-evidence')?.value || 4),
+    max_cases_per_cycle: Number(el('research-resolution-limit')?.value || 10),
+    auto_retract_rules: Boolean(el('research-resolution-retract-rules')?.checked),
+  }, event.currentTarget));
+  el('research-resolution-current-btn')?.addEventListener('click', event => runResearchCaseAction('resolution-run', {
+    pipeline_id: state.researchCases.selected?.pipelines?.[0]?.pipeline_id || '',
+  }, event.currentTarget));
+  el('research-resolution-open-automation-btn')?.addEventListener('click', () => setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.automation }));
+  host.querySelectorAll('.research-resolution-review-btn').forEach(button => button.addEventListener('click', async event => {
+    const decision = button.dataset.decision;
+    if (!(await requestConfirmation(decision === 'reopen' ? 'Reopen this agent-resolved case for analyst review?' : 'Accept this agent resolution?', {
+      title: decision === 'reopen' ? 'Reopen case' : 'Accept agent resolution',
+      context: decision === 'reopen' ? 'The previous case fields and validation-passed rules will be restored.' : 'The closure remains auditable and no publication or external action occurs.',
+      confirmLabel: decision === 'reopen' ? 'Reopen' : 'Accept'
+    }))) return;
+    await runResearchCaseAction('resolution-review', { run_id: button.dataset.runId, decision }, event.currentTarget);
+  }));
 }
 
 function syncResearchPipelinePolling() {
@@ -9002,7 +9108,7 @@ function bindEvents() {
   });
   el('intelligence-autopilot-save')?.addEventListener('click', async event => {
     const mode = el('intelligence-autopilot-mode')?.value || 'advisory';
-    const model = el('intelligence-model-select')?.value || '';
+    const model = el('intelligence-autopilot-model')?.value || '';
     const minAutoCloseConfidence = Number(el('intelligence-autopilot-confidence')?.value || 97);
     const minEvidenceRefs = Number(el('intelligence-autopilot-evidence')?.value || 2);
     const maxRecordsPerCycle = Number(el('intelligence-autopilot-limit')?.value || 10);
