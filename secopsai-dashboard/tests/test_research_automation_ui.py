@@ -136,6 +136,15 @@ def test_research_discovery_commands_are_allowlisted_and_cross_ecosystem():
     assert "Braintree" in args
     assert ";" not in " ".join(args)
     assert dashboard_server.build_research_discovery_args("monitor-run-due", {"limit": 10})[-1] == "10"
+    policy = dashboard_server.build_research_discovery_args(
+        "promotion-policy-set",
+        {"ecosystem": "nuget", "enabled": True, "score_threshold": 94, "minimum_evidence": 3, "require_publisher": True, "mode": "draft_case"},
+    )
+    assert policy[:4] == ["research", "candidate", "promotion-policy", "--ecosystem"]
+    assert "--set" in policy and "--require-publisher" in policy
+    apply_policy = dashboard_server.build_research_discovery_args("promotion-policy-apply", {"ecosystem": "nuget", "limit": 20})
+    assert apply_policy[:4] == ["research", "candidate", "run-promotion-policy", "--ecosystem"]
+    assert "--apply" in apply_policy
 
 
 def test_research_discovery_selector_tracks_the_selected_ecosystem():

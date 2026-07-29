@@ -167,6 +167,8 @@ const state = {
       monitors: [],
       candidates: [],
       alerts: [],
+      campaigns: [],
+      promotionPolicy: null,
       loading: false,
       error: null,
       lastAction: null
@@ -252,6 +254,7 @@ const PAGE_ROUTES = Object.freeze({
 const RESEARCH_VIEW_ROUTES = Object.freeze({
   inbox: 'research/inbox',
   cases: 'research/cases',
+  campaigns: 'research/campaigns',
   watchlists: 'research/watchlists',
   coverage: 'research/coverage',
   disclosure: 'research/disclosure',
@@ -334,6 +337,7 @@ const CONTEXT_NAV = Object.freeze({
   "research-cases": [
     ["Inbox", "research-cases", RESEARCH_VIEW_ROUTES.inbox],
     ["Cases", "research-cases", RESEARCH_VIEW_ROUTES.cases],
+    ["Campaigns", "research-cases", RESEARCH_VIEW_ROUTES.campaigns],
     ["Watchlists", "research-cases", RESEARCH_VIEW_ROUTES.watchlists],
     ["Global coverage", "coverage", RESEARCH_VIEW_ROUTES.coverage],
     ["Disclosure", "research-cases", RESEARCH_VIEW_ROUTES.disclosure],
@@ -1257,6 +1261,18 @@ function closeHelpDrawer() {
   document.body.classList.remove('help-drawer-open');
 }
 
+function enhanceResponsiveTables(root = document) {
+  root.querySelectorAll?.('.table-wrap table').forEach(table => {
+    table.classList.add('mobile-card-table');
+    const labels = [...table.querySelectorAll('thead th')].map(cell => String(cell.textContent || '').trim() || 'Value');
+    table.querySelectorAll('tbody tr').forEach(row => {
+      [...row.children].forEach((cell, index) => {
+        if (!cell.dataset.label) cell.dataset.label = labels[index] || 'Value';
+      });
+    });
+  });
+}
+
 let commandPaletteIndex = 0;
 function renderCommandPalette(query = '') {
   const host = el('command-palette-list');
@@ -1313,6 +1329,7 @@ function startTopStripClock() {
 
 function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   const normalizedPageId = pages.includes(pageId) ? pageId : pageIdForRoute(pageId);
+  if (normalizedPageId !== 'findings') closeFindingReview();
   if (normalizedPageId === 'research-cases' && routeOverride) state.researchCases.view = researchViewForRoute(routeOverride);
   if (normalizedPageId === 'blog-ops' && routeOverride) state.blogOps.view = blogViewForRoute(routeOverride);
   if (normalizedPageId === 'integrations' && routeOverride) state.integrationView = systemViewForRoute(routeOverride);
@@ -1384,12 +1401,42 @@ function getTaskFilters() {
   };
 }
 
+function isInternalDevelopmentRecord(item = {}) {
+  const explicit = String(item.work_type || item.category || item.source_type || '').toLowerCase();
+  if (['development', 'engineering', 'product_delivery', 'internal'].includes(explicit)) return true;
+  const labels = Array.isArray(item.labels) ? item.labels.map(value => String(value).toLowerCase()) : [];
+  if (labels.some(label => ['development', 'engineering', 'internal', 'dashboard'].includes(label))) return true;
+  const text = `${item.title || ''} ${item.task_summary || ''}`.toLowerCase();
+  return /\b(?:implement|implementation|wire|wiring|refactor|dashboard demo|sample operational data|build pipeline|test fixture|frontend|backend)\b/.test(text);
+}
+
+function isOperatorWorkItem(item = {}) {
+  const linkedSecurityRecord = Boolean(item.finding_id || item.research_case_id || item.case_id || item.alert_id || item.asset_id);
+  if (linkedSecurityRecord) return true;
+  if (isInternalDevelopmentRecord(item)) return false;
+  return linkedSecurityRecord || Boolean(item.external_facing) || Boolean(item.requires_security_review) || ['blocked', 'review'].includes(String(item.status || ''));
+}
+
+function applyFindingSavedView(view = 'all', { persist = false } = {}) {
+  ['finding-search', 'finding-filter-severity', 'finding-filter-status', 'finding-filter-source'].forEach(id => { if (el(id)) el(id).value = ''; });
+  if (view === 'open' && el('finding-filter-status')) el('finding-filter-status').value = 'open';
+  if (view === 'priority' && el('finding-filter-severity')) el('finding-filter-severity').value = 'priority';
+  if (view === 'edge' && el('finding-filter-source')) el('finding-filter-source').value = 'secopsai_edge';
+  if (view === 'supply-chain' && el('finding-filter-source')) el('finding-filter-source').value = 'supply_chain_all';
+  if (persist) localStorage.setItem('secopsai_findings_saved_view', view || 'all');
+}
+
+function restoreFindingSavedView() {
+  const allowed = new Set(['open', 'priority', 'edge', 'supply-chain', 'all']);
+  const saved = localStorage.getItem('secopsai_findings_saved_view') || 'all';
+  applyFindingSavedView(allowed.has(saved) ? saved : 'all');
+}
+
 function filteredWorkItems() {
   const filters = getTaskFilters();
   return state.workItems.filter(item => {
     if (filters.scope === 'operator') {
-      const operatorWork = item.external_facing || item.requires_security_review || item.domain === 'security' || ['blocked', 'review', 'in_progress'].includes(String(item.status || ''));
-      if (!operatorWork) return false;
+      if (!isOperatorWorkItem(item)) return false;
     }
     if (filters.domain && item.domain !== filters.domain) return false;
     if (filters.priority && item.priority !== filters.priority) return false;
@@ -1542,7 +1589,6 @@ function renderAiDependencyGuardDetail(finding) {
       ${renderBulletList(evidence, 'No structured source evidence was included. Re-run the guard with JSON output for full context.')}
       <h4 style="margin-top:14px;">Recommended action</h4>
       ${renderBulletList(recommendations, 'Verify the package name against official documentation, tune allowlists for private packages, and scan again before install.')}
-      <div class="small" style="margin-top:12px;"><strong>CLI fallback:</strong> <code>${escapeHtml(aiDependencyGuardCliFallback())}</code></div>
     </div>
   `;
 }
@@ -1699,6 +1745,20 @@ function selectFinding(nextFindingId = null) {
   const findings = sortedFindings();
   const nextId = nextFindingId || findingId(findings?.[0]) || null;
   state.selectedFindingId = nextId;
+  const drawer = el('finding-review-drawer');
+  if (drawer && nextId) {
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('finding-review-open');
+  }
+}
+
+function closeFindingReview() {
+  state.selectedFindingId = null;
+  const drawer = el('finding-review-drawer');
+  drawer?.classList.remove('open');
+  drawer?.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('finding-review-open');
 }
 
 function coreWorkspaceFindings() {
@@ -2507,12 +2567,13 @@ function renderMissionControl() {
     });
   }
 
-  const byDomain = state.workItems.reduce((acc, item) => {
+  const operatorWorkItems = state.workItems.filter(isOperatorWorkItem);
+  const byDomain = operatorWorkItems.reduce((acc, item) => {
     acc[item.domain] = (acc[item.domain] || 0) + 1;
     return acc;
   }, {});
   const topDomains = Object.entries(byDomain).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  const extFacing = state.workItems.filter(w => w.external_facing).length;
+  const extFacing = operatorWorkItems.filter(w => w.external_facing).length;
   const openFindings = sortedFindings().filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
   const missionOverview = el("mission-overview");
   if (missionOverview) {
@@ -2583,6 +2644,7 @@ function renderMissionControl() {
 
   const activitySince = Date.now() - (30 * 24 * 60 * 60 * 1000);
   const recentFeed = [...state.events]
+    .filter(event => !isInternalDevelopmentRecord(event))
     .filter(event => Number.isFinite(new Date(event.created_at).getTime()) && new Date(event.created_at).getTime() >= activitySince)
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 6);
@@ -2597,6 +2659,7 @@ function renderMissionControl() {
   }
 
   const recentRuns = [...state.runs]
+    .filter(run => String(run.runtime || '').toLowerCase() !== 'dashboard-auto' && !isInternalDevelopmentRecord(run))
     .filter(run => Number.isFinite(new Date(run.created_at).getTime()) && new Date(run.created_at).getTime() >= activitySince)
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 6);
@@ -2665,12 +2728,14 @@ function filteredFindings(items = sortedFindings()) {
     const severity = String(findingSeverity(finding) || '').toLowerCase();
     const status = String(effectiveFindingStatus(finding) || '').toLowerCase();
     const source = String(findingSource(finding) || '').toLowerCase();
-    if (filters.severity && severity !== filters.severity) return false;
+    if (filters.severity === 'priority' && !['critical', 'high', 'urgent'].includes(severity)) return false;
+    if (filters.severity && filters.severity !== 'priority' && severity !== filters.severity) return false;
     if (filters.status && status !== filters.status) return false;
     if (filters.source) {
       if (filters.source === 'secopsai_edge' && !source.includes('edge') && !String(finding.finding_id || '').toUpperCase().startsWith('EDGE-')) return false;
       if (filters.source === 'secopsai_core' && findingRecordOrigin(finding) !== 'core') return false;
       if (filters.source === 'ai_dependency_guard' && !source.includes('ai') && !source.includes('dependency')) return false;
+      if (filters.source === 'supply_chain_all' && !/(?:supply.?chain|dependency|package|npm|pypi|nuget|maven|rubygems|packagist|open-vsx)/i.test(source)) return false;
     }
     if (filters.search) {
       const haystack = `${findingId(finding) || ''} ${findingTitle(finding)} ${findingBody(finding)} ${findingSource(finding)} ${findingValue(finding, 'asset') || ''}`.toLowerCase();
@@ -2810,7 +2875,6 @@ function renderFindings() {
   if (state.selectedFindingId && !findings.some(finding => String(findingId(finding)) === String(state.selectedFindingId)) && Object.values(getFindingFilters()).some(Boolean)) {
     state.selectedFindingId = null;
   }
-  if (findingsAvailable && findings.length && !state.selectedFindingId) selectFinding();
   const triageSummary = localTriageSummary();
   const triageLatest = localTriageLatestRun();
   const pendingActions = localPendingActions();
@@ -2853,19 +2917,16 @@ function renderFindings() {
       table.innerHTML = `
         ${renderAiDependencyGuardSurface(findings)}
         <div class="table-wrap"><table class="mobile-card-table">
-          <thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Correlation</th><th>Linked work</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Finding</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>${findings.map(f => {
             const related = relatedTasksForFinding(f);
-            const best = related[0] || null;
             const normalizedFindingId = findingId(f);
             const selected = String(state.selectedFindingId) === String(normalizedFindingId);
             return `<tr class="finding-row ${selected ? 'selected-row' : ''}" data-finding-id="${escapeHtml(normalizedFindingId || '')}">
               <td data-label="Finding"><strong>${escapeHtml(findingTitle(f))}</strong><span class="finding-origin ${findingRecordOrigin(f)}">${findingRecordOrigin(f) === 'core' ? 'Core canonical' : 'Dashboard'}</span><div class="small">${escapeHtml(displayFindingSource(f))}${findingConfidence(f) !== null ? ` • confidence ${escapeHtml(findingConfidence(f))}` : ''}</div><div class="small">${escapeHtml(compactText(findingBody(f), 120))}</div></td>
               <td data-label="Severity"><span class="badge priority-${String(findingSeverity(f)).toLowerCase() === 'critical' ? 'urgent' : String(findingSeverity(f)).toLowerCase() === 'high' ? 'high' : 'normal'}">${escapeHtml(findingSeverity(f))}</span></td>
               <td data-label="Status">${renderStatusPill(String(effectiveFindingStatus(f)).toLowerCase(), humanizeSnake(effectiveFindingStatus(f)))}</td>
-              <td data-label="Correlation">${best ? `<div class="small"><strong>${best.score}</strong> match</div><div class="small">${escapeHtml(best.reasons.join(' • '))}</div>` : '<span class="small">No strong match yet</span>'}</td>
-              <td data-label="Linked work">${related.length ? related.slice(0, 2).map(match => `<div class="small">${escapeHtml(match.item.title)} <span class="muted-inline">(${escapeHtml(match.item.status || 'unknown')})</span></div>`).join('') : '<span class="small">No linked task yet</span>'}</td>
-              <td data-label="Actions"><div class="task-card-actions finding-actions"><button class="primary-btn mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Review</button><details class="inline-action-menu"><summary>More</summary><div><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-run-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Investigate now</button><button class="mini-btn finding-copy-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Copy investigate command</button></div></details></div></td>
+              <td data-label="Actions"><div class="task-card-actions finding-actions"><button class="primary-btn mini-btn finding-select-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Review</button><details class="inline-action-menu"><summary>More</summary><div><button class="mini-btn finding-task-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Create task</button><button class="mini-btn finding-run-investigate-btn" data-finding-id="${escapeHtml(normalizedFindingId || '')}">Start investigation</button></div></details></div></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
@@ -3040,9 +3101,8 @@ function renderFindings() {
             </div>
             <div class="task-card-actions" style="margin-top:14px;">
               <button class="mini-btn" id="selected-finding-run-close-btn">Close in SecOpsAI</button>
-              <button class="mini-btn" id="selected-finding-copy-close-btn">Copy close command</button>
             </div>
-            <div class="small" style="margin-top:10px;">Only guarded dispositions are available here. Use the CLI directly for any more sensitive disposition.</div>
+            <div class="small" style="margin-top:10px;">Only guarded dispositions are available here. Sensitive dispositions require the approved investigation workflow.</div>
           </div>
         ` : `
           <div class="small" style="margin-top:12px;">This finding is already marked closed locally in the current dashboard session.</div>
@@ -3053,7 +3113,7 @@ function renderFindings() {
         ${requests.length ? requests.map(match => `<div class="feed-item compact-feed-item"><div><strong>${escapeHtml(shortRoleLabel(match.request.role_label || 'unknown'))}</strong></div><div class="small">${escapeHtml(humanizeSnake(match.request.status || 'queued'))} • score ${match.score}</div><div class="small">${escapeHtml(summarizePromptText(match.request.prompt_text || '—'))}</div></div>`).join('') : '<div class="empty compact-empty">No strong queued-run overlap yet. This stays empty when the local run queue does not meaningfully reference the finding.</div>'}
         <div class="action-cluster">
           <div class="small action-cluster-label">Next actions</div>
-          <div class="task-card-actions" style="margin-top:10px;"><button class="mini-btn" id="selected-finding-run-investigate-btn">Investigate now</button><button class="mini-btn" id="selected-finding-copy-investigate-btn">Copy investigate</button><button class="mini-btn" id="selected-finding-copy-research-btn">Copy research</button>${!latestSession ? `<button class="mini-btn" id="selected-finding-run-research-btn">Run source-backed research</button>` : ''}${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply now</button><button class="mini-btn" id="selected-finding-copy-apply-btn">Copy apply-action</button>` : ''}<button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open lead brief</button>` : ''}</div>
+          <div class="task-card-actions" style="margin-top:10px;"><button class="mini-btn" id="selected-finding-run-investigate-btn">Start investigation</button>${!latestSession ? `<button class="mini-btn" id="selected-finding-run-research-btn">Run source-backed research</button>` : ''}${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply approved action</button>` : ''}<button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open lead brief</button>` : ''}</div>
         </div>
       </div>
     `;
@@ -3593,15 +3653,15 @@ function renderIntegrations() {
   const currentAiGuard = state.integrationStatus?.ai_guard || aiGuardConfig();
   if (summary) {
     summary.innerHTML = `
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Open findings</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.in_review_findings ?? 0 : '—'}</div><div class="metric-label">In review</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Pending actions</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.applied_actions ?? localAppliedActionsCount() : '—'}</div><div class="metric-label">Applied actions</div></div>
-      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open sessions</div></div>
-      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending approvals</div></div>
-      <div class="card"><div class="metric">${localFindingsArtifact()?.total_findings ?? '—'}</div><div class="metric-label">Latest findings artifact total</div></div>
-      <div class="card"><div class="metric">${recentRuns.length}</div><div class="metric-label">Recent orchestrator runs</div></div>
-      <div class="card"><div class="metric">${escapeHtml(currentAiGuard.hostedEnabled ? 'Guarded enabled' : 'Local-first only')}</div><div class="metric-label">Hosted AI guardrail mode</div></div>`;
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Open findings</div><div class="metric-scope">Local Core triage artifact</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.in_review_findings ?? 0 : '—'}</div><div class="metric-label">In review</div><div class="metric-scope">Local Core triage artifact</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Pending actions</div><div class="metric-scope">Local Core action queue</div></div>
+      <div class="card"><div class="metric">${triageSummary ? triageSummary.applied_actions ?? localAppliedActionsCount() : '—'}</div><div class="metric-label">Applied actions</div><div class="metric-scope">Local Core action queue</div></div>
+      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open sessions</div><div class="metric-scope">Local Core session store</div></div>
+      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending approvals</div><div class="metric-scope">Local Core session store</div></div>
+      <div class="card"><div class="metric">${localFindingsArtifact()?.total_findings ?? '—'}</div><div class="metric-label">Latest findings artifact total</div><div class="metric-scope">Most recent local artifact</div></div>
+      <div class="card"><div class="metric">${recentRuns.length}</div><div class="metric-label">Recent orchestrator runs</div><div class="metric-scope">Local Core retained history</div></div>
+      <div class="card"><div class="metric">${escapeHtml(currentAiGuard.hostedEnabled ? 'Guarded enabled' : 'Local-first only')}</div><div class="metric-label">Hosted AI guardrail mode</div><div class="metric-scope">Current workspace policy</div></div>`;
   }
 
   const cfgEl = el('integration-config');
@@ -3633,7 +3693,7 @@ function renderIntegrations() {
           <div class="kv-row"><div class="kv-key">Queue file</div><div class="kv-val">${escapeHtml(state.localTriage?.queue?.path || 'Unavailable')}</div></div>
           <div class="kv-row"><div class="kv-key">Session store</div><div class="kv-val">${escapeHtml(localSessionSummary()?.path || 'Unavailable')}</div></div>
         </div>
-        <div class="small" style="margin-top:12px;">Copy native CLI commands from this dashboard for investigation and action application without deleting or mutating findings from the UI.</div>
+        <div class="small" style="margin-top:12px;">Investigation and action history remains local and auditable. Use the approved dashboard workflows for operator changes.</div>
       </div>
       <div class="card">
         <h3>Hosted AI guardrails</h3>
@@ -4327,7 +4387,7 @@ function renderReadinessPill(draft = {}) {
   const status = missing ? 'not scored' : statusLabel(draft.readiness_status);
   const score = Number(draft.readiness_score || 0);
   const statusClass = String(draft.readiness_status || 'not-scored').replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
-  const label = missing ? status : `${status} · ${score}`;
+  const label = missing ? 'Evidence not scored' : `Evidence ${status} · ${score}`;
   return `<span class="readiness-pill ${escapeHtml(statusClass)}">${escapeHtml(label)}</span>`;
 }
 
@@ -4514,10 +4574,10 @@ function renderBlogOpsStats() {
   const latestRun = runs[0] || null;
   const cards = [
     ['Sources', counts.sources ?? '—', isLocalBlogOpsMode() ? 'Local SecOpsAI registry' : status.configured ? 'GitHub backed registry' : 'GitHub token needed'],
-    ['Drafts', counts.drafts ?? blogOpsDrafts().length, 'review records in repo'],
-    ['Needs review', counts.needs_review ?? 0, 'external news waits here'],
-    ['Approved', counts.approved ?? 0, `${counts.approved_publishable ?? counts.approved ?? 0} publishable${Number(counts.approved_blocked || 0) ? `, ${counts.approved_blocked} blocked` : ''}`],
-    ['Deployed', counts.deployed ?? 0, 'deployed to Cloudflare'],
+    ['Drafts', counts.drafts ?? blogOpsDrafts().length, 'All publication streams'],
+    ['Needs review', counts.needs_review ?? 0, 'All streams · editorial state'],
+    ['Approved', counts.approved ?? 0, `All streams · ${counts.approved_publishable ?? counts.approved ?? 0} publishable${Number(counts.approved_blocked || 0) ? `, ${counts.approved_blocked} blocked` : ''}`],
+    ['Deployed', counts.deployed ?? 0, 'All streams · Cloudflare delivery'],
     ['Latest run', latestRun ? statusLabel(latestRun.status || latestRun.conclusion || 'queued') : '—', latestRun ? fmtDate(latestRun.updated_at) : isLocalBlogOpsMode() ? 'Local helper does not read workflow runs' : 'No workflow run loaded']
   ];
   host.innerHTML = cards.map(([label, value, sub]) => `
@@ -7279,19 +7339,23 @@ async function loadResearchDiscovery({ render = true } = {}) {
   discovery.error = null;
   if (render) renderResearchCases();
   try {
-    const [capabilities, watchlists, monitors, candidates, alerts] = await Promise.all([
+    const [capabilities, watchlists, monitors, candidates, alerts, campaigns, promotionPolicy] = await Promise.all([
       dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=capabilities`, { cache: 'no-store' }).then(response => response.json()),
       dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=watchlists`, { cache: 'no-store' }).then(response => response.json()),
       dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=monitors`, { cache: 'no-store' }).then(response => response.json()),
       dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=candidates`, { cache: 'no-store' }).then(response => response.json()),
-      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=alerts`, { cache: 'no-store' }).then(response => response.json())
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=alerts`, { cache: 'no-store' }).then(response => response.json()),
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=campaigns`, { cache: 'no-store' }).then(response => response.json()),
+      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=promotion-policy&ecosystem=${encodeURIComponent(el('research-promotion-ecosystem')?.value || 'all')}`, { cache: 'no-store' }).then(response => response.json())
     ]);
-    if (capabilities.ok === false || watchlists.ok === false || monitors.ok === false || candidates.ok === false || alerts.ok === false) throw new Error(capabilities.error || watchlists.error || monitors.error || candidates.error || alerts.error || 'Research discovery unavailable');
+    if (capabilities.ok === false || watchlists.ok === false || monitors.ok === false || candidates.ok === false || alerts.ok === false || campaigns.ok === false || promotionPolicy.ok === false) throw new Error(capabilities.error || watchlists.error || monitors.error || candidates.error || alerts.error || campaigns.error || promotionPolicy.error || 'Research discovery unavailable');
     discovery.capabilities = capabilities.result || null;
     discovery.watchlists = watchlists.result?.watchlists || [];
     discovery.monitors = monitors.result?.monitors || [];
     discovery.candidates = candidates.result?.candidates || [];
     discovery.alerts = alerts.result?.alerts || [];
+    discovery.campaigns = campaigns.result?.campaigns || [];
+    discovery.promotionPolicy = promotionPolicy.result || null;
   } catch (error) {
     discovery.error = error?.message || String(error);
   } finally {
@@ -7328,6 +7392,18 @@ async function runResearchDiscoveryAction(action, payload = {}, button = null) {
     return null;
   } finally {
     setButtonBusy(button, false);
+  }
+}
+
+async function loadPromotionPolicyForEcosystem(ecosystem) {
+  try {
+    const response = await dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=promotion-policy&ecosystem=${encodeURIComponent(ecosystem || 'all')}`, { cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Promotion policy HTTP ${response.status}`);
+    state.researchCases.discovery.promotionPolicy = payload.result || null;
+    renderResearchPromotionPolicy();
+  } catch (error) {
+    setStatus(`Promotion policy could not be loaded: ${escapeHtml(error.message || String(error))}`, true);
   }
 }
 
@@ -7374,18 +7450,55 @@ function renderResearchDiscovery() {
   const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(item.reason || 'Review candidate')}</td><td>${escapeHtml(statusLabel(item.status))}</td><td><div style="display: flex; gap: 8px;"><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email</button>${item.status === 'open' ? `<button class="mini-btn research-alert-resolve-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Resolve</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>` : '';
   candidatesHost.innerHTML = candidateMarkup + alertMarkup;
   renderResearchStageQueues(candidates);
+  renderResearchPromotionPolicy();
+  renderResearchCampaigns();
+}
+
+function renderResearchPromotionPolicy() {
+  const policy = state.researchCases.discovery.promotionPolicy || {};
+  const statePill = el('research-promotion-state');
+  if (statePill) statePill.textContent = policy.enabled ? 'Enabled' : 'Disabled';
+  if (el('research-promotion-score')) el('research-promotion-score').value = String(policy.score_threshold ?? 90);
+  if (el('research-promotion-evidence')) el('research-promotion-evidence').value = String(policy.minimum_evidence ?? 2);
+  if (el('research-promotion-mode')) el('research-promotion-mode').value = policy.mode || 'draft_case';
+  if (el('research-promotion-enabled')) el('research-promotion-enabled').checked = Boolean(policy.enabled);
+  if (el('research-promotion-publisher')) el('research-promotion-publisher').checked = Boolean(policy.require_publisher);
+  const last = state.researchCases.discovery.lastAction;
+  const result = el('research-promotion-result');
+  if (result && last && String(last.action || '').startsWith('promotion-policy')) {
+    const data = last.result?.result || last.result || {};
+    result.innerHTML = `<div class="small"><strong>${escapeHtml(statusLabel(last.action))}</strong> · evaluated ${escapeHtml(String(data.evaluated ?? 0))} · eligible ${escapeHtml(String(data.eligible ?? 0))} · draft cases created ${escapeHtml(String(data.promoted ?? 0))}</div>`;
+  }
+}
+
+function renderResearchCampaigns() {
+  const host = el('research-campaigns-list');
+  if (!host) return;
+  const campaigns = state.researchCases.discovery.campaigns || [];
+  host.innerHTML = campaigns.length ? researchTable(['Campaign', 'Confidence', 'Attribution', 'Status', 'Updated'], campaigns.map(item => `<tr><td><strong>${escapeHtml(item.title || item.campaign_id)}</strong><div class="small"><code>${escapeHtml(item.campaign_id)}</code></div></td><td>${escapeHtml(String(item.confidence ?? '—'))}%</td><td>${escapeHtml(item.attribution || 'Not attributed')}</td><td>${renderStatusPill(item.status || 'candidate')}</td><td>${escapeHtml(fmtDate(item.updated_at))}</td></tr>`), '') : '<div class="empty-state compact">No campaign clusters exist yet. Correlation creates candidate relationships; it does not establish attribution.</div>';
 }
 
 function renderResearchStageQueues(candidates = []) {
   const inbox = el('research-inbox-candidates');
   if (inbox) {
-    inbox.innerHTML = candidates.length ? candidates.slice(0, 30).map(item => `
+    const ranked = [...candidates].sort((left, right) => {
+      const leftEvidence = Object.values(left.evidence || {}).filter(Boolean).length;
+      const rightEvidence = Object.values(right.evidence || {}).filter(Boolean).length;
+      return (Number(right.score || 0) + rightEvidence * 3) - (Number(left.score || 0) + leftEvidence * 3);
+    });
+    inbox.innerHTML = ranked.length ? ranked.slice(0, 30).map((item, index) => {
+      const evidenceCount = Object.values(item.evidence || {}).filter(Boolean).length;
+      const completeness = Math.min(100, Math.round((evidenceCount / 3) * 100));
+      const novelty = String(item.status || 'new').toLowerCase() === 'new' ? 'New lead' : statusLabel(item.status || 'review');
+      const impact = Number(item.score || 0) >= 95 ? 'Critical review priority' : Number(item.score || 0) >= 85 ? 'High review priority' : 'Standard review priority';
+      return `
       <article class="research-inbox-card">
-        <div class="research-inbox-card-head"><strong>${escapeHtml(item.package || item.identifier || 'Candidate')}</strong><span class="status-pill">Score ${escapeHtml(String(item.score ?? '—'))}</span></div>
+        <div class="research-inbox-card-head"><strong>#${index + 1} · ${escapeHtml(item.package || item.identifier || 'Candidate')}</strong><span class="status-pill">Score ${escapeHtml(String(item.score ?? '—'))}</span></div>
         <div class="small">${escapeHtml(item.ecosystem || 'unknown')} · ${escapeHtml(item.version || 'version unknown')} · reference ${escapeHtml(item.reference_identifier || 'not recorded')}</div>
         <p>${escapeHtml(item.reason || 'Explainable similarity requires analyst review.')}</p>
-        <div class="small">Status: ${escapeHtml(statusLabel(item.status || 'new'))} · coverage: ${escapeHtml(item.coverage || 'scoped')}</div>
-      </article>`).join('') : '<div class="empty-state compact">No candidates are waiting for review. A scoped monitor with no candidates is not a global clean result.</div>';
+        <div class="research-candidate-facts"><span>${escapeHtml(novelty)}</span><span>${escapeHtml(impact)}</span><span>Evidence ${completeness}%</span><span>Coverage ${escapeHtml(item.coverage || 'scoped')}</span></div>
+      </article>`;
+    }).join('') : '<div class="empty-state compact">No candidates are waiting for review. A scoped monitor with no candidates is not a global clean result.</div>';
   }
   const cases = state.researchCases.cases || [];
   const disclosure = el('research-disclosure-queue');
@@ -8117,6 +8230,7 @@ function renderResearchCases() {
   const researchViewCopy = {
     inbox: ['Discovery inbox', 'Review ranked candidates and decide which leads should become durable investigations.'],
     cases: ['Research cases', 'Track evidence, analysis, disclosure, publication, and monitoring for each investigation.'],
+    campaigns: ['Campaigns', 'Review related packages, publishers, dependencies, infrastructure, and timelines without inferring attribution.'],
     watchlists: ['Watchlists', 'Manage monitored packages, brands, publishers, and namespaces across supported ecosystems.'],
     disclosure: ['Disclosure', 'Review disclosure state, deadlines, and external communication gates for selected cases.'],
     sandbox: ['Sandbox jobs', 'Review approval-gated dynamic analysis requests and imported results.']
@@ -8684,6 +8798,7 @@ function bindEvents() {
         if (selected) selected.click();
       }
     } else if (event.key === 'Escape') {
+      if (document.body.classList.contains('finding-review-open')) closeFindingReview();
       closeHelpDrawer();
     }
   });
@@ -8715,6 +8830,7 @@ function bindEvents() {
     }
     openFindingTaskModal();
   });
+  el('finding-review-close-btn')?.addEventListener('click', closeFindingReview);
   el('edge-refresh-btn')?.addEventListener('click', async (event) => {
     const btn = event.currentTarget;
     setButtonBusy(btn, true, '<span class="dot"></span> Refreshing…');
@@ -8884,6 +9000,11 @@ function bindEvents() {
     ['finding-search', 'finding-filter-severity', 'finding-filter-status', 'finding-filter-source'].forEach(id => { if (el(id)) el(id).value = ''; });
     renderFindings();
   });
+  document.querySelectorAll('.finding-view-btn').forEach(button => button.addEventListener('click', () => {
+    const view = button.dataset.findingView;
+    applyFindingSavedView(view, { persist: true });
+    renderFindings();
+  }));
   el('triage-ops-save-token-btn')?.addEventListener('click', () => {
     state.triageOps.adminToken = el('triage-ops-admin-token')?.value || '';
     state.researchCases.adminToken = state.triageOps.adminToken;
@@ -8984,6 +9105,23 @@ function bindEvents() {
   });
   el('research-discovery-run-due-btn')?.addEventListener('click', event => runResearchDiscoveryAction('monitor-run-due', { limit: 25 }, event.currentTarget));
   el('research-discovery-correlate-btn')?.addEventListener('click', event => runResearchDiscoveryAction('campaign-correlate', {}, event.currentTarget));
+  el('research-campaigns-refresh-btn')?.addEventListener('click', () => loadResearchDiscovery());
+  el('research-promotion-ecosystem')?.addEventListener('change', event => loadPromotionPolicyForEcosystem(event.currentTarget.value));
+  el('research-promotion-save-btn')?.addEventListener('click', event => runResearchDiscoveryAction('promotion-policy-set', {
+    ecosystem: el('research-promotion-ecosystem')?.value || 'all',
+    enabled: Boolean(el('research-promotion-enabled')?.checked),
+    score_threshold: Number(el('research-promotion-score')?.value || 90),
+    minimum_evidence: Number(el('research-promotion-evidence')?.value || 2),
+    require_publisher: Boolean(el('research-promotion-publisher')?.checked),
+    mode: el('research-promotion-mode')?.value || 'draft_case'
+  }, event.currentTarget));
+  el('research-promotion-preview-btn')?.addEventListener('click', event => runResearchDiscoveryAction('promotion-policy-preview', { ecosystem: el('research-promotion-ecosystem')?.value || 'all', limit: 100 }, event.currentTarget));
+  el('research-promotion-apply-btn')?.addEventListener('click', async event => {
+    if (!(await requestConfirmation('Create draft research cases for every candidate that passes the saved deterministic promotion policy?', { title: 'Apply candidate promotion policy', context: 'This creates draft investigations only. It does not record a malicious verdict, send disclosure, or publish content.', confirmLabel: 'Create draft cases' }))) return;
+    await runResearchDiscoveryAction('promotion-policy-apply', { ecosystem: el('research-promotion-ecosystem')?.value || 'all', limit: 100 }, event.currentTarget);
+    await loadResearchCases({ render: false, preserveSelection: true });
+    renderResearchCases();
+  });
   el('research-discovery-candidates')?.addEventListener('click', async event => {
     const deliverBtn = event.target.closest('.research-alert-deliver-btn');
     const resolveBtn = event.target.closest('.research-alert-resolve-btn');
@@ -9101,6 +9239,7 @@ function bindEvents() {
   });
   el('blog-draft-filter')?.addEventListener('change', renderBlogOps);
   el('blog-content-filter')?.addEventListener('change', renderBlogOps);
+  document.querySelectorAll('.publication-lane-btn').forEach(button => button.addEventListener('click', () => setPage('blog-ops', { routeOverride: button.dataset.publicationRoute })));
   document.querySelectorAll('.blog-action-btn').forEach(btn => {
     btn.addEventListener('click', () => runBlogOpsAction(btn.dataset.blogAction, { button: btn }));
   });
@@ -9111,8 +9250,12 @@ window.addEventListener('popstate', () => setPage(currentPageFromLocation(), { s
 window.addEventListener('DOMContentLoaded', () => {
   setPage(currentPageFromLocation(), { skipHistory: true });
   bindEvents();
+  restoreFindingSavedView();
   startTopStripClock();
   initializeDashboardAuth();
+  enhanceResponsiveTables();
+  const responsiveTableObserver = new MutationObserver(() => enhanceResponsiveTables());
+  responsiveTableObserver.observe(document.body, { childList: true, subtree: true });
 });
 
 window.addEventListener('beforeunload', () => {

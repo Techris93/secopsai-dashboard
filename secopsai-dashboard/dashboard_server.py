@@ -94,6 +94,10 @@ RESEARCH_DISCOVERY_ACTIONS = {
     'monitor-run-due',
     'candidate-list',
     'candidate-show',
+    'promotion-policy-get',
+    'promotion-policy-set',
+    'promotion-policy-preview',
+    'promotion-policy-apply',
     'campaign-correlate',
     'campaign-list',
     'compare-packages',
@@ -1265,6 +1269,29 @@ def build_research_discovery_args(action, payload=None):
         if not candidate_id.startswith('CAN-'):
             raise ValueError('Invalid candidate id')
         return ['research', 'candidate', 'show', candidate_id]
+    if action in {'promotion-policy-get', 'promotion-policy-set', 'promotion-policy-preview', 'promotion-policy-apply'}:
+        ecosystem = _clean_string(payload.get('ecosystem') or 'all', 40).lower()
+        if ecosystem != 'all' and not ECOSYSTEM_RE.match(ecosystem):
+            raise ValueError('Invalid promotion-policy ecosystem')
+        if action == 'promotion-policy-get':
+            return ['research', 'candidate', 'promotion-policy', '--ecosystem', ecosystem]
+        if action in {'promotion-policy-preview', 'promotion-policy-apply'}:
+            args = ['research', 'candidate', 'run-promotion-policy', '--ecosystem', ecosystem, '--limit', str(max(1, min(int(payload.get('limit', 100)), 500))), '--actor', 'dashboard-operator']
+            if action == 'promotion-policy-apply':
+                args.append('--apply')
+            return args
+        try:
+            threshold = max(70, min(float(payload.get('score_threshold', 90)), 100))
+            minimum_evidence = max(1, min(int(payload.get('minimum_evidence', 2)), 8))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('Invalid promotion policy thresholds') from exc
+        mode = _clean_string(payload.get('mode') or 'draft_case', 20)
+        if mode not in {'review_only', 'draft_case'}:
+            raise ValueError('Invalid promotion policy mode')
+        args = ['research', 'candidate', 'promotion-policy', '--ecosystem', ecosystem, '--set', '--enabled', 'true' if payload.get('enabled') else 'false', '--score-threshold', str(threshold), '--minimum-evidence', str(minimum_evidence), '--mode', mode, '--actor', 'dashboard-operator']
+        if payload.get('require_publisher'):
+            args.append('--require-publisher')
+        return args
     if action == 'campaign-correlate':
         return ['research', 'campaign', 'correlate']
     if action == 'campaign-list':
@@ -3128,6 +3155,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'monitors': 'monitor-list',
                     'candidates': 'candidate-list',
                     'alerts': 'alert-list',
+                    'campaigns': 'campaign-list',
+                    'promotion-policy': 'promotion-policy-get',
                     'collectors': 'collect-status',
                     'feed-events': 'collect-events',
                     'coverage-windows': 'collect-coverage',
