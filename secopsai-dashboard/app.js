@@ -8104,6 +8104,23 @@ function bindResearchCaseDetailActions(researchCase) {
     }))) return;
     runResearchCaseAction('publication-approve', { case_id: researchCase.case_id, review_id: review.review_id, waivers: [], actor: 'dashboard-publisher' }, event.currentTarget);
   });
+  el('research-disclosure-suggest-btn')?.addEventListener('click', async event => {
+    const result = await runResearchCaseAction('suggest-disclosure', {
+      case_id: researchCase.case_id,
+      actor: 'dashboard-operator'
+    }, event.currentTarget);
+    const suggestion = result?.result || result || {};
+    if (!suggestion || (!suggestion.recipient && !suggestion.subject && !suggestion.body)) return;
+    // Preserve operator edits only when the server returned a value.
+    if (el('research-disclosure-recipient') && suggestion.recipient) el('research-disclosure-recipient').value = suggestion.recipient;
+    if (el('research-disclosure-subject') && suggestion.subject) el('research-disclosure-subject').value = suggestion.subject;
+    if (el('research-disclosure-body') && suggestion.body) el('research-disclosure-body').value = suggestion.body;
+    if (Array.isArray(suggestion.recipient_candidates) && el('research-disclosure-recipient-options')) {
+      el('research-disclosure-recipient-options').innerHTML = suggestion.recipient_candidates
+        .map(value => `<option value="${escapeHtml(value)}"></option>`)
+        .join('');
+    }
+  });
   el('research-disclosure-btn')?.addEventListener('click', event => runResearchCaseAction('prepare-disclosure', {
     case_id: researchCase.case_id,
     recipient: el('research-disclosure-recipient')?.value,
@@ -8260,9 +8277,122 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
 </section>`;
 }
 
-function renderResearchAutomationPanel(researchCase) {
+
+function researchCasePrefill(researchCase = {}) {
   const subjects = researchCase.subjects || [];
-  const packageSubject = subjects.find(item => item.subject_type === 'package' && item.status === 'active') || subjects[0] || {};
+  const packageSubject = subjects.find(item => item.subject_type === 'package' && item.status === 'active')
+    || subjects.find(item => item.subject_type === 'package')
+    || subjects[0]
+    || {};
+  const metadata = packageSubject.metadata && typeof packageSubject.metadata === 'object' ? packageSubject.metadata : {};
+  const contacts = metadata.contacts && typeof metadata.contacts === 'object' ? metadata.contacts : {};
+  const evidence = researchCase.evidence || [];
+  const artifactEvidence = evidence.find(item => item.evidence_type === 'package_artifact' && item.status === 'active')
+    || evidence.find(item => item.evidence_type === 'package_artifact')
+    || null;
+  const metadataEvidence = evidence.find(item => item.evidence_type === 'registry_metadata' && item.status === 'active')
+    || evidence.find(item => item.evidence_type === 'registry_metadata')
+    || null;
+  const activeEvidenceIds = evidence
+    .filter(item => item.status === 'active' && item.evidence_id)
+    .map(item => item.evidence_id)
+    .slice(0, 12);
+  const latestVerdict = (researchCase.verdicts || [])[0] || {};
+  const packageName = packageSubject.name || metadata.package || '';
+  const packageVersion = packageSubject.version || metadata.version || '';
+  const ecosystem = packageSubject.ecosystem || metadata.ecosystem || 'npm';
+  const publisher = packageSubject.publisher || metadata.publisher || '';
+  const packageLabel = [ecosystem, packageName, packageVersion].filter(Boolean).join(' / ') || researchCase.title || 'investigated package';
+  const emails = Array.isArray(contacts.emails) ? contacts.emails.filter(Boolean) : [];
+  const names = Array.isArray(contacts.names) ? contacts.names.filter(Boolean) : [];
+  const urls = Array.isArray(contacts.urls) ? contacts.urls.filter(Boolean) : [];
+  const registryContacts = {
+    npm: 'security@npmjs.com',
+    pypi: 'security@pypi.org',
+    nuget: 'support@nuget.org',
+    maven: 'security@central.sonatype.com',
+    rubygems: 'security@rubygems.org',
+    packagist: 'contact@packagist.org',
+    go: 'security@golang.org',
+    'open-vsx': 'security@eclipse.org'
+  };
+  const recipientCandidates = [...emails];
+  if (!recipientCandidates.length && ecosystem) recipientCandidates.push(registryContacts[String(ecosystem).toLowerCase()] || 'security@secopsai.dev');
+  if (!recipientCandidates.length) recipientCandidates.push('security@secopsai.dev');
+  const recipient = recipientCandidates[0];
+  const contactName = names[0] || publisher || 'maintainer';
+  const artifactHash = artifactEvidence?.sha256 || metadata.artifact_sha256 || '';
+  const metadataUrl = metadata.metadata_url || metadataEvidence?.locator || '';
+  const artifactUrl = metadata.artifact_url || '';
+  const subject = `Responsible disclosure: ${packageLabel}`.slice(0, 240);
+  const body = [
+    `Hello ${contactName},`,
+    '',
+    `SecOpsAI Research is preparing a responsible disclosure regarding ${packageLabel}.`,
+    '',
+    'We collected official registry metadata and preserved a hashed, quarantined artifact for defensive analysis. Package code was not installed or executed on analyst workstations.',
+    '',
+    'Relevant artifact hashes:',
+    artifactHash ? `- ${artifactHash}` : '- Artifact hash available on request through the agreed channel.',
+    '',
+    'We can share reproduction-safe details, affected versions, and recommended mitigations through this channel. Please confirm the preferred security contact and any embargo expectations.',
+    '',
+    'Regards,',
+    'SecOpsAI Research',
+    'research@secopsai.dev'
+  ].join('\n');
+  const partnerReason = [
+    `Requesting the exact package artifact for research case ${researchCase.case_id || ''}.`.trim(),
+    `Package: ${packageLabel}`,
+    publisher ? `Publisher: ${publisher}` : '',
+    artifactHash ? `Expected SHA-256: ${artifactHash}` : 'Expected SHA-256: unknown; please provide the original hash and provenance.',
+    metadataUrl ? `Registry metadata URL: ${metadataUrl}` : '',
+    artifactUrl ? `Original artifact URL: ${artifactUrl}` : '',
+    'Please include lawful source, chain of custody, and confirmation that the file was not modified.'
+  ].filter(Boolean).join('\n');
+  const sandboxJustification = [
+    `Need isolated runtime confirmation for ${packageLabel}.`,
+    'Static intake preserved a quarantined artifact without execution.',
+    'Requested behaviors: network, process, file writes, credential access indicators.'
+  ].join(' ');
+  const artifactSource = metadataUrl
+    ? `Official registry metadata/artifact reference: ${metadataUrl}`
+    : (artifactUrl ? `Official artifact reference: ${artifactUrl}` : 'Authorized research copy with documented provenance.');
+  const referencePackage = metadata.reference_package
+    || packageSubject.reference_package
+    || (researchCase.metadata && researchCase.metadata.reference_package)
+    || '';
+  const referenceVersion = metadata.reference_version
+    || packageSubject.reference_version
+    || (researchCase.metadata && researchCase.metadata.reference_version)
+    || '';
+  return {
+    packageSubject,
+    packageName,
+    packageVersion,
+    ecosystem,
+    publisher,
+    packageLabel,
+    recipient,
+    recipientCandidates,
+    subject,
+    body,
+    partnerReason,
+    sandboxJustification,
+    artifactSource,
+    artifactHash,
+    activeEvidenceIds,
+    latestVerdict,
+    referencePackage,
+    referenceVersion,
+    contactName
+  };
+}
+
+function renderResearchAutomationPanel(researchCase) {
+  const prefill = researchCasePrefill(researchCase);
+  const subjects = researchCase.subjects || [];
+  const packageSubject = prefill.packageSubject || {};
   const artifact = (researchCase.evidence || []).find(item => item.evidence_type === 'package_artifact' && item.status === 'active');
   const jobs = (researchCase.jobs || []).slice(0, 12);
   const reviews = researchCase.publication_reviews || [];
@@ -8270,6 +8400,9 @@ function renderResearchAutomationPanel(researchCase) {
   const sandboxes = researchCase.sandbox_requests || [];
   const ecosystems = ['npm', 'pypi', 'nuget', 'maven', 'rubygems', 'packagist', 'go', 'open-vsx'];
   const artifacts = researchCase.artifacts || [];
+  const latestVerdict = prefill.latestVerdict || {};
+  const evidencePrefill = (prefill.activeEvidenceIds || []).join(', ');
+  const recipientOptions = (prefill.recipientCandidates || []).map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
   return researchDetailSection('Research automation', `
     ${renderInvestigationPipeline(researchCase, ecosystems)}
     <p class="small">Safe intake fetches official metadata and artifacts into quarantine, hashes them, and performs bounded static inspection. It never installs or executes the package.</p>
@@ -8286,18 +8419,18 @@ function renderResearchAutomationPanel(researchCase) {
       <button class="secondary-btn" id="research-brief-btn" type="button">Generate Analyst Brief</button>
       <button class="secondary-btn" id="research-publication-check-btn" type="button">Run Publication Safety Check</button>
     </div>
-    <details class="research-action-drawer"><summary>Local artifact evidence</summary><p class="small">Artifacts are sent only to the authenticated local helper, hashed, and stored in owner-only quarantine. They are never uploaded to Supabase, Render, Cloudflare, or an AI provider.</p><div class="research-form-grid"><label class="research-span-2"><span>Authorized package file</span><input id="research-artifact-file" type="file" accept=".nupkg,.zip,.vsix,.gem,.whl" /></label><label class="research-span-2"><span>Lawful source and authorization</span><input id="research-artifact-source" placeholder="e.g. Downloaded from nuget.org before removal; authorized research copy" /></label><label><span>Ecosystem</span><select id="research-artifact-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'nuget')).join('')}</select></label><label><span>Package</span><input id="research-artifact-package" value="${escapeHtml(packageSubject.name || '')}" /></label><label><span>Version</span><input id="research-artifact-version" value="${escapeHtml(packageSubject.version || '')}" /></label></div><div class="research-form-actions"><button class="primary-btn" id="research-artifact-import-btn" type="button">Import Authorized Artifact</button><button class="secondary-btn" id="research-artifact-ioc-btn" type="button" ${artifacts.length ? '' : 'disabled'}>Extract IOC Candidates</button></div>${artifacts.length ? `<div class="research-form-grid"><label><span>Compare left artifact</span><select id="research-artifact-left">${artifacts.map(item => `<option value="${escapeHtml(item.artifact_id)}">${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><label><span>Compare right artifact</span><select id="research-artifact-right">${artifacts.map((item, index) => `<option value="${escapeHtml(item.artifact_id)}" ${index === 1 ? 'selected' : ''}>${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><button class="secondary-btn" id="research-artifact-compare-btn" type="button" ${artifacts.length > 1 ? '' : 'disabled'}>Compare local artifacts</button></div><div class="table-wrap"><table><thead><tr><th>Artifact</th><th>Package</th><th>SHA-256</th><th>State</th><th>Actions</th></tr></thead><tbody>${artifacts.map(item => `<tr><td><strong>${escapeHtml(item.artifact_id)}</strong><div class="small">${escapeHtml(item.filename)}</div></td><td>${escapeHtml(item.ecosystem)}:${escapeHtml(item.package_name || '—')}@${escapeHtml(item.version || '—')}</td><td><code>${escapeHtml(item.sha256)}</code></td><td>${escapeHtml(statusLabel(item.state))}</td><td><button class="mini-btn research-artifact-analysis-btn" data-artifact-id="${escapeHtml(item.artifact_id)}" type="button">Inspect safely</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state compact">No local artifacts attached. Import an authorized package file to begin.</div>'}</details>
-    <details class="research-action-drawer"><summary>Compare packages</summary><p class="small">Both exact targets are fetched from allowlisted registries, hashed, and inspected statically. Package code is never installed or executed.</p><div class="research-form-grid"><label><span>Left ecosystem</span><select id="research-compare-left-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Left package</span><input id="research-compare-left-package" value="${escapeHtml(packageSubject.name || '')}" placeholder="legitimate package" /></label><label><span>Left version</span><input id="research-compare-left-version" value="${escapeHtml(packageSubject.version || '')}" placeholder="latest if empty" /></label><label><span>Right ecosystem</span><select id="research-compare-right-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Right package</span><input id="research-compare-right-package" placeholder="candidate package" /></label><label><span>Right version</span><input id="research-compare-right-version" placeholder="latest if empty" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-compare-packages-btn" type="button">Compare exact packages</button></div></details>
+    <details class="research-action-drawer"><summary>Local artifact evidence</summary><p class="small">Artifacts are sent only to the authenticated local helper, hashed, and stored in owner-only quarantine. They are never uploaded to Supabase, Render, Cloudflare, or an AI provider.</p><div class="research-form-grid"><label class="research-span-2"><span>Authorized package file</span><input id="research-artifact-file" type="file" accept=".nupkg,.zip,.vsix,.gem,.whl" /></label><label class="research-span-2"><span>Lawful source and authorization</span><input id="research-artifact-source" value="${escapeHtml(prefill.artifactSource || '')}" placeholder="e.g. Downloaded from nuget.org before removal; authorized research copy" /></label><label><span>Ecosystem</span><select id="research-artifact-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'nuget')).join('')}</select></label><label><span>Package</span><input id="research-artifact-package" value="${escapeHtml(packageSubject.name || '')}" /></label><label><span>Version</span><input id="research-artifact-version" value="${escapeHtml(packageSubject.version || '')}" /></label></div><div class="research-form-actions"><button class="primary-btn" id="research-artifact-import-btn" type="button">Import Authorized Artifact</button><button class="secondary-btn" id="research-artifact-ioc-btn" type="button" ${artifacts.length ? '' : 'disabled'}>Extract IOC Candidates</button></div>${artifacts.length ? `<div class="research-form-grid"><label><span>Compare left artifact</span><select id="research-artifact-left">${artifacts.map(item => `<option value="${escapeHtml(item.artifact_id)}">${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><label><span>Compare right artifact</span><select id="research-artifact-right">${artifacts.map((item, index) => `<option value="${escapeHtml(item.artifact_id)}" ${index === 1 ? 'selected' : ''}>${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><button class="secondary-btn" id="research-artifact-compare-btn" type="button" ${artifacts.length > 1 ? '' : 'disabled'}>Compare local artifacts</button></div><div class="table-wrap"><table><thead><tr><th>Artifact</th><th>Package</th><th>SHA-256</th><th>State</th><th>Actions</th></tr></thead><tbody>${artifacts.map(item => `<tr><td><strong>${escapeHtml(item.artifact_id)}</strong><div class="small">${escapeHtml(item.filename)}</div></td><td>${escapeHtml(item.ecosystem)}:${escapeHtml(item.package_name || '—')}@${escapeHtml(item.version || '—')}</td><td><code>${escapeHtml(item.sha256)}</code></td><td>${escapeHtml(statusLabel(item.state))}</td><td><button class="mini-btn research-artifact-analysis-btn" data-artifact-id="${escapeHtml(item.artifact_id)}" type="button">Inspect safely</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state compact">No local artifacts attached. Import an authorized package file to begin.</div>'}</details>
+    <details class="research-action-drawer"><summary>Compare packages</summary><p class="small">Both exact targets are fetched from allowlisted registries, hashed, and inspected statically. Package code is never installed or executed. Left defaults to the trusted reference when known; right defaults to the investigated package.</p><div class="research-form-grid"><label><span>Left ecosystem</span><select id="research-compare-left-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Left package</span><input id="research-compare-left-package" value="${escapeHtml(prefill.referencePackage || packageSubject.name || '')}" placeholder="legitimate package" /></label><label><span>Left version</span><input id="research-compare-left-version" value="${escapeHtml(prefill.referenceVersion || '')}" placeholder="latest if empty" /></label><label><span>Right ecosystem</span><select id="research-compare-right-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Right package</span><input id="research-compare-right-package" value="${escapeHtml(packageSubject.name || '')}" placeholder="candidate package" /></label><label><span>Right version</span><input id="research-compare-right-version" value="${escapeHtml(packageSubject.version || '')}" placeholder="latest if empty" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-compare-packages-btn" type="button">Compare exact packages</button></div></details>
     <div class="research-form-grid">
-      <label><span>Analyst verdict</span><select id="research-verdict-value"><option value="inconclusive">Inconclusive</option><option value="credible">Credible</option><option value="likely">Likely</option><option value="not_substantiated">Not substantiated</option><option value="benign">Benign</option><option value="retracted">Retracted</option></select></label>
-      <label><span>Confidence</span><input id="research-verdict-confidence" type="number" min="0" max="100" value="50" /></label>
-      <label class="research-span-2"><span>Rationale</span><textarea id="research-verdict-rationale" rows="2" placeholder="Explain the evidence and limitations."></textarea></label>
-      <label class="research-span-2"><span>Evidence IDs</span><input id="research-verdict-evidence" placeholder="EVD-..., EVD-..." /></label>
+      <label><span>Analyst verdict</span><select id="research-verdict-value">${['inconclusive','credible','likely','not_substantiated','benign','retracted'].map(value => researchOption(value, latestVerdict.verdict || 'inconclusive')).join('')}</select></label>
+      <label><span>Confidence</span><input id="research-verdict-confidence" type="number" min="0" max="100" value="${escapeHtml(String(latestVerdict.confidence ?? 50))}" /></label>
+      <label class="research-span-2"><span>Rationale</span><textarea id="research-verdict-rationale" rows="2" placeholder="Explain the evidence and limitations.">${escapeHtml(latestVerdict.rationale || '')}</textarea></label>
+      <label class="research-span-2"><span>Evidence IDs</span><input id="research-verdict-evidence" value="${escapeHtml(Array.isArray(latestVerdict.evidence_ids) && latestVerdict.evidence_ids.length ? latestVerdict.evidence_ids.join(', ') : evidencePrefill)}" placeholder="EVD-..., EVD-..." /></label>
     </div>
     <div class="research-form-actions"><button class="secondary-btn" id="research-verdict-btn" type="button">Record Human Verdict</button><button class="secondary-btn" id="research-publication-approve-btn" type="button" ${reviews[0]?.status === 'needs_approval' ? '' : 'disabled'}>Approve Publication Review</button></div>
-    <details class="research-action-drawer"><summary>Prepare responsible disclosure</summary><div class="research-form-grid"><label><span>Recipient</span><input id="research-disclosure-recipient" placeholder="maintainer or registry contact" /></label><label><span>Subject</span><input id="research-disclosure-subject" /></label><label class="research-span-2"><span>Body</span><textarea id="research-disclosure-body" rows="4" placeholder="Leave empty for the safe template."></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-disclosure-btn" type="button">Prepare Disclosure</button></div></details>
-    <details class="research-action-drawer"><summary>Acquire an unavailable artifact</summary><p class="small">Use this when an official registry no longer serves the exact version. The request is an auditable draft and does not send email automatically or change the case verdict.</p><div class="research-form-grid"><label><span>Research partner or contact</span><input id="research-partner-recipient" placeholder="security@partner.example" /></label><label class="research-span-2"><span>Reason and requested provenance</span><textarea id="research-partner-reason" rows="3" placeholder="Request the exact package, original source, and chain of custody."></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-partner-request-btn" type="button">Request Artifact From Research Partner</button></div>${(researchCase.partner_requests || []).slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)}</div>`).join('')}</details>
-    <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">This creates an approval record only. Execution is unavailable until a dedicated isolated provider is configured.</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="2"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
+    <details class="research-action-drawer" open><summary>Prepare responsible disclosure</summary><p class="small">Recipient, subject, and body are prefilled from case subjects, registry contacts, and artifact hashes. Review before preparing the draft. Sending remains a separate approval gate.</p><div class="research-form-grid"><label><span>Recipient</span><input id="research-disclosure-recipient" list="research-disclosure-recipient-options" value="${escapeHtml(prefill.recipient || '')}" placeholder="maintainer or registry contact" /><datalist id="research-disclosure-recipient-options">${recipientOptions}</datalist></label><label><span>Subject</span><input id="research-disclosure-subject" value="${escapeHtml(prefill.subject || '')}" /></label><label class="research-span-2"><span>Body</span><textarea id="research-disclosure-body" rows="8" placeholder="Leave empty for the safe template.">${escapeHtml(prefill.body || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-disclosure-suggest-btn" type="button">Refresh Suggested Draft</button><button class="primary-btn" id="research-disclosure-btn" type="button">Prepare Disclosure</button></div></details>
+    <details class="research-action-drawer"><summary>Acquire an unavailable artifact</summary><p class="small">Use this when an official registry no longer serves the exact version. The request is an auditable draft and does not send email automatically or change the case verdict.</p><div class="research-form-grid"><label><span>Research partner or contact</span><input id="research-partner-recipient" value="${escapeHtml(prefill.recipient || '')}" placeholder="security@partner.example" /></label><label class="research-span-2"><span>Reason and requested provenance</span><textarea id="research-partner-reason" rows="5" placeholder="Request the exact package, original source, and chain of custody.">${escapeHtml(prefill.partnerReason || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-partner-request-btn" type="button">Request Artifact From Research Partner</button></div>${(researchCase.partner_requests || []).slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)}</div>`).join('')}</details>
+    <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">This creates an approval record only. Execution is unavailable until a dedicated isolated provider is configured.</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || prefill.artifactHash || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="3">${escapeHtml(prefill.sandboxJustification || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
     <div class="research-automation-status">
       <strong>Jobs and approvals</strong>
       ${jobs.length ? jobs.map(job => `<div class="feed-item"><code>${escapeHtml(job.job_id)}</code> · ${escapeHtml(statusLabel(job.status))} · ${escapeHtml(statusLabel(job.action))}${job.status === 'awaiting_review' ? ` <button class="mini-btn research-intake-attach-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Attach Verified Evidence</button>` : ''}${['failed','expired','canceled'].includes(job.status) ? ` <button class="mini-btn research-job-retry-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Retry</button>` : ''}${['queued','running','awaiting_review'].includes(job.status) ? ` <button class="mini-btn research-job-cancel-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : ''}</div>`).join('') : '<div class="small">No automated research jobs yet.</div>'}

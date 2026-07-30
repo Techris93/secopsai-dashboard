@@ -18,6 +18,7 @@ def test_research_actions_are_typed_and_not_shell_commands():
         "verdict",
         "publication-check",
         "publication-approve",
+        "suggest-disclosure",
         "prepare-disclosure",
         "sandbox-request",
         "job-retry",

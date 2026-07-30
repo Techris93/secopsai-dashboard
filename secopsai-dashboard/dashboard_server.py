@@ -78,6 +78,7 @@ RESEARCH_CASE_ACTIONS = {
     'verdict',
     'publication-check',
     'publication-approve',
+    'suggest-disclosure',
     'prepare-disclosure',
     'disclosure-status',
     'sandbox-request',
@@ -1124,7 +1125,7 @@ def build_research_case_args(action, payload):
         return args
     workflow_commands = {
         'intake-run', 'evidence-matrix', 'analyst-brief', 'verdict', 'publication-check', 'publication-approve',
-        'prepare-disclosure', 'disclosure-status', 'sandbox-request', 'sandbox-status',
+        'suggest-disclosure', 'prepare-disclosure', 'disclosure-status', 'sandbox-request', 'sandbox-status',
     }
     if action in workflow_commands:
         args = ['research', 'workflow']
@@ -1150,6 +1151,7 @@ def build_research_case_args(action, payload):
             'verdict': 'verdict',
             'publication-check': 'publication-check',
             'publication-approve': 'publication-approve',
+            'suggest-disclosure': 'suggest-disclosure',
             'prepare-disclosure': 'prepare-disclosure',
             'disclosure-status': 'disclosure-status',
             'sandbox-request': 'request-sandbox',
@@ -1224,6 +1226,7 @@ def build_research_case_args(action, payload):
         'analyst-brief': [('--actor', 'actor', 160)],
         'publication-check': [('--actor', 'actor', 160)],
         'publication-approve': [('--review-id', 'review_id', 40), ('--actor', 'actor', 160)],
+        'suggest-disclosure': [('--db-path', 'db_path', 512)],
         'prepare-disclosure': [('--recipient', 'recipient', 320), ('--subject', 'subject', 240), ('--body', 'body', 30000), ('--embargo-until', 'embargo_until', 64), ('--actor', 'actor', 160)],
         'verdict': [('--verdict', 'verdict', 40), ('--confidence', 'confidence', 20), ('--rationale', 'rationale', 12000), ('--actor', 'actor', 160)],
         'sandbox-request': [('--artifact-sha256', 'artifact_sha256', 64), ('--justification', 'justification', 12000), ('--provider', 'provider', 80), ('--actor', 'actor', 160)],
@@ -1272,7 +1275,8 @@ def build_research_case_args(action, payload):
         'retract': ['--item-type', '--item-id', '--reason'],
         'intake-run': ['--ecosystem', '--package'],
         'verdict': ['--verdict', '--confidence', '--rationale'],
-        'prepare-disclosure': ['--recipient'],
+        'suggest-disclosure': [],
+        'prepare-disclosure': [],
         'sandbox-request': ['--artifact-sha256', '--justification'],
         'sandbox-status': ['--status'],
         'disclosure-status': ['--status'],
