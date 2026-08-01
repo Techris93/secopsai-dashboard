@@ -1,6 +1,6 @@
 # Autonomous triage
 
-Open **System → SecOpsAI Intelligence** to choose a Kimi, Grok, Gemini, or Codex model from the local OpenCodex catalog. The same panel controls continuous review of canonical SecOpsAI findings.
+Open **Automation → SecOpsAI Intelligence** to choose a Kimi, Grok, Gemini, or Codex model from the local OpenCodex catalog. The same panel controls continuous review of canonical SecOpsAI findings.
 
 ## Modes
 

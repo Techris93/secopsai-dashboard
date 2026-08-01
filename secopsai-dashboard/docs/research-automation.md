@@ -4,13 +4,13 @@ The primary case action is **Run Investigation Pipeline**. It combines bounded p
 
 In guarded agent-review mode, **Complete Agent Review** accepts bounded proposals, attaches deterministic evidence with pipeline provenance, records an evidence-linked verdict, and reruns publication safety. Core independently enforces confidence and evidence rules; local dependency absence cannot establish benignness. Operators may still inspect and decide individual proposals. A failed run exposes **Retry from checkpoint**. When a verified comparison package becomes available, **Add reference and rerun analysis** creates a new revision and supersedes stale proposals.
 
-In **System → SecOpsAI Intelligence**, choose the model before clicking **Install service**. Mission Control installs the bridge in `agent_review` mode and persists that provider/model identifier in the local service definition, so the background worker uses the same selection after the browser closes or the workstation restarts. Provider credentials remain in OpenCodex/Codex and are not stored by Mission Control.
+In **Automation → SecOpsAI Intelligence**, choose the model before clicking **Install service**. Mission Control installs the bridge in `agent_review` mode and persists that provider/model identifier in the local service definition, so the background worker uses the same selection after the browser closes or the workstation restarts. Provider credentials remain in OpenCodex/Codex and are not stored by Mission Control.
 
 The pipeline never executes package code, guesses a legitimate comparison package, submits a sandbox artifact, sends disclosure, changes customer controls, approves publication, or publishes an article. Agent review may record a guarded case verdict; the actor, model, evidence, confidence, rationale, and pipeline revision remain auditable.
 
 ## Review Complete Model Analysis
 
-Open **System → SecOpsAI Intelligence → Analysis jobs**, then select **Open full analysis** for a completed job. Mission Control shows the complete normalized result instead of reducing it to a short summary:
+Open **Automation → Analysis jobs**, then select **Open full analysis** for a completed job. Mission Control shows the complete normalized result instead of reducing it to a short summary:
 
 - executive summary and risk assessment;
 - confidence-scored verdict, rationale, and evidence references;

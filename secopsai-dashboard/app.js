@@ -370,6 +370,45 @@ const CONTEXT_NAV = Object.freeze({
   ],
   "operator-guide": []
 });
+
+// Secondary navigation must make the destination visible immediately. These
+// targets are deliberately tied to rendered panel IDs, not hidden routes.
+const CONTEXT_SCROLL_TARGETS = Object.freeze({
+  'findings/supply-chain': 'page-triage-ops',
+  'assets/inventory': 'edge-assets',
+  'assets/changes': 'edge-change-timeline',
+  'assets/sensors': 'edge-sensors',
+  'assets/schedules': 'edge-schedules',
+  'assets/wifi': 'edge-wifi',
+  'research/inbox': 'research-inbox-title',
+  'research/cases': 'research-case-list',
+  'research/campaigns': 'research-campaigns-title',
+  'research/watchlists': 'research-discovery-title',
+  'research/disclosure': 'research-disclosure-title',
+  'research/sandbox': 'research-sandbox-title',
+  'research/resolved': 'research-resolution-title',
+  'research/coverage': 'page-coverage',
+  'publications/research': 'blog-draft-list',
+  'publications/advisories': 'blog-draft-list',
+  'publications/news': 'blog-draft-list',
+  'publications/drafts': 'blog-draft-list',
+  'publications/review': 'blog-draft-list',
+  'publications/published': 'blog-workflow-runs',
+  'system/health': 'integration-summary',
+  'system/integrations': 'integration-config',
+  'system/credentials': 'system-credentials',
+  'system/audit': 'native-session-detail'
+});
+
+function scrollToContextTarget(route) {
+  const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const targetId = CONTEXT_SCROLL_TARGETS[normalized];
+  if (!targetId) return;
+  window.requestAnimationFrame(() => {
+    const target = el(targetId);
+    if (target && !target.hidden) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
 const COMMANDS = Object.freeze([
   ["Open Overview", "See priorities, changes, and system health", "mission-control"],
   ["Review Findings", "Triage canonical security issues", "findings"],
@@ -1414,10 +1453,23 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   if (normalizedPageId === 'automation') renderAutomation();
   if (normalizedPageId === 'integrations') renderIntegrations();
   if (normalizedPageId === 'edge') renderEdgeWorkspace();
+  if (normalizedPageId === 'triage-ops') {
+    renderTriageOps();
+    if (state.auth.activeUserId) {
+      loadTriageOpsAlerts({ render: false }).then(() => renderTriageOps()).catch(error => console.warn('Triage Ops navigation refresh failed', error));
+    }
+  }
+  if (normalizedPageId === 'coverage') {
+    renderCoverage();
+    if (state.auth.activeUserId) {
+      loadCoverage({ render: false }).then(() => renderCoverage()).catch(error => console.warn('coverage navigation refresh failed', error));
+    }
+  }
   if (!skipHistory && window.history?.pushState) {
     const nextHash = `#${routeOverride || routeForPage(normalizedPageId)}`;
     if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);
   }
+  scrollToContextTarget(routeOverride || routeForPage(normalizedPageId));
 }
 
 function toggleMobileNav() {

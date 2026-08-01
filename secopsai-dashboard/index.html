@@ -459,7 +459,7 @@
         <form class="card research-auth-card" onsubmit="return false;">
           <div>
             <h3>Protected research actions</h3>
-            <p class="small">Case review is read-only. Creation, evidence changes, disclosure updates, exports, and blog handoff require the helper-side research action token configured for Supply Chain Triage.</p>
+            <p class="small">Case review is read-only. Creation, evidence changes, disclosure updates, exports, and blog handoff require the protected research action token configured for this workspace.</p>
           </div>
           <div class="research-auth-controls">
             <input id="research-cases-admin-token" type="password" placeholder="Use the research action token for this session" autocomplete="current-password" />
@@ -804,8 +804,8 @@
             <a href="#guide-findings">Findings</a>
             <a href="#guide-research">Research Cases</a>
             <a href="#guide-ai-dependency-guard">AI Dependency Guard</a>
-            <a href="#guide-native-triage">Native Triage</a>
-            <a href="#guide-triage-ops">Supply Chain Triage</a>
+            <a href="#guide-native-triage">System audit and native triage</a>
+            <a href="#guide-triage-ops">Findings · Supply chain</a>
             <a href="#guide-campaigns">Campaign Research</a>
             <a href="#guide-discovery">Autonomous Discovery</a>
             <a href="#guide-blog-ops">Blog Ops</a>
@@ -822,7 +822,7 @@
               <div class="guide-card-grid">
                 <div class="guide-mini-card">
                   <strong>Daily Refresh</strong>
-                  <span>Refreshes dashboard data, helper state, Blog Ops status, Supply Chain Triage alerts, and campaign fixtures.</span>
+                  <span>Refreshes dashboard data, helper state, Publications status, Findings supply-chain alerts, and campaign fixtures.</span>
                   <button class="secondary-btn guide-automation-btn" id="guide-daily-refresh-card-btn" type="button">Run Daily Refresh</button>
                 </div>
                 <div class="guide-mini-card">
@@ -832,7 +832,7 @@
                 </div>
                 <div class="guide-mini-card">
                   <strong>Discovery Review</strong>
-                  <span>Runs read-only campaign discovery and opens the Supply Chain Triage campaign dock for candidate review.</span>
+                  <span>Runs read-only campaign discovery and opens the Findings supply-chain campaign dock for candidate review.</span>
                   <button class="secondary-btn guide-automation-btn" id="guide-discovery-review-btn" type="button">Run Discovery Review</button>
                 </div>
                 <div class="guide-mini-card">
@@ -873,7 +873,7 @@
                 <div class="guide-step"><span>1</span><p>Click <strong>Overview</strong>, then click <strong>Refresh data</strong> if the timestamp looks stale.</p></div>
                 <div class="guide-step"><span>2</span><p>Read the top metrics first: active runs, blockers, in-review work, and security-review count.</p></div>
                 <div class="guide-step"><span>3</span><p>Use recent events and recent runs to spot failed automation, stuck reviews, or unexpected spikes.</p></div>
-                <div class="guide-step"><span>4</span><p>If a metric is concerning, jump to <strong>Tasks</strong>, <strong>Findings</strong>, or <strong>Supply Chain Triage</strong> instead of acting from memory.</p></div>
+                <div class="guide-step"><span>4</span><p>If a metric is concerning, jump to <strong>Work</strong>, <strong>Findings</strong>, or <strong>Research</strong> instead of acting from memory.</p></div>
               </div>
               <div class="guide-callout guide-good">Best use: situational awareness. Overview is not where you close security issues; it tells you where to go next.</div>
             </section>
@@ -903,7 +903,7 @@
                 <div class="guide-step"><span>1</span><p>Click <strong>Findings</strong>, then filter or select a finding from the backlog.</p></div>
                 <div class="guide-step"><span>2</span><p>Read the evidence, source, severity, status, and any linked task or run context.</p></div>
                 <div class="guide-step"><span>3</span><p>Click <strong>Create task</strong> when the finding needs remediation, research, or review ownership.</p></div>
-                <div class="guide-step"><span>4</span><p>For supply-chain <strong>SCM-*</strong> findings, switch to <strong>Supply Chain Triage</strong> for advisory checks, evidence verdicts, mitigation, closure, and research/blog handoff.</p></div>
+                <div class="guide-step"><span>4</span><p>For supply-chain <strong>SCM-*</strong> findings, select the <strong>Supply chain</strong> secondary tab under <strong>Findings</strong> for advisory checks, evidence verdicts, mitigation, closure, and research handoff.</p></div>
               </div>
               <div class="guide-callout guide-warning">Important: absence of local usage means lower environment impact, not that the package itself is benign.</div>
             </section>
@@ -915,19 +915,19 @@
                 <p>Research Cases are the durable investigation record. Use them for original package, malware, typosquatting, infrastructure, or vulnerability research that may become a public report.</p>
               </div>
               <div class="guide-card-grid">
-                <div class="guide-mini-card"><strong>Supply Chain Triage</strong><span>Incoming <code>SCM-*</code> alert handling, evidence verdicts, local impact, mitigation, and response.</span></div>
+                <div class="guide-mini-card"><strong>Findings · Supply chain</strong><span>Incoming <code>SCM-*</code> alert handling, evidence verdicts, local impact, mitigation, and response.</span></div>
                 <div class="guide-mini-card"><strong>Research Cases</strong><span>Evidence ledger, subjects, IOCs, disclosure state, detection rules, reproducible exports, and publication readiness.</span></div>
-                <div class="guide-mini-card"><strong>Blog Ops</strong><span>Editorial review, approval, publishing, feed rebuild, and deployment after a case is ready.</span></div>
+                <div class="guide-mini-card"><strong>Publications</strong><span>Editorial review, approval, publishing, feed rebuild, and deployment after a case is ready.</span></div>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Choose a lead: an alert from <strong>Supply Chain Triage</strong>, a reviewed package watchlist entry, or a public source you are authorized to investigate.</p></div>
+                <div class="guide-step"><span>1</span><p>Choose a lead: an alert from <strong>Findings → Supply chain</strong>, a reviewed package watchlist entry, or a public source you are authorized to investigate.</p></div>
                 <div class="guide-step"><span>2</span><p>Open <strong>Research</strong>. Click <strong>New case</strong> for a manual investigation, or use <strong>Promote from package watchlist</strong>, then click <strong>Preview selected</strong> before <strong>Create draft cases</strong>.</p></div>
                 <div class="guide-step"><span>3</span><p>Set a precise title, type, severity, confidence, owner, and summary. Add every affected package, publisher, repository, brand, or infrastructure item under <strong>Subjects</strong>.</p></div>
                 <div class="guide-step"><span>4</span><p>Collect evidence safely: public source URLs, registry metadata, local artifact hashes, static-analysis notes, screenshots, and controlled sandbox results. Record provenance and timestamps. Never execute untrusted packages on this Mac.</p></div>
                 <div class="guide-step"><span>5</span><p>Add IOCs only when supported by evidence. Link each IOC to its source evidence, add detection rules when useful, and write analyst notes explaining uncertainty and limitations.</p></div>
                 <div class="guide-step"><span>6</span><p>Validate the claim and complete disclosure handling. Set confidence and move the case through <strong>Investigating</strong>, <strong>Validation</strong>, and <strong>Disclosure pending</strong> as appropriate.</p></div>
                 <div class="guide-step"><span>7</span><p>When the readiness blockers are resolved, set status to <strong>Ready to publish</strong>, click <strong>Download case report</strong>, review the deterministic Markdown/JSON export, then click <strong>Create review draft</strong>.</p></div>
-                <div class="guide-step"><span>8</span><p>Open <strong>Blog Ops</strong>, review the draft line by line, correct claims and references, then use <strong>Approve</strong>. Publish and deploy only after human editorial approval and responsible-disclosure review.</p></div>
+                <div class="guide-step"><span>8</span><p>Open <strong>Publications</strong>, review the draft line by line, correct claims and references, then use <strong>Approve</strong>. Publish and deploy only after human editorial approval and responsible-disclosure review.</p></div>
                 <div class="guide-step"><span>9</span><p>After publication, set the case to <strong>Published</strong>, preserve the export manifest, and use the IOCs and detection rules to improve SecOpsAI defensive coverage.</p></div>
               </div>
               <div class="guide-callout guide-danger">A high score, an LLM explanation, or a watchlist hit is a lead, not proof. Human evidence review, disclosure judgment, and editorial approval remain mandatory.</div>
@@ -961,7 +961,7 @@
                 <p>Native Triage shows helper health, pending triage actions, orchestrator history, and local SecOpsAI state freshness.</p>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Click <strong>Native Triage</strong> and check helper readiness before relying on dashboard actions.</p></div>
+                <div class="guide-step"><span>1</span><p>Open <strong>System</strong>, select <strong>Audit log</strong>, and check Native SecOpsAI helper readiness before relying on dashboard actions.</p></div>
                 <div class="guide-step"><span>2</span><p>Review pending actions. Apply or close only when the evidence and analyst note are ready.</p></div>
                 <div class="guide-step"><span>3</span><p>Use recent orchestrator summaries to see what was queued, completed, failed, or needs human review.</p></div>
                 <div class="guide-step"><span>4</span><p>If helper health is degraded, use the copyable CLI fallback from the relevant section and restart/update the helper before retrying buttons.</p></div>
@@ -981,7 +981,7 @@
                 <div class="guide-mini-card"><strong>Core decision</strong><span>Separate package maliciousness from local environment impact.</span></div>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Click <strong>Supply Chain Triage</strong>, then click <strong>Refresh evidence</strong>.</p></div>
+                <div class="guide-step"><span>1</span><p>Click <strong>Findings</strong>, select the <strong>Supply chain</strong> secondary tab, then click <strong>Refresh evidence</strong>.</p></div>
                 <div class="guide-step"><span>2</span><p>Select an alert in <strong>Supply Chain Alerts</strong>. The default Actionability filter shows only operator-actionable alerts; switch to <strong>All alerts</strong> when you need to audit no-local-impact or review-only scanner evidence.</p></div>
                 <div class="guide-step"><span>3</span><p>Run <strong>Run Evidence Verdict</strong> first. It summarizes package verdict, confidence, advisory evidence, scanner rules, local impact, mitigation, and operator commands.</p></div>
                 <div class="guide-step"><span>4</span><p>Click <strong>Explain verdict</strong> and <strong>Check advisory matches</strong> when you need source-backed evidence beyond the scanner rationale.</p></div>
@@ -1000,7 +1000,7 @@
                 <p>Use Campaign Research when multiple packages, IOCs, sources, publishers, or ecosystems appear related to one supply-chain attack.</p>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Open the <strong>Campaign Research & Autonomous Discovery</strong> dock inside Supply Chain Triage.</p></div>
+                <div class="guide-step"><span>1</span><p>For an alert-led campaign, open <strong>Findings → Supply chain</strong> and expand <strong>Campaign Research & Autonomous Discovery</strong>. For registry surveillance, use <strong>Research → Watchlists</strong> and <strong>Research → Inbox</strong>.</p></div>
                 <div class="guide-step"><span>2</span><p>Either quick-load a fixture, paste campaign JSON, or manually add campaign ID, title, source URLs, actors, publishers, IOCs, behavior indicators, and package rows.</p></div>
                 <div class="guide-step"><span>3</span><p>Click <strong>Run Campaign Research</strong>. This single read-only action returns campaign verdict, package verdicts, correlations, local impact, mitigation, and references.</p></div>
                 <div class="guide-step"><span>4</span><p>Click <strong>Correlate Campaign</strong> when the campaign includes shared publishers, C2s, source reports, or overlapping strings.</p></div>
@@ -1036,13 +1036,13 @@
                 <p>Blog Ops is the protected newsroom for source-backed drafts, approvals, feed rebuilds, and deployment. It never should be used as an autopublish shortcut.</p>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Click <strong>Blog Ops</strong>, then click <strong>Refresh Blog Ops</strong> to load workflow status, sources, and draft queue.</p></div>
+                <div class="guide-step"><span>1</span><p>Click <strong>Publications</strong>, then click <strong>Refresh Blog Ops</strong> to load workflow status, sources, and draft queue.</p></div>
                 <div class="guide-step"><span>2</span><p>Use <strong>Fetch news</strong> to ingest sources, <strong>Create drafts</strong> to generate review-only drafts, or <strong>Run fetch + draft</strong> for both.</p></div>
                 <div class="guide-step"><span>3</span><p>Select a draft in the review queue. Check title, summary, severity, body, references, IOCs, affected artifacts, and recommended actions.</p></div>
                 <div class="guide-step"><span>4</span><p>Use edit/save if the article needs cleanup. In local helper mode, use <strong>Images & source screenshots</strong> to attach an approved source image candidate or source image URL, then re-review because media resets the draft to Needs review. Approve only when claims and images are source-backed, licensed/safe, and no internal checklist, local path, secret, or copied external article text appears.</p></div>
                 <div class="guide-step"><span>5</span><p>Click <strong>Publish approved to blog</strong> only after approval. This writes approved drafts into the blog posts directory and rebuilds feeds, but drafts remain under <strong>Approved</strong>. Use <strong>Rebuild feeds</strong> only as a repair/regeneration action. Click <strong>Deploy blog to Cloudflare</strong> when ready; after a successful deploy, those staged approved drafts move to <strong>Deployed</strong>.</p></div>
               </div>
-              <div class="guide-callout guide-danger">External-news and campaign drafts must remain human-reviewed. Publishing stays approval-gated even when a draft was created from Supply Chain Triage.</div>
+              <div class="guide-callout guide-danger">External-news and campaign drafts must remain human-reviewed. Publishing stays approval-gated even when a draft was created from Findings or Research.</div>
             </section>
 
             <section class="card guide-section" id="guide-safe-actions">

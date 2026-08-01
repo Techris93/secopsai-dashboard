@@ -2,7 +2,7 @@
 
 ## Full Intelligence Result Review
 
-Mission Control now opens complete structured results from **System → Analysis jobs**. The result workspace separates facts, inferences, contradictions, unsupported claims, missing evidence, next steps, verdict rationale, publication risks, article structure, disclosure text, limitations, and the durable job audit history. Operators can copy a complete Markdown record or open the canonical Research Case directly. The normalized JSON remains available for reproducibility and troubleshooting.
+Mission Control now opens complete structured results from **Automation → Analysis jobs**. The result workspace separates facts, inferences, contradictions, unsupported claims, missing evidence, next steps, verdict rationale, publication risks, article structure, disclosure text, limitations, and the durable job audit history. Operators can copy a complete Markdown record or open the canonical Research Case directly. The normalized JSON remains available for reproducibility and troubleshooting.
 
 Regression checks prevent a future renderer from collapsing completed frontier-model output back into a generic summary. Browser verification uses a representative Braintree case fixture derived from the normalized result shape and covers modal interaction plus desktop/mobile readability. The production sign-in gate remains fail-closed; authenticated live-case acceptance is a deployment check rather than a test bypass.
 

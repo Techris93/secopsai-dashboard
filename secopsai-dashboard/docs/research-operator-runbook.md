@@ -21,7 +21,7 @@ Blog Ops is the editorial and deployment boundary.
 ### A. Start from an alert
 
 1. Sign in to the dashboard.
-2. Open **Supply Chain Triage** and click **Refresh evidence**.
+2. Open **Findings**, select the **Supply chain** secondary tab, and click **Refresh evidence**.
 3. Select an `SCM-*` alert.
 4. Run **Run Evidence Verdict** first.
 5. Run **Investigate**, **Explain verdict**, **Check advisory matches**, and
@@ -33,7 +33,7 @@ Blog Ops is the editorial and deployment boundary.
 
 ### B. Start from a package watchlist
 
-1. Open **Research**.
+1. Open **Research**, then select **Watchlists** or **Inbox** from the secondary navigation.
 2. Use **Research discovery** to select npm, PyPI, NuGet, Maven, RubyGems,
    Packagist, Go, or Open VSX.
 3. Add a package, brand, publisher, namespace, repository, or organization
@@ -152,7 +152,7 @@ Before changing the status:
 1. In the case detail, click **Download case report**.
 2. Review the Markdown and JSON content and its manifest checksums.
 3. When the case is `Ready to publish`, click **Create review draft**.
-4. Open **Blog Ops** and refresh the draft queue.
+4. Open **Publications** and refresh the draft queue.
 5. Review the title, summary, severity, body, references, IOCs, affected
    artifacts, detection logic, mitigations, and limitations.
 6. Edit and save any corrections. Do not paste internal paths, secrets,
