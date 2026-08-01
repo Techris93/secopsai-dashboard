@@ -11,6 +11,14 @@ window.addEventListener('unhandledrejection', event => {
   const reason = event.reason && (event.reason.message || String(event.reason));
   const lowerReason = String(reason || '').toLowerCase();
   if (lowerReason.includes('metamask') || lowerReason.includes('wallet') || lowerReason.includes('ethereum')) return;
+  // Browser crypto/auth helpers can reject while the Supabase session is being
+  // restored. Do not expose an implementation detail such as "Key ring is
+  // empty" as if it were a SecOpsAI platform failure. The auth surface and
+  // API responses remain the source of truth for session state.
+  if (lowerReason.includes('key ring') || lowerReason.includes('keyring')) {
+    if (status) status.textContent = 'Authentication session needs refresh.';
+    return;
+  }
   if (status) status.textContent = `Promise error: ${reason || 'unknown rejection'}`;
 });
 
@@ -3990,13 +3998,15 @@ function intelligenceResultList(value) {
 function intelligenceResultView(job) {
   const envelope = job?.result && typeof job.result === 'object' ? job.result : {};
   const data = envelope?.data && typeof envelope.data === 'object' ? envelope.data : envelope;
+  const action = String(job?.action || '').trim().toLowerCase();
+  const finalVerdictAction = ['analyze_research_case', 'review_finding', 'investigation_verdict'].includes(action);
   const brief = data?.analyst_brief && typeof data.analyst_brief === 'object' ? data.analyst_brief : {};
   const triage = data?.triage_analysis && typeof data.triage_analysis === 'object' ? data.triage_analysis : {};
   const handling = data?.handling_proposal && typeof data.handling_proposal === 'object' ? data.handling_proposal : {};
   const mergeLists = (...values) => intelligenceResultList(values.flatMap(value => Array.isArray(value) ? value : []));
   return {
     summary: String(data.summary || data.automation_note || data.executive_summary || brief.executive_summary || job?.error_message || '').trim(),
-    riskAssessment: String(data.risk_assessment || data.risk || brief.risk_assessment || (data.finding_verdict ? `Model verdict: ${humanizeSnake(data.finding_verdict)} at ${Number(data.finding_confidence || 0)}% confidence.` : '')).trim(),
+    riskAssessment: String(data.risk_assessment || data.risk || brief.risk_assessment || (finalVerdictAction && data.finding_verdict ? `Model verdict: ${humanizeSnake(data.finding_verdict)} at ${Number(data.finding_confidence || 0)}% confidence.` : '')).trim(),
     confirmedFacts: mergeLists(data.confirmed_facts, brief.facts, triage.facts),
     inferences: mergeLists(data.inferences, brief.inferences, triage.inferences),
     unsupportedClaims: intelligenceResultList(data.unsupported_claims),
@@ -4008,8 +4018,13 @@ function intelligenceResultView(job) {
     publicationRisks: intelligenceResultList(data.publication_risks),
     articleOutline: intelligenceResultList(data.article_outline),
     disclosureDraft: String(data.disclosure_draft || '').trim(),
-    verdict: String(data.finding_verdict || data.verdict_recommendation || '').trim(),
-    verdictConfidence: Number(data.finding_confidence ?? data.verdict_confidence ?? 0),
+    // Only verdict-producing actions may populate the verdict banner. Briefs
+    // and publication-safety reviews can contain generic finding fields for
+    // context, but they must never be presented as a final 0% decision.
+    verdict: String(finalVerdictAction ? (data.verdict_recommendation || data.finding_verdict || '') : (data.final_verdict || '')).trim(),
+    verdictConfidence: Number(finalVerdictAction ? (data.verdict_confidence ?? data.finding_confidence ?? 0) : (data.final_verdict_confidence ?? 0)),
+    verdictScope: finalVerdictAction ? 'final' : 'advisory',
+    verdictScopeMessage: finalVerdictAction ? '' : 'This action produced advisory analysis. It did not assess a final case verdict.',
     verdictRationale: String(data.verdict_rationale || data.summary || '').trim(),
     verdictEvidenceRefs: intelligenceResultList(data.decision_evidence_refs || data.verdict_evidence_refs),
     dispositionRecommendation: String(data.disposition_recommendation || '').trim(),
@@ -4081,7 +4096,9 @@ function renderIntelligenceResultModal() {
   if (el('intelligence-result-title')) el('intelligence-result-title').textContent = humanizeSnake(job.action || 'Analysis result');
   if (el('intelligence-result-subtitle')) el('intelligence-result-subtitle').textContent = `${job.job_id} · ${job.target_id || 'Workspace'} · ${view.provider || 'Provider not recorded'}`;
   if (el('intelligence-result-open-case')) el('intelligence-result-open-case').hidden = !String(job.target_id || '').startsWith('RSC-');
-  const verdict = view.verdict ? `<div class="intelligence-verdict"><span>Agent verdict</span><strong>${escapeHtml(humanizeSnake(view.verdict))}</strong><b>${escapeHtml(String(view.verdictConfidence))}% confidence</b></div>` : '';
+  const verdict = view.verdict
+    ? `<div class="intelligence-verdict"><span>Agent verdict</span><strong>${escapeHtml(humanizeSnake(view.verdict))}</strong><b>${escapeHtml(String(view.verdictConfidence))}% confidence</b></div>`
+    : (view.verdictScopeMessage ? `<div class="intelligence-advisory-note">${escapeHtml(view.verdictScopeMessage)}</div>` : '');
   const meta = `<div class="intelligence-result-meta"><span>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</span><span>${escapeHtml(fmtDate(view.generatedAt))}</span><span>${view.readOnly ? 'Read-only analysis' : 'Recorded result'}</span></div>`;
   const sections = [
     renderIntelligenceResultSection('Executive summary', view.summary ? `<p>${escapeHtml(view.summary)}</p>` : '<p class="small">No executive summary was returned.</p>', { wide: true }),
@@ -4383,10 +4400,14 @@ function renderIntelligence() {
   if (investigationRunsEl) {
     investigationRunsEl.innerHTML = !investigationRuns.length
       ? '<div class="empty-state compact">No high-priority evidence investigations yet. Eligible high and critical package findings enter this queue automatically.</div>'
-      : `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Stage</th><th>Evidence state</th><th>Decision</th><th>Updated</th><th>Recovery</th></tr></thead><tbody>${investigationRuns.slice(0, 25).map(run => {
+      : `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Stage</th><th>Evidence state</th><th>Decision</th><th>Updated</th><th>Recovery</th></tr></thead><tbody>${[
+          ...investigationRuns.filter(run => ['failed', 'evidence_gap', 'canceled'].includes(String(run.status || ''))),
+          ...investigationRuns.filter(run => !['failed', 'evidence_gap', 'canceled'].includes(String(run.status || ''))),
+        ].slice(0, 100).map(run => {
           const decision = run.decision || {};
           const blocker = run.blocker_message ? `<div class="small investigation-blocker">${escapeHtml(humanizeMachineText(run.blocker_message))}</div>` : '';
-          const retry = run.retryable && ['failed', 'evidence_gap', 'canceled'].includes(String(run.status || ''))
+          const recoveryAvailable = run.recovery_available !== undefined ? Boolean(run.recovery_available) : run.retryable !== false;
+          const retry = ['failed', 'evidence_gap', 'canceled'].includes(String(run.status || '')) && recoveryAvailable
             ? `<button class="mini-btn" data-investigation-retry="${escapeHtml(run.run_id)}" type="button">Retry</button>` : '';
           const cancel = ['queued', 'collecting', 'analyzing', 'awaiting_model', 'awaiting_input'].includes(String(run.status || ''))
             ? `<button class="mini-btn" data-investigation-cancel="${escapeHtml(run.run_id)}" type="button">Cancel</button>` : '';

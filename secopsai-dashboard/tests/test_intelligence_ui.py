@@ -147,6 +147,14 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         assert section in app
     assert "data-intelligence-service" in html
     assert "arbitrary prompt" not in html.lower()
+    # Brief and publication-safety jobs are advisory records, not final
+    # verdicts. Keep this contract explicit so a generic 0% field cannot be
+    # rendered as a misleading decision.
+    assert "finalVerdictAction" in app
+    assert "verdictScopeMessage" in app
+    assert "This action produced advisory analysis" in app
+    assert "recovery_available" in app
+    assert "Authentication session needs refresh." in app
 
 
 def test_local_action_credential_is_adjacent_to_service_controls():
