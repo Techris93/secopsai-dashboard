@@ -1301,11 +1301,11 @@ function currentPageFromLocation() {
   return pageIdForRoute(route);
 }
 
-function renderContextNav(pageId) {
+function renderContextNav(pageId, routeOverride = null) {
   const host = el('context-nav');
   if (!host) return;
   const items = CONTEXT_NAV[pageId] || [];
-  const currentRoute = String(window.location.hash || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const currentRoute = String(routeOverride || window.location.hash || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
   host.innerHTML = items.map(([label, target, route], index) => {
     const isActive = route ? route === currentRoute : (target === pageId && index === 0);
     return `<button class="context-nav-btn ${isActive ? 'active' : ''}" type="button" data-context-page="${escapeHtml(target)}"${route ? ` data-context-route="${escapeHtml(route)}"` : ''}>${escapeHtml(label)}</button>`;
@@ -1447,7 +1447,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
   document.body.classList.remove('mobile-nav-open');
   el('mobile-menu-btn')?.setAttribute('aria-expanded', 'false');
   updateTopStrip(normalizedPageId);
-  renderContextNav(normalizedPageId);
+  renderContextNav(normalizedPageId, activeRoute);
   if (normalizedPageId === 'research-cases') renderResearchCases();
   if (normalizedPageId === 'blog-ops') renderBlogOps();
   if (normalizedPageId === 'automation') renderAutomation();

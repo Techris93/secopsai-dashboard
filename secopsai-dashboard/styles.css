@@ -197,6 +197,9 @@ a { color: inherit; }
 
 /* Improve label/input spacing inside filter cards */
 .card label span.small { display: block; margin-bottom: 10px; }
+
+/* Hidden is a behavioral state. Keep component display rules from overriding it. */
+[hidden] { display: none !important; }
 .card label input, .card label select { margin-top: 2px; }
 
 .kv-list { display: grid; gap: 10px; }
