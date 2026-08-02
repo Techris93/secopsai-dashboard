@@ -495,6 +495,57 @@ const PAGE_SUBSECTION_DEFS = Object.freeze({
   ]
 });
 
+// These were previously rendered in the top strip as a second row of tabs.
+// Keep the route definitions here so each primary section owns its views in
+// one place: Findings owns Supply Chain, Research owns Coverage and Cases,
+// System owns Health/Integrations/Credentials/Audit, and so on.
+const PAGE_ROUTE_SUBSECTION_DEFS = Object.freeze({
+  findings: [
+    ['All findings', PAGE_ROUTES.findings],
+    ['Supply chain', PAGE_ROUTES['triage-ops']]
+  ],
+  edge: [
+    ['Inventory', ASSET_VIEW_ROUTES.inventory],
+    ['Changes', ASSET_VIEW_ROUTES.changes],
+    ['Sensors', ASSET_VIEW_ROUTES.sensors],
+    ['Scans and schedules', ASSET_VIEW_ROUTES.schedules],
+    ['Wi-Fi', ASSET_VIEW_ROUTES.wifi]
+  ],
+  'research-cases': [
+    ['Inbox', RESEARCH_VIEW_ROUTES.inbox],
+    ['Cases', RESEARCH_VIEW_ROUTES.cases],
+    ['Campaigns', RESEARCH_VIEW_ROUTES.campaigns],
+    ['Watchlists', RESEARCH_VIEW_ROUTES.watchlists],
+    ['Global coverage', PAGE_ROUTES.coverage],
+    ['Disclosure', RESEARCH_VIEW_ROUTES.disclosure],
+    ['Sandbox jobs', RESEARCH_VIEW_ROUTES.sandbox],
+    ['Resolved by agents', RESEARCH_VIEW_ROUTES.resolved]
+  ],
+  coverage: [
+    ['Coverage', PAGE_ROUTES.coverage],
+    ['Candidates', RESEARCH_VIEW_ROUTES.inbox],
+    ['Cases', RESEARCH_VIEW_ROUTES.cases]
+  ],
+  'blog-ops': [
+    ['Original research', BLOG_VIEW_ROUTES.research],
+    ['Advisories', BLOG_VIEW_ROUTES.advisories],
+    ['News intake', BLOG_VIEW_ROUTES.news],
+    ['Drafts', BLOG_VIEW_ROUTES.drafts],
+    ['Review', BLOG_VIEW_ROUTES.review],
+    ['Published', BLOG_VIEW_ROUTES.published]
+  ],
+  integrations: [
+    ['Health', SYSTEM_VIEW_ROUTES.health],
+    ['Integrations', SYSTEM_VIEW_ROUTES.integrations],
+    ['Credentials', SYSTEM_VIEW_ROUTES.credentials],
+    ['Audit log', SYSTEM_VIEW_ROUTES.audit]
+  ],
+  'triage-ops': [
+    ['All findings', PAGE_ROUTES.findings],
+    ['Supply chain', PAGE_ROUTES['triage-ops']]
+  ]
+});
+
 let subsectionObserver = null;
 
 function elementIsVisible(element) {
@@ -507,16 +558,18 @@ function elementIsVisible(element) {
   return true;
 }
 
-function setActiveSubsectionButton(buttons, targetId) {
+function setActiveSubsectionButton(buttons, targetId, route = '') {
   buttons.forEach(button => {
-    const active = button.dataset.subsectionTarget === targetId;
+    const active = route
+      ? button.dataset.subsectionRoute === route
+      : button.dataset.subsectionTarget === targetId;
     button.classList.toggle('active', active);
     if (active) button.setAttribute('aria-current', 'location');
     else button.removeAttribute('aria-current');
   });
 }
 
-function renderSidebarSubnav(pageId) {
+function renderSidebarSubnav(pageId, routeOverride = null) {
   const nav = el('dashboard-nav');
   if (!nav) return;
   nav.querySelector('#sidebar-subnav')?.remove();
@@ -524,30 +577,53 @@ function renderSidebarSubnav(pageId) {
     subsectionObserver.disconnect();
     subsectionObserver = null;
   }
-  const definitions = PAGE_SUBSECTION_DEFS[pageId] || [];
-  const entries = definitions
-    .map(([label, target]) => ({ label, target: el(target) }))
+  const currentRoute = String(routeOverride || window.location.hash || routeForPage(pageId) || '')
+    .replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const routeEntries = (PAGE_ROUTE_SUBSECTION_DEFS[pageId] || [])
+    .map(([label, route]) => ({ label, route, kind: 'route' }));
+  const panelEntries = (PAGE_SUBSECTION_DEFS[pageId] || [])
+    .map(([label, target]) => ({ label, target: el(target), kind: 'panel' }))
     .filter(item => elementIsVisible(item.target));
+  const entries = [...routeEntries, ...panelEntries];
   if (entries.length < 2) return;
 
   const host = document.createElement('div');
   host.id = 'sidebar-subnav';
   host.className = 'sidebar-subnav';
   host.setAttribute('aria-label', `${PAGE_CONTEXT[pageId] || pageId} subsections`);
-  host.innerHTML = entries.map(({ label, target }) => `
+  const renderRouteButton = ({ label, route }) => `
+    <button class="sidebar-subnav-btn sidebar-subnav-route" type="button" data-subsection-route="${escapeHtml(route)}"${route === currentRoute ? ' aria-current="location"' : ''}>
+      <span class="sidebar-subnav-marker" aria-hidden="true"></span><span>${escapeHtml(label)}</span>
+    </button>`;
+  const renderPanelButton = ({ label, target }) => `
     <button class="sidebar-subnav-btn" type="button" data-subsection-target="${escapeHtml(target.id)}">
       <span class="sidebar-subnav-marker" aria-hidden="true"></span><span>${escapeHtml(label)}</span>
-    </button>
-  `).join('');
+    </button>`;
+  host.innerHTML = [
+    routeEntries.length ? `<div class="sidebar-subnav-heading">Views</div>${routeEntries.map(renderRouteButton).join('')}` : '',
+    panelEntries.length ? `<div class="sidebar-subnav-heading">In this view</div>${panelEntries.map(renderPanelButton).join('')}` : ''
+  ].join('');
 
   const activePrimary = nav.querySelector(`.nav-btn[data-page="${CSS.escape(pageId)}"]`)
     || nav.querySelector('.nav-btn.active');
+  nav.querySelectorAll('.nav-btn').forEach(button => {
+    button.removeAttribute('aria-expanded');
+    button.removeAttribute('aria-controls');
+  });
+  activePrimary?.setAttribute('aria-expanded', 'true');
+  activePrimary?.setAttribute('aria-controls', 'sidebar-subnav');
   if (activePrimary) activePrimary.insertAdjacentElement('afterend', host);
   else nav.prepend(host);
 
-  const buttons = [...host.querySelectorAll('[data-subsection-target]')];
+  const buttons = [...host.querySelectorAll('[data-subsection-target], [data-subsection-route]')];
   buttons.forEach(button => {
     button.addEventListener('click', () => {
+      const route = button.dataset.subsectionRoute || '';
+      if (route) {
+        setActiveSubsectionButton(buttons, '', route);
+        setPage(pageIdForRoute(route), { routeOverride: route });
+        return;
+      }
       const target = el(button.dataset.subsectionTarget);
       if (!elementIsVisible(target)) return;
       setActiveSubsectionButton(buttons, target.id);
@@ -559,7 +635,7 @@ function renderSidebarSubnav(pageId) {
     });
   });
 
-  const observedTargets = entries.map(({ target }) => target).filter(Boolean);
+  const observedTargets = panelEntries.map(({ target }) => target).filter(Boolean);
   if ('IntersectionObserver' in window && observedTargets.length) {
     subsectionObserver = new IntersectionObserver(intersections => {
       const visible = intersections
@@ -1501,16 +1577,11 @@ function currentPageFromLocation() {
 function renderContextNav(pageId, routeOverride = null) {
   const host = el('context-nav');
   if (!host) return;
-  const items = CONTEXT_NAV[pageId] || [];
-  const currentRoute = String(routeOverride || window.location.hash || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
-  host.innerHTML = items.map(([label, target, route], index) => {
-    const isActive = route ? route === currentRoute : (target === pageId && index === 0);
-    return `<button class="context-nav-btn ${isActive ? 'active' : ''}" type="button" data-context-page="${escapeHtml(target)}"${route ? ` data-context-route="${escapeHtml(route)}"` : ''}>${escapeHtml(label)}</button>`;
-  }).join('');
-  host.hidden = !items.length;
-  host.querySelectorAll('[data-context-page]').forEach(button => {
-    button.addEventListener('click', () => setPage(button.dataset.contextPage, { routeOverride: button.dataset.contextRoute || null }));
-  });
+  // Route choices now live under the active primary section in the sidebar.
+  // Keep this empty for a clean top bar and retain CONTEXT_NAV as the
+  // compatibility registry used by route tests and legacy deep links.
+  host.innerHTML = '';
+  host.hidden = true;
 }
 
 function helpCopyForPage(pageId) {
@@ -1662,7 +1733,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
       loadCoverage({ render: false }).then(() => renderCoverage()).catch(error => console.warn('coverage navigation refresh failed', error));
     }
   }
-  renderSidebarSubnav(normalizedPageId);
+  renderSidebarSubnav(normalizedPageId, activeRoute);
   if (!skipHistory && window.history?.pushState) {
     const nextHash = `#${routeOverride || routeForPage(normalizedPageId)}`;
     if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);

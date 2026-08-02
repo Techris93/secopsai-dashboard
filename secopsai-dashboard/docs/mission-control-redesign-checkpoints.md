@@ -73,3 +73,22 @@ This ledger records the product redesign in verified, reversible checkpoints.
 - Implemented: Automation is an independent Administration page and route; System owns only health, integrations, credentials, and audit history; Work is restored to primary navigation; Global Coverage is no longer overwritten by the Research tab router; Findings and Supply Chain share a consistent two-destination subnavigation; placeholder Work, Findings, Supply Chain, and Coverage tabs that did not change content were removed.
 - Verification: contract tests assert distinct Automation and System DOM ownership, reject the former `system/automation` alias, and reject placeholder secondary links. Browser route checks confirmed `#automation` selects `page-automation`, `#system/credentials` selects only the credentials section in `page-integrations`, and `#research/coverage` selects `page-coverage` after direct navigation.
 - Acceptance: Automation and System cannot appear active together; deep links resolve to the same page before and after reload; the legacy `system/automation` bookmark resolves to standalone Automation; every visible secondary tab changes destination; the Health shortcut always opens System Health.
+
+## Checkpoint 9: Nested route navigation
+
+- Status: complete
+- Goal: keep primary sections and their secondary views in one visible navigation
+  tree so operators do not need to search the top bar for the next workspace.
+- Implemented: the active sidebar section now expands a nested `Views` group
+  for route-level destinations and an `In this view` group for direct panel
+  anchors. Research now owns Inbox, Cases, Campaigns, Watchlists, Global
+  Coverage, Disclosure, Sandbox Jobs, and Resolved by Agents. System now owns
+  Health, Integrations, Credentials, and Audit Log. Findings, Assets,
+  Publications, and Global Coverage use the same pattern. The top bar no longer
+  renders a second clickable navigation row; it shows workspace context only.
+- Verification: route contract tests, JavaScript syntax checks, production
+  build, Python dashboard tests, and diff checks pass. Route buttons retain
+  reload-stable hashes and direct panel buttons scroll only to visible targets.
+- Acceptance: clicking a primary section reveals all of its secondary routes
+  directly beneath it; Research and System no longer require top-bar tab clicks;
+  mobile navigation closes after a nested destination is selected.

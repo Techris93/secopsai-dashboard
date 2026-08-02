@@ -21,7 +21,7 @@ Blog Ops is the editorial and deployment boundary.
 ### A. Start from an alert
 
 1. Sign in to the dashboard.
-2. Open **Findings**, select the **Supply chain** secondary tab, and click **Refresh evidence**.
+2. Open **Findings**, expand the nested sidebar views, select **Supply chain**, and click **Refresh evidence**.
 3. Select an `SCM-*` alert.
 4. Run **Run Evidence Verdict** first.
 5. Run **Investigate**, **Explain verdict**, **Check advisory matches**, and
@@ -33,7 +33,7 @@ Blog Ops is the editorial and deployment boundary.
 
 ### B. Start from a package watchlist
 
-1. Open **Research**, then select **Watchlists** or **Inbox** from the secondary navigation.
+1. Open **Research**, then select **Watchlists** or **Inbox** from the nested sidebar views.
 2. Use **Research discovery** to select npm, PyPI, NuGet, Maven, RubyGems,
    Packagist, Go, or Open VSX.
 3. Add a package, brand, publisher, namespace, repository, or organization

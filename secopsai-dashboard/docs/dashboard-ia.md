@@ -53,9 +53,11 @@ remain one click away.
 The current vanilla frontend is a supported production surface during the
 migration. Keep `dashboard_server.py`, `_worker.js`, Supabase policies, and
 existing API routes stable. New screens should use the shared shell, route map,
-context navigation, command palette, help drawer, toast feedback, and explicit
-loading/empty/error/degraded states. Remove legacy renderers only after their
-route has parity tests and responsive/a11y coverage.
+the nested sidebar subsection tree, command palette, help drawer, toast
+feedback, and explicit loading/empty/error/degraded states. The top bar shows
+workspace context only; route-level secondary tabs are not rendered there.
+Remove legacy renderers only after their route has parity tests and
+responsive/a11y coverage.
 
 ## Acceptance checks
 
@@ -63,6 +65,8 @@ route has parity tests and responsive/a11y coverage.
 - Browser hash routes restore the selected page and support back/forward.
 - Supply-chain functionality is reachable from Findings without a duplicate
   top-level navigation entry.
+- Every route-level secondary view is reachable under its owning primary
+  sidebar section, including Research and System.
 - Native actions are reachable from Work/System without a second triage product.
 - Research and Publications remain separate because evidence preservation and
   public editorial approval have different safety requirements.

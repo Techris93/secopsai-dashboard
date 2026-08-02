@@ -6882,6 +6882,15 @@ body.professional-ui::before {
   border-left: 1px solid #2e5d5a;
 }
 
+.professional-ui .sidebar-subnav-heading {
+  margin: 5px 8px 2px;
+  color: #687885;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .professional-ui .sidebar-subnav-btn {
   display: flex;
   align-items: center;
@@ -6920,6 +6929,10 @@ body.professional-ui::before {
 .professional-ui .sidebar-subnav-btn.active .sidebar-subnav-marker {
   border-color: #35d6c4;
   background: #35d6c4;
+}
+
+.professional-ui .sidebar-subnav-route {
+  font-weight: 600;
 }
 
 /* Leave room for the sticky top strip when a nested action jumps to a panel. */

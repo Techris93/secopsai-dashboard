@@ -52,9 +52,20 @@ assert.match(styles, /\.research-pipeline-actions\s*>\s*button\s*\{[^}]*white-sp
 for (const marker of ['task-filter-scope', 'Operator assignments', 'blog-content-filter', 'Original research', 'system-credentials', 'Credential readiness', 'Candidate promotion policy', 'finding-review-drawer']) {
   assert.ok(index.includes(marker) || app.includes(marker), `missing operator clarity surface: ${marker}`);
 }
-for (const marker of ['sidebar-subnav', 'sidebar-subnav-btn', 'PAGE_SUBSECTION_DEFS', 'renderSidebarSubnav', 'scrollIntoView']) {
+for (const marker of ['sidebar-subnav', 'sidebar-subnav-btn', 'PAGE_SUBSECTION_DEFS', 'PAGE_ROUTE_SUBSECTION_DEFS', 'renderSidebarSubnav', 'scrollIntoView']) {
   assert.ok((index + styles + app).includes(marker), `missing direct subsection navigation: ${marker}`);
 }
+for (const marker of [
+  "['Supply chain', PAGE_ROUTES['triage-ops']]",
+  "['Inbox', RESEARCH_VIEW_ROUTES.inbox]",
+  "['Global coverage', PAGE_ROUTES.coverage]",
+  "['Original research', BLOG_VIEW_ROUTES.research]",
+  "['Health', SYSTEM_VIEW_ROUTES.health]",
+]) {
+  assert.ok(app.includes(marker), `missing nested route ${marker}`);
+}
+assert.match(app, /host\.hidden = true/);
+assert.match(app, /sidebar-subnav-heading.*Views/);
 for (const target of ['automation-bridge-section', 'automation-request-section', 'automation-alert-review-section', 'automation-investigations-section', 'automation-daily-section', 'automation-learning-section', 'automation-jobs-section', 'edge-sensors-section', 'research-case-workspace-section', 'blog-drafts-section', 'coverage-collectors-section']) {
   assert.match(index, new RegExp(`id="${target}"`), `missing subsection target ${target}`);
 }
