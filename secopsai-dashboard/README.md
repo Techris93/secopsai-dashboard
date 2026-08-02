@@ -25,7 +25,7 @@ It is not a Discord control plane and not a generic multi-agent org shell.
 
 ## SecOpsAI Intelligence
 
-The **System** page contains one operator surface for two separate integrations:
+The **Administration → Automation** page contains one operator surface for two separate integrations:
 
 - **Local Codex bridge** queues fixed, read-only analysis actions and processes them with the Codex CLI login already owned by the operator. The dashboard never stores a ChatGPT credential.
 - **ChatGPT app** exposes nine read-only SecOpsAI tools through the hosted OAuth MCP endpoint. ChatGPT authenticates the model session; SecOpsAI OAuth independently authorizes access to SecOpsAI data.
@@ -37,9 +37,9 @@ openssl rand -hex 32
 # Put the generated value in INTELLIGENCE_ADMIN_TOKEN. Do not commit it.
 ```
 
-Restart `./start-local-dashboard-stack.sh`, open **System**, and enter the action credential beside the local bridge controls before installing, starting, stopping, inspecting, or running the service. The credential is sent only to the local helper and retained in session storage for the current browser tab.
+Restart `./start-local-dashboard-stack.sh`, open **Administration → Automation**, and enter the **Automation action token** beside the local bridge controls before running learning cycles, model review, investigation controls, or service actions. The credential is sent only to the configured helper and retained in session storage for the current browser tab.
 
-Existing pilot installations may continue to use `TRIAGE_OPS_ADMIN_TOKEN` when a separate `INTELLIGENCE_ADMIN_TOKEN` is not configured. Enter the credential once in **System → Local Codex bridge**; it is retained only in the current browser tab. A missing or rejected action credential must produce an in-page error and must never sign the operator out. Operator sign-in and local action authorization are separate controls.
+Existing pilot installations may continue to use `TRIAGE_OPS_ADMIN_TOKEN` when a separate `INTELLIGENCE_ADMIN_TOKEN` is not configured. Enter the credential once in **Administration → Automation → Automation action token**; it is retained only in the current browser tab. A missing or rejected action credential must produce an in-page error and must never sign the operator out. Operator sign-in and local action authorization are separate controls.
 
 Hosted Cloudflare Pages uses server-side variables instead:
 

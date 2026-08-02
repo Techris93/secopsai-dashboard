@@ -4367,7 +4367,9 @@ function renderIntelligence() {
     button.hidden = !localMode;
   });
   const tokenField = el('intelligence-token-field');
-  if (tokenField) tokenField.hidden = !localMode;
+  // All Intelligence POST actions are protected, including hosted helper
+  // mode. Keep the field visible so the operator can see where the token goes.
+  if (tokenField) tokenField.hidden = false;
   const tokenInput = el('intelligence-admin-token');
   if (tokenInput && tokenInput.value !== state.intelligence.adminToken) tokenInput.value = state.intelligence.adminToken;
 
@@ -4532,9 +4534,8 @@ async function loadIntelligence({ render = true } = {}) {
 async function runIntelligenceAction(action, payload = {}, button = null) {
   const tokenInput = el('intelligence-admin-token');
   state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
-  const localMode = state.intelligence.data?.mode === 'local-helper';
-  if (localMode && !state.intelligence.adminToken) {
-    showToast('Enter the local Intelligence action credential before using bridge controls.', 'error');
+  if (!state.intelligence.adminToken) {
+    showToast('Enter the Automation action token in Administration → Automation before using this action.', 'error');
     tokenInput?.focus();
     return null;
   }

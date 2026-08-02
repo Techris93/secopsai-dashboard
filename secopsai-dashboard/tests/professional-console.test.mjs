@@ -89,7 +89,7 @@ assert.match(styles, /\.research-rule-review-actions/);
 
 assert.match(app, /response\.clone\(\)\.json\(\)/);
 assert.match(app, /\['operator_session_required', 'operator_session_invalid'\]/);
-assert.match(app, /Enter the local Intelligence action credential before using bridge controls\./);
+assert.match(app, /Enter the Automation action token in Administration/);
 assert.match(app, /result\.code === 'intelligence_action_unauthorized'/);
 assert.equal((index.match(/id="intelligence-admin-token"/g) || []).length, 1);
 assert.ok(index.indexOf('id="intelligence-admin-token"') < index.indexOf('id="intelligence-service-actions"'));

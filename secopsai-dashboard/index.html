@@ -306,10 +306,10 @@
               </label>
               <p class="small" id="intelligence-model-hint">Pick Kimi, Grok, Gemini, or another OpenCodex model. If it hits a usage limit, the bridge falls back to the configured chain automatically.</p>
               <label class="intelligence-credential-field" id="intelligence-token-field">
-                <span>Local action credential</span>
-                <input id="intelligence-admin-token" type="password" autocomplete="current-password" aria-describedby="intelligence-token-hint" placeholder="Intelligence or Triage Ops credential" />
+                <span>Automation action token</span>
+                <input id="intelligence-admin-token" type="password" autocomplete="current-password" aria-describedby="intelligence-token-hint" placeholder="Paste the INTELLIGENCE_ADMIN_TOKEN here" />
               </label>
-              <p class="small" id="intelligence-token-hint">Required for service controls and retained only in this browser tab. Existing pilot installations may use the same credential configured for Triage Ops.</p>
+              <p class="small" id="intelligence-token-hint">Required for <strong>Run learning cycle</strong>, model review, investigation controls, and service controls. Paste the value configured as <code>INTELLIGENCE_ADMIN_TOKEN</code> in the local helper, or the same approved Triage Ops token when your installation shares it. It is retained only in this browser tab.</p>
               <div class="intelligence-actions" id="intelligence-service-actions">
                 <button class="secondary-btn" data-intelligence-service="install" type="button">Install service</button>
                 <button class="secondary-btn" data-intelligence-service="start" type="button">Start</button>
