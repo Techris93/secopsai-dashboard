@@ -2,6 +2,8 @@ import re
 import unittest
 from pathlib import Path
 
+import dashboard_server
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,6 +45,11 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
         self.assertIn("core.sync_state", app)
         self.assertIn("Edge to Core sync", app)
         self.assertIn("syncStale", app)
+
+    def test_local_helper_rejects_credential_query_parameters(self):
+        self.assertTrue(dashboard_server.DashboardHandler._has_sensitive_query("email=operator%40example.com&password=secret"))
+        self.assertTrue(dashboard_server.DashboardHandler._has_sensitive_query("token=secret"))
+        self.assertFalse(dashboard_server.DashboardHandler._has_sensitive_query("route=overview"))
 
 
 if __name__ == "__main__":

@@ -39,6 +39,15 @@ RESEARCH_PIPELINE_ID_RE = re.compile(r'^RPL-[A-F0-9]{16}$')
 RESEARCH_REVIEW_ITEM_ID_RE = re.compile(r'^RVI-[A-F0-9]{16}$')
 RESEARCH_RULE_PROPOSAL_ID_RE = re.compile(r'^RRP-[A-F0-9]{16}$')
 BLOG_DRAFT_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,260}$')
+SENSITIVE_QUERY_KEYS = {
+    'email', 'password', 'pass', 'passwd', 'pwd', 'token', 'secret',
+    'api_key', 'apikey', 'access_token', 'refresh_token', 'id_token',
+    'client_secret'
+}
+SENSITIVE_REQUEST_QUERY_RE = re.compile(
+    r'([?&](?:email|password|pass|passwd|pwd|token|secret|api[_-]?key|access_token|refresh_token|id_token|client_secret)=)[^&\s"]*',
+    re.IGNORECASE,
+)
 ALLOWED_CLOSE_DISPOSITIONS = {'expected_behavior', 'needs_review', 'tune_policy', 'false_positive', 'not_applicable'}
 ALLOWED_TRIAGE_OPS_WRITE_ACTIONS = {
     'close',
@@ -3204,10 +3213,48 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header('Cache-Control', 'no-store')
+        self.send_header('Referrer-Policy', 'no-referrer')
+        self.send_header('X-Content-Type-Options', 'nosniff')
         super().end_headers()
+
+    def log_message(self, format, *args):
+        # SimpleHTTPRequestHandler logs the request target. Redact credential-
+        # looking query values before they reach the local terminal/log sink.
+        safe_args = tuple(
+            SENSITIVE_REQUEST_QUERY_RE.sub(r'\1[REDACTED]', value) if isinstance(value, str) else value
+            for value in args
+        )
+        super().log_message(format, *safe_args)
+
+    @staticmethod
+    def _has_sensitive_query(query):
+        try:
+            return any(str(key).lower() in SENSITIVE_QUERY_KEYS for key, _ in urllib.parse.parse_qsl(query or '', keep_blank_values=True))
+        except (TypeError, ValueError):
+            return False
+
+    def _reject_sensitive_url(self, parsed):
+        if parsed.path.startswith('/api/'):
+            return json_response(
+                self,
+                400,
+                {
+                    'ok': False,
+                    'error': 'Credential-like query parameters are not accepted. Submit credentials through the protected form.',
+                    'code': 'credential_query_rejected',
+                },
+            )
+        self.send_response(303)
+        self.send_header('Location', '/')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Referrer-Policy', 'no-referrer')
+        self.end_headers()
+        return
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if self._has_sensitive_query(parsed.query):
+            return self._reject_sensitive_url(parsed)
         if parsed.path == '/api/secopsai/research-artifacts':
             try:
                 qs = urllib.parse.parse_qs(parsed.query or '')
@@ -3514,6 +3561,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if self._has_sensitive_query(parsed.query):
+            return self._reject_sensitive_url(parsed)
         if parsed.path == '/api/secopsai/research-artifacts/import':
             if require_triage_ops_admin(self):
                 return

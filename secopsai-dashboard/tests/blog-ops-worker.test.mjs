@@ -169,8 +169,27 @@ async function testWorkerAppliesSecurityHeaders() {
   assert.match(response.headers.get("Content-Security-Policy") || "", /frame-ancestors 'none'/);
   assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
   assert.equal(response.headers.get("X-Frame-Options"), "DENY");
-  assert.equal(response.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin");
+  assert.equal(response.headers.get("Referrer-Policy"), "no-referrer");
   assert.match(response.headers.get("Permissions-Policy") || "", /camera=\(\)/);
+}
+
+async function testCredentialQueryIsRejectedAndNeverReflected() {
+  const browserResponse = await workerModule.fetch(
+    new Request("https://dashboard.example/?email=operator%40example.com&password=super-secret#overview"),
+    {},
+  );
+  assert.equal(browserResponse.status, 303);
+  assert.equal(browserResponse.headers.get("Location"), "https://dashboard.example/");
+  assert.equal((await browserResponse.text()).includes("super-secret"), false);
+
+  const apiResponse = await workerModule.fetch(
+    new Request("https://dashboard.example/api/config?token=super-secret"),
+    {},
+  );
+  assert.equal(apiResponse.status, 400);
+  const apiBody = await apiResponse.text();
+  assert.match(apiBody, /credential_query_rejected/);
+  assert.equal(apiBody.includes("super-secret"), false);
 }
 
 async function testProtectedWorkspaceRequiresOperatorSession() {
@@ -1175,6 +1194,7 @@ function testResearchCaseWorkspaceIsPresentAndTokenGated() {
 function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const urlSafety = readFileSync(new URL("../url-safety.js", import.meta.url), "utf8");
   assert.match(html, /id="auth-gate"/);
   assert.match(html, /id="auth-login-form"/);
   assert.match(html, /id="auth-update-form"/);
@@ -1191,6 +1211,11 @@ function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   assert.ok(app.indexOf("state.auth.session = session || null;") < app.indexOf("if (state.auth.activeUserId === userId)"));
   assert.match(html, /@supabase\/supabase-js@2\.110\.2\/dist\/umd\/supabase\.js/);
   assert.match(html, /integrity="sha384-yifgV8iFWyp5cgu\+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP\/NlXVJT3vO"/);
+  assert.match(html, /url-safety\.js\?v=20260803-credential-url-hardening/);
+  assert.match(html, /name="referrer" content="no-referrer"/);
+  assert.match(urlSafety, /replaceState/);
+  assert.match(urlSafety, /password/);
+  assert.match(urlSafety, /access_token/);
   assert.equal(/<script(?![^>]*src=)/.test(html), false);
   assert.equal(/<script[^>]+\sonload=/.test(html), false);
   assert.equal(app.includes("window.addEventListener('DOMContentLoaded', () => {\n  bindEvents();\n  startTopStripClock();\n  setPage('mission-control');"), false);
@@ -1215,6 +1240,7 @@ await testConfigExposesTriageOpsEndpoint();
 await testHostedIntelligenceUsesScopedServerSideCredentials();
 await testConfigRequiresAuthenticationByDefault();
 await testWorkerAppliesSecurityHeaders();
+await testCredentialQueryIsRejectedAndNeverReflected();
 await testProtectedWorkspaceRequiresOperatorSession();
 await testDisabledAuthRefusesProtectedBackendCredentials();
 await testHostedCoreEdgeWorkspaceAggregatesServerSide();

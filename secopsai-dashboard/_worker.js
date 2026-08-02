@@ -8,6 +8,11 @@ const DEFAULT_HOSTED_AI_MAX_COST_USD = 3;
 const DEFAULT_BLOG_OPS_OWNER = "Techris93";
 const DEFAULT_BLOG_OPS_REPO = "secopsai";
 const DEFAULT_BLOG_OPS_WORKFLOW = "blog-ops.yml";
+const SENSITIVE_QUERY_KEYS = new Set([
+  "email", "password", "pass", "passwd", "pwd", "token", "secret",
+  "api_key", "apikey", "access_token", "refresh_token", "id_token",
+  "client_secret",
+]);
 const MAX_OPERATOR_PROFILE_BYTES = 64 * 1024;
 const MAX_SECOPSAI_WORKSPACE_BYTES = 5 * 1024 * 1024;
 const INTELLIGENCE_ACTIONS = new Set([
@@ -82,7 +87,7 @@ function withSecurityHeaders(response) {
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("Cross-Origin-Resource-Policy", "same-origin");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
-  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Referrer-Policy", "no-referrer");
   headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "DENY");
@@ -110,6 +115,37 @@ function jsResponse(source, init = {}) {
   return new Response(source, {
     ...init,
     headers,
+  });
+}
+
+function hasSensitiveQuery(url) {
+  for (const key of url.searchParams.keys()) {
+    if (SENSITIVE_QUERY_KEYS.has(String(key).toLowerCase())) return true;
+  }
+  return Boolean(url.username || url.password);
+}
+
+function rejectSensitiveUrl(url) {
+  if (url.pathname.startsWith("/api/")) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Credential-like query parameters are not accepted. Submit credentials through the protected form.",
+        code: "credential_query_rejected",
+      },
+      { status: 400 },
+    );
+  }
+  const clean = new URL(url);
+  clean.search = "";
+  clean.hash = "";
+  return new Response(null, {
+    status: 303,
+    headers: {
+      Location: clean.toString(),
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    },
   });
 }
 
@@ -1418,6 +1454,11 @@ async function handleRunOutput(request, env) {
 
 async function routeRequest(request, env) {
     const url = new URL(request.url);
+
+    // Reject credential-bearing URLs before auth, asset serving, or proxying.
+    // Query strings can be copied into history, analytics, referrers, and
+    // request logs, so the dashboard never treats them as an auth channel.
+    if (hasSensitiveQuery(url)) return rejectSensitiveUrl(url);
 
     if (request.method === "GET" && url.pathname === "/config.js") {
       return jsResponse(buildConfigScript(env));
