@@ -1618,7 +1618,10 @@ function optionalLoadTable(table, options = {}) {
 }
 
 function findingId(finding) {
-  return finding?.id || finding?.finding_id || finding?.uuid || finding?.event_id || null;
+  // Core records may contain an internal database id alongside the stable
+  // public finding_id. Guarded CLI actions accept the latter; preferring the
+  // internal id makes close/investigate actions fail with "Invalid finding_id".
+  return finding?.finding_id || finding?.id || finding?.uuid || finding?.event_id || null;
 }
 
 function findingSeverity(finding) {

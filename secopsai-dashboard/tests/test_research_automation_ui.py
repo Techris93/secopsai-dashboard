@@ -53,6 +53,7 @@ def test_research_actions_are_typed_and_not_shell_commands():
     assert "Core did not persist" in source
     assert "Core did not confirm alert" in source
     assert "applyNativeFindingStatuses" in source
+    assert "finding?.finding_id || finding?.id" in source
     styles = (ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".research-pipeline-targets {\n  grid-template-columns: repeat(2, minmax(0, 1fr));" in styles
 
