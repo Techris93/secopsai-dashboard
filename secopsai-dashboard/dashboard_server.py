@@ -26,7 +26,11 @@ SECOPSAI_DB_PATH = os.environ.get(
     str((SECOPSAI_ROOT / 'data' / 'openclaw' / 'findings' / 'openclaw_soc.db').resolve()),
 ).strip()
 OPENCLAW_WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace').resolve()
-FINDING_ID_RE = re.compile(r'^[A-Z]{3}-[A-Z0-9]+$')
+# Stable finding identifiers use different namespace lengths (for example
+# ``OCF-...``, ``AIDG-...`` and ``EDGE-...``). Keep the namespace bounded,
+# uppercase, and explicit instead of assuming every producer uses three
+# letters.
+FINDING_ID_RE = re.compile(r'^[A-Z][A-Z0-9_]{1,15}-[A-Z0-9][A-Z0-9._-]{0,127}$')
 ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
 APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')

@@ -54,6 +54,7 @@ def test_research_actions_are_typed_and_not_shell_commands():
     assert "Core did not confirm alert" in source
     assert "applyNativeFindingStatuses" in source
     assert "finding?.finding_id || finding?.id" in source
+    assert "nativeCloseDraft" in source
     styles = (ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".research-pipeline-targets {\n  grid-template-columns: repeat(2, minmax(0, 1fr));" in styles
 
@@ -92,6 +93,20 @@ def test_dashboard_uses_one_explicit_core_database_for_persistent_actions():
         "--db-path",
         dashboard_server.SECOPSAI_DB_PATH,
     ]
+
+
+def test_finding_id_validator_accepts_all_core_namespace_lengths():
+    accepted = (
+        "OCF-AAAAAAAAAAAAAAAA",
+        "AIDG-BBBBBBBBBBBBBBBB",
+        "EDGE-CCCCCCCCCCCCCCCC",
+        "SCM-DDDDDDDDDDDDDDDD",
+    )
+    for value in accepted:
+        assert dashboard_server.FINDING_ID_RE.fullmatch(value), value
+    assert not dashboard_server.FINDING_ID_RE.fullmatch("edge-CCCCCCCCCCCCCCCC")
+    assert not dashboard_server.FINDING_ID_RE.fullmatch("EDGE-")
+    assert not dashboard_server.FINDING_ID_RE.fullmatch("EDGE bad-CCCC")
 
 
 def test_triage_state_exposes_persisted_native_statuses(monkeypatch):

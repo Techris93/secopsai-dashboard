@@ -228,6 +228,7 @@ const state = {
     adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
   selectedFindingId: null,
+  nativeCloseDraft: null,
   selectedSessionId: null,
   selectedSessionDetail: null,
   nativeFindingOverrides: new Map(),
@@ -1045,6 +1046,7 @@ async function runNativeCloseFinding(finding, disposition, note, status = 'close
     disposition: result?.disposition || normalizedDisposition,
     note: result?.note || normalizedNote
   });
+  state.nativeCloseDraft = null;
   const line = String(result?.stdout || '').trim().split('\n').filter(Boolean).pop() || `Closed ${id}`;
   await loadLocalTriageState();
   const persisted = nativeFindingOverride(id);
@@ -3107,6 +3109,18 @@ function renderFindings() {
   const intel = el('intel-summary');
   if (intel) {
     const selected = currentSelectedFinding();
+    if (selected) {
+      const selectedId = String(findingId(selected) || '');
+      const existingDisposition = el('selected-finding-close-disposition')?.value;
+      const existingNote = el('selected-finding-close-note')?.value;
+      if (selectedId && (existingDisposition !== undefined || existingNote !== undefined)) {
+        state.nativeCloseDraft = {
+          findingId: selectedId,
+          disposition: existingDisposition || state.nativeCloseDraft?.disposition || 'needs_review',
+          note: existingNote ?? state.nativeCloseDraft?.note ?? ''
+        };
+      }
+    }
     if (!findingsAvailable) {
       intel.innerHTML = triageLatest ? `
         <div class="card finding-detail-card">
@@ -3139,6 +3153,9 @@ function renderFindings() {
       return;
     }
     const related = relatedTasksForFinding(selected);
+    const closeDraft = state.nativeCloseDraft && String(state.nativeCloseDraft.findingId) === String(findingId(selected) || '')
+      ? state.nativeCloseDraft
+      : { disposition: 'needs_review', note: '' };
     const requests = correlatedRunRequestsForFinding(selected);
     const nativeInsight = localFindingInsight(findingId(selected));
     const findingSessions = sessionsForFinding(selected);
@@ -3232,15 +3249,15 @@ function renderFindings() {
               <label>
                 <span>Close disposition</span>
                 <select id="selected-finding-close-disposition">
-                  <option value="needs_review">Needs Review</option>
-                  <option value="tune_policy">Tune Policy</option>
-                  <option value="expected_behavior">Expected Behavior</option>
-                  <option value="false_positive">False Positive</option>
+                  <option value="needs_review" ${closeDraft.disposition === 'needs_review' ? 'selected' : ''}>Needs Review</option>
+                  <option value="tune_policy" ${closeDraft.disposition === 'tune_policy' ? 'selected' : ''}>Tune Policy</option>
+                  <option value="expected_behavior" ${closeDraft.disposition === 'expected_behavior' ? 'selected' : ''}>Expected Behavior</option>
+                  <option value="false_positive" ${closeDraft.disposition === 'false_positive' ? 'selected' : ''}>False Positive</option>
                 </select>
               </label>
               <label class="full">
                 <span>Analyst note</span>
-                <textarea id="selected-finding-close-note" rows="3" placeholder="Explain why this finding should be closed in native SecOpsAI."></textarea>
+                <textarea id="selected-finding-close-note" rows="3" placeholder="Explain why this finding should be closed in native SecOpsAI.">${escapeHtml(closeDraft.note || '')}</textarea>
               </label>
             </div>
             <div class="task-card-actions" style="margin-top:14px;">
@@ -3314,6 +3331,12 @@ function renderFindings() {
       const disposition = el('selected-finding-close-disposition')?.value || 'needs_review';
       const note = el('selected-finding-close-note')?.value || 'Analyst review note required.';
       copyTextWithStatus(closeFindingCommand(selected, disposition, note), `Close command copied for ${findingTitle(selected)}`);
+    });
+    el('selected-finding-close-disposition')?.addEventListener('change', event => {
+      state.nativeCloseDraft = { findingId: String(findingId(selected) || ''), disposition: event.currentTarget.value, note: el('selected-finding-close-note')?.value || '' };
+    });
+    el('selected-finding-close-note')?.addEventListener('input', event => {
+      state.nativeCloseDraft = { findingId: String(findingId(selected) || ''), disposition: el('selected-finding-close-disposition')?.value || 'needs_review', note: event.currentTarget.value };
     });
     intel.querySelectorAll('.session-approval-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
       try {
