@@ -4468,10 +4468,12 @@ function renderIntelligence() {
   }
   const learningSummaryEl = el('detection-learning-summary');
   if (learningSummaryEl) learningSummaryEl.innerHTML = `
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.feedback_total || 0))}</div><div class="metric-label">Alert feedback</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.examples || 0))}</div><div class="metric-label">Trusted examples</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.experiments || 0))}</div><div class="metric-label">Experiments</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String((learningSummary.shadow || 0) + (learningSummary.canary || 0)))}</div><div class="metric-label">Under evaluation</div></div>
-    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.rolled_back || 0))}</div><div class="metric-label">Rolled back</div></div>`;
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.rolled_back || 0))}</div><div class="metric-label">Rolled back</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.feedback_by_outcome?.unknown || 0))}</div><div class="metric-label">Awaiting adjudication</div></div>`;
   const learningProposalsEl = el('detection-learning-proposals');
   if (learningProposalsEl) learningProposalsEl.innerHTML = !learningProposals.length
     ? '<div class="empty-state compact">No learning proposals yet. A cycle remains blocked until both verified true-positive and false-positive labels meet the minimum dataset policy.</div>'

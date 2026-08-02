@@ -381,11 +381,11 @@
 
           <section class="intelligence-module detection-learning" aria-labelledby="detection-learning-title">
             <div class="module-head">
-              <div><h4 id="detection-learning-title">Detection Learning</h4><p>Builds trusted datasets from verified investigations, evaluates improvements offline, and promotes only replay-tested changes through shadow and canary stages.</p></div>
+              <div><h4 id="detection-learning-title">Detection Learning</h4><p>Retains every alert outcome as feedback. Verified true and false outcomes become training examples; unknown, true-negative, and false-negative feedback remains available for active learning and replay.</p></div>
               <button class="primary-btn" id="detection-learning-run" type="button">Run learning cycle</button>
             </div>
             <div id="detection-learning-summary" class="metrics-grid compact-metrics"></div>
-            <div class="intelligence-boundary-note">Model recommendations are never labels. Holdout data is never used for training. Any false-negative regression blocks promotion and rolls back a canary automatically.</div>
+            <div class="intelligence-boundary-note">Every alert is recorded, but model-only recommendations never become labels. Holdout data is never used for training. True-negative and false-negative records require an explicit baseline or evidence reference. Any false-negative regression blocks promotion and rolls back a canary automatically.</div>
             <div id="detection-learning-proposals"></div>
             <div id="detection-learning-deployments"></div>
           </section>
