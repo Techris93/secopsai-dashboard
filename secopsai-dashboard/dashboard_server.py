@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import urllib.parse
 import urllib.error
 import urllib.request
@@ -20,7 +21,10 @@ SECOPSAI_ROOT = Path(os.environ.get('SECOPSAI_ROOT', '/Users/chrixchange/secopsa
 SECOPSAI_SESSION_DIR = Path(
     os.environ.get('SECOPSAI_SESSION_DIR', str(SECOPSAI_ROOT / 'data' / 'sessions'))
 ).expanduser().resolve()
-SECOPSAI_DB_PATH = os.environ.get('SECOPSAI_DB_PATH', '').strip()
+SECOPSAI_DB_PATH = os.environ.get(
+    'SECOPSAI_DB_PATH',
+    str((SECOPSAI_ROOT / 'data' / 'openclaw' / 'findings' / 'openclaw_soc.db').resolve()),
+).strip()
 OPENCLAW_WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace').resolve()
 FINDING_ID_RE = re.compile(r'^[A-Z]{3}-[A-Z0-9]+$')
 ACTION_ID_RE = re.compile(r'^ACT-\d+$')
@@ -454,12 +458,44 @@ def run_secopsai_triage_summary():
         return None
 
 
+_NATIVE_STATUS_CACHE = {'at': 0.0, 'statuses': []}
+
+
+def invalidate_native_status_cache():
+    _NATIVE_STATUS_CACHE['at'] = 0.0
+    _NATIVE_STATUS_CACHE['statuses'] = []
+
+
+def run_secopsai_native_statuses(limit=500):
+    now = time.monotonic()
+    if now - float(_NATIVE_STATUS_CACHE.get('at') or 0) < 3.0:
+        return list(_NATIVE_STATUS_CACHE.get('statuses') or [])
+    payload = run_secopsai_triage_list(status=None, limit=limit)
+    findings = payload.get('findings', []) if isinstance(payload, dict) else []
+    statuses = [
+        {
+            'finding_id': item.get('finding_id'),
+            'status': item.get('status'),
+            'disposition': item.get('disposition'),
+            'updated_at': item.get('last_seen') or item.get('updated_at') or item.get('first_seen'),
+        }
+        for item in findings
+        if isinstance(item, dict) and item.get('finding_id')
+    ]
+    _NATIVE_STATUS_CACHE['at'] = now
+    _NATIVE_STATUS_CACHE['statuses'] = statuses
+    return list(statuses)
+
+
 def run_secopsai_triage_list(status='open', limit=20):
     python_bin = SECOPSAI_ROOT / '.venv' / 'bin' / 'python3'
     if not python_bin.exists():
         return None
     try:
-        args = [str(python_bin), '-m', 'secopsai.cli', 'triage', 'list', '--status', status, '--json', '--limit', str(limit)]
+        args = [str(python_bin), '-m', 'secopsai.cli', 'triage', 'list']
+        if status:
+            args.extend(['--status', status])
+        args.extend(['--json', '--limit', str(limit)])
         if SECOPSAI_DB_PATH:
             args.extend(['--db-path', SECOPSAI_DB_PATH])
         result = subprocess.run(
@@ -486,6 +522,13 @@ def collect_secopsai_triage_state():
     if not isinstance(active_findings, list):
         active_findings = []
     active_findings = sort_latest_first(active_findings, TRIAGE_FINDING_DATE_FIELDS)
+
+    # Return the persisted native status for every finding as a compact overlay.
+    # The dashboard also has canonical records in Supabase, so it must not infer
+    # native closure from the current browser session.  Reading the Core store on
+    # every triage-state refresh makes a close/triage action survive reloads and
+    # gives the UI one authoritative status source for native decisions.
+    native_statuses = run_secopsai_native_statuses()
 
     raw_summary_findings = summary.get('findings', []) if isinstance(summary, dict) else []
     if not isinstance(raw_summary_findings, list):
@@ -581,6 +624,7 @@ def collect_secopsai_triage_state():
             'latest_updated_at': sessions[0].get('updated_at') if sessions else None,
         },
         'findings_artifact': findings_artifact,
+        'native_statuses': native_statuses,
     }
 
 
@@ -4022,6 +4066,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         ],
                         timeout=180,
                     )
+                    invalidate_native_status_cache()
                     return json_response(
                         self,
                         200 if result['ok'] else 500,
@@ -4034,6 +4079,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         ['triage', 'start', finding_id, '--note', note, *secopsai_db_args()],
                         timeout=90,
                     )
+                    invalidate_native_status_cache()
                     return json_response(
                         self,
                         200 if result['ok'] else 500,
@@ -4145,6 +4191,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if session_id:
                     cli_args.extend(['--session-id', session_id])
                 result = run_secopsai_cli(cli_args, timeout=180)
+                invalidate_native_status_cache()
                 return json_response(
                     self,
                     200 if result['ok'] else 500,
@@ -4190,6 +4237,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     cli_args,
                     timeout=180,
                 )
+                invalidate_native_status_cache()
                 return json_response(
                     self,
                     200 if result['ok'] else 500,

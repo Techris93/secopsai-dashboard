@@ -17,9 +17,9 @@ def test_local_intelligence_actions_are_allowlisted():
         {"intelligence_action": "explain_finding", "target_id": "FND-ABC123"},
     )[:4] == ["intelligence", "enqueue", "--action", "explain_finding"]
     assert dashboard_server.build_intelligence_args("run-once", {})[:4] == ["intelligence", "bridge", "run", "--once"]
-    assert dashboard_server.build_intelligence_args(
-        "service", {"service_action": "status"}
-    ) == ["intelligence", "bridge", "service", "status"]
+    service_status = dashboard_server.build_intelligence_args("service", {"service_action": "status"})
+    assert service_status[:4] == ["intelligence", "bridge", "service", "status"]
+    assert service_status[-2:] == ["--db-path", dashboard_server.SECOPSAI_DB_PATH]
     install = dashboard_server.build_intelligence_args(
         "service",
         {"service_action": "install", "model": "kimi/kimi-k2.7-code-highspeed"},

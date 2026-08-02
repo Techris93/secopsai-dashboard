@@ -49,6 +49,10 @@ def test_research_actions_are_typed_and_not_shell_commands():
     assert "Complete Agent Review" in source
     assert "Resolved by agents" in source
     assert "Agent resolution policy" in source
+    assert "researchCaseActionQueues" in source
+    assert "Core did not persist" in source
+    assert "Core did not confirm alert" in source
+    assert "applyNativeFindingStatuses" in source
     styles = (ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".research-pipeline-targets {\n  grid-template-columns: repeat(2, minmax(0, 1fr));" in styles
 
@@ -77,6 +81,53 @@ def test_helper_rejects_untrusted_case_arguments():
     except ValueError:
         return
     raise AssertionError("unsafe package input was accepted")
+
+
+def test_dashboard_uses_one_explicit_core_database_for_persistent_actions():
+    assert dashboard_server.SECOPSAI_DB_PATH.endswith(
+        "/secopsai/data/openclaw/findings/openclaw_soc.db"
+    )
+    assert dashboard_server.secopsai_db_args() == [
+        "--db-path",
+        dashboard_server.SECOPSAI_DB_PATH,
+    ]
+
+
+def test_triage_state_exposes_persisted_native_statuses(monkeypatch):
+    monkeypatch.setattr(
+        dashboard_server,
+        "run_secopsai_triage_summary",
+        lambda: {"open_findings": 1, "findings": []},
+    )
+
+    def fake_list(status="open", limit=20):
+        if status == "open":
+            return {"findings": [{"finding_id": "EDGE-AAAAAAAAAAAAAAAA", "status": "open", "severity": "low"}]}
+        return {
+            "findings": [
+                {
+                    "finding_id": "EDGE-AAAAAAAAAAAAAAAA",
+                    "status": "closed",
+                    "disposition": "expected_behavior",
+                    "last_seen": "2026-08-02T12:00:00Z",
+                },
+                {
+                    "finding_id": "SCM-BBBBBBBBBBBBBBBB",
+                    "status": "in_review",
+                    "disposition": "unreviewed",
+                    "last_seen": "2026-08-02T12:01:00Z",
+                },
+            ]
+        }
+
+    monkeypatch.setattr(dashboard_server, "run_secopsai_triage_list", fake_list)
+    monkeypatch.setattr(dashboard_server, "list_session_payloads", lambda limit=25: [])
+    dashboard_server.invalidate_native_status_cache()
+    payload = dashboard_server.collect_secopsai_triage_state()
+    statuses = {item["finding_id"]: item for item in payload["native_statuses"]}
+    assert statuses["EDGE-AAAAAAAAAAAAAAAA"]["status"] == "closed"
+    assert statuses["EDGE-AAAAAAAAAAAAAAAA"]["disposition"] == "expected_behavior"
+    assert statuses["SCM-BBBBBBBBBBBBBBBB"]["status"] == "in_review"
 
 
 def test_pipeline_actions_map_to_typed_core_commands():

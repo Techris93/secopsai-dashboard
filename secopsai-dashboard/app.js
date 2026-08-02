@@ -848,6 +848,27 @@ function nativeFindingOverride(findingOrId) {
   return state.nativeFindingOverrides.get(String(id)) || null;
 }
 
+function applyNativeFindingStatuses(payload) {
+  const statuses = Array.isArray(payload?.native_statuses) ? payload.native_statuses : [];
+  const seen = new Set();
+  statuses.forEach(item => {
+    const id = String(item?.finding_id || '').trim();
+    if (!id) return;
+    seen.add(id);
+    state.nativeFindingOverrides.set(id, {
+      status: item.status || 'open',
+      disposition: item.disposition || 'unreviewed',
+      updated_at: item.updated_at || null
+    });
+  });
+  // A finding that is returned by Core without a native override is allowed
+  // to follow its canonical dashboard status again. This prevents a stale
+  // in-memory close from surviving after an operator reopens the record.
+  for (const id of state.nativeFindingOverrides.keys()) {
+    if (!seen.has(String(id))) state.nativeFindingOverrides.delete(id);
+  }
+}
+
 function effectiveFindingStatus(finding) {
   return nativeFindingOverride(finding)?.status || findingStatus(finding);
 }
@@ -1025,8 +1046,12 @@ async function runNativeCloseFinding(finding, disposition, note, status = 'close
     note: result?.note || normalizedNote
   });
   const line = String(result?.stdout || '').trim().split('\n').filter(Boolean).pop() || `Closed ${id}`;
-  setStatus(`<span class="dot"></span> ${escapeHtml(line)}`);
   await loadLocalTriageState();
+  const persisted = nativeFindingOverride(id);
+  if (!persisted || String(persisted.status || '').toLowerCase() !== String(status).toLowerCase()) {
+    throw new Error(`SecOpsAI did not confirm ${id} as ${status}`);
+  }
+  setStatus(`<span class="dot"></span> ${escapeHtml(line)} · confirmed after reload`);
   renderFindings();
   renderIntegrations();
 }
@@ -2628,7 +2653,7 @@ function renderMissionControl() {
   const pendingActions = localPendingActions();
   const openSessions = openLocalSessionsCount();
   const pendingApprovals = pendingLocalApprovalsCount();
-  const openFindingsForCockpit = sortedFindings().filter(finding => !['resolved', 'closed', 'done'].includes(String(findingStatus(finding)).toLowerCase()));
+  const openFindingsForCockpit = sortedFindings().filter(finding => !['resolved', 'closed', 'done'].includes(String(effectiveFindingStatus(finding)).toLowerCase()));
   const edgeWorkspaceReady = Boolean(state.edgeWorkspace.data) && !state.edgeWorkspace.error;
   const researchQueue = Array.isArray(state.researchCases.cases) ? state.researchCases.cases : [];
   const researchReady = researchQueue.filter(item => ['ready_to_publish', 'disclosure_pending', 'validation'].includes(String(item.status || '').toLowerCase())).length;
@@ -2690,7 +2715,7 @@ function renderMissionControl() {
   }, {});
   const topDomains = Object.entries(byDomain).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const extFacing = operatorWorkItems.filter(w => w.external_facing).length;
-  const openFindings = sortedFindings().filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
+  const openFindings = sortedFindings().filter(f => !['resolved', 'closed', 'done'].includes(String(effectiveFindingStatus(f)).toLowerCase())).length;
   const missionOverview = el("mission-overview");
   if (missionOverview) {
     missionOverview.innerHTML = `
@@ -2999,7 +3024,7 @@ function renderFindings() {
   const summary = el('finding-summary');
   const total = findings.length;
   const aiGuardCount = aiDependencyGuardFindings(findings).length;
-  const openCount = findings.filter(f => !['resolved', 'closed', 'done'].includes(String(findingStatus(f)).toLowerCase())).length;
+  const openCount = findings.filter(f => !['resolved', 'closed', 'done'].includes(String(effectiveFindingStatus(f)).toLowerCase())).length;
   const criticalCount = findings.filter(f => ['critical', 'urgent'].includes(String(findingSeverity(f)).toLowerCase())).length;
   const linkedCount = findings.filter(f => relatedTasksForFinding(f).length > 0).length;
   const actionableCount = findings.filter(f => {
@@ -7577,7 +7602,31 @@ async function loadResearchDiscovery({ render = true } = {}) {
   }
 }
 
+const researchDiscoveryActionQueues = new Map();
+
+function researchActionQueueKey(prefix, action, payload = {}) {
+  const recordId = payload.case_id || payload.alert_id || payload.monitor_id || payload.collector_id || '';
+  // All writes for one case/alert must share a queue. Including the action
+  // name here would allow a verdict and a workflow update to race again.
+  return `${prefix}:${String(recordId || 'workspace').trim().toLowerCase()}`;
+}
+
+function enqueueResearchAction(queueMap, key, task) {
+  const previous = queueMap.get(key) || Promise.resolve();
+  const current = previous.catch(() => null).then(task);
+  queueMap.set(key, current);
+  current.finally(() => {
+    if (queueMap.get(key) === current) queueMap.delete(key);
+  }).catch(() => {});
+  return current;
+}
+
 async function runResearchDiscoveryAction(action, payload = {}, button = null) {
+  const key = researchActionQueueKey('discovery', action, payload);
+  return enqueueResearchAction(researchDiscoveryActionQueues, key, () => runResearchDiscoveryActionNow(action, payload, button));
+}
+
+async function runResearchDiscoveryActionNow(action, payload = {}, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
   if (!token) {
     setStatus('Use the protected research action token before changing discovery state.', true);
@@ -7595,6 +7644,12 @@ async function runResearchDiscoveryAction(action, payload = {}, button = null) {
     if (!response.ok || result.ok === false) throw new Error(result.error || result.result?.error || `Discovery action HTTP ${response.status}`);
     state.researchCases.discovery.lastAction = { action, result, at: new Date().toISOString() };
     await loadResearchDiscovery({ render: false });
+    if (action === 'alert-resolve' && payload.alert_id) {
+      const alert = (state.researchCases.discovery.alerts || []).find(item => String(item.alert_id) === String(payload.alert_id));
+      if (!alert || String(alert.status || '').toLowerCase() !== 'resolved') {
+        throw new Error(`Core did not confirm alert ${payload.alert_id} as resolved`);
+      }
+    }
     renderResearchCases();
     setStatus(`<span class="dot"></span> Research discovery ${escapeHtml(action)} completed`);
     return result;
@@ -7839,7 +7894,14 @@ function renderCoverage() {
     : '<div class="empty-state compact">No coverage windows recorded yet.</div>';
 }
 
+const researchCaseActionQueues = new Map();
+
 async function runResearchCaseAction(action, payload = {}, button = null) {
+  const key = researchActionQueueKey('case', action, payload);
+  return enqueueResearchAction(researchCaseActionQueues, key, () => runResearchCaseActionNow(action, payload, button));
+}
+
+async function runResearchCaseActionNow(action, payload = {}, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
   if (!token) {
     setStatus('Use the protected research action token before changing a case.', true);
@@ -7863,6 +7925,30 @@ async function runResearchCaseAction(action, payload = {}, button = null) {
     if (nextId) state.researchCases.selectedId = nextId;
     if (action === 'export' && result.artifact) researchDownloadArtifact(result.artifact);
     await loadResearchCases({ render: false, preserveSelection: true });
+    const selectedCase = state.researchCases.selected;
+    if (action === 'update' && selectedCase) {
+      const checks = [
+        ['status', payload.status],
+        ['disclosure_status', payload.disclosure_status],
+        ['severity', payload.severity],
+        ['owner', payload.owner],
+        ['summary', payload.summary],
+      ].filter(([, expected]) => expected !== undefined && expected !== null && String(expected) !== '');
+      const mismatches = checks.filter(([field, expected]) => String(selectedCase[field] ?? '') !== String(expected));
+      const expectedConfidence = payload.confidence;
+      if (expectedConfidence !== undefined && expectedConfidence !== null && String(expectedConfidence) !== '' && Number(selectedCase.confidence) !== Number(expectedConfidence)) {
+        mismatches.push(['confidence', expectedConfidence]);
+      }
+      if (mismatches.length) {
+        throw new Error(`Core did not persist ${mismatches.map(([field]) => field).join(', ')}`);
+      }
+    }
+    if (action === 'verdict' && selectedCase && payload.verdict) {
+      const latestVerdict = Array.isArray(selectedCase.verdicts) ? selectedCase.verdicts[0] : null;
+      if (!latestVerdict || String(latestVerdict.verdict) !== String(payload.verdict) || Number(latestVerdict.confidence) !== Number(payload.confidence)) {
+        throw new Error('Core did not confirm the recorded verdict after reload');
+      }
+    }
     renderResearchCases();
     setStatus(`<span class="dot"></span> ${escapeHtml(statusLabel(action))} completed for ${escapeHtml(nextId || 'research case')}`);
     return result;
@@ -8047,7 +8133,8 @@ function bindResearchCaseDetailActions(researchCase) {
       actor: 'secopsai-agent-autonomy'
     }, event.currentTarget);
   });
-  el('research-save-case-btn')?.addEventListener('click', event => runResearchCaseAction('update', {
+  el('research-save-case-btn')?.addEventListener('click', async event => {
+    await runResearchCaseAction('update', {
     case_id: researchCase.case_id,
     status: el('research-detail-status')?.value,
     disclosure_status: el('research-detail-disclosure')?.value,
@@ -8056,7 +8143,8 @@ function bindResearchCaseDetailActions(researchCase) {
     owner: el('research-detail-owner')?.value,
     summary: el('research-detail-summary')?.value,
     actor: 'dashboard-operator'
-  }, event.currentTarget));
+    }, event.currentTarget);
+  });
   el('research-add-subject-btn')?.addEventListener('click', event => runResearchCaseAction('add-subject', {
     case_id: researchCase.case_id,
     subject_type: el('research-subject-type')?.value,
@@ -8175,7 +8263,7 @@ function bindResearchCaseDetailActions(researchCase) {
       context: 'This records the final human approval gate. It does not deploy the article by itself.',
       confirmLabel: 'Record approval'
     }))) return;
-    runResearchCaseAction('publication-approve', { case_id: researchCase.case_id, review_id: review.review_id, waivers: [], actor: 'dashboard-publisher' }, event.currentTarget);
+    await runResearchCaseAction('publication-approve', { case_id: researchCase.case_id, review_id: review.review_id, waivers: [], actor: 'dashboard-publisher' }, event.currentTarget);
   });
   el('research-disclosure-suggest-btn')?.addEventListener('click', async event => {
     const result = await runResearchCaseAction('suggest-disclosure', {
@@ -8194,13 +8282,15 @@ function bindResearchCaseDetailActions(researchCase) {
         .join('');
     }
   });
-  el('research-disclosure-btn')?.addEventListener('click', event => runResearchCaseAction('prepare-disclosure', {
+  el('research-disclosure-btn')?.addEventListener('click', async event => {
+    await runResearchCaseAction('prepare-disclosure', {
     case_id: researchCase.case_id,
     recipient: el('research-disclosure-recipient')?.value,
     subject: el('research-disclosure-subject')?.value,
     body: el('research-disclosure-body')?.value,
     actor: 'dashboard-operator'
-  }, event.currentTarget));
+    }, event.currentTarget);
+  });
   el('research-partner-request-btn')?.addEventListener('click', async event => {
     const token = state.researchCases.adminToken || state.triageOps.adminToken;
     if (!token) { setStatus('Use the protected research action token first.', true); return; }
@@ -8230,7 +8320,7 @@ function bindResearchCaseDetailActions(researchCase) {
       confirmLabel: 'Cancel job',
       danger: true
     }))) return;
-    runResearchCaseAction('job-cancel', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget);
+    await runResearchCaseAction('job-cancel', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-disclosure-status-btn').forEach(button => button.addEventListener('click', async event => {
     const status = button.dataset.disclosureStatus;
@@ -8239,7 +8329,7 @@ function bindResearchCaseDetailActions(researchCase) {
       context: 'Only continue after the message has been reviewed and sent through the approved channel.',
       confirmLabel: 'Record as sent'
     }))) return;
-    runResearchCaseAction('disclosure-status', { case_id: researchCase.case_id, disclosure_id: button.dataset.disclosureId, status, actor: 'dashboard-operator' }, event.currentTarget);
+    await runResearchCaseAction('disclosure-status', { case_id: researchCase.case_id, disclosure_id: button.dataset.disclosureId, status, actor: 'dashboard-operator' }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-sandbox-status-btn').forEach(button => button.addEventListener('click', async event => {
     if (!(await requestConfirmation('Approve this sandbox request? Execution remains unavailable until an isolated provider is configured.', {
@@ -8248,7 +8338,7 @@ function bindResearchCaseDetailActions(researchCase) {
       confirmLabel: 'Approve request'
     }))) return;
     const action = button.dataset.sandboxAction || 'sandbox-status';
-    runResearchCaseAction(action, { case_id: researchCase.case_id, request_id: button.dataset.requestId, status: button.dataset.sandboxStatus, public_submission_acknowledged: true, actor: 'dashboard-operator' }, event.currentTarget);
+    await runResearchCaseAction(action, { case_id: researchCase.case_id, request_id: button.dataset.requestId, status: button.dataset.sandboxStatus, public_submission_acknowledged: true, actor: 'dashboard-operator' }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-retract-btn').forEach(button => button.addEventListener('click', () => {
     openResearchRetractModal(researchCase, button.dataset.itemType, button.dataset.itemId);
@@ -8765,6 +8855,7 @@ async function loadLocalTriageState() {
     const res = await dashboardApiFetch('/api/secopsai/triage-state');
     if (!res.ok) throw new Error(`Local triage HTTP ${res.status}`);
     state.localTriage = await res.json();
+    applyNativeFindingStatuses(state.localTriage);
     await refreshSelectedSessionDetail();
   } catch (error) {
     console.warn('local triage load failed', error);
@@ -8776,6 +8867,7 @@ async function loadLocalTriageState() {
 function applyNativeStreamPayload(payload) {
   if (!payload || payload.ok === false || !payload.sessions) return;
   state.localTriage = payload;
+  applyNativeFindingStatuses(payload);
   state.nativeStreamLastEventAt = new Date().toISOString();
   const selectedId = String(state.selectedSessionId || '').trim();
   if (selectedId) {
@@ -9650,13 +9742,13 @@ function bindEvents() {
     const deliverBtn = event.target.closest('.research-alert-deliver-btn');
     const resolveBtn = event.target.closest('.research-alert-resolve-btn');
     if (deliverBtn) {
-      runResearchDiscoveryAction('alert-deliver', { alert_id: deliverBtn.dataset.alertId, channel: 'email' }, deliverBtn);
+      await runResearchDiscoveryAction('alert-deliver', { alert_id: deliverBtn.dataset.alertId, channel: 'email' }, deliverBtn);
     } else if (resolveBtn) {
       if (!(await requestConfirmation(`Mark research alert ${resolveBtn.dataset.alertId} as resolved?`, {
         title: 'Resolve alert',
         confirmLabel: 'Resolve'
       }))) return;
-      runResearchDiscoveryAction('alert-resolve', { alert_id: resolveBtn.dataset.alertId }, resolveBtn);
+      await runResearchDiscoveryAction('alert-resolve', { alert_id: resolveBtn.dataset.alertId }, resolveBtn);
     }
   });
   el('coverage-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadCoverage(), {
