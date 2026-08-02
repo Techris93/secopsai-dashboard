@@ -409,6 +409,168 @@ const CONTEXT_SCROLL_TARGETS = Object.freeze({
   'system/audit': 'native-session-detail'
 });
 
+// In-page navigation is intentionally separate from route navigation. Route
+// tabs change the data view; these nested items move directly to the visible
+// work surface inside that view. Keeping the map explicit prevents a large
+// page from becoming a guessing exercise for operators and gives every target
+// a stable, testable anchor.
+const PAGE_SUBSECTION_DEFS = Object.freeze({
+  'mission-control': [
+    ['Needs attention', 'mission-attention'],
+    ['Summary', 'mission-stats'],
+    ['Operational view', 'mission-overview'],
+    ['Research queues', 'mission-queues-section']
+  ],
+  tasks: [
+    ['Filters', 'work-filters'],
+    ['Table', 'work-table'],
+    ['Board', 'task-board']
+  ],
+  findings: [
+    ['Filters', 'finding-filters'],
+    ['Summary', 'finding-summary'],
+    ['Findings queue', 'finding-queue-section']
+  ],
+  edge: [
+    ['Health', 'edge-health'],
+    ['Sensors', 'edge-sensors-section'],
+    ['Scans and schedules', 'edge-schedules-section'],
+    ['Inventory', 'edge-inventory-section'],
+    ['Asset detail', 'edge-asset-detail-section'],
+    ['Related findings', 'edge-related-section'],
+    ['Changes', 'edge-change-timeline-section'],
+    ['Wi-Fi', 'edge-wifi-section']
+  ],
+  automation: [
+    ['Bridge', 'automation-bridge-section'],
+    ['ChatGPT app', 'automation-chatgpt-section'],
+    ['Requests', 'automation-request-section'],
+    ['Alert review', 'automation-alert-review-section'],
+    ['Investigations', 'automation-investigations-section'],
+    ['Daily workflow', 'automation-daily-section'],
+    ['Detection learning', 'automation-learning-section'],
+    ['Analysis jobs', 'automation-jobs-section']
+  ],
+  integrations: [
+    ['Health', 'integration-summary'],
+    ['Integrations', 'integration-config'],
+    ['Credentials', 'system-credentials'],
+    ['Action queue', 'system-action-queue-section'],
+    ['Sessions', 'system-sessions-section'],
+    ['Session detail', 'system-session-detail-section'],
+    ['Orchestrator runs', 'system-runs-section']
+  ],
+  'triage-ops': [
+    ['Access', 'triage-access-section'],
+    ['Alert review', 'triage-review-section'],
+    ['Campaign research', 'triage-campaign-section']
+  ],
+  coverage: [
+    ['Pipeline actions', 'coverage-actions-section'],
+    ['Collectors', 'coverage-collectors-section'],
+    ['Feed events', 'coverage-events-section'],
+    ['Coverage windows', 'coverage-windows-section']
+  ],
+  'blog-ops': [
+    ['Access', 'blog-access-section'],
+    ['Actions', 'blog-actions-section'],
+    ['Editorial queues', 'blog-queues-section'],
+    ['Draft review', 'blog-drafts-section'],
+    ['Published runs', 'blog-published-section']
+  ],
+  'operator-guide': [
+    ['Safe automations', 'guide-automations'],
+    ['Access and recovery', 'guide-access'],
+    ['Overview', 'guide-overview'],
+    ['Work', 'guide-tasks'],
+    ['Findings', 'guide-findings'],
+    ['Research', 'guide-research'],
+    ['Detection guard', 'guide-ai-dependency-guard'],
+    ['Native triage', 'guide-native-triage'],
+    ['Supply chain', 'guide-triage-ops'],
+    ['Campaigns', 'guide-campaigns'],
+    ['Discovery', 'guide-discovery'],
+    ['Publications', 'guide-blog-ops'],
+    ['Safety rules', 'guide-safe-actions']
+  ]
+});
+
+let subsectionObserver = null;
+
+function elementIsVisible(element) {
+  if (!element) return false;
+  let current = element;
+  while (current && current !== document.body) {
+    if (current.hidden || current.classList?.contains('hidden') || current.getAttribute('aria-hidden') === 'true') return false;
+    current = current.parentElement;
+  }
+  return true;
+}
+
+function setActiveSubsectionButton(buttons, targetId) {
+  buttons.forEach(button => {
+    const active = button.dataset.subsectionTarget === targetId;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'location');
+    else button.removeAttribute('aria-current');
+  });
+}
+
+function renderSidebarSubnav(pageId) {
+  const nav = el('dashboard-nav');
+  if (!nav) return;
+  nav.querySelector('#sidebar-subnav')?.remove();
+  if (subsectionObserver) {
+    subsectionObserver.disconnect();
+    subsectionObserver = null;
+  }
+  const definitions = PAGE_SUBSECTION_DEFS[pageId] || [];
+  const entries = definitions
+    .map(([label, target]) => ({ label, target: el(target) }))
+    .filter(item => elementIsVisible(item.target));
+  if (entries.length < 2) return;
+
+  const host = document.createElement('div');
+  host.id = 'sidebar-subnav';
+  host.className = 'sidebar-subnav';
+  host.setAttribute('aria-label', `${PAGE_CONTEXT[pageId] || pageId} subsections`);
+  host.innerHTML = entries.map(({ label, target }) => `
+    <button class="sidebar-subnav-btn" type="button" data-subsection-target="${escapeHtml(target.id)}">
+      <span class="sidebar-subnav-marker" aria-hidden="true"></span><span>${escapeHtml(label)}</span>
+    </button>
+  `).join('');
+
+  const activePrimary = nav.querySelector(`.nav-btn[data-page="${CSS.escape(pageId)}"]`)
+    || nav.querySelector('.nav-btn.active');
+  if (activePrimary) activePrimary.insertAdjacentElement('afterend', host);
+  else nav.prepend(host);
+
+  const buttons = [...host.querySelectorAll('[data-subsection-target]')];
+  buttons.forEach(button => {
+    button.addEventListener('click', () => {
+      const target = el(button.dataset.subsectionTarget);
+      if (!elementIsVisible(target)) return;
+      setActiveSubsectionButton(buttons, target.id);
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (window.innerWidth <= 720) {
+        document.body.classList.remove('mobile-nav-open');
+        el('mobile-menu-btn')?.setAttribute('aria-expanded', 'false');
+      }
+    });
+  });
+
+  const observedTargets = entries.map(({ target }) => target).filter(Boolean);
+  if ('IntersectionObserver' in window && observedTargets.length) {
+    subsectionObserver = new IntersectionObserver(intersections => {
+      const visible = intersections
+        .filter(item => item.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (visible) setActiveSubsectionButton(buttons, visible.target.id);
+    }, { rootMargin: '-112px 0px -62% 0px', threshold: [0, 0.2, 0.6] });
+    observedTargets.forEach(target => subsectionObserver.observe(target));
+  }
+}
+
 function scrollToContextTarget(route) {
   const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
   const targetId = CONTEXT_SCROLL_TARGETS[normalized];
@@ -1500,6 +1662,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
       loadCoverage({ render: false }).then(() => renderCoverage()).catch(error => console.warn('coverage navigation refresh failed', error));
     }
   }
+  renderSidebarSubnav(normalizedPageId);
   if (!skipHistory && window.history?.pushState) {
     const nextHash = `#${routeOverride || routeForPage(normalizedPageId)}`;
     if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);
@@ -4317,7 +4480,10 @@ function syncIntelligenceTarget() {
 
 function renderIntelligence() {
   const data = state.intelligence.data;
-  const jobs = intelligenceJobs();
+  // Keep the operator surface responsive when the bridge or investigation
+  // worker has accumulated a large history. The API remains the full source;
+  // this panel only renders the most recent actionable slice.
+  const jobs = intelligenceJobs().slice(0, 25);
   const bridge = data?.bridge || {};
   const service = data?.service || {};
   const mcp = data?.chatgpt_app || {};
@@ -4329,7 +4495,7 @@ function renderIntelligence() {
   const tuningProposals = Array.isArray(autopilot.tuning_proposals) ? autopilot.tuning_proposals : [];
   const investigations = data?.investigations || {};
   const investigationSummary = investigations.summary || {};
-  const investigationRuns = Array.isArray(investigations.runs) ? investigations.runs : [];
+  const investigationRuns = Array.isArray(investigations.runs) ? investigations.runs.slice(0, 25) : [];
   const dailyAutomation = data?.daily_automation || {};
   const dailySettings = dailyAutomation.settings || {};
   const dailySummary = dailyAutomation.summary || {};
@@ -7124,6 +7290,7 @@ function renderAll() {
   renderTriageOps();
   renderResearchCases();
   renderBlogOps();
+  renderSidebarSubnav(currentPageFromLocation());
   const triageSummary = localTriageSummary();
   const triageBit = triageSummary
     ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending / ${openLocalSessionsCount()} sessions`

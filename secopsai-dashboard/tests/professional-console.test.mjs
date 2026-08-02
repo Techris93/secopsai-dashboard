@@ -52,6 +52,12 @@ assert.match(styles, /\.research-pipeline-actions\s*>\s*button\s*\{[^}]*white-sp
 for (const marker of ['task-filter-scope', 'Operator assignments', 'blog-content-filter', 'Original research', 'system-credentials', 'Credential readiness', 'Candidate promotion policy', 'finding-review-drawer']) {
   assert.ok(index.includes(marker) || app.includes(marker), `missing operator clarity surface: ${marker}`);
 }
+for (const marker of ['sidebar-subnav', 'sidebar-subnav-btn', 'PAGE_SUBSECTION_DEFS', 'renderSidebarSubnav', 'scrollIntoView']) {
+  assert.ok((index + styles + app).includes(marker), `missing direct subsection navigation: ${marker}`);
+}
+for (const target of ['automation-bridge-section', 'automation-request-section', 'automation-alert-review-section', 'automation-investigations-section', 'automation-daily-section', 'automation-learning-section', 'automation-jobs-section', 'edge-sensors-section', 'research-case-workspace-section', 'blog-drafts-section', 'coverage-collectors-section']) {
+  assert.match(index, new RegExp(`id="${target}"`), `missing subsection target ${target}`);
+}
 assert.match(app, /scope: el\('task-filter-scope'\)/);
 assert.match(app, /function blogDraftContentKind/);
 assert.match(app, /function applyFindingSavedView/);
@@ -95,7 +101,7 @@ assert.equal((index.match(/id="intelligence-admin-token"/g) || []).length, 1);
 assert.ok(index.indexOf('id="intelligence-admin-token"') < index.indexOf('id="intelligence-service-actions"'));
 assert.ok(index.indexOf('id="intelligence-service-actions"') < index.indexOf('id="intelligence-request-title"'));
 
-assert.match(index, /20260727-full-intelligence-results/);
+assert.match(index, /20260803-subsection-navigation/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function humanizeMachineText/);
 assert.match(app, /function runRefreshAction/);

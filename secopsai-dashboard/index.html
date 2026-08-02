@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/dist/umd/supabase.js" integrity="sha384-yifgV8iFWyp5cgu+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP/NlXVJT3vO" crossorigin="anonymous"></script>
-  <link rel="stylesheet" href="./styles.css?v=20260727-full-intelligence-results" />
+  <link rel="stylesheet" href="./styles.css?v=20260803-subsection-navigation" />
 </head>
 <body class="okcomputer-skin professional-ui">
   <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
@@ -153,7 +153,7 @@
         <div class="operations-cockpit" id="mission-attention"></div>
         <div class="grid cols-5" id="mission-stats"></div>
         <div class="grid cols-3" style="margin-top:18px;" id="mission-overview"></div>
-        <div class="card mission-queues-card" style="margin-top:18px;">
+        <div class="card mission-queues-card" id="mission-queues-section" style="margin-top:18px;">
           <div class="page-header compact-header"><div><h3 style="margin:0;">Research operations queues</h3><p class="small" style="margin:6px 0 0;">The next decisions for discovery, validation, disclosure, publication, and degraded coverage.</p></div></div>
           <div class="mission-queues" id="mission-research-queues" role="status" aria-live="polite"></div>
         </div>
@@ -173,8 +173,8 @@
             <button class="primary-btn" id="new-task-btn" type="button">New task</button>
           </div>
         </div>
-        <div class="small" style="margin-bottom:12px;">The default queue contains assignments linked to findings, research, approvals, or external work. Internal delivery history is available only through All work.</div>
-        <div class="grid cols-4" style="margin-bottom:18px;">
+        <div class="small" id="work-scope-note" style="margin-bottom:12px;">The default queue contains assignments linked to findings, research, approvals, or external work. Internal delivery history is available only through All work.</div>
+        <div class="grid cols-4" id="work-filters" style="margin-bottom:18px;">
           <div class="card"><label><span class="small">Work scope</span><select id="task-filter-scope"><option value="operator" selected>Operator assignments</option><option value="all">Internal delivery history</option></select></label><div class="small" style="margin-top:8px;">Operator assignments exclude implementation and dashboard-development records.</div></div>
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
           <div class="card"><label><span class="small">Domain</span><select id="task-filter-domain"><option value="">All</option><option value="exec">exec</option><option value="platform">platform</option><option value="security">security</option></select></label></div>
@@ -200,7 +200,7 @@
           </div>
           <div class="status-pill" id="new-finding-task-btn" style="cursor:pointer;"><span class="dot"></span> New investigation task</div>
         </div>
-        <div class="page-toolbar" aria-label="Finding filters">
+        <div class="page-toolbar" id="finding-filters" aria-label="Finding filters">
           <label class="toolbar-search"><span class="sr-only">Search findings</span><input id="finding-search" type="search" placeholder="Search title, source, asset, or ID" /></label>
           <label><span class="sr-only">Finding severity</span><select id="finding-filter-severity"><option value="">All severities</option><option value="priority">High and critical</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option></select></label>
           <label><span class="sr-only">Finding status</span><select id="finding-filter-status"><option value="">All statuses</option><option value="open">Open</option><option value="in_review">In review</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
@@ -209,7 +209,7 @@
         </div>
         <div class="saved-view-bar" role="group" aria-label="Saved finding views"><span class="small">Saved views</span><button class="mini-btn finding-view-btn" data-finding-view="open" type="button">Open</button><button class="mini-btn finding-view-btn" data-finding-view="priority" type="button">High and critical</button><button class="mini-btn finding-view-btn" data-finding-view="edge" type="button">Edge</button><button class="mini-btn finding-view-btn" data-finding-view="supply-chain" type="button">Supply chain</button><button class="mini-btn finding-view-btn" data-finding-view="all" type="button">All</button></div>
         <div class="grid cols-5" id="finding-summary"></div>
-        <div style="margin-top:18px;">
+        <div id="finding-queue-section" style="margin-top:18px;">
           <div class="card">
             <h3>Findings queue</h3>
             <div id="findings-table"></div>
@@ -236,39 +236,39 @@
         <div class="card edge-health" id="edge-health"></div>
         <div class="grid cols-5" id="edge-stats" style="margin-top:18px;"></div>
         <div class="grid cols-2" style="margin-top:18px;">
-          <div class="card" data-edge-section="sensors">
+          <div class="card" id="edge-sensors-section" data-edge-section="sensors">
             <h3>Sensors</h3>
             <div class="edge-table" id="edge-sensors"></div>
           </div>
-          <div class="card" data-edge-section="schedules">
+          <div class="card" id="edge-schedules-section" data-edge-section="schedules">
             <h3>Scans & schedules</h3>
             <div class="edge-table" id="edge-schedules"></div>
           </div>
         </div>
-        <div class="card" data-edge-section="inventory" style="margin-top:18px;">
+        <div class="card" id="edge-inventory-section" data-edge-section="inventory" style="margin-top:18px;">
           <h3>Inventory</h3>
           <div class="edge-table" id="edge-assets"></div>
         </div>
-        <div class="card" data-edge-section="inventory" style="margin-top:18px;">
+        <div class="card" id="edge-asset-detail-section" data-edge-section="inventory" style="margin-top:18px;">
           <h3>Asset detail</h3>
           <div id="edge-asset-detail"><div class="empty">Select an asset to inspect its observations, services, findings, and history.</div></div>
         </div>
-        <div class="grid cols-2" data-edge-section="inventory changes" style="margin-top:18px;">
+        <div class="grid cols-2" id="edge-related-section" data-edge-section="inventory changes" style="margin-top:18px;">
           <div class="card">
             <h3>Related findings</h3>
             <div class="edge-table" id="edge-findings"></div>
           </div>
-          <div class="card">
+          <div class="card" id="edge-changes-section">
             <h3>Changes since last sync</h3>
             <div id="edge-changes"></div>
           </div>
         </div>
-        <div class="card" data-edge-section="changes" style="margin-top:18px;">
+        <div class="card" id="edge-change-timeline-section" data-edge-section="changes" style="margin-top:18px;">
           <h3>Change timeline</h3>
           <p class="small">A chronological view of new, missing, and changed network observations.</p>
           <div id="edge-change-timeline"></div>
         </div>
-        <div class="card" data-edge-section="wifi" style="margin-top:18px;">
+        <div class="card" id="edge-wifi-section" data-edge-section="wifi" style="margin-top:18px;">
           <h3>Wi-Fi observations</h3>
           <p class="small">Wireless observations are shown only when the sensor reports them. An empty view is not proof that the network is clean.</p>
           <div id="edge-wifi"></div>
@@ -294,7 +294,7 @@
           </div>
           <div class="grid cols-4 intelligence-summary" id="intelligence-summary"></div>
           <div class="intelligence-grid">
-            <section class="intelligence-module" aria-labelledby="local-bridge-title">
+            <section class="intelligence-module" id="automation-bridge-section" aria-labelledby="local-bridge-title">
               <div class="module-head">
                 <div><h4 id="local-bridge-title">Local model bridge</h4><p>Runs approved analysis actions through your local OpenCodex catalog or ChatGPT sign-in.</p></div>
                 <span class="status-pill" id="intelligence-bridge-pill">Checking</span>
@@ -320,7 +320,7 @@
               <pre class="intelligence-log" id="intelligence-service-output" hidden></pre>
             </section>
 
-            <section class="intelligence-module" aria-labelledby="chatgpt-app-title">
+            <section class="intelligence-module" id="automation-chatgpt-section" aria-labelledby="chatgpt-app-title">
               <div class="module-head">
                 <div><h4 id="chatgpt-app-title">ChatGPT app</h4><p>Read authorized SecOpsAI findings, assets, and research from inside ChatGPT.</p></div>
                 <span class="status-pill" id="intelligence-mcp-pill">Checking</span>
@@ -333,7 +333,7 @@
             </section>
           </div>
 
-          <section class="intelligence-module intelligence-request" aria-labelledby="intelligence-request-title">
+          <section class="intelligence-module intelligence-request" id="automation-request-section" aria-labelledby="intelligence-request-title">
             <div class="module-head">
               <div><h4 id="intelligence-request-title">Request analysis</h4><p>Actions use normalized SecOpsAI context. They cannot publish, close findings, run scans, or execute package code.</p></div>
             </div>
@@ -345,7 +345,7 @@
             <div class="small" id="intelligence-request-hint">Select a target-specific action to use the currently selected finding or research case automatically.</div>
           </section>
 
-          <section class="intelligence-module intelligence-autopilot" aria-labelledby="intelligence-autopilot-title">
+          <section class="intelligence-module intelligence-autopilot" id="automation-alert-review-section" aria-labelledby="intelligence-autopilot-title">
             <div class="module-head">
               <div><h4 id="intelligence-autopilot-title">Agent finding and alert review</h4><p>Continuously reviews host, Edge, supply-chain, and registry-research alerts with the selected model. Only evidence-corroborated, reversible decisions can be applied.</p></div>
               <span class="status-pill" id="intelligence-autopilot-pill">Checking</span>
@@ -369,7 +369,7 @@
             <div id="intelligence-autopilot-proposals"></div>
           </section>
 
-          <section class="intelligence-module investigation-autopilot" aria-labelledby="investigation-autopilot-title">
+          <section class="intelligence-module investigation-autopilot" id="automation-investigations-section" aria-labelledby="investigation-autopilot-title">
             <div class="module-head">
               <div><h4 id="investigation-autopilot-title">High-priority investigations</h4><p>Collects exact package evidence, performs bounded static analysis, compares verified releases, extracts IOC candidates, and requests an evidence-complete model verdict.</p></div>
               <button class="secondary-btn" id="investigation-run-due" type="button">Run due investigations</button>
@@ -379,7 +379,7 @@
             <div id="investigation-autopilot-runs"></div>
           </section>
 
-          <section class="intelligence-module daily-automation" aria-labelledby="daily-automation-title">
+          <section class="intelligence-module daily-automation" id="automation-daily-section" aria-labelledby="daily-automation-title">
             <div class="module-head">
               <div><h4 id="daily-automation-title">Daily workflow automation</h4><p>Runs surveillance, candidate promotion, evidence investigations, model review queues, and guarded learning as one durable workflow.</p></div>
               <span class="status-pill" id="daily-automation-pill">Checking</span>
@@ -402,7 +402,7 @@
             <div id="daily-automation-steps"></div>
           </section>
 
-          <section class="intelligence-module detection-learning" aria-labelledby="detection-learning-title">
+          <section class="intelligence-module detection-learning" id="automation-learning-section" aria-labelledby="detection-learning-title">
             <div class="module-head">
               <div><h4 id="detection-learning-title">Detection Learning</h4><p>Retains every alert outcome as feedback. Verified true and false outcomes become training examples; unknown, true-negative, and false-negative feedback remains available for active learning and replay.</p></div>
               <button class="primary-btn" id="detection-learning-run" type="button">Run learning cycle</button>
@@ -413,7 +413,7 @@
             <div id="detection-learning-deployments"></div>
           </section>
 
-          <section class="intelligence-module" aria-labelledby="intelligence-jobs-title">
+          <section class="intelligence-module" id="automation-jobs-section" aria-labelledby="intelligence-jobs-title">
             <div class="module-head">
               <div><h4 id="intelligence-jobs-title">Analysis jobs</h4><p>Every request and result is durable, bounded, and reviewable.</p></div>
             </div>
@@ -433,7 +433,7 @@
         <div class="grid cols-4" id="integration-summary" data-system-section="health"></div>
         <div class="grid cols-2" id="integration-config" data-system-section="integrations" style="margin-top:18px;"></div>
         <div class="card" id="system-credentials" data-system-section="credentials" style="margin-top:18px;"></div>
-        <div class="card" data-system-section="audit" style="margin-top:18px;">
+        <div class="card" id="system-action-queue-section" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Native action queue</h3>
@@ -442,7 +442,7 @@
           </div>
           <div id="run-requests-table"></div>
         </div>
-        <div class="card" data-system-section="audit" style="margin-top:18px;">
+        <div class="card" id="system-sessions-section" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Investigation sessions</h3>
@@ -451,7 +451,7 @@
           </div>
           <div id="native-sessions-table"></div>
         </div>
-        <div class="card" data-system-section="audit" style="margin-top:18px;">
+        <div class="card" id="system-session-detail-section" data-system-section="audit" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Selected session</h3>
@@ -460,7 +460,7 @@
           </div>
           <div id="native-session-detail"></div>
         </div>
-        <div class="card" data-system-section="audit" style="margin-top:18px;">
+        <div class="card" id="system-runs-section" data-system-section="audit" style="margin-top:18px;">
           <h3>Recent orchestrator runs</h3>
           <div id="routes-table"></div>
         </div>
@@ -479,7 +479,7 @@
         </div>
         <div class="research-view-summary" id="research-view-summary" role="status" aria-live="polite"></div>
 
-        <form class="card research-auth-card" onsubmit="return false;">
+        <form class="card research-auth-card" id="research-access-section" onsubmit="return false;">
           <div>
             <h3>Protected research actions</h3>
             <p class="small">Case review is read-only. Creation, evidence changes, disclosure updates, exports, and blog handoff require the protected research action token configured for this workspace.</p>
@@ -506,7 +506,7 @@
           <div class="research-form-actions"><button class="primary-btn" id="research-create-submit-btn" type="button">Create case</button></div>
         </details>
 
-        <section class="card research-watchlist-panel" data-research-section="watchlists" aria-labelledby="research-watchlist-title">
+        <section class="card research-watchlist-panel" id="research-watchlist-section" data-research-section="watchlists" aria-labelledby="research-watchlist-title">
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-watchlist-title">Promote from package watchlist</h3>
@@ -525,7 +525,7 @@
           <div class="research-watchlist-result" id="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <section class="card research-discovery-panel" data-research-section="watchlists" aria-labelledby="research-discovery-title">
+        <section class="card research-discovery-panel" id="research-discovery-section" data-research-section="watchlists" aria-labelledby="research-discovery-title">
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-discovery-title">Research discovery</h3>
@@ -551,12 +551,12 @@
           <div id="research-discovery-candidates" class="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <section class="card research-stage-panel" data-research-section="inbox" aria-labelledby="research-inbox-title">
+        <section class="card research-stage-panel" id="research-inbox-section" data-research-section="inbox" aria-labelledby="research-inbox-title">
           <div class="page-header compact-header"><div><h3 id="research-inbox-title" style="margin:0;">Discovery inbox</h3><p class="small" style="margin:6px 0 0;">Candidates are ranked by explainable similarity and evidence completeness. Review the reason before creating a case.</p></div><button class="secondary-btn" id="research-inbox-refresh-btn" type="button">Refresh candidates</button></div>
           <div id="research-inbox-candidates" class="research-inbox-grid" role="status" aria-live="polite"></div>
         </section>
 
-        <section class="card research-stage-panel" data-research-section="inbox" aria-labelledby="research-promotion-title">
+        <section class="card research-stage-panel" id="research-promotion-section" data-research-section="inbox" aria-labelledby="research-promotion-title">
           <div class="page-header compact-header"><div><h3 id="research-promotion-title" style="margin:0;">Candidate promotion policy</h3><p class="small" style="margin:6px 0 0;">Deterministic gates may create draft investigations. They never declare a package malicious or publish content.</p></div><span class="status-pill" id="research-promotion-state">Disabled</span></div>
           <div class="research-form-grid">
             <label><span>Policy ecosystem</span><select id="research-promotion-ecosystem"><option value="all">All ecosystems</option><option value="npm">npm</option><option value="pypi">PyPI</option><option value="nuget">NuGet</option><option value="maven">Maven</option><option value="rubygems">RubyGems</option><option value="packagist">Packagist</option><option value="go">Go</option><option value="open-vsx">Open VSX</option></select></label>
@@ -570,26 +570,26 @@
           <div id="research-promotion-result" class="research-watchlist-result" role="status" aria-live="polite"></div>
         </section>
 
-        <section class="card research-stage-panel" data-research-section="campaigns" aria-labelledby="research-campaigns-title">
+        <section class="card research-stage-panel" id="research-campaigns-section" data-research-section="campaigns" aria-labelledby="research-campaigns-title">
           <div class="page-header compact-header"><div><h3 id="research-campaigns-title" style="margin:0;">Campaigns</h3><p class="small" style="margin:6px 0 0;">Review deterministic package, publisher, dependency, infrastructure, and timeline relationships. Shared infrastructure alone is not attribution.</p></div><button class="secondary-btn" id="research-campaigns-refresh-btn" type="button">Refresh campaigns</button></div>
           <div id="research-campaigns-list"></div>
         </section>
 
-        <section class="card research-stage-panel" data-research-section="disclosure" aria-labelledby="research-disclosure-title">
+        <section class="card research-stage-panel" id="research-disclosure-section" data-research-section="disclosure" aria-labelledby="research-disclosure-title">
           <div class="page-header compact-header"><div><h3 id="research-disclosure-title" style="margin:0;">Disclosure queue</h3><p class="small" style="margin:6px 0 0;">Prepare and track external communication. Sending remains approval-gated.</p></div></div>
           <div id="research-disclosure-queue"></div>
         </section>
 
-        <section class="card research-stage-panel" data-research-section="sandbox" aria-labelledby="research-sandbox-title">
+        <section class="card research-stage-panel" id="research-sandbox-section" data-research-section="sandbox" aria-labelledby="research-sandbox-title">
           <div class="page-header compact-header"><div><h3 id="research-sandbox-title" style="margin:0;">Sandbox jobs</h3><p class="small" style="margin:6px 0 0;">Review dynamic-analysis requests, approvals, provider state, and imported results.</p></div></div>
           <div id="research-sandbox-queue"></div>
         </section>
 
-        <section class="card research-stage-panel" data-research-section="resolved" aria-labelledby="research-resolution-title">
+        <section class="card research-stage-panel" id="research-resolved-section" data-research-section="resolved" aria-labelledby="research-resolution-title">
           <div id="research-agent-resolution"></div>
         </section>
 
-        <div class="grid cols-2 research-case-layout" data-research-section="cases">
+        <div class="grid cols-2 research-case-layout" id="research-case-workspace-section" data-research-section="cases">
           <div class="card research-case-list-panel">
             <div class="research-list-head"><div><h3>Case queue</h3><p class="small">Select a case to review its evidence and workflow.</p></div></div>
             <div class="research-case-filters">
@@ -614,7 +614,7 @@
         </div>
         <div class="publication-view-summary" id="publication-view-summary" role="status" aria-live="polite"></div>
 
-        <div class="card blog-auth-card">
+        <div class="card blog-auth-card" id="blog-access-section">
           <div>
             <h3>Admin action token</h3>
             <p class="small">Read-only status can load without this token. Write actions require the dashboard secret value from `BLOG_OPS_ADMIN_TOKEN`; it is stored only in this browser session.</p>
@@ -628,7 +628,7 @@
 
         <div class="grid cols-5" id="blog-ops-stats" style="margin-top:18px;"></div>
 
-        <div class="card" data-blog-section="news" style="margin-top:18px;">
+        <div class="card" id="blog-actions-section" data-blog-section="news" style="margin-top:18px;">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Actions</h3>
@@ -646,12 +646,12 @@
           </div>
         </div>
 
-        <div class="card" data-blog-section="review" style="margin-top:18px;">
+        <div class="card" id="blog-queues-section" data-blog-section="review" style="margin-top:18px;">
           <div class="page-header compact-header"><div><h3 style="margin:0;">Choose an editorial queue</h3><p class="small" style="margin:6px 0 0;">Original research, advisories, and external news have separate review queues and never share an approval list.</p></div></div>
           <div class="publication-lane-grid"><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/research"><span><strong>Original research</strong><small>Evidence-led SecOpsAI investigations</small></span></button><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/advisories"><span><strong>Advisories</strong><small>Confirmed mitigations and indicators</small></span></button><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/news"><span><strong>External news</strong><small>Source-backed third-party reporting</small></span></button></div>
         </div>
 
-        <div class="grid cols-2" data-blog-section="drafts research advisories news" style="margin-top:18px;">
+        <div class="grid cols-2" id="blog-drafts-section" data-blog-section="drafts research advisories news" style="margin-top:18px;">
           <div class="card">
             <div class="page-header compact-header">
               <div>
@@ -687,7 +687,7 @@
           </div>
         </div>
 
-        <div class="card" data-blog-section="published" style="margin-top:18px;">
+        <div class="card" id="blog-published-section" data-blog-section="published" style="margin-top:18px;">
           <h3>Recent Blog Ops workflow runs</h3>
           <div id="blog-workflow-runs"></div>
         </div>
@@ -702,7 +702,7 @@
           <div class="status-pill" id="triage-ops-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh evidence</div>
         </div>
 
-        <div class="card triage-ops-auth-card">
+        <div class="card triage-ops-auth-card" id="triage-access-section">
           <div>
             <h3>Admin action token</h3>
             <p class="small">Read actions can run without this token. Closing, escalation, and blog draft creation require the helper-side `TRIAGE_OPS_ADMIN_TOKEN` or `BLOG_OPS_ADMIN_TOKEN`.</p>
@@ -716,7 +716,7 @@
 
         <div class="grid cols-5 triage-ops-stats-grid" id="triage-ops-stats"></div>
 
-        <div class="grid cols-2 triage-ops-layout">
+        <div class="grid cols-2 triage-ops-layout" id="triage-review-section">
           <div class="card triage-alerts-panel">
             <div class="page-header compact-header">
               <div>
@@ -742,7 +742,7 @@
           </div>
         </div>
 
-        <details class="card triage-campaign-dock">
+        <details class="card triage-campaign-dock" id="triage-campaign-section">
           <summary>
             <span>
               <strong>Campaign Research & Autonomous Discovery</strong>
@@ -762,7 +762,7 @@
           <div class="status-pill" id="coverage-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh coverage</div>
         </div>
 
-        <div class="card">
+        <div class="card" id="coverage-actions-section">
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Pipeline actions</h3>
@@ -777,12 +777,12 @@
 
         <div class="grid cols-5 triage-ops-stats-grid" id="coverage-stats"></div>
 
-        <div class="card">
+        <div class="card" id="coverage-collectors-section">
           <h3>Registry collectors</h3>
           <div id="coverage-collectors"></div>
         </div>
 
-        <div class="grid cols-2 triage-ops-layout">
+        <div class="grid cols-2 triage-ops-layout" id="coverage-events-section">
           <div class="card">
             <div class="page-header compact-header">
               <div>
@@ -792,7 +792,7 @@
             </div>
             <div id="coverage-events"></div>
           </div>
-          <div class="card">
+          <div class="card" id="coverage-windows-section">
             <div class="page-header compact-header">
               <div>
                 <h3 style="margin:0;">Coverage windows</h3>
@@ -1207,7 +1207,7 @@
   </div>
 
   <script src="./config.js?v=20260722-asd-console-theme"></script>
-  <script src="./app.js?v=20260802-persistence-fixes"></script>
+  <script src="./app.js?v=20260803-subsection-navigation"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

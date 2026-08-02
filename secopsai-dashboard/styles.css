@@ -6811,6 +6811,10 @@ body.professional-ui::before {
 
 .professional-ui .nav-list {
   gap: 3px;
+  max-height: calc(100vh - 122px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #344452 transparent;
 }
 
 .professional-ui .nav-group-label {
@@ -6864,6 +6868,70 @@ body.professional-ui::before {
 
 .professional-ui .nav-btn.active .nav-icon {
   color: #7de2d4;
+}
+
+/* Direct subsection navigation keeps long operator pages scannable. The
+   primary section stays in the normal sidebar flow and its children appear
+   immediately below it, so the hierarchy is visible instead of hidden in a
+   distant top-bar tab. */
+.professional-ui .sidebar-subnav {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 7px 18px;
+  padding: 4px 0 4px 12px;
+  border-left: 1px solid #2e5d5a;
+}
+
+.professional-ui .sidebar-subnav-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 8px;
+  color: #91a0af;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  white-space: normal;
+}
+
+.professional-ui .sidebar-subnav-btn:hover,
+.professional-ui .sidebar-subnav-btn:focus-visible,
+.professional-ui .sidebar-subnav-btn.active {
+  color: #dce5ec;
+  border-color: #2a4e4d;
+  background: #142321;
+  outline: 0;
+}
+
+.professional-ui .sidebar-subnav-marker {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border: 1px solid #647582;
+  border-radius: 50%;
+}
+
+.professional-ui .sidebar-subnav-btn.active .sidebar-subnav-marker {
+  border-color: #35d6c4;
+  background: #35d6c4;
+}
+
+/* Leave room for the sticky top strip when a nested action jumps to a panel. */
+.professional-ui [id$="-section"],
+.professional-ui [id^="mission-"],
+.professional-ui [id^="work-"],
+.professional-ui [id^="finding-"],
+.professional-ui [id^="automation-"],
+.professional-ui [id^="system-"],
+.professional-ui [id^="coverage-"],
+.professional-ui [id^="blog-"] {
+  scroll-margin-top: 112px;
 }
 
 .professional-ui .sidebar-footer {
@@ -7618,6 +7686,8 @@ body.professional-ui.modal-open { overflow: hidden; }
   .professional-ui .app-shell { display: block; }
   .professional-ui .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: 280px; transform: translateX(-100%); transition: transform 160ms ease; }
   .professional-ui.mobile-nav-open .sidebar { transform: translateX(0); }
+  .professional-ui .nav-list { max-height: 0; overflow-y: hidden; }
+  .professional-ui.mobile-nav-open .nav-list { max-height: calc(100vh - 88px); overflow-y: auto; }
   .professional-ui .main { min-height: 100vh; }
   .professional-ui .top-strip { padding: 0 16px; }
   .professional-ui .topbar-primary { min-height: 52px; }
