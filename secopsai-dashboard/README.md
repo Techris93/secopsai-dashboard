@@ -103,6 +103,17 @@ content-type, referrer, permissions, opener, and transport-security headers to
 both static and API responses. Update the version and integrity hash together;
 never restore an unversioned CDN import.
 
+### Credential URL protection
+
+Operator credentials must never be entered into a URL. Mission Control accepts
+authentication through the protected sign-in form only. The local helper and
+Cloudflare Worker reject credential-like query parameters, redact them from
+local request logs, and redirect document requests to a clean path. The browser
+also removes any legacy credential-looking parameters from the current history
+entry before the application loads. If a real password was ever visible in an
+address bar, change it immediately and remove the affected browser-history
+entry; the dashboard does not recover or store that value.
+
 ## Visual System
 
 The dashboard uses an OKComputer_Sec-inspired dark command-plane skin: void-black shell, elevated dark panels, teal/cyan live-state accents, Lucide-style inline SVG navigation icons, compact mono metadata, and high-contrast status badges. The reference audit is tracked in [`docs/okcomputer-reference-audit.md`](docs/okcomputer-reference-audit.md). No Kimi runtime, compiled reference bundle, external image assets, or mock data are imported into production.
