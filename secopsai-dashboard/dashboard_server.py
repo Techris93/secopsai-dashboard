@@ -899,6 +899,30 @@ def build_intelligence_args(action, payload):
             if not re.fullmatch(r'DLD-[A-F0-9]{16}', deployment_id) or outcome not in {'tp','fp','tn','fn'}: raise ValueError('Invalid learning observation')
             args.extend(['--deployment-id',deployment_id,'--outcome',outcome])
         return [*args,*secopsai_db_args()]
+    if action == 'daily-run':
+        return ['intelligence', 'autopilot', 'daily', 'run', '--actor', 'mission-control', *secopsai_db_args()]
+    if action == 'daily-configure':
+        args = ['intelligence', 'autopilot', 'daily', 'configure', '--actor', 'mission-control']
+        enabled = payload.get('enabled')
+        if enabled is not None:
+            args.extend(['--enabled', 'on' if bool(enabled) else 'off'])
+        for key, flag, lower, upper in (
+            ('interval_seconds', '--interval-seconds', 900, 604800),
+            ('max_alert_reviews', '--max-alert-reviews', 1, 500),
+            ('max_investigations', '--max-investigations', 1, 100),
+            ('max_candidate_cases', '--max-candidate-cases', 1, 500),
+        ):
+            if payload.get(key) is None:
+                continue
+            value = validate_bounded_int(payload.get(key), default=lower, lower=lower, upper=upper)
+            args.extend([flag, str(value)])
+        for key, flag in (
+            ('auto_promote_candidates', '--auto-promote-candidates'),
+            ('run_learning', '--run-learning'),
+        ):
+            if payload.get(key) is not None:
+                args.extend([flag, 'on' if bool(payload.get(key)) else 'off'])
+        return [*args, *secopsai_db_args()]
     raise ValueError('Unsupported intelligence operation')
 
 

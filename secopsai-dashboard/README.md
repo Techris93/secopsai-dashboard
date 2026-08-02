@@ -41,6 +41,18 @@ Restart `./start-local-dashboard-stack.sh`, open **Administration → Automation
 
 Existing pilot installations may continue to use `TRIAGE_OPS_ADMIN_TOKEN` when a separate `INTELLIGENCE_ADMIN_TOKEN` is not configured. Enter the credential once in **Administration → Automation → Automation action token**; it is retained only in the current browser tab. A missing or rejected action credential must produce an in-page error and must never sign the operator out. Operator sign-in and local action authorization are separate controls.
 
+### Daily workflow automation
+
+**Administration → Automation → Daily workflow automation** coordinates due
+registry surveillance, candidate draft promotion, alert feedback and model
+review queueing, evidence investigations, guarded detection learning, and
+operational alert delivery. Configure the interval and bounded limits, click
+**Save daily workflow**, then use **Run full workflow now** for the first cycle.
+The existing research worker checks the same persisted schedule on each cycle,
+so a separate scheduler is not required. Each cycle records every step and can
+finish as `degraded` when one step fails; disclosure, sandbox submission,
+publication, and unverified detector activation remain separate approvals.
+
 Hosted Cloudflare Pages uses server-side variables instead:
 
 - `SECOPSAI_CORE_API_URL`

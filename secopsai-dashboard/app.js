@@ -4330,6 +4330,11 @@ function renderIntelligence() {
   const investigations = data?.investigations || {};
   const investigationSummary = investigations.summary || {};
   const investigationRuns = Array.isArray(investigations.runs) ? investigations.runs : [];
+  const dailyAutomation = data?.daily_automation || {};
+  const dailySettings = dailyAutomation.settings || {};
+  const dailySummary = dailyAutomation.summary || {};
+  const dailyRuns = Array.isArray(dailyAutomation.runs) ? dailyAutomation.runs : [];
+  const dailyLatest = dailyRuns[0] || null;
   const learning = data?.learning || {};
   const learningSummary = learning.summary || {};
   const learningProposals = Array.isArray(learning.proposals) ? learning.proposals : [];
@@ -4467,6 +4472,39 @@ function renderIntelligence() {
           const openCase = run.case_id ? `<button class="mini-btn" data-investigation-case="${escapeHtml(run.case_id)}" type="button">Open case</button>` : '';
           return `<tr><td><strong>${escapeHtml(run.finding_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div></td><td><span class="status-pill">${escapeHtml(humanizeSnake(run.status || 'unknown'))}</span><div class="small">${escapeHtml(humanizeSnake(run.current_stage || 'queued'))}</div></td><td>${run.pipeline_id ? `<span class="mono small">${escapeHtml(run.pipeline_id)}</span>` : '<span class="small">Not started</span>'}${blocker}</td><td>${escapeHtml(humanizeSnake(decision.verdict || 'pending'))}${decision.confidence != null ? `<div class="small">${escapeHtml(String(decision.confidence))}% confidence</div>` : ''}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${openCase}${retry}${cancel}</td></tr>`;
         }).join('')}</tbody></table></div>`;
+  }
+  const dailyPill = el('daily-automation-pill');
+  if (dailyPill) dailyPill.textContent = humanizeSnake(dailySettings.enabled === false ? 'paused' : (dailySummary.last_status || 'ready'));
+  const dailyEnabled = el('daily-automation-enabled');
+  if (dailyEnabled && document.activeElement !== dailyEnabled) dailyEnabled.value = dailySettings.enabled === false ? 'off' : 'on';
+  const dailyInterval = el('daily-automation-interval');
+  if (dailyInterval && document.activeElement !== dailyInterval) dailyInterval.value = String(dailySettings.interval_seconds || 86400);
+  const dailyAlertLimit = el('daily-automation-alert-limit');
+  if (dailyAlertLimit && document.activeElement !== dailyAlertLimit) dailyAlertLimit.value = String(dailySettings.max_alert_reviews || 25);
+  const dailyInvestigationLimit = el('daily-automation-investigation-limit');
+  if (dailyInvestigationLimit && document.activeElement !== dailyInvestigationLimit) dailyInvestigationLimit.value = String(dailySettings.max_investigations || 5);
+  const dailyCaseLimit = el('daily-automation-case-limit');
+  if (dailyCaseLimit && document.activeElement !== dailyCaseLimit) dailyCaseLimit.value = String(dailySettings.max_candidate_cases || 25);
+  const dailyPromote = el('daily-automation-promote');
+  if (dailyPromote && document.activeElement !== dailyPromote) dailyPromote.checked = dailySettings.auto_promote_candidates !== false;
+  const dailyLearning = el('daily-automation-learning');
+  if (dailyLearning && document.activeElement !== dailyLearning) dailyLearning.checked = dailySettings.run_learning !== false;
+  const dailySummaryEl = el('daily-automation-summary');
+  if (dailySummaryEl) dailySummaryEl.innerHTML = `
+    <div class="metric-card"><div class="metric">${escapeHtml(String(dailySummary.runs || 0))}</div><div class="metric-label">Recorded cycles</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(dailySummary.active || 0))}</div><div class="metric-label">Running now</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(dailySummary.failed_steps || 0))}</div><div class="metric-label">Failed steps</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(fmtDate(dailySummary.next_run_at) || 'Ready')}</div><div class="metric-label">Next scheduled run</div></div>`;
+  const dailyStepsEl = el('daily-automation-steps');
+  if (dailyStepsEl) {
+    const steps = dailyLatest?.steps || [];
+    dailyStepsEl.innerHTML = !dailyLatest
+      ? '<div class="empty-state compact">No coordinated cycle has run yet. Save the policy, then run the full workflow once.</div>'
+      : `<div class="module-head compact-header"><div><h4>Latest cycle</h4><p>${escapeHtml(humanizeSnake(dailyLatest.status || 'unknown'))} · ${escapeHtml(fmtDate(dailyLatest.completed_at || dailyLatest.started_at))} · ${escapeHtml(dailyLatest.run_id || '')}</p></div></div><div class="table-wrap"><table><thead><tr><th>Step</th><th>Status</th><th>Result</th><th>Completed</th></tr></thead><tbody>${steps.map(step => {
+        const result = step.result || {};
+        const detail = result.error || result.reason || result.status || 'Completed';
+        return `<tr><td><strong>${escapeHtml(humanizeSnake(step.step_name || 'step'))}</strong></td><td><span class="status-pill">${escapeHtml(humanizeSnake(step.status || 'unknown'))}</span></td><td>${escapeHtml(compactText(String(detail), 180))}</td><td>${escapeHtml(fmtDate(step.completed_at || step.started_at))}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
   }
   const learningSummaryEl = el('detection-learning-summary');
   if (learningSummaryEl) learningSummaryEl.innerHTML = `
@@ -9552,6 +9590,20 @@ function bindEvents() {
     }
   });
   el('detection-learning-run')?.addEventListener('click', event => runIntelligenceAction('learning-run-cycle', {}, event.currentTarget));
+  el('daily-automation-save')?.addEventListener('click', async event => {
+    await runIntelligenceAction('daily-configure', {
+      enabled: el('daily-automation-enabled')?.value === 'on',
+      interval_seconds: Number(el('daily-automation-interval')?.value || 86400),
+      max_alert_reviews: Number(el('daily-automation-alert-limit')?.value || 25),
+      max_investigations: Number(el('daily-automation-investigation-limit')?.value || 5),
+      max_candidate_cases: Number(el('daily-automation-case-limit')?.value || 25),
+      auto_promote_candidates: Boolean(el('daily-automation-promote')?.checked),
+      run_learning: Boolean(el('daily-automation-learning')?.checked)
+    }, event.currentTarget);
+  });
+  el('daily-automation-run')?.addEventListener('click', async event => {
+    await runIntelligenceAction('daily-run', {}, event.currentTarget);
+  });
   el('detection-learning-proposals')?.addEventListener('click', async event => {
     const deploy = event.target.closest('[data-learning-deploy]'); const rollback = event.target.closest('[data-learning-rollback]');
     if (deploy) await runIntelligenceAction('learning-deploy', { proposal_id: deploy.dataset.learningDeploy, stage: deploy.dataset.learningStage }, deploy);

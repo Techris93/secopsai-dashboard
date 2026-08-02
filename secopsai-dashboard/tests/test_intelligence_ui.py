@@ -61,6 +61,21 @@ def test_local_intelligence_actions_are_allowlisted():
     )[:6] == ["intelligence", "autopilot", "investigations", "retry", "--run-id", "IAR-0123456789ABCDEF"]
     assert dashboard_server.build_intelligence_args("learning-run-cycle", {})[:4] == ["intelligence","autopilot","learning","run-cycle"]
     assert dashboard_server.build_intelligence_args("learning-deploy", {"proposal_id":"DLP-0123456789ABCDEF","stage":"shadow"})[:8] == ["intelligence","autopilot","learning","deploy","--proposal-id","DLP-0123456789ABCDEF","--stage","shadow"]
+    assert dashboard_server.build_intelligence_args("daily-run", {})[:4] == ["intelligence", "autopilot", "daily", "run"]
+    daily_config = dashboard_server.build_intelligence_args(
+        "daily-configure",
+        {
+            "enabled": True,
+            "interval_seconds": 86400,
+            "max_alert_reviews": 25,
+            "max_investigations": 5,
+            "max_candidate_cases": 25,
+            "auto_promote_candidates": True,
+            "run_learning": True,
+        },
+    )
+    assert daily_config[:4] == ["intelligence", "autopilot", "daily", "configure"]
+    assert "--interval-seconds" in daily_config
 
 
 def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
@@ -112,6 +127,10 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "detection-learning-proposals",
         "detection-learning-deployments",
         "detection-learning-run",
+        "daily-automation-summary",
+        "daily-automation-save",
+        "daily-automation-run",
+        "daily-automation-steps",
     ):
         assert f'id="{element}"' in html
     assert "runIntelligenceAction('enqueue'" in app
@@ -126,6 +145,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "High-priority investigations" in html
     assert "Detection Learning" in html
     assert "learning-deploy" in app
+    assert "daily-configure" in app
+    assert "daily-run" in app
     assert "investigation-retry" in app
     assert "Missing local dependency exposure never proves an external package is safe" in html
     assert "Registry outages and collector failures use deterministic recovery checks" in html

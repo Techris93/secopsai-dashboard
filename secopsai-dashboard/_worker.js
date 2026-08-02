@@ -350,6 +350,7 @@ async function handleHostedIntelligence(request, env) {
       actions: null,
       jobs: { jobs: [] },
       autopilot: null,
+      daily_automation: null,
       bridge: { status: "remote", queue_mode: "hosted_core", message: "A local Codex bridge processes this hosted queue." },
       service: { status: "managed_on_sensor", manager: "local" },
       chatgpt_app: {
@@ -385,6 +386,18 @@ async function handleHostedIntelligence(request, env) {
           summary: {},
           runs: [],
           tuning_proposals: [],
+        };
+      }
+      try {
+        result.daily_automation = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/daily", intelligenceToken, "Core daily automation");
+      } catch (error) {
+        result.daily_automation = {
+          schema_version: "secopsai.daily-automation.v1",
+          degraded: true,
+          error: sanitizeHelperErrorDetail(error?.message || error),
+          settings: {},
+          summary: {},
+          runs: [],
         };
       }
     } else {
@@ -438,6 +451,23 @@ async function handleHostedIntelligence(request, env) {
   if (action === "autopilot-run-now") {
     const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/autopilot/run-now", intelligenceToken, "Run autonomous triage", { method: "POST", body: {} });
     return jsonResponse({ ok: true, action, result: payload.result });
+  }
+  if (action === "daily-run") {
+    const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/daily/run", intelligenceToken, "Run Core daily automation", { method: "POST", body: {} });
+    return jsonResponse({ ok: true, action, result: payload.result });
+  }
+  if (action === "daily-configure") {
+    const bodyPayload = {
+      enabled: body.enabled === undefined ? undefined : Boolean(body.enabled),
+      interval_seconds: body.interval_seconds === undefined ? undefined : Number(body.interval_seconds),
+      max_alert_reviews: body.max_alert_reviews === undefined ? undefined : Number(body.max_alert_reviews),
+      max_investigations: body.max_investigations === undefined ? undefined : Number(body.max_investigations),
+      max_candidate_cases: body.max_candidate_cases === undefined ? undefined : Number(body.max_candidate_cases),
+      auto_promote_candidates: body.auto_promote_candidates === undefined ? undefined : Boolean(body.auto_promote_candidates),
+      run_learning: body.run_learning === undefined ? undefined : Boolean(body.run_learning),
+    };
+    const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/daily/configure", intelligenceToken, "Configure Core daily automation", { method: "POST", body: bodyPayload });
+    return jsonResponse({ ok: true, action, result: payload.settings });
   }
   if (action === "autopilot-rollback") {
     const runId = String(body.run_id || "").trim().toUpperCase();

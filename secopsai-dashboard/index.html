@@ -379,6 +379,29 @@
             <div id="investigation-autopilot-runs"></div>
           </section>
 
+          <section class="intelligence-module daily-automation" aria-labelledby="daily-automation-title">
+            <div class="module-head">
+              <div><h4 id="daily-automation-title">Daily workflow automation</h4><p>Runs surveillance, candidate promotion, evidence investigations, model review queues, and guarded learning as one durable workflow.</p></div>
+              <span class="status-pill" id="daily-automation-pill">Checking</span>
+            </div>
+            <div id="daily-automation-summary" class="metrics-grid compact-metrics"></div>
+            <div class="intelligence-autopilot-grid">
+              <label><span>Automation</span><select id="daily-automation-enabled"><option value="on">Enabled</option><option value="off">Paused</option></select></label>
+              <label><span>Run interval</span><select id="daily-automation-interval"><option value="3600">Every hour</option><option value="21600">Every 6 hours</option><option value="43200">Every 12 hours</option><option value="86400">Daily</option><option value="604800">Weekly</option></select></label>
+              <label><span>Maximum alert reviews</span><input id="daily-automation-alert-limit" type="number" min="1" max="500" step="1" value="25" /></label>
+              <label><span>Maximum evidence investigations</span><input id="daily-automation-investigation-limit" type="number" min="1" max="100" step="1" value="5" /></label>
+              <label><span>Maximum draft cases</span><input id="daily-automation-case-limit" type="number" min="1" max="500" step="1" value="25" /></label>
+              <label class="toggle-row"><input id="daily-automation-promote" type="checkbox" checked /><span>Create draft cases from policy-approved candidates</span></label>
+              <label class="toggle-row"><input id="daily-automation-learning" type="checkbox" checked /><span>Run guarded detection learning</span></label>
+            </div>
+            <div class="intelligence-boundary-note">Agents can collect evidence, queue model review, propose or apply only evidence-gated reversible triage, create draft cases, and prepare learning proposals. They cannot submit sandbox artifacts, send disclosure, publish research, or activate unverified detector changes.</div>
+            <div class="intelligence-actions">
+              <button class="primary-btn" id="daily-automation-save" type="button">Save daily workflow</button>
+              <button class="secondary-btn" id="daily-automation-run" type="button">Run full workflow now</button>
+            </div>
+            <div id="daily-automation-steps"></div>
+          </section>
+
           <section class="intelligence-module detection-learning" aria-labelledby="detection-learning-title">
             <div class="module-head">
               <div><h4 id="detection-learning-title">Detection Learning</h4><p>Retains every alert outcome as feedback. Verified true and false outcomes become training examples; unknown, true-negative, and false-negative feedback remains available for active learning and replay.</p></div>

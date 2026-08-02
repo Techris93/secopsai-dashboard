@@ -69,8 +69,17 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     if (parsed.pathname === "/api/v1/intelligence/autopilot" && (init.method || "GET") === "GET") {
       return new Response(JSON.stringify({ settings: { mode: "advisory" }, summary: {}, runs: [], tuning_proposals: [] }), { status: 200 });
     }
+    if (parsed.pathname === "/api/v1/intelligence/daily" && (init.method || "GET") === "GET") {
+      return new Response(JSON.stringify({ settings: { enabled: true, interval_seconds: 86400 }, summary: {}, runs: [] }), { status: 200 });
+    }
     if (parsed.pathname === "/api/v1/intelligence/jobs" && init.method === "POST") {
       return new Response(JSON.stringify({ job: { job_id: "AIJ-AAAAAAAAAAAAAAAA", action: "prioritize_findings", status: "queued" } }), { status: 200 });
+    }
+    if (parsed.pathname === "/api/v1/intelligence/daily/run" && init.method === "POST") {
+      return new Response(JSON.stringify({ result: { run_id: "DAR-0123456789ABCDEF", status: "succeeded" } }), { status: 200 });
+    }
+    if (parsed.pathname === "/api/v1/intelligence/daily/configure" && init.method === "POST") {
+      return new Response(JSON.stringify({ settings: { enabled: true, interval_seconds: 86400 } }), { status: 200 });
     }
     return new Response(JSON.stringify({ detail: "unexpected path" }), { status: 404 });
   };
@@ -107,8 +116,30 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     assert.equal(queued.status, 200);
     assert.equal((await jsonFrom(queued)).result.status, "queued");
     assert.equal(calls.filter(call => call.authorization === "Bearer core-read-secret").length, 1);
-    assert.equal(calls.filter(call => call.authorization === "Bearer core-intelligence-secret").length, 3);
+    assert.equal(calls.filter(call => call.authorization === "Bearer core-intelligence-secret").length, 4);
     assert.equal(calls.some(call => String(call.body).includes("core-intelligence-secret")), false);
+
+    const run = await workerModule.fetch(
+      new Request("https://dashboard.example/api/secopsai/intelligence", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "daily-run" }),
+      }),
+      env,
+    );
+    assert.equal(run.status, 200);
+    assert.equal((await jsonFrom(run)).result.status, "succeeded");
+
+    const configured = await workerModule.fetch(
+      new Request("https://dashboard.example/api/secopsai/intelligence", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "daily-configure", enabled: true, interval_seconds: 86400 }),
+      }),
+      env,
+    );
+    assert.equal(configured.status, 200);
+    assert.equal((await jsonFrom(configured)).result.interval_seconds, 86400);
   } finally {
     globalThis.fetch = originalFetch;
   }
