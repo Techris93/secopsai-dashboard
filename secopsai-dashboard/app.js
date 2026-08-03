@@ -677,7 +677,7 @@ function togglePrimarySectionNavigation(button) {
   }
 
   collapsedSidebarPrimaryPage = null;
-  setPage(requestedPage, { routeOverride: button?.dataset.route || null });
+  setPage(requestedPage, { routeOverride: button?.dataset.route || null, scrollToTarget: false });
 }
 
 function scrollToContextTarget(route) {
@@ -687,6 +687,16 @@ function scrollToContextTarget(route) {
   window.requestAnimationFrame(() => {
     const target = el(targetId);
     if (target && !target.hidden) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+function scrollPrimaryPageToTop() {
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    const main = document.querySelector('.main');
+    if (main) main.scrollTop = 0;
   });
 }
 const COMMANDS = Object.freeze([
@@ -1722,7 +1732,7 @@ function startTopStripClock() {
   window.setInterval(updateTopStripClock, 1000);
 }
 
-function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
+function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTarget = true } = {}) {
   const normalizedPageId = pages.includes(pageId) ? pageId : pageIdForRoute(pageId);
   if (normalizedPageId !== 'findings') closeFindingReview();
   if (normalizedPageId === 'research-cases' && routeOverride) state.researchCases.view = researchViewForRoute(routeOverride);
@@ -1771,7 +1781,8 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
     const nextHash = `#${routeOverride || routeForPage(normalizedPageId)}`;
     if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);
   }
-  scrollToContextTarget(routeOverride || routeForPage(normalizedPageId));
+  if (scrollToTarget) scrollToContextTarget(routeOverride || routeForPage(normalizedPageId));
+  else scrollPrimaryPageToTop();
 }
 
 function toggleMobileNav() {
@@ -4770,10 +4781,13 @@ function renderIntelligence() {
     const steps = dailyLatest?.steps || [];
     dailyStepsEl.innerHTML = !dailyLatest
       ? '<div class="empty-state compact">No coordinated cycle has run yet. Save the policy, then run the full workflow once.</div>'
-      : `<div class="module-head compact-header"><div><h4>Latest cycle</h4><p>${escapeHtml(humanizeSnake(dailyLatest.status || 'unknown'))} · ${escapeHtml(fmtDate(dailyLatest.completed_at || dailyLatest.started_at))} · ${escapeHtml(dailyLatest.run_id || '')}</p></div></div><div class="table-wrap"><table><thead><tr><th>Step</th><th>Status</th><th>Result</th><th>Completed</th></tr></thead><tbody>${steps.map(step => {
+      : `<div class="module-head compact-header"><div><h4>Latest cycle</h4><p>${escapeHtml(humanizeSnake(dailyLatest.status || 'unknown'))} · ${escapeHtml(fmtDate(dailyLatest.completed_at || dailyLatest.started_at))} · ${escapeHtml(dailyLatest.run_id || '')}</p></div></div><div class="table-wrap"><table><thead><tr><th>Step</th><th>Status</th><th>Result</th><th>Finished</th></tr></thead><tbody>${steps.map(step => {
         const result = step.result || {};
-        const detail = result.error || result.reason || result.status || 'Completed';
-        return `<tr><td><strong>${escapeHtml(humanizeSnake(step.step_name || 'step'))}</strong></td><td><span class="status-pill">${escapeHtml(humanizeSnake(step.status || 'unknown'))}</span></td><td>${escapeHtml(compactText(String(detail), 180))}</td><td>${escapeHtml(fmtDate(step.completed_at || step.started_at))}</td></tr>`;
+        const stepStatus = String(step.status || 'unknown').toLowerCase();
+        const inProgress = ['queued', 'running'].includes(stepStatus);
+        const detail = result.error || result.reason || result.status || (inProgress ? 'In progress' : (stepStatus === 'skipped' ? 'Skipped' : 'Completed'));
+        const finished = step.completed_at ? fmtDate(step.completed_at) : (inProgress ? 'In progress' : '—');
+        return `<tr><td><strong>${escapeHtml(humanizeSnake(step.step_name || 'step'))}</strong></td><td><span class="status-pill">${escapeHtml(humanizeSnake(stepStatus))}</span></td><td>${escapeHtml(compactText(String(detail), 180))}</td><td>${escapeHtml(finished)}</td></tr>`;
       }).join('')}</tbody></table></div>`;
   }
   const learningSummaryEl = el('detection-learning-summary');
@@ -8318,6 +8332,54 @@ async function runArtifactCaseAction(action, payload = {}, button = null) {
   finally { setButtonBusy(button, false); }
 }
 
+async function downloadApprovedSandboxArtifact(requestId, button = null) {
+  const token = state.researchCases.adminToken || state.triageOps.adminToken;
+  if (!token) {
+    setStatus('Use the protected research action token before preparing a sandbox sample.', true);
+    return;
+  }
+  if (!(await requestConfirmation('Prepare this exact artifact for manual Tria.ge upload?', {
+    title: 'Prepare public sandbox sample',
+    context: 'The local helper will verify the approved SHA-256 and download one owner-authorized copy to your browser. Nothing is uploaded automatically. Tria.ge public submissions are visible publicly and cannot be deleted by public-cloud users.',
+    confirmLabel: 'Prepare sample'
+  }))) return;
+  setButtonBusy(button, true, 'Preparing…');
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/research-artifacts/manual-sandbox-download', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Triage-Ops-Admin-Token': token
+      },
+      body: JSON.stringify({ request_id: requestId, public_submission_acknowledged: true })
+    });
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({}));
+      throw new Error(failure.error || `Manual sandbox handoff HTTP ${response.status}`);
+    }
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || `secopsai-${requestId.toLowerCase()}-sample.bin`;
+    const digest = response.headers.get('X-SecOpsAI-Artifact-SHA256') || '';
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    await loadResearchCaseDetail(state.researchCases.selectedId, { render: false });
+    renderResearchCases();
+    setStatus(`<span class="dot"></span> Hash-verified sample prepared${digest ? ` · SHA-256 ${escapeHtml(digest)}` : ''}`);
+  } catch (error) {
+    setStatus(`Manual sandbox handoff failed: ${error?.message || error}`, true);
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
 async function runResearchWatchlistAction(action, payload = {}, button = null) {
   const headers = { 'Content-Type': 'application/json' };
   if (action === 'create') {
@@ -8670,13 +8732,57 @@ function bindResearchCaseDetailActions(researchCase) {
     await runResearchCaseAction('disclosure-status', { case_id: researchCase.case_id, disclosure_id: button.dataset.disclosureId, status, actor: 'dashboard-operator' }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-sandbox-status-btn').forEach(button => button.addEventListener('click', async event => {
-    if (!(await requestConfirmation('Approve this sandbox request? Execution remains unavailable until an isolated provider is configured.', {
+    if (!(await requestConfirmation('Approve this sandbox request for a public handoff?', {
       title: 'Approve sandbox request',
-      context: 'Approval authorizes the request record only. Execution remains blocked until an isolated provider is configured.',
+      context: 'Approval enables a later hash-verified manual download. It does not upload or execute the artifact. Tria.ge public submissions are visible publicly and cannot be deleted by public-cloud users.',
       confirmLabel: 'Approve request'
     }))) return;
     const action = button.dataset.sandboxAction || 'sandbox-status';
     await runResearchCaseAction(action, { case_id: researchCase.case_id, request_id: button.dataset.requestId, status: button.dataset.sandboxStatus, public_submission_acknowledged: true, actor: 'dashboard-operator' }, event.currentTarget);
+  }));
+  document.querySelectorAll('#research-case-detail .research-sandbox-download-btn').forEach(button => button.addEventListener('click', event => {
+    downloadApprovedSandboxArtifact(button.dataset.requestId, event.currentTarget);
+  }));
+  document.querySelectorAll('#research-case-detail .research-sandbox-result-btn').forEach(button => button.addEventListener('click', async event => {
+    const requestId = button.dataset.requestId;
+    const reportUrl = el(`research-sandbox-result-url-${requestId}`)?.value?.trim() || '';
+    const status = el(`research-sandbox-result-status-${requestId}`)?.value || 'completed';
+    const summary = el(`research-sandbox-result-summary-${requestId}`)?.value?.trim() || '';
+    const scoreText = el(`research-sandbox-result-score-${requestId}`)?.value?.trim() || '';
+    let submissionId = '';
+    if (reportUrl) {
+      try {
+        const parsed = new URL(reportUrl);
+        if (parsed.protocol !== 'https:' || !['tria.ge', 'www.tria.ge'].includes(parsed.hostname.toLowerCase())) throw new Error('not an approved Tria.ge URL');
+        submissionId = parsed.pathname.split('/').filter(Boolean)[0] || '';
+      } catch (error) {
+        setStatus(`Sandbox result URL is invalid: ${error?.message || error}`, true);
+        return;
+      }
+    }
+    if (status === 'completed' && (!reportUrl || !submissionId || !summary)) {
+      setStatus('A completed manual result requires the public Tria.ge report URL and a reviewed behavior summary.', true);
+      return;
+    }
+    if (!(await requestConfirmation('Record this reviewed, sanitized sandbox result?', {
+      title: 'Attach sandbox evidence',
+      context: 'SecOpsAI stores the report identifier, score, and your bounded summary. It does not retain a raw report or treat the sandbox score alone as proof.',
+      confirmLabel: 'Record result'
+    }))) return;
+    await runResearchCaseAction('sandbox-status', {
+      case_id: researchCase.case_id,
+      request_id: requestId,
+      status,
+      result: {
+        id: submissionId,
+        submission_id: submissionId,
+        report_url: reportUrl,
+        status,
+        score: scoreText === '' ? null : Number(scoreText),
+        summary,
+      },
+      actor: 'dashboard-operator'
+    }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-retract-btn').forEach(button => button.addEventListener('click', () => {
     openResearchRetractModal(researchCase, button.dataset.itemType, button.dataset.itemId);
@@ -8931,13 +9037,18 @@ function renderResearchAutomationPanel(researchCase) {
     <div class="research-form-actions"><button class="secondary-btn" id="research-verdict-btn" type="button">Record Human Verdict</button><button class="secondary-btn" id="research-publication-approve-btn" type="button" ${reviews[0]?.status === 'needs_approval' ? '' : 'disabled'}>Approve Publication Review</button></div>
     <details class="research-action-drawer" open><summary>Prepare responsible disclosure</summary><p class="small">Recipient, subject, and body are prefilled from case subjects, registry contacts, and artifact hashes. Review before preparing the draft. Sending remains a separate approval gate.</p><div class="research-form-grid"><label><span>Recipient</span><input id="research-disclosure-recipient" list="research-disclosure-recipient-options" value="${escapeHtml(prefill.recipient || '')}" placeholder="maintainer or registry contact" /><datalist id="research-disclosure-recipient-options">${recipientOptions}</datalist></label><label><span>Subject</span><input id="research-disclosure-subject" value="${escapeHtml(prefill.subject || '')}" /></label><label class="research-span-2"><span>Body</span><textarea id="research-disclosure-body" rows="8" placeholder="Leave empty for the safe template.">${escapeHtml(prefill.body || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-disclosure-suggest-btn" type="button">Refresh Suggested Draft</button><button class="primary-btn" id="research-disclosure-btn" type="button">Prepare Disclosure</button></div></details>
     <details class="research-action-drawer"><summary>Acquire an unavailable artifact</summary><p class="small">Use this when an official registry no longer serves the exact version. The request is an auditable draft and does not send email automatically or change the case verdict.</p><div class="research-form-grid"><label><span>Research partner or contact</span><input id="research-partner-recipient" value="${escapeHtml(prefill.recipient || '')}" placeholder="security@partner.example" /></label><label class="research-span-2"><span>Reason and requested provenance</span><textarea id="research-partner-reason" rows="5" placeholder="Request the exact package, original source, and chain of custody.">${escapeHtml(prefill.partnerReason || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-partner-request-btn" type="button">Request Artifact From Research Partner</button></div>${(researchCase.partner_requests || []).slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)}</div>`).join('')}</details>
-    <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">This creates an approval record only. Execution is unavailable until a dedicated isolated provider is configured.</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || prefill.artifactHash || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="3">${escapeHtml(prefill.sandboxJustification || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
+    <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">Create an approval record for one exact artifact hash. Until Tria.ge API access is configured, an approved request can prepare a hash-verified browser download for manual public upload. SecOpsAI never executes the sample locally.</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || prefill.artifactHash || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="3">${escapeHtml(prefill.sandboxJustification || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
     <div class="research-automation-status">
       <strong>Jobs and approvals</strong>
       ${jobs.length ? jobs.map(job => `<div class="feed-item"><code>${escapeHtml(job.job_id)}</code> · ${escapeHtml(statusLabel(job.status))} · ${escapeHtml(statusLabel(job.action))}${job.status === 'awaiting_review' ? ` <button class="mini-btn research-intake-attach-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Attach Verified Evidence</button>` : ''}${['failed','expired','canceled'].includes(job.status) ? ` <button class="mini-btn research-job-retry-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Retry</button>` : ''}${['queued','running','awaiting_review'].includes(job.status) ? ` <button class="mini-btn research-job-cancel-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : ''}</div>`).join('') : '<div class="small">No automated research jobs yet.</div>'}
       ${reviews.length ? `<div class="small">Latest publication review: <strong>${escapeHtml(statusLabel(reviews[0].status))}</strong>${(reviews[0].blockers || []).length ? ` · ${(reviews[0].blockers || []).length} blocker(s)` : ''}</div>` : ''}
       ${disclosures.length ? disclosures.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.disclosure_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)} <button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="approved" type="button">Approve</button><button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="sent" type="button">Record Sent</button></div>`).join('') : ''}
-      ${sandboxes.length ? sandboxes.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-action="sandbox-approve" data-sandbox-status="approved" type="button">Approve public submission</button>` : ''}</div>`).join('') : ''}
+      ${sandboxes.length ? sandboxes.slice(0, 3).map(item => {
+        const matchingArtifact = artifacts.find(candidate => String(candidate.sha256 || '').toLowerCase() === String(item.artifact_sha256 || '').toLowerCase());
+        const canPrepare = item.status === 'approved' && Boolean(matchingArtifact?.available ?? matchingArtifact);
+        const canRecord = ['approved', 'submitted'].includes(item.status);
+        return `<div class="feed-item sandbox-workflow-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-action="sandbox-approve" data-sandbox-status="approved" type="button">Approve public handoff</button>` : ''}${canPrepare ? ` <button class="mini-btn research-sandbox-download-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Download exact sample</button>` : ''}${canRecord ? `<details class="research-inline-state"><summary>Record manual Tria.ge result</summary><div class="research-form-grid"><label class="research-span-2"><span>Public report URL</span><input id="research-sandbox-result-url-${escapeHtml(item.request_id)}" placeholder="https://tria.ge/analysis-id" /></label><label><span>Result state</span><select id="research-sandbox-result-status-${escapeHtml(item.request_id)}"><option value="completed">Completed</option><option value="failed">Failed</option></select></label><label><span>Tria.ge score</span><input id="research-sandbox-result-score-${escapeHtml(item.request_id)}" type="number" min="0" max="10" step="0.1" /></label><label class="research-span-2"><span>Reviewed behavior summary</span><textarea id="research-sandbox-result-summary-${escapeHtml(item.request_id)}" rows="4" placeholder="Record observed runtime behavior, important limitations, and whether indicators were independently validated."></textarea></label><button class="mini-btn research-sandbox-result-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Attach sanitized result</button></div></details>` : ''}</div>`;
+      }).join('') : ''}
     </div>
   `);
 }

@@ -654,6 +654,33 @@ def json_response(handler, code, payload):
         return
 
 
+def attachment_response(handler, path, *, filename, sha256):
+    """Stream one already-verified local artifact without caching or sniffing."""
+    target = Path(path)
+    safe_name = re.sub(r'[^A-Za-z0-9._-]+', '_', Path(filename).name).strip('._')[:220] or 'secopsai-sample.bin'
+    size = target.stat().st_size
+    try:
+        handler.send_response(200)
+        handler.send_header('Content-Type', 'application/octet-stream')
+        handler.send_header('Content-Length', str(size))
+        handler.send_header('Content-Disposition', f'attachment; filename="{safe_name}"')
+        handler.send_header('X-SecOpsAI-Artifact-SHA256', str(sha256))
+        handler.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
+        handler.send_header('Pragma', 'no-cache')
+        handler.send_header('Referrer-Policy', 'no-referrer')
+        handler.send_header('X-Content-Type-Options', 'nosniff')
+        handler.send_header('Content-Security-Policy', "sandbox; default-src 'none'")
+        handler.end_headers()
+        with target.open('rb') as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                handler.wfile.write(chunk)
+    except (BrokenPipeError, ConnectionResetError):
+        return
+
+
 def sse_send(handler, event_name, payload):
     body = f"event: {event_name}\ndata: {json.dumps(payload)}\n\n".encode('utf-8')
     handler.wfile.write(body)
@@ -3606,6 +3633,42 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 except OSError:
                     pass
         payload = read_request_json(self)
+
+        if parsed.path == '/api/secopsai/research-artifacts/manual-sandbox-download':
+            if require_triage_ops_admin(self):
+                return
+            request_id = _clean_string(payload.get('request_id'), 40).upper()
+            if not re.fullmatch(r'SBX-[A-F0-9]{12}', request_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid sandbox request ID', 'code': 'sandbox_request_invalid'})
+            if payload.get('public_submission_acknowledged') is not True:
+                return json_response(self, 400, {'ok': False, 'error': 'Public sandbox acknowledgment is required', 'code': 'public_submission_acknowledgment_required'})
+            staging = SECOPSAI_ROOT / 'data' / 'research' / 'manual-sandbox-handoff'
+            staging.mkdir(parents=True, exist_ok=True)
+            os.chmod(staging, 0o700)
+            export_dir = Path(tempfile.mkdtemp(prefix=f'{request_id.lower()}-', dir=staging))
+            try:
+                result, parsed_result = run_cli_json([
+                    'research', 'sandbox', 'prepare-manual', request_id,
+                    '--output-dir', str(export_dir),
+                    '--public-submission-acknowledged',
+                    '--actor', 'mission-control',
+                    *secopsai_db_args(),
+                ], timeout=180)
+                if not result['ok'] or not isinstance(parsed_result, dict):
+                    return json_response(self, 400, {'ok': False, 'error': result.get('stderr') or 'Manual sandbox handoff failed', 'code': 'manual_sandbox_handoff_failed'})
+                target = Path(str(parsed_result.get('output_path') or '')).resolve()
+                if export_dir.resolve() not in target.parents or not target.is_file() or target.is_symlink():
+                    return json_response(self, 500, {'ok': False, 'error': 'Prepared sandbox artifact failed path validation', 'code': 'manual_sandbox_path_invalid'})
+                return attachment_response(
+                    self,
+                    target,
+                    filename=str(parsed_result.get('filename') or target.name),
+                    sha256=str(parsed_result.get('artifact_sha256') or ''),
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'manual_sandbox_handoff_failed'})
+            finally:
+                shutil.rmtree(export_dir, ignore_errors=True)
 
         if parsed.path == '/api/secopsai/research-artifacts/analysis':
             if require_triage_ops_admin(self):

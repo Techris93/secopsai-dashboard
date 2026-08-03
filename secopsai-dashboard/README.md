@@ -161,6 +161,12 @@ navigation, command search, contextual help, explicit degraded states, and
 common feedback components. See [`docs/dashboard-ia.md`](docs/dashboard-ia.md)
 for the migration boundaries and acceptance rules.
 
+For approval-gated dynamic analysis, Mission Control supports both the configured
+Tria.ge connector and a manual public-sandbox handoff. The manual path re-verifies
+the approved artifact hash, downloads one no-store copy for operator upload, and
+accepts only a sanitized report reference and reviewed behavior summary afterward.
+It never executes the sample or uploads it automatically.
+
 ## Pages
 
 ### Overview

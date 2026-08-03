@@ -268,6 +268,22 @@ def test_sandbox_approval_requires_public_acknowledgement():
         )
 
 
+def test_manual_sandbox_handoff_is_approval_gated_and_hash_identified():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    assert "downloadApprovedSandboxArtifact" in app
+    assert "Download exact sample" in app
+    assert "Record manual Tria.ge result" in app
+    assert "Attach sanitized result" in app
+    assert "public_submission_acknowledged: true" in app
+    assert "/api/secopsai/research-artifacts/manual-sandbox-download" in app
+    assert "/api/secopsai/research-artifacts/manual-sandbox-download" in server
+    assert "research', 'sandbox', 'prepare-manual'" in server
+    assert "X-SecOpsAI-Artifact-SHA256" in server
+    assert "require_triage_ops_admin(self)" in server
+    assert "shutil.rmtree(export_dir, ignore_errors=True)" in server
+
+
 def test_research_case_recommendation_is_conservative_and_explains_create_route():
     recommendation = dashboard_server.build_research_case_recommendation(
         {

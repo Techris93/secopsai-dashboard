@@ -51,6 +51,13 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
         self.assertTrue(dashboard_server.DashboardHandler._has_sensitive_query("token=secret"))
         self.assertFalse(dashboard_server.DashboardHandler._has_sensitive_query("route=overview"))
 
+    def test_manual_sandbox_download_uses_nosniff_and_no_store_headers(self):
+        source = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+        self.assertIn("def attachment_response", source)
+        self.assertIn("no-store, no-cache, must-revalidate", source)
+        self.assertIn("X-Content-Type-Options', 'nosniff", source)
+        self.assertIn("Content-Security-Policy', \"sandbox; default-src 'none'\"", source)
+
 
 if __name__ == "__main__":
     unittest.main()

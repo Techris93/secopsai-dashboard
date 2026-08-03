@@ -125,6 +125,27 @@ network-controlled sandbox for dynamic analysis, with no production secrets,
 customer data, or access to third-party systems. Static analysis is the
 default. LLM output is a drafting aid, never evidence.
 
+## Manual Tria.ge Workflow
+
+When Tria.ge API access is pending, Mission Control can prepare an approved,
+hash-verified sample for manual upload without exposing the quarantine path.
+
+1. Open **Research → Cases** and select the case.
+2. Confirm the exact artifact appears under **Local artifact evidence**.
+3. Expand **Request dynamic sandbox analysis** and select **Request Sandbox Approval**.
+4. In **Jobs and approvals**, select **Approve public handoff** after reviewing the public-submission warning.
+5. Select **Download exact sample**. This downloads locally; it does not contact Tria.ge.
+6. Upload the file through the Tria.ge website in interactive mode and review the static report before choosing an execution profile.
+7. When the public report is complete, expand **Record manual Tria.ge result**.
+8. Enter the report URL, score, and a reviewed behavior summary, then select **Attach sanitized result**.
+9. Regenerate the evidence matrix and model analysis. Independently validate any IOC before adding it to the case.
+
+Public Tria.ge submissions are visible publicly and public-cloud users cannot
+delete them. Do not submit confidential, customer, credential-bearing, or
+otherwise unauthorized artifacts.
+
+Review the official [Tria.ge sample submission guide](https://tria.ge/docs/cloud-api/submit/), [analysis process](https://tria.ge/docs/data-model/), and [public-cloud FAQ](https://tria.ge/docs/faq/) before submitting a sample.
+
 ## Make A Case Publishable
 
 The case readiness gate requires:

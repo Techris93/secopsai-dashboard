@@ -109,3 +109,23 @@ This ledger records the product redesign in verified, reversible checkpoints.
 - Acceptance: secondary views exist only beneath their owner, no top-row tab is
   required, active parents toggle in one click, and keyboard and assistive
   technology users receive the same expanded/collapsed state.
+
+## Checkpoint 11: Research navigation and manual sandbox handoff
+
+- Status: complete
+- Goal: remove two misleading operator states and provide a safe dynamic-analysis
+  path while automated Tria.ge access is pending.
+- Implemented: primary Research navigation now starts at the top of the page;
+  secondary Research routes still move to their named workspaces. Running daily
+  steps display **In progress**, never the fallback **Completed**, and unfinished
+  steps no longer show their start time as a finish time. An approved sandbox
+  request can prepare one hash-verified local download, and a separate form
+  records only a sanitized Tria.ge report reference, score, and reviewed summary.
+- Safety: the manual handoff requires the protected action token, an approved
+  request, explicit public-submission acknowledgment, an exact attached hash,
+  owner-only staging, no-store response headers, and immediate staging cleanup.
+  The download does not submit or execute the sample.
+- Acceptance: a primary Research click lands at the page header; status and result
+  columns cannot contradict each other; pending API access does not block a
+  fully audited manual sandbox workflow; raw sandbox results and quarantine paths
+  never enter browser state, cloud storage, or AI context.
