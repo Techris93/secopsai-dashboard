@@ -237,6 +237,7 @@ const state = {
   surfaceRefreshTimer: null,
   surfaceRefreshInFlight: false,
   lastSurfaceRefreshAt: 0,
+  actionAutoRefresh: new Map(),
   researchPipelinePollTimer: null,
   nativeEventSource: null,
   nativeStreamStatus: 'disconnected',
@@ -810,6 +811,10 @@ function stopDashboardRuntime() {
     clearInterval(state.researchPipelinePollTimer);
     state.researchPipelinePollTimer = null;
   }
+  state.actionAutoRefresh.forEach(entry => {
+    if (entry?.timer) clearTimeout(entry.timer);
+  });
+  state.actionAutoRefresh.clear();
   if (state.nativeEventSource) {
     state.nativeEventSource.close();
     state.nativeEventSource = null;
@@ -1238,6 +1243,7 @@ async function postNativeHelper(path, payload) {
   if (!response.ok || data?.ok === false) {
     throw new Error(data?.error || data?.stderr || data?.stdout || `Request failed (${response.status})`);
   }
+  await refreshAfterAction({ key: `native:${path}` });
   return data;
 }
 
@@ -1492,6 +1498,89 @@ async function runRefreshAction(buttonOrId, action, {
       currentButton.dataset.originalLabel = originalLabel;
     }
     setButtonBusy(currentButton, false);
+  }
+}
+
+// Actions that hand work to a local worker or hosted workflow can finish after
+// the POST response. Keep the visible surface current without requiring the
+// operator to press Refresh again.
+const ACTION_AUTO_REFRESH_INTERVAL_MS = 3000;
+const ACTION_AUTO_REFRESH_MAX_MS = 5 * 60 * 1000;
+
+function stopActionAutoRefresh(key, entry = null) {
+  const current = state.actionAutoRefresh.get(key);
+  if (!current || (entry && current !== entry)) return;
+  if (current.timer) window.clearTimeout(current.timer);
+  state.actionAutoRefresh.delete(key);
+}
+
+function scheduleActionAutoRefresh(
+  key,
+  refresh,
+  {
+    intervalMs = ACTION_AUTO_REFRESH_INTERVAL_MS,
+    maxMs = ACTION_AUTO_REFRESH_MAX_MS,
+    isComplete = () => false,
+    onTimeout = null
+  } = {}
+) {
+  const normalizedKey = String(key || 'current-surface');
+  stopActionAutoRefresh(normalizedKey);
+  const entry = {
+    startedAt: Date.now(),
+    timer: null,
+    inFlight: false
+  };
+  state.actionAutoRefresh.set(normalizedKey, entry);
+
+  const tick = async () => {
+    if (state.actionAutoRefresh.get(normalizedKey) !== entry) return;
+    if (entry.inFlight) {
+      entry.timer = window.setTimeout(tick, intervalMs);
+      return;
+    }
+    entry.inFlight = true;
+    try {
+      await refresh();
+    } catch (error) {
+      // A transient refresh failure should not strand the button or stop the
+      // next attempt. The normal surface error state remains authoritative.
+      console.warn('post-action auto-refresh failed', normalizedKey, error);
+    } finally {
+      entry.inFlight = false;
+    }
+    if (state.actionAutoRefresh.get(normalizedKey) !== entry) return;
+    if (isComplete()) {
+      stopActionAutoRefresh(normalizedKey, entry);
+      return;
+    }
+    if (Date.now() - entry.startedAt >= maxMs) {
+      stopActionAutoRefresh(normalizedKey, entry);
+      if (typeof onTimeout === 'function') onTimeout();
+      return;
+    }
+    entry.timer = window.setTimeout(tick, intervalMs);
+  };
+
+  entry.timer = window.setTimeout(tick, intervalMs);
+  return () => stopActionAutoRefresh(normalizedKey, entry);
+}
+
+async function refreshAfterAction({
+  key = `surface:${currentPageFromLocation()}`,
+  poll = false,
+  refresh = () => refreshActiveSurface({ force: true }),
+  isComplete = () => false,
+  maxMs = ACTION_AUTO_REFRESH_MAX_MS,
+  onTimeout = null
+} = {}) {
+  try {
+    await refresh();
+  } catch (error) {
+    console.warn('post-action refresh failed', key, error);
+  }
+  if (poll) {
+    scheduleActionAutoRefresh(key, refresh, { isComplete, maxMs, onTimeout });
   }
 }
 
@@ -4881,8 +4970,20 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
     }
     state.intelligence.serviceOutput = ['service', 'run-once'].includes(action) ? JSON.stringify(result.result || result, null, 2) : state.intelligence.serviceOutput;
     showToast(`Intelligence action completed: ${humanizeSnake(action)}`, 'success');
-    await loadIntelligence({ render: false });
-    renderIntelligence();
+    const intelligenceJobId = String(
+      result?.result?.job_id || result?.result?.job?.job_id || result?.job_id || ''
+    ).trim();
+    const backgroundAction = ['enqueue', 'autopilot-run-now', 'investigation-run-due'].includes(action);
+    await refreshAfterAction({
+      key: `intelligence:${action}:${intelligenceJobId || 'workspace'}`,
+      poll: backgroundAction,
+      isComplete: () => {
+        if (!intelligenceJobId) return false;
+        const job = (state.intelligence.data?.jobs || []).find(item => String(item.job_id || '') === intelligenceJobId);
+        return Boolean(job && !['queued', 'running'].includes(String(job.status || '').toLowerCase()));
+      },
+      onTimeout: () => showToast('The intelligence action is still running. The console will continue updating in the background.', 'info', 6000)
+    });
     return result;
   } catch (error) {
     showToast(error?.message || String(error), 'error');
@@ -5097,9 +5198,15 @@ async function runBlogOpsAction(action, { draft = null, note = '', button = null
     await loadBlogOpsStatus({ render: false });
     if (draft) {
       await loadBlogDraft(draft);
-      return;
+    } else {
+      renderBlogOps();
     }
-    renderBlogOps();
+    await refreshAfterAction({
+      key: `blog:${action}:${draft || 'workspace'}`,
+      poll: ['deploy', 'publish', 'news-run', 'news-fetch'].includes(action),
+      maxMs: 5 * 60 * 1000,
+      onTimeout: () => showToast('The publication workflow is still running. This page will continue updating while it completes.', 'info', 6000)
+    });
   } catch (error) {
     const suffix = /unauthorized/i.test(error.message) ? ' Check that the token matches BLOG_OPS_ADMIN_TOKEN in Cloudflare Pages.' : '';
     setStatus(`Blog Ops ${action} failed: ${error.message}${suffix}`, true);
@@ -5637,6 +5744,7 @@ async function runTriageOpsAction(action, { button = null, payload = {}, write =
     }
     setStatus(`<span class="dot"></span> Triage Ops ${escapeHtml(statusLabel(action))} completed`);
     renderTriageOps();
+    await refreshAfterAction({ key: `triage:${action}:${selectedAlert?.finding_id || 'workspace'}` });
   } catch (error) {
     const suffix = /not configured/i.test(error.message) ? ' Configure the local helper/admin token, or use the copyable CLI fallback.' : '';
     state.triageOps.lastOutput = { action, error: `${error.message}${suffix}`, at: new Date().toISOString() };
@@ -6217,6 +6325,7 @@ async function runCampaignDiscoveryAction(action, { button = null, write = false
     }
     setStatus(`<span class="dot"></span> Campaign discovery ${escapeHtml(statusLabel(action))} completed`);
     renderTriageOps();
+    await refreshAfterAction({ key: `campaign:${action}` });
   } catch (error) {
     const message = campaignActionErrorMessage(action, error);
     state.triageOps.campaignLastOutput = { action, error: message, at: new Date().toISOString() };
@@ -8004,6 +8113,7 @@ async function runResearchDiscoveryActionNow(action, payload = {}, button = null
     }
     renderResearchCases();
     setStatus(`<span class="dot"></span> Research discovery ${escapeHtml(action)} completed`);
+    await refreshAfterAction({ key: `research-discovery:${action}` });
     return result;
   } catch (error) {
     state.researchCases.discovery.error = error?.message || String(error);
@@ -8303,6 +8413,7 @@ async function runResearchCaseActionNow(action, payload = {}, button = null) {
     }
     renderResearchCases();
     setStatus(`<span class="dot"></span> ${escapeHtml(statusLabel(action))} completed for ${escapeHtml(nextId || 'research case')}`);
+    await refreshAfterAction({ key: `research-case:${action}:${nextId || 'workspace'}` });
     return result;
   } catch (error) {
     state.researchCases.lastAction = { action, error: error?.message || String(error), at: new Date().toISOString() };
@@ -8327,6 +8438,7 @@ async function runArtifactCaseAction(action, payload = {}, button = null) {
     await loadResearchCaseDetail(state.researchCases.selectedId, { render: false });
     renderResearchCases();
     setStatus(`<span class="dot"></span> ${action === 'extract' ? 'IOC candidates extracted' : 'Artifact inspection completed'}`);
+    await refreshAfterAction({ key: `research-artifact:${action}:${payload.artifact_id || state.researchCases.selectedId || 'workspace'}` });
     return result;
   } catch (error) { setStatus(`Artifact action failed: ${error?.message || error}`, true); return null; }
   finally { setButtonBusy(button, false); }
@@ -8401,6 +8513,7 @@ async function runResearchWatchlistAction(action, payload = {}, button = null) {
     const result = await response.json().catch(() => ({}));
     if (!response.ok || result.ok === false) throw new Error(result.error || result.result?.error || `Research watchlist HTTP ${response.status}`);
     setStatus(`<span class="dot"></span> ${action === 'create' ? 'Draft cases created' : 'Watchlist preview ready'}`);
+    await refreshAfterAction({ key: `research-watchlist:${action}` });
     return result;
   } catch (error) {
     setStatus(`Research watchlist action failed: ${error?.message || String(error)}`, true);
@@ -9605,7 +9718,7 @@ async function refreshOperationalWorkspace() {
 async function refreshActiveSurface({ force = false } = {}) {
   const now = Date.now();
   if (state.surfaceRefreshInFlight || document.hidden) return false;
-  if (!force && now - state.lastSurfaceRefreshAt < 12000) return false;
+  if (!force && now - state.lastSurfaceRefreshAt < 4000) return false;
   state.surfaceRefreshInFlight = true;
   try {
     const page = currentPageFromLocation();
@@ -9654,7 +9767,7 @@ function startLiveExecutionRefreshLoop() {
   if (state.surfaceRefreshTimer) clearInterval(state.surfaceRefreshTimer);
   state.surfaceRefreshTimer = setInterval(() => {
     refreshActiveSurface();
-  }, 15000);
+  }, 5000);
 }
 
 async function boot() {

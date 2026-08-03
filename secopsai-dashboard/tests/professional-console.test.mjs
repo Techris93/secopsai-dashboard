@@ -129,7 +129,23 @@ assert.match(app, /renderContextNav\(normalizedPageId, activeRoute\)/);
 assert.match(styles, /^\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/m);
 assert.match(app, /function refreshActiveSurface/);
 assert.match(app, /surfaceRefreshInFlight/);
-assert.match(app, /setInterval\(\(\) => \{\s*refreshActiveSurface\(\);\s*\}, 15000\)/s);
+assert.match(app, /setInterval\(\(\) => \{\s*refreshActiveSurface\(\);\s*\}, 5000\)/s);
+assert.match(app, /function scheduleActionAutoRefresh/);
+assert.match(app, /function refreshAfterAction/);
+assert.match(app, /actionAutoRefresh: new Map\(\)/);
+assert.match(app, /The console will continue updating in the background/);
+for (const marker of [
+  'refreshAfterAction({ key: `triage:',
+  'refreshAfterAction({ key: `campaign:',
+  'refreshAfterAction({ key: `research-discovery:',
+  'refreshAfterAction({ key: `research-case:',
+  'refreshAfterAction({ key: `research-artifact:',
+  'refreshAfterAction({ key: `research-watchlist:',
+  'key: `blog:',
+  "await refreshAfterAction({ key: `native:"
+]) {
+  assert.ok(app.includes(marker), `missing post-action refresh wiring: ${marker}`);
+}
 assert.match(app, /window\.addEventListener\('focus', \(\) => refreshActiveSurface\(\{ force: true \}\)\)/);
 assert.match(app, /const CONTEXT_SCROLL_TARGETS/);
 assert.match(app, /if \(normalizedPageId === 'triage-ops'\) \{\s*renderTriageOps\(\)/s);
