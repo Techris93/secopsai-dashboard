@@ -67,6 +67,8 @@ responsive/a11y coverage.
   top-level navigation entry.
 - Every route-level secondary view is reachable under its owning primary
   sidebar section, including Research and System.
+- An active primary section collapses its secondary views when selected again
+  and restores them on the next selection, with matching `aria-expanded` state.
 - Native actions are reachable from Work/System without a second triage product.
 - Research and Publications remain separate because evidence preservation and
   public editorial approval have different safety requirements.

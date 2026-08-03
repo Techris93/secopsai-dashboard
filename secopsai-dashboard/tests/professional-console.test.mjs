@@ -52,9 +52,16 @@ assert.match(styles, /\.research-pipeline-actions\s*>\s*button\s*\{[^}]*white-sp
 for (const marker of ['task-filter-scope', 'Operator assignments', 'blog-content-filter', 'Original research', 'system-credentials', 'Credential readiness', 'Candidate promotion policy', 'finding-review-drawer']) {
   assert.ok(index.includes(marker) || app.includes(marker), `missing operator clarity surface: ${marker}`);
 }
-for (const marker of ['sidebar-subnav', 'sidebar-subnav-btn', 'PAGE_SUBSECTION_DEFS', 'PAGE_ROUTE_SUBSECTION_DEFS', 'renderSidebarSubnav', 'scrollIntoView']) {
+for (const marker of ['sidebar-subnav', 'sidebar-subnav-btn', 'PAGE_SUBSECTION_DEFS', 'PAGE_ROUTE_SUBSECTION_DEFS', 'primaryPageFor', 'renderSidebarSubnav', 'togglePrimarySectionNavigation', 'collapsedSidebarPrimaryPage', 'scrollIntoView']) {
   assert.ok((index + styles + app).includes(marker), `missing direct subsection navigation: ${marker}`);
 }
+assert.match(app, /host\.hidden = collapsedSidebarPrimaryPage === activeTopPage/);
+assert.match(app, /if \(!activeTopPage\) return/);
+assert.match(app, /activePrimary\?\.setAttribute\('aria-expanded', String\(!host\.hidden\)\)/);
+assert.match(app, /collapsedSidebarPrimaryPage === currentPrimaryPage[\s\S]*\? null[\s\S]*: currentPrimaryPage/);
+assert.match(app, /addEventListener\('click', \(\) => togglePrimarySectionNavigation\(btn\)\)/);
+assert.match(styles, /\.nav-btn\[aria-controls="sidebar-subnav"\]::after/);
+assert.match(styles, /\.nav-btn\[aria-expanded="true"\]::after/);
 for (const marker of [
   "['Supply chain', PAGE_ROUTES['triage-ops']]",
   "['Inbox', RESEARCH_VIEW_ROUTES.inbox]",

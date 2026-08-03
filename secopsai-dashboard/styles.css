@@ -6831,12 +6831,36 @@ body.professional-ui::before {
 }
 
 .professional-ui .nav-btn {
+  position: relative;
   min-height: 44px;
   padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   box-shadow: none;
+}
+
+.professional-ui .nav-btn[aria-controls="sidebar-subnav"] {
+  padding-right: 32px;
+}
+
+.professional-ui .nav-btn[aria-controls="sidebar-subnav"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid #91a0af;
+  border-bottom: 1.5px solid #91a0af;
+  transform: translateY(-65%) rotate(45deg);
+  transform-origin: center;
+  transition: transform 140ms ease, border-color 140ms ease;
+}
+
+.professional-ui .nav-btn[aria-expanded="true"]::after {
+  border-color: #7de2d4;
+  transform: translateY(-35%) rotate(225deg);
 }
 
 .professional-ui .nav-btn:hover {

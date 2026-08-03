@@ -147,6 +147,9 @@ through nested views and help, but are no longer presented as competing
 top-level products. Select a primary section in the sidebar to reveal its
 route-level views and direct panel anchors beneath it; the top bar is reserved
 for workspace context and no longer contains a second navigation row. The
+active primary section is a disclosure control: select it again to collapse its
+secondary views, and select it once more to expand them. The chevron and
+`aria-expanded` state always report whether the nested navigation is open. The
 browser URL is now a durable route such as
 `#findings`, `#assets`, `#research/cases`, or `#publications`, so a review can be
 shared and restored with browser back/forward navigation.

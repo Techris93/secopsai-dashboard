@@ -316,6 +316,12 @@ const TOP_NAV_PAGE = Object.freeze({
   "blog-ops": "blog-ops",
   "operator-guide": null
 });
+
+function primaryPageFor(pageId) {
+  return Object.prototype.hasOwnProperty.call(TOP_NAV_PAGE, pageId)
+    ? TOP_NAV_PAGE[pageId]
+    : pageId;
+}
 const PAGE_CONTEXT = {
   "mission-control": "Overview · operational priorities",
   "tasks": "Work · ownership, approvals, and runs",
@@ -547,6 +553,7 @@ const PAGE_ROUTE_SUBSECTION_DEFS = Object.freeze({
 });
 
 let subsectionObserver = null;
+let collapsedSidebarPrimaryPage = null;
 
 function elementIsVisible(element) {
   if (!element) return false;
@@ -577,6 +584,13 @@ function renderSidebarSubnav(pageId, routeOverride = null) {
     subsectionObserver.disconnect();
     subsectionObserver = null;
   }
+  nav.querySelectorAll('.nav-btn').forEach(button => {
+    button.removeAttribute('aria-expanded');
+    button.removeAttribute('aria-controls');
+  });
+  const activeTopPage = primaryPageFor(pageId);
+  if (!activeTopPage) return;
+
   const currentRoute = String(routeOverride || window.location.hash || routeForPage(pageId) || '')
     .replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
   const routeEntries = (PAGE_ROUTE_SUBSECTION_DEFS[pageId] || [])
@@ -587,10 +601,14 @@ function renderSidebarSubnav(pageId, routeOverride = null) {
   const entries = [...routeEntries, ...panelEntries];
   if (entries.length < 2) return;
 
+  const activePrimary = nav.querySelector(`.nav-btn[data-page="${CSS.escape(activeTopPage)}"]`)
+    || nav.querySelector('.nav-btn.active');
+
   const host = document.createElement('div');
   host.id = 'sidebar-subnav';
   host.className = 'sidebar-subnav';
   host.setAttribute('aria-label', `${PAGE_CONTEXT[pageId] || pageId} subsections`);
+  host.hidden = collapsedSidebarPrimaryPage === activeTopPage;
   const renderRouteButton = ({ label, route }) => `
     <button class="sidebar-subnav-btn sidebar-subnav-route" type="button" data-subsection-route="${escapeHtml(route)}"${route === currentRoute ? ' aria-current="location"' : ''}>
       <span class="sidebar-subnav-marker" aria-hidden="true"></span><span>${escapeHtml(label)}</span>
@@ -604,16 +622,12 @@ function renderSidebarSubnav(pageId, routeOverride = null) {
     panelEntries.length ? `<div class="sidebar-subnav-heading">In this view</div>${panelEntries.map(renderPanelButton).join('')}` : ''
   ].join('');
 
-  const activePrimary = nav.querySelector(`.nav-btn[data-page="${CSS.escape(pageId)}"]`)
-    || nav.querySelector('.nav-btn.active');
-  nav.querySelectorAll('.nav-btn').forEach(button => {
-    button.removeAttribute('aria-expanded');
-    button.removeAttribute('aria-controls');
-  });
-  activePrimary?.setAttribute('aria-expanded', 'true');
+  activePrimary?.setAttribute('aria-expanded', String(!host.hidden));
   activePrimary?.setAttribute('aria-controls', 'sidebar-subnav');
   if (activePrimary) activePrimary.insertAdjacentElement('afterend', host);
   else nav.prepend(host);
+
+  if (host.hidden) return;
 
   const buttons = [...host.querySelectorAll('[data-subsection-target], [data-subsection-route]')];
   buttons.forEach(button => {
@@ -645,6 +659,25 @@ function renderSidebarSubnav(pageId, routeOverride = null) {
     }, { rootMargin: '-112px 0px -62% 0px', threshold: [0, 0.2, 0.6] });
     observedTargets.forEach(target => subsectionObserver.observe(target));
   }
+}
+
+function togglePrimarySectionNavigation(button) {
+  const requestedPage = button?.dataset.page || 'mission-control';
+  const currentPage = currentPageFromLocation();
+  const requestedPrimaryPage = primaryPageFor(requestedPage);
+  const currentPrimaryPage = primaryPageFor(currentPage);
+  const isCurrentPrimary = button?.classList.contains('active') && requestedPrimaryPage === currentPrimaryPage;
+
+  if (isCurrentPrimary) {
+    collapsedSidebarPrimaryPage = collapsedSidebarPrimaryPage === currentPrimaryPage
+      ? null
+      : currentPrimaryPage;
+    renderSidebarSubnav(currentPage, routeForPage(currentPage));
+    return;
+  }
+
+  collapsedSidebarPrimaryPage = null;
+  setPage(requestedPage, { routeOverride: button?.dataset.route || null });
 }
 
 function scrollToContextTarget(route) {
@@ -1700,7 +1733,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null } = {}) {
     const page = el(`page-${id}`);
     if (page) page.classList.toggle("active", id === normalizedPageId);
   });
-  const activeTopPage = TOP_NAV_PAGE[normalizedPageId] || normalizedPageId;
+  const activeTopPage = primaryPageFor(normalizedPageId);
   const activeRoute = routeOverride || routeForPage(normalizedPageId);
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     const buttonRoute = String(btn.dataset.route || '');
@@ -9627,7 +9660,7 @@ function bindEvents() {
   el('auth-reset-request-btn')?.addEventListener('click', requestPasswordReset);
   el('auth-update-form')?.addEventListener('submit', updateRecoveredPassword);
   el('auth-signout-btn')?.addEventListener('click', signOutOperator);
-  document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page, { routeOverride: btn.dataset.route || null })));
+  document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => togglePrimarySectionNavigation(btn)));
   el('mobile-menu-btn')?.addEventListener('click', toggleMobileNav);
   el('work-table-view-btn')?.addEventListener('click', () => { workView = 'table'; renderTasks(); });
   el('work-board-view-btn')?.addEventListener('click', () => { workView = 'board'; renderTasks(); });

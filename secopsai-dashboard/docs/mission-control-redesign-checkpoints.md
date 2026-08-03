@@ -92,3 +92,20 @@ This ledger records the product redesign in verified, reversible checkpoints.
 - Acceptance: clicking a primary section reveals all of its secondary routes
   directly beneath it; Research and System no longer require top-bar tab clicks;
   mobile navigation closes after a nested destination is selected.
+
+## Checkpoint 10: Collapsible navigation hierarchy
+
+- Status: complete
+- Goal: make the nested sidebar behave like a predictable enterprise disclosure
+  tree instead of a permanently expanded list.
+- Implemented: selecting the active primary section collapses its route and
+  panel children; selecting it again restores them. Navigating to another
+  primary section expands that destination. Refresh rendering preserves the
+  current collapse choice, and the parent exposes a chevron plus synchronized
+  `aria-expanded` and `aria-controls` attributes.
+- Verification: contract tests cover the toggle state, hidden child container,
+  event binding, and disclosure affordance. Signed-in Chrome verification covers
+  both Research and System after the production checks pass.
+- Acceptance: secondary views exist only beneath their owner, no top-row tab is
+  required, active parents toggle in one click, and keyboard and assistive
+  technology users receive the same expanded/collapsed state.
