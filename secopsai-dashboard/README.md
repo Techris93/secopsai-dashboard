@@ -352,6 +352,8 @@ Optional `.env` values:
   - local operator token required by write endpoints
 - `TRIAGE_OPS_ADMIN_TOKEN`
   - optional local operator token for Triage Ops write endpoints; if omitted, the helper falls back to `BLOG_OPS_ADMIN_TOKEN`
+- `TRIAGE_API_TOKEN`
+  - optional server-side Tria.ge Researcher API token. It enables approval-gated **Submit to Tria.ge** and **Refresh Tria.ge result** actions while remaining invisible to browser configuration.
 - `SECOPSAI_EDGE_API_URL`
   - optional Edge API base URL used by the local helper or hosted Pages Worker to load sensor operations
 - `SECOPSAI_EDGE_OPERATIONS_TOKEN`

@@ -8821,7 +8821,7 @@ function bindResearchCaseDetailActions(researchCase) {
     artifact_sha256: el('research-sandbox-sha256')?.value,
     justification: el('research-sandbox-justification')?.value,
     behaviors: ['network behavior', 'filesystem behavior', 'process behavior'],
-    provider: 'manual-result-import',
+    provider: state.integrationStatus?.sandbox?.configured ? 'tria.ge' : 'manual-result-import',
     actor: 'dashboard-operator'
   }, event.currentTarget));
   document.querySelectorAll('#research-case-detail .research-intake-attach-btn').forEach(button => button.addEventListener('click', event => runResearchCaseAction('intake-attach', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget)));
@@ -8847,11 +8847,29 @@ function bindResearchCaseDetailActions(researchCase) {
   document.querySelectorAll('#research-case-detail .research-sandbox-status-btn').forEach(button => button.addEventListener('click', async event => {
     if (!(await requestConfirmation('Approve this sandbox request for a public handoff?', {
       title: 'Approve sandbox request',
-      context: 'Approval enables a later hash-verified manual download. It does not upload or execute the artifact. Tria.ge public submissions are visible publicly and cannot be deleted by public-cloud users.',
+      context: 'Approval enables a later hash-verified Tria.ge submission. It does not upload or execute the artifact by itself. Tria.ge public submissions are visible publicly and cannot be deleted by public-cloud users.',
       confirmLabel: 'Approve request'
     }))) return;
     const action = button.dataset.sandboxAction || 'sandbox-status';
     await runResearchCaseAction(action, { case_id: researchCase.case_id, request_id: button.dataset.requestId, status: button.dataset.sandboxStatus, public_submission_acknowledged: true, actor: 'dashboard-operator' }, event.currentTarget);
+  }));
+  document.querySelectorAll('#research-case-detail .research-sandbox-submit-btn').forEach(button => button.addEventListener('click', async event => {
+    if (!(await requestConfirmation('Submit this exact artifact to Tria.ge through the server-side API token?', {
+      title: 'Submit sandbox sample',
+      context: 'The local helper verifies the approved SHA-256 before upload. Tria.ge public submissions are visible publicly and cannot be deleted by public-cloud users.',
+      confirmLabel: 'Submit sample'
+    }))) return;
+    await runResearchCaseAction('sandbox-submit', {
+      case_id: researchCase.case_id,
+      request_id: button.dataset.requestId,
+      public_submission_acknowledged: true
+    }, event.currentTarget);
+  }));
+  document.querySelectorAll('#research-case-detail .research-sandbox-poll-btn').forEach(button => button.addEventListener('click', event => {
+    runResearchCaseAction('sandbox-poll', {
+      case_id: researchCase.case_id,
+      request_id: button.dataset.requestId
+    }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-sandbox-download-btn').forEach(button => button.addEventListener('click', event => {
     downloadApprovedSandboxArtifact(button.dataset.requestId, event.currentTarget);
@@ -9111,6 +9129,13 @@ function researchCasePrefill(researchCase = {}) {
 
 function renderResearchAutomationPanel(researchCase) {
   const prefill = researchCasePrefill(researchCase);
+  const sandboxProvider = state.integrationStatus?.sandbox || {
+    provider: 'tria.ge',
+    configured: false,
+    mode: 'manual-result-import',
+    warning: 'Tria.ge public submissions are visible to the public and must not contain confidential data.'
+  };
+  const sandboxApiConfigured = Boolean(sandboxProvider.configured);
   const subjects = researchCase.subjects || [];
   const packageSubject = prefill.packageSubject || {};
   const artifact = (researchCase.evidence || []).find(item => item.evidence_type === 'package_artifact' && item.status === 'active');
@@ -9150,7 +9175,7 @@ function renderResearchAutomationPanel(researchCase) {
     <div class="research-form-actions"><button class="secondary-btn" id="research-verdict-btn" type="button">Record Human Verdict</button><button class="secondary-btn" id="research-publication-approve-btn" type="button" ${reviews[0]?.status === 'needs_approval' ? '' : 'disabled'}>Approve Publication Review</button></div>
     <details class="research-action-drawer" open><summary>Prepare responsible disclosure</summary><p class="small">Recipient, subject, and body are prefilled from case subjects, registry contacts, and artifact hashes. Review before preparing the draft. Sending remains a separate approval gate.</p><div class="research-form-grid"><label><span>Recipient</span><input id="research-disclosure-recipient" list="research-disclosure-recipient-options" value="${escapeHtml(prefill.recipient || '')}" placeholder="maintainer or registry contact" /><datalist id="research-disclosure-recipient-options">${recipientOptions}</datalist></label><label><span>Subject</span><input id="research-disclosure-subject" value="${escapeHtml(prefill.subject || '')}" /></label><label class="research-span-2"><span>Body</span><textarea id="research-disclosure-body" rows="8" placeholder="Leave empty for the safe template.">${escapeHtml(prefill.body || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-disclosure-suggest-btn" type="button">Refresh Suggested Draft</button><button class="primary-btn" id="research-disclosure-btn" type="button">Prepare Disclosure</button></div></details>
     <details class="research-action-drawer"><summary>Acquire an unavailable artifact</summary><p class="small">Use this when an official registry no longer serves the exact version. The request is an auditable draft and does not send email automatically or change the case verdict.</p><div class="research-form-grid"><label><span>Research partner or contact</span><input id="research-partner-recipient" value="${escapeHtml(prefill.recipient || '')}" placeholder="security@partner.example" /></label><label class="research-span-2"><span>Reason and requested provenance</span><textarea id="research-partner-reason" rows="5" placeholder="Request the exact package, original source, and chain of custody.">${escapeHtml(prefill.partnerReason || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-partner-request-btn" type="button">Request Artifact From Research Partner</button></div>${(researchCase.partner_requests || []).slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)}</div>`).join('')}</details>
-    <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">Create an approval record for one exact artifact hash. Until Tria.ge API access is configured, an approved request can prepare a hash-verified browser download for manual public upload. SecOpsAI never executes the sample locally.</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || prefill.artifactHash || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="3">${escapeHtml(prefill.sandboxJustification || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
+    <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">Create an approval record for one exact artifact hash. ${sandboxApiConfigured ? 'Tria.ge API access is configured on the local helper. After approval, SecOpsAI can submit the exact hash-verified artifact through the server-side token and poll the sanitized result.' : 'Tria.ge API access is not configured, so an approved request prepares a hash-verified browser download for manual public upload.'} SecOpsAI never executes the sample locally. ${escapeHtml(sandboxProvider.warning || '')}</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || prefill.artifactHash || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="3">${escapeHtml(prefill.sandboxJustification || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
     <div class="research-automation-status">
       <strong>Jobs and approvals</strong>
       ${jobs.length ? jobs.map(job => `<div class="feed-item"><code>${escapeHtml(job.job_id)}</code> · ${escapeHtml(statusLabel(job.status))} · ${escapeHtml(statusLabel(job.action))}${job.status === 'awaiting_review' ? ` <button class="mini-btn research-intake-attach-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Attach Verified Evidence</button>` : ''}${['failed','expired','canceled'].includes(job.status) ? ` <button class="mini-btn research-job-retry-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Retry</button>` : ''}${['queued','running','awaiting_review'].includes(job.status) ? ` <button class="mini-btn research-job-cancel-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : ''}</div>`).join('') : '<div class="small">No automated research jobs yet.</div>'}
@@ -9158,9 +9183,12 @@ function renderResearchAutomationPanel(researchCase) {
       ${disclosures.length ? disclosures.slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.disclosure_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)} <button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="approved" type="button">Approve</button><button class="mini-btn research-disclosure-status-btn" data-disclosure-id="${escapeHtml(item.disclosure_id)}" data-disclosure-status="sent" type="button">Record Sent</button></div>`).join('') : ''}
       ${sandboxes.length ? sandboxes.slice(0, 3).map(item => {
         const matchingArtifact = artifacts.find(candidate => String(candidate.sha256 || '').toLowerCase() === String(item.artifact_sha256 || '').toLowerCase());
-        const canPrepare = item.status === 'approved' && Boolean(matchingArtifact?.available ?? matchingArtifact);
-        const canRecord = ['approved', 'submitted'].includes(item.status);
-        return `<div class="feed-item sandbox-workflow-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-action="sandbox-approve" data-sandbox-status="approved" type="button">Approve public handoff</button>` : ''}${canPrepare ? ` <button class="mini-btn research-sandbox-download-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Download exact sample</button>` : ''}${canRecord ? `<details class="research-inline-state"><summary>Record manual Tria.ge result</summary><div class="research-form-grid"><label class="research-span-2"><span>Public report URL</span><input id="research-sandbox-result-url-${escapeHtml(item.request_id)}" placeholder="https://tria.ge/analysis-id" /></label><label><span>Result state</span><select id="research-sandbox-result-status-${escapeHtml(item.request_id)}"><option value="completed">Completed</option><option value="failed">Failed</option></select></label><label><span>Tria.ge score</span><input id="research-sandbox-result-score-${escapeHtml(item.request_id)}" type="number" min="0" max="10" step="0.1" /></label><label class="research-span-2"><span>Reviewed behavior summary</span><textarea id="research-sandbox-result-summary-${escapeHtml(item.request_id)}" rows="4" placeholder="Record observed runtime behavior, important limitations, and whether indicators were independently validated."></textarea></label><button class="mini-btn research-sandbox-result-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Attach sanitized result</button></div></details>` : ''}</div>`;
+        const artifactAvailable = Boolean(matchingArtifact?.available ?? matchingArtifact);
+        const canSubmit = sandboxApiConfigured && item.status === 'approved' && artifactAvailable;
+        const canPoll = sandboxApiConfigured && item.status === 'submitted';
+        const canPrepare = !sandboxApiConfigured && item.status === 'approved' && artifactAvailable;
+        const canRecord = !sandboxApiConfigured && ['approved', 'submitted'].includes(item.status);
+        return `<div class="feed-item sandbox-workflow-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(sandboxApiConfigured ? 'tria.ge api' : item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-action="sandbox-approve" data-sandbox-status="approved" type="button">Approve public submission</button>` : ''}${canSubmit ? ` <button class="mini-btn research-sandbox-submit-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Submit to Tria.ge</button>` : ''}${canPoll ? ` <button class="mini-btn research-sandbox-poll-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Refresh Tria.ge result</button>` : ''}${canPrepare ? ` <button class="mini-btn research-sandbox-download-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Download exact sample</button>` : ''}${canRecord ? `<details class="research-inline-state"><summary>Record manual Tria.ge result</summary><div class="research-form-grid"><label class="research-span-2"><span>Public report URL</span><input id="research-sandbox-result-url-${escapeHtml(item.request_id)}" placeholder="https://tria.ge/analysis-id" /></label><label><span>Result state</span><select id="research-sandbox-result-status-${escapeHtml(item.request_id)}"><option value="completed">Completed</option><option value="failed">Failed</option></select></label><label><span>Tria.ge score</span><input id="research-sandbox-result-score-${escapeHtml(item.request_id)}" type="number" min="0" max="10" step="0.1" /></label><label class="research-span-2"><span>Reviewed behavior summary</span><textarea id="research-sandbox-result-summary-${escapeHtml(item.request_id)}" rows="4" placeholder="Record observed runtime behavior, important limitations, and whether indicators were independently validated."></textarea></label><button class="mini-btn research-sandbox-result-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Attach sanitized result</button></div></details>` : ''}</div>`;
       }).join('') : ''}
     </div>
   `);

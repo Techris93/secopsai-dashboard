@@ -21,6 +21,8 @@ def test_research_actions_are_typed_and_not_shell_commands():
         "suggest-disclosure",
         "prepare-disclosure",
         "sandbox-request",
+        "sandbox-submit",
+        "sandbox-poll",
         "job-retry",
         "job-cancel",
         "pipeline-start",
@@ -266,6 +268,47 @@ def test_sandbox_approval_requires_public_acknowledgement():
             "sandbox-approve",
             {"request_id": "SBX-AAAAAAAAAAAAAAAA", "public_submission_acknowledged": False},
         )
+
+
+def test_triage_sandbox_api_actions_are_approval_gated_and_typed():
+    with pytest.raises(ValueError):
+        dashboard_server.build_research_case_args(
+            "sandbox-submit",
+            {"request_id": "SBX-AAAAAAAAAAAAAAAA", "public_submission_acknowledged": False},
+        )
+
+    submit = dashboard_server.build_research_case_args(
+        "sandbox-submit",
+        {"request_id": "SBX-AAAAAAAAAAAAAAAA", "public_submission_acknowledged": True},
+    )
+    assert submit == [
+        "research",
+        "sandbox",
+        "submit",
+        "SBX-AAAAAAAAAAAAAAAA",
+        "--public-submission-acknowledged",
+    ]
+
+    poll = dashboard_server.build_research_case_args(
+        "sandbox-poll", {"request_id": "SBX-AAAAAAAAAAAAAAAA"}
+    )
+    assert poll == ["research", "sandbox", "poll", "SBX-AAAAAAAAAAAAAAAA"]
+
+
+def test_triage_sandbox_api_ui_uses_server_side_token_and_keeps_manual_fallback():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    assert "Submit to Tria.ge" in app
+    assert "Refresh Tria.ge result" in app
+    assert "runResearchCaseAction('sandbox-submit'" in app
+    assert "runResearchCaseAction('sandbox-poll'" in app
+    assert "public_submission_acknowledged: true" in app
+    assert "manual-result-import" in app
+    assert "Download exact sample" in app
+    assert "'sandbox-submit'" in server
+    assert "'sandbox-poll'" in server
+    assert "TRIAGE_API_TOKEN" in server
+    assert "public sandbox submission acknowledgment is required" in server
 
 
 def test_manual_sandbox_handoff_is_approval_gated_and_hash_identified():

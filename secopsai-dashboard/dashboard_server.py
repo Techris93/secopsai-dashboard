@@ -101,6 +101,8 @@ RESEARCH_CASE_ACTIONS = {
     'sandbox-request',
     'sandbox-status',
     'sandbox-approve',
+    'sandbox-submit',
+    'sandbox-poll',
     'pipeline-start',
     'pipeline-resume',
     'pipeline-review',
@@ -1095,6 +1097,23 @@ def build_research_case_args(action, payload):
         args.append('--public-submission-acknowledged')
         add(args, '--actor', 'actor', 160)
         return args
+
+    if action == 'sandbox-submit':
+        request_id = _clean_string(payload.get('request_id'), 40).upper()
+        if not request_id:
+            raise ValueError('request_id is required')
+        if payload.get('public_submission_acknowledged') is not True:
+            raise ValueError('public sandbox submission acknowledgment is required')
+        return [
+            'research', 'sandbox', 'submit', request_id,
+            '--public-submission-acknowledged',
+        ]
+
+    if action == 'sandbox-poll':
+        request_id = _clean_string(payload.get('request_id'), 40).upper()
+        if not request_id:
+            raise ValueError('request_id is required')
+        return ['research', 'sandbox', 'poll', request_id]
 
     if action == 'jobs':
         args = ['research', 'jobs', 'list']
@@ -3316,6 +3335,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     },
                 },
                 'ai_guard': build_ai_guard(),
+                'sandbox': {
+                    'provider': 'tria.ge',
+                    'configured': bool(os.environ.get('TRIAGE_API_TOKEN', '').strip()),
+                    'mode': 'public' if os.environ.get('TRIAGE_API_TOKEN', '').strip() else 'manual-result-import',
+                    'public_submission': True,
+                    'warning': 'Tria.ge public submissions are visible to the public and must not contain confidential data.',
+                },
             }
             return json_response(self, 200, payload)
 
