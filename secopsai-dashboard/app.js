@@ -4587,6 +4587,9 @@ function renderIntelligenceModelSelect() {
   const models = intelligenceModels();
   const selected = intelligenceSelectedModel();
   const fallback = Array.isArray(state.intelligence.data?.bridge?.fallback_models) ? state.intelligence.data.bridge.fallback_models : [];
+  const effectiveChain = Array.isArray(state.intelligence.data?.bridge?.effective_model_chain)
+    ? state.intelligence.data.bridge.effective_model_chain
+    : [selected, ...fallback].filter(Boolean);
   if (!models.length) {
     const errorText = state.intelligence.data?.models_error ? `Catalog unavailable — provider default will be used` : 'Catalog loading…';
     select.innerHTML = `<option value="">${escapeHtml(errorText)}</option>`;
@@ -4611,7 +4614,7 @@ function renderIntelligenceModelSelect() {
   }
   const hint = el('intelligence-model-hint');
   if (hint) {
-    const fallbackText = fallback.length ? ` Fallback chain: ${fallback.join(' → ')}.` : '';
+    const fallbackText = effectiveChain.length ? ` Effective chain: ${effectiveChain.join(' → ')}.` : '';
     hint.textContent = `Runs the next queued job on this model.${fallbackText}`;
   }
   state.intelligence.selectedModel = selected;
@@ -4731,7 +4734,9 @@ function renderIntelligence() {
   const providerHealth = bridge.providers && typeof bridge.providers === 'object' ? bridge.providers : {};
   const providerRows = Object.entries(providerHealth).map(([model, item]) => {
     const status = String(item?.status || 'unknown');
-    const detail = status === 'ready' ? `${item?.http_status ? `HTTP ${item.http_status}` : 'live probe passed'}` : (item?.error || 'provider unavailable');
+    const detail = status === 'ready'
+      ? `${item?.http_status ? `HTTP ${item.http_status}; ` : ''}live probe passed${item?.transport_diagnostic ? ` · ${item.transport_diagnostic}` : ''}`
+      : (item?.error || 'provider unavailable');
     return `<div class="kv-row"><div class="kv-key">${escapeHtml(model)}</div><div class="kv-val"><strong>${escapeHtml(humanizeSnake(status))}</strong><div class="small">${escapeHtml(detail)}</div></div></div>`;
   }).join('');
   if (bridgeDetail) bridgeDetail.innerHTML = `
@@ -4900,8 +4905,16 @@ function renderIntelligence() {
     ? '<div class="empty-state compact">No learning proposals yet. A cycle remains blocked until both verified true-positive and false-positive labels meet the minimum dataset policy.</div>'
     : `<div class="table-wrap"><table><thead><tr><th>Proposal</th><th>Stage</th><th>Holdout</th><th>False negatives</th><th>Action</th></tr></thead><tbody>${learningProposals.map(p => {
         const holdout = p.replay_metrics?.holdout || {};
+        const evaluationStatus = String(p.replay_metrics?.evaluation_status || p.parameters?.evaluation_status || '').toLowerCase();
+        const insufficient = evaluationStatus === 'insufficient_data'
+          || (Number(holdout.tp || 0) + Number(holdout.fp || 0) === 0)
+          || (Number(holdout.tp || 0) + Number(holdout.fn || 0) === 0);
         const next = p.status === 'shadow_ready' ? 'shadow' : (p.status === 'shadow' ? 'canary' : (p.status === 'canary' ? 'active' : ''));
-        return `<tr><td><strong>${escapeHtml(humanizeSnake(p.proposal_type || 'risk_ranker'))}</strong><div class="small mono">${escapeHtml(p.proposal_id || '')}</div></td><td><span class="status-pill">${escapeHtml(humanizeSnake(p.status || 'unknown'))}</span></td><td>${escapeHtml(String(Math.round(Number(holdout.precision || 0)*100)))}% precision<div class="small">${escapeHtml(String(Math.round(Number(holdout.recall || 0)*100)))}% recall</div></td><td>${escapeHtml(String(holdout.fn || 0))}</td><td>${next ? `<button class="mini-btn" data-learning-deploy="${escapeHtml(p.proposal_id)}" data-learning-stage="${next}" type="button">Promote to ${escapeHtml(next)}</button>` : ''}${['shadow','canary','active'].includes(p.status) ? `<button class="mini-btn" data-learning-rollback="${escapeHtml(p.proposal_id)}" type="button">Rollback</button>` : ''}</td></tr>`;
+        const holdoutCell = insufficient
+          ? 'Insufficient data<div class="small">Precision and recall are undefined until the holdout contains both required observations.</div>'
+          : `${escapeHtml(String(Math.round(Number(holdout.precision || 0)*100)))}% precision<div class="small">${escapeHtml(String(Math.round(Number(holdout.recall || 0)*100)))}% recall</div>`;
+        const falseNegativeCell = insufficient ? '—' : escapeHtml(String(holdout.fn || 0));
+        return `<tr><td><strong>${escapeHtml(humanizeSnake(p.proposal_type || 'risk_ranker'))}</strong><div class="small mono">${escapeHtml(p.proposal_id || '')}</div></td><td><span class="status-pill">${escapeHtml(humanizeSnake(p.status || 'unknown'))}</span></td><td>${holdoutCell}</td><td>${falseNegativeCell}</td><td>${next ? `<button class="mini-btn" data-learning-deploy="${escapeHtml(p.proposal_id)}" data-learning-stage="${next}" type="button">Promote to ${escapeHtml(next)}</button>` : ''}${['shadow','canary','active'].includes(p.status) ? `<button class="mini-btn" data-learning-rollback="${escapeHtml(p.proposal_id)}" type="button">Rollback</button>` : ''}</td></tr>`;
       }).join('')}</tbody></table></div>`;
   const learningDeploymentsEl = el('detection-learning-deployments');
   if (learningDeploymentsEl) learningDeploymentsEl.innerHTML = learningDeployments.length
