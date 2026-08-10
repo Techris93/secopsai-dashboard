@@ -118,7 +118,7 @@ def test_triage_state_exposes_persisted_native_statuses(monkeypatch):
         lambda: {"open_findings": 1, "findings": []},
     )
 
-    def fake_list(status="open", limit=20):
+    def fake_list(status="open", limit=20, **kwargs):
         if status == "open":
             return {"findings": [{"finding_id": "EDGE-AAAAAAAAAAAAAAAA", "status": "open", "severity": "low"}]}
         return {
@@ -146,6 +146,30 @@ def test_triage_state_exposes_persisted_native_statuses(monkeypatch):
     assert statuses["EDGE-AAAAAAAAAAAAAAAA"]["status"] == "closed"
     assert statuses["EDGE-AAAAAAAAAAAAAAAA"]["disposition"] == "expected_behavior"
     assert statuses["SCM-BBBBBBBBBBBBBBBB"]["status"] == "in_review"
+
+
+def test_triage_readers_use_core_in_process(monkeypatch):
+    calls = []
+
+    def fake_summary(*, db_path=None):
+        calls.append(("summary", db_path))
+        return {"open_findings": 0, "findings": []}
+
+    def fake_list(*, db_path=None, status=None, limit=20, **kwargs):
+        calls.append(("list", db_path, status, limit))
+        return []
+
+    monkeypatch.setattr(dashboard_server, "_core_triage_api", lambda: (fake_summary, fake_list))
+
+    def fail_if_spawned(*args, **kwargs):
+        raise AssertionError("triage-state must not spawn a subprocess")
+
+    monkeypatch.setattr(dashboard_server.subprocess, "run", fail_if_spawned)
+    assert dashboard_server.run_secopsai_triage_summary()["open_findings"] == 0
+    assert dashboard_server.run_secopsai_triage_list(status="open", limit=3) == {"findings": []}
+    assert calls[0][0] == "summary"
+    assert calls[1][0:3] == ("list", dashboard_server.SECOPSAI_DB_PATH, "open")
+    assert calls[1][3] == 3
 
 
 def test_pipeline_actions_map_to_typed_core_commands():

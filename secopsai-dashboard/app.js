@@ -4719,6 +4719,7 @@ function renderIntelligence() {
   if (summary) summary.innerHTML = `
     <div class="metric-card"><div class="metric">${jobs.length}</div><div class="metric-label">Recorded jobs</div></div>
     <div class="metric-card"><div class="metric">${counts.queued || 0}</div><div class="metric-label">Queued</div></div>
+    <div class="metric-card"><div class="metric">${counts.awaiting_provider || 0}</div><div class="metric-label">Awaiting provider</div></div>
     <div class="metric-card"><div class="metric">${counts.running || 0}</div><div class="metric-label">Running</div></div>
     <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed</div></div>`;
 
@@ -4727,6 +4728,12 @@ function renderIntelligence() {
   const bridgeDetail = el('intelligence-bridge-detail');
   renderIntelligenceModelSelect();
   const selectedModelLabel = intelligenceSelectedModel() || 'Provider default';
+  const providerHealth = bridge.providers && typeof bridge.providers === 'object' ? bridge.providers : {};
+  const providerRows = Object.entries(providerHealth).map(([model, item]) => {
+    const status = String(item?.status || 'unknown');
+    const detail = status === 'ready' ? `${item?.http_status ? `HTTP ${item.http_status}` : 'live probe passed'}` : (item?.error || 'provider unavailable');
+    return `<div class="kv-row"><div class="kv-key">${escapeHtml(model)}</div><div class="kv-val"><strong>${escapeHtml(humanizeSnake(status))}</strong><div class="small">${escapeHtml(detail)}</div></div></div>`;
+  }).join('');
   if (bridgeDetail) bridgeDetail.innerHTML = `
     <div class="kv-row"><div class="kv-key">Queue mode</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.queue_mode || data?.mode || 'unknown'))}</div></div>
     <div class="kv-row"><div class="kv-key">Selected model</div><div class="kv-val">${escapeHtml(selectedModelLabel)}</div></div>
@@ -4734,6 +4741,7 @@ function renderIntelligence() {
     <div class="kv-row"><div class="kv-key">Codex</div><div class="kv-val">${escapeHtml(bridge.codex_version || (localMode ? 'Unavailable' : 'Runs on local sensor'))}</div></div>
     <div class="kv-row"><div class="kv-key">Authentication</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.authentication_method || (localMode ? 'unknown' : 'local ChatGPT sign-in')))}</div></div>
     <div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">${escapeHtml(humanizeSnake(service.status || 'unknown'))}</div></div>
+    ${providerRows ? `<div class="kv-row"><div class="kv-key">Live providers</div><div class="kv-val"><div class="kv-list">${providerRows}</div></div></div>` : ''}
     <div class="kv-row"><div class="kv-key">ChatGPT credentials</div><div class="kv-val">Codex-owned; never stored by SecOpsAI</div></div>
     ${bridge.message ? `<div class="small" style="margin-top:10px;">${escapeHtml(bridge.message)}</div>` : ''}`;
 
@@ -4911,7 +4919,7 @@ function renderIntelligence() {
       table.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody>${jobs.map(job => {
         const resultView = intelligenceResultView(job);
         const hasResult = Boolean(resultView.summary || resultView.confirmedFacts.length || resultView.publicationRisks.length || job.error_message);
-        const cancel = String(job.status || '') === 'queued'
+        const cancel = ['queued', 'awaiting_provider'].includes(String(job.status || ''))
           ? `<button class="mini-btn" data-intelligence-cancel="${escapeHtml(job.job_id)}" type="button">Cancel</button>`
           : '';
         const requeue = String(job.status || '') === 'failed'

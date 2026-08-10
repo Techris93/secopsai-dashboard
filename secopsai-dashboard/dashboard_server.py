@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.parse
@@ -14,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+from threading import RLock
 from urllib.parse import urlparse
 
 DIR = Path(__file__).resolve().parent
@@ -376,6 +378,48 @@ def sort_latest_first(items, fields=DEFAULT_LATEST_FIRST_FIELDS):
 def latest_json_files(directory: Path, pattern: str, limit: int = 5):
     if not directory.exists():
         return []
+    # Core writes the JSON files consumed here with a UTC timestamp in the
+    # filename. Sorting those names is equivalent to sorting their creation
+    # time, but avoids stat'ing tens of thousands of historical reports on
+    # every triage-state refresh. Keep the mtime path for any future caller
+    # that supplies a non-timestamped JSON filename.
+    known_patterns = {'*.json', 'openclaw-findings-*.json', 'triage-orchestrator-index-*.json'}
+    if pattern not in known_patterns:
+        return sorted(directory.glob(pattern), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]
+
+    def matches(name):
+        if pattern == '*.json':
+            return name.endswith('.json')
+        if pattern == 'openclaw-findings-*.json':
+            return name.startswith('openclaw-findings-') and name.endswith('.json')
+        if pattern == 'triage-orchestrator-index-*.json':
+            return name.startswith('triage-orchestrator-index-') and name.endswith('.json')
+        return False
+
+    def has_timestamp_suffix(name):
+        suffix = name[-21:]
+        return (
+            len(name) >= 21
+            and suffix[0] == '-'
+            and suffix[9] == '-'
+            and suffix[16:] == '.json'
+            and suffix[1:9].isdigit()
+            and suffix[10:16].isdigit()
+        )
+
+    timestamped = []
+    matched = []
+    try:
+        for name in os.listdir(directory):
+            if not matches(name):
+                continue
+            matched.append(name)
+            if has_timestamp_suffix(name):
+                timestamped.append(name)
+    except OSError:
+        return []
+    if len(matched) == len(timestamped):
+        return [directory / name for name in sorted(timestamped, reverse=True)[:limit]]
     return sorted(directory.glob(pattern), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]
 
 
@@ -452,23 +496,60 @@ def list_session_payloads(status=None, finding_id=None, limit=20):
     return rows[:limit]
 
 
-def run_secopsai_triage_summary():
-    python_bin = SECOPSAI_ROOT / '.venv' / 'bin' / 'python3'
-    if not python_bin.exists():
+_CORE_TRIAGE_API_ROOT = None
+_CORE_TRIAGE_API = None
+_CORE_TRIAGE_LOCK = RLock()
+
+
+def _triage_profile_enabled():
+    return str(os.environ.get('SECOPSAI_TRIAGE_PROFILE', '')).strip().lower() in {'1', 'true', 'yes'}
+
+
+def _core_triage_api():
+    """Load the local Core triage readers once for the helper process.
+
+    The dashboard helper and Core live in separate repositories, but the
+    helper already treats ``SECOPSAI_ROOT`` as its local authority. Importing
+    the read-only triage functions from that root avoids launching a new
+    Python interpreter for every dashboard refresh.
+    """
+    global _CORE_TRIAGE_API_ROOT, _CORE_TRIAGE_API
+    root = str(SECOPSAI_ROOT)
+    if _CORE_TRIAGE_API_ROOT == root:
+        return _CORE_TRIAGE_API
+
+    _CORE_TRIAGE_API_ROOT = root
+    _CORE_TRIAGE_API = None
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    try:
+        from secopsai.triage.engine import list_triage_findings
+        from secopsai.triage.orchestrator import generate_dashboard_summary, generate_summary
+    except Exception:
+        # The local helper can still serve filesystem-backed panels when Core
+        # is unavailable. Do not fall back to per-request subprocesses.
+        return None
+    _CORE_TRIAGE_API = (generate_summary, list_triage_findings, generate_dashboard_summary)
+    return _CORE_TRIAGE_API
+
+
+def run_secopsai_triage_summary(profile=None):
+    api = _core_triage_api()
+    if not api:
         return None
     try:
-        args = [str(python_bin), '-m', 'secopsai.cli', 'triage', 'summary', '--json']
-        if SECOPSAI_DB_PATH:
-            args.extend(['--db-path', SECOPSAI_DB_PATH])
-        result = subprocess.run(
-            args,
-            cwd=str(SECOPSAI_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=45,
-            check=True,
-        )
-        return json.loads(result.stdout)
+        generate_summary = api[0]
+        dashboard_summary = api[2] if len(api) > 2 else None
+        lock_started = time.perf_counter()
+        with _CORE_TRIAGE_LOCK:
+            lock_wait = time.perf_counter() - lock_started
+            compute_started = time.perf_counter()
+            result = (dashboard_summary or generate_summary)(db_path=SECOPSAI_DB_PATH or None)
+        compute_elapsed = time.perf_counter() - compute_started
+        if isinstance(profile, dict):
+            profile['summary_lock_wait_ms'] = round(lock_wait * 1000, 3)
+            profile['summary_compute_ms'] = round(compute_elapsed * 1000, 3)
+        return result
     except Exception:
         return None
 
@@ -481,11 +562,32 @@ def invalidate_native_status_cache():
     _NATIVE_STATUS_CACHE['statuses'] = []
 
 
-def run_secopsai_native_statuses(limit=500):
+def run_secopsai_native_statuses(limit=500, profile=None):
     now = time.monotonic()
     if now - float(_NATIVE_STATUS_CACHE.get('at') or 0) < 3.0:
+        if isinstance(profile, dict):
+            profile['all_findings_cache_hit'] = True
+            profile['all_findings_lock_wait_ms'] = 0.0
+            profile['all_findings_compute_ms'] = 0.0
         return list(_NATIVE_STATUS_CACHE.get('statuses') or [])
-    payload = run_secopsai_triage_list(status=None, limit=limit)
+    if isinstance(profile, dict):
+        profile['all_findings_cache_hit'] = False
+    if profile is None:
+        payload = run_secopsai_triage_list(
+            status=None,
+            limit=limit,
+            include_payload=False,
+            initialize_db=False,
+        )
+    else:
+        payload = run_secopsai_triage_list(
+            status=None,
+            limit=limit,
+            profile=profile,
+            timing_key='all_findings',
+            include_payload=False,
+            initialize_db=False,
+        )
     findings = payload.get('findings', []) if isinstance(payload, dict) else []
     statuses = [
         {
@@ -502,37 +604,60 @@ def run_secopsai_native_statuses(limit=500):
     return list(statuses)
 
 
-def run_secopsai_triage_list(status='open', limit=20):
-    python_bin = SECOPSAI_ROOT / '.venv' / 'bin' / 'python3'
-    if not python_bin.exists():
+def run_secopsai_triage_list(
+    status='open',
+    limit=20,
+    profile=None,
+    timing_key='findings',
+    include_payload=True,
+    initialize_db=True,
+):
+    api = _core_triage_api()
+    if not api:
         return None
     try:
-        args = [str(python_bin), '-m', 'secopsai.cli', 'triage', 'list']
-        if status:
-            args.extend(['--status', status])
-        args.extend(['--json', '--limit', str(limit)])
-        if SECOPSAI_DB_PATH:
-            args.extend(['--db-path', SECOPSAI_DB_PATH])
-        result = subprocess.run(
-            args,
-            cwd=str(SECOPSAI_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=45,
-            check=True,
-        )
-        return json.loads(result.stdout)
+        list_triage_findings = api[1]
+        lock_started = time.perf_counter()
+        with _CORE_TRIAGE_LOCK:
+            lock_wait = time.perf_counter() - lock_started
+            compute_started = time.perf_counter()
+            list_kwargs = {
+                'db_path': SECOPSAI_DB_PATH or None,
+                'status': status,
+                'limit': limit,
+            }
+            if include_payload is not True:
+                list_kwargs['include_payload'] = include_payload
+            if initialize_db is not True:
+                list_kwargs['initialize_db'] = initialize_db
+            findings = list_triage_findings(**list_kwargs)
+            compute_elapsed = time.perf_counter() - compute_started
+        if isinstance(profile, dict):
+            profile[f'{timing_key}_lock_wait_ms'] = round(lock_wait * 1000, 3)
+            profile[f'{timing_key}_compute_ms'] = round(compute_elapsed * 1000, 3)
+        return {'findings': findings}
     except Exception:
         return None
 
 
-def collect_secopsai_triage_state():
-    summary = run_secopsai_triage_summary()
+def collect_secopsai_triage_state(profile=None):
+    summary = run_secopsai_triage_summary(profile=profile) if profile is not None else run_secopsai_triage_summary()
     if not isinstance(summary, dict):
-        latest_summary_files = latest_json_files(SECOPSAI_ROOT / 'reports' / 'triage' / 'orchestrator', '*.json', limit=1)
+        orchestrator_dir = SECOPSAI_ROOT / 'reports' / 'triage' / 'orchestrator'
+        latest_summary_files = latest_json_files(orchestrator_dir, 'triage-orchestrator-index-*.json', limit=1)
+        latest_summary_files = latest_summary_files or latest_json_files(orchestrator_dir, '*.json', limit=1)
         summary = read_json_file(latest_summary_files[0], {}) if latest_summary_files else {}
 
-    active_list_payload = run_secopsai_triage_list(status='open', limit=50)
+    if profile is None:
+        active_list_payload = run_secopsai_triage_list(status='open', limit=50)
+    else:
+        active_list_payload = run_secopsai_triage_list(
+            status='open',
+            limit=50,
+            profile=profile,
+            timing_key='open_findings',
+            initialize_db=False,
+        )
     active_findings = active_list_payload.get('findings', []) if isinstance(active_list_payload, dict) else []
     if not isinstance(active_findings, list):
         active_findings = []
@@ -543,7 +668,7 @@ def collect_secopsai_triage_state():
     # native closure from the current browser session.  Reading the Core store on
     # every triage-state refresh makes a close/triage action survive reloads and
     # gives the UI one authoritative status source for native decisions.
-    native_statuses = run_secopsai_native_statuses()
+    native_statuses = run_secopsai_native_statuses(profile=profile) if profile is not None else run_secopsai_native_statuses()
 
     raw_summary_findings = summary.get('findings', []) if isinstance(summary, dict) else []
     if not isinstance(raw_summary_findings, list):
@@ -573,7 +698,10 @@ def collect_secopsai_triage_state():
     applied = sort_latest_first(applied)
 
     recent_orchestrator = []
-    for path in latest_json_files(SECOPSAI_ROOT / 'reports' / 'triage' / 'orchestrator', '*.json', limit=5):
+    orchestrator_dir = SECOPSAI_ROOT / 'reports' / 'triage' / 'orchestrator'
+    indexed_reports = latest_json_files(orchestrator_dir, 'triage-orchestrator-index-*.json', limit=5)
+    report_paths = indexed_reports or latest_json_files(orchestrator_dir, '*.json', limit=5)
+    for path in report_paths:
         payload = read_json_file(path, {})
         if not isinstance(payload, dict):
             continue
@@ -644,12 +772,21 @@ def collect_secopsai_triage_state():
 
 
 def json_response(handler, code, payload):
+    profile = payload.get('_triage_timings_ms') if isinstance(payload, dict) else None
+    serialize_started = time.perf_counter()
     body = json.dumps(payload).encode('utf-8')
+    timing_header = None
+    if isinstance(profile, dict):
+        profile['serialization_ms'] = round((time.perf_counter() - serialize_started) * 1000, 3)
+        profile['body_bytes'] = len(body)
+        timing_header = json.dumps(profile, separators=(',', ':'), sort_keys=True)
     try:
         handler.send_response(code)
         handler.send_header('Content-Type', 'application/json')
         handler.send_header('Content-Length', str(len(body)))
         handler.send_header('Cache-Control', 'no-store')
+        if timing_header is not None:
+            handler.send_header('X-SecOpsAI-Triage-Timings', timing_header)
         handler.end_headers()
         handler.wfile.write(body)
     except (BrokenPipeError, ConnectionResetError):
@@ -3347,7 +3484,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == '/api/secopsai/triage-state':
             try:
-                return json_response(self, 200, collect_secopsai_triage_state())
+                profile = {} if _triage_profile_enabled() else None
+                payload = collect_secopsai_triage_state(profile=profile)
+                if profile is not None:
+                    payload['_triage_timings_ms'] = profile
+                return json_response(self, 200, payload)
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
