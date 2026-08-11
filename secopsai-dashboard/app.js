@@ -4542,14 +4542,40 @@ function renderIntelligenceResultModal() {
   body.innerHTML = `${meta}${verdict}<div class="intelligence-result-grid">${sections}</div>`;
 }
 
-function openIntelligenceResult(jobId) {
+async function loadIntelligenceJobDetail(jobId) {
+  const response = await dashboardApiFetch(`/api/secopsai/intelligence/jobs/${encodeURIComponent(jobId)}`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok || !payload.job) {
+    throw new Error(payload.error || `Unable to load analysis job (${response.status})`);
+  }
+  const jobs = state.intelligence.data?.jobs?.jobs;
+  if (Array.isArray(jobs)) {
+    const index = jobs.findIndex(item => String(item.job_id || '') === String(jobId));
+    if (index >= 0) jobs[index] = payload.job;
+    else jobs.unshift(payload.job);
+  }
+  return payload.job;
+}
+
+async function openIntelligenceResult(jobId) {
   state.intelligence.selectedJobId = jobId;
-  renderIntelligenceResultModal();
+  const initialJob = intelligenceJobs().find(item => item.job_id === jobId);
+  const body = el('intelligence-result-body');
+  if (body) body.innerHTML = '<p class="small">Loading the complete, normalized analysis…</p>';
   const modal = el('intelligence-result-modal');
   modal?.classList.remove('hidden');
   modal?.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
   el('intelligence-result-close')?.focus();
+  if (initialJob?.result_available && !Object.keys(initialJob.result || {}).length) {
+    try {
+      await loadIntelligenceJobDetail(jobId);
+    } catch (error) {
+      if (body) body.innerHTML = `<p class="error">${escapeHtml(error?.message || String(error))}</p>`;
+      return;
+    }
+  }
+  renderIntelligenceResultModal();
 }
 
 function closeIntelligenceResult() {
@@ -4712,26 +4738,36 @@ function renderIntelligence() {
   const learningSummary = learning.summary || {};
   const learningProposals = Array.isArray(learning.proposals) ? learning.proposals : [];
   const learningDeployments = Array.isArray(learning.deployments) ? learning.deployments : [];
-  const counts = jobs.reduce((result, job) => {
+  const recordedCounts = data?.jobs?.counts && typeof data.jobs.counts === 'object' ? data.jobs.counts : {};
+  const counts = Object.keys(recordedCounts).length ? recordedCounts : jobs.reduce((result, job) => {
     const status = String(job?.status || 'unknown');
     result[status] = (result[status] || 0) + 1;
     return result;
   }, {});
+  const recordedTotal = Object.values(counts).reduce((total, value) => total + Number(value || 0), 0);
 
   const summary = el('intelligence-summary');
   if (summary) summary.innerHTML = `
-    <div class="metric-card"><div class="metric">${jobs.length}</div><div class="metric-label">Recorded jobs</div></div>
+    <div class="metric-card"><div class="metric">${recordedTotal}</div><div class="metric-label">Recorded jobs</div></div>
     <div class="metric-card"><div class="metric">${counts.queued || 0}</div><div class="metric-label">Queued</div></div>
     <div class="metric-card"><div class="metric">${counts.awaiting_provider || 0}</div><div class="metric-label">Awaiting provider</div></div>
     <div class="metric-card"><div class="metric">${counts.running || 0}</div><div class="metric-label">Running</div></div>
     <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed</div></div>`;
 
   const bridgePill = el('intelligence-bridge-pill');
-  if (bridgePill) bridgePill.textContent = state.intelligence.loading ? 'Checking' : humanizeSnake(bridge.status || (data ? 'unavailable' : 'not_checked'));
   const bridgeDetail = el('intelligence-bridge-detail');
   renderIntelligenceModelSelect();
   const selectedModelLabel = intelligenceSelectedModel() || 'Provider default';
   const providerHealth = bridge.providers && typeof bridge.providers === 'object' ? bridge.providers : {};
+  const selectedProvider = bridge.selected_model ? providerHealth[bridge.selected_model] : null;
+  const selectedProviderReady = selectedProvider?.status === 'ready';
+  const healthStale = bridge.health_stale === true;
+  const bridgeDisplayStatus = state.intelligence.loading
+    ? 'Checking'
+    : (selectedProviderReady
+      ? (healthStale ? 'Ready · stale probe' : 'Ready')
+      : (bridge.live_ready ? 'Degraded' : (healthStale ? 'Stale' : humanizeSnake(bridge.status || (data ? 'unavailable' : 'not_checked')))));
+  if (bridgePill) bridgePill.textContent = bridgeDisplayStatus;
   const providerRows = Object.entries(providerHealth).map(([model, item]) => {
     const status = String(item?.status || 'unknown');
     const detail = status === 'ready'
@@ -4739,13 +4775,25 @@ function renderIntelligence() {
       : (item?.error || 'provider unavailable');
     return `<div class="kv-row"><div class="kv-key">${escapeHtml(model)}</div><div class="kv-val"><strong>${escapeHtml(humanizeSnake(status))}</strong><div class="small">${escapeHtml(detail)}</div></div></div>`;
   }).join('');
+  const codex = bridge.codex && typeof bridge.codex === 'object' ? bridge.codex : {};
+  const codexStatus = String(codex.status || '').trim();
+  const codexLabel = codexStatus === 'ready'
+    ? `Ready${codex.version ? ` · ${codex.version}` : ''}`
+    : (codexStatus ? humanizeSnake(codexStatus) : (localMode ? 'Unavailable' : 'Runs on local sensor'));
+  const healthAge = bridge.snapshot_age_seconds === null || bridge.snapshot_age_seconds === undefined
+    ? ''
+    : ` · ${formatCoverageLag(bridge.snapshot_age_seconds)} old`;
+  const selectedHealthLabel = selectedProviderReady
+    ? (healthStale ? 'last probe passed; refresh pending' : 'live probe passed')
+    : (selectedProvider?.error || 'no successful live probe recorded');
   if (bridgeDetail) bridgeDetail.innerHTML = `
     <div class="kv-row"><div class="kv-key">Queue mode</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.queue_mode || data?.mode || 'unknown'))}</div></div>
     <div class="kv-row"><div class="kv-key">Selected model</div><div class="kv-val">${escapeHtml(selectedModelLabel)}</div></div>
     <div class="kv-row"><div class="kv-key">Model catalog</div><div class="kv-val">${escapeHtml(String(data?.models?.count || 0))} models from OpenCodex</div></div>
-    <div class="kv-row"><div class="kv-key">Codex</div><div class="kv-val">${escapeHtml(bridge.codex_version || (localMode ? 'Unavailable' : 'Runs on local sensor'))}</div></div>
+    <div class="kv-row"><div class="kv-key">Codex</div><div class="kv-val">${escapeHtml(codexLabel)}</div></div>
     <div class="kv-row"><div class="kv-key">Authentication</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.authentication_method || (localMode ? 'unknown' : 'local ChatGPT sign-in')))}</div></div>
     <div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">${escapeHtml(humanizeSnake(service.status || 'unknown'))}</div></div>
+    <div class="kv-row"><div class="kv-key">Selected model health</div><div class="kv-val">${escapeHtml(selectedHealthLabel)}${healthAge ? `<div class="small">${escapeHtml(healthAge.replace(/^ · /, ''))}</div>` : ''}</div></div>
     ${providerRows ? `<div class="kv-row"><div class="kv-key">Live providers</div><div class="kv-val"><div class="kv-list">${providerRows}</div></div></div>` : ''}
     <div class="kv-row"><div class="kv-key">ChatGPT credentials</div><div class="kv-val">Codex-owned; never stored by SecOpsAI</div></div>
     ${bridge.message ? `<div class="small" style="margin-top:10px;">${escapeHtml(bridge.message)}</div>` : ''}`;
@@ -4931,7 +4979,7 @@ function renderIntelligence() {
     } else {
       table.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody>${jobs.map(job => {
         const resultView = intelligenceResultView(job);
-        const hasResult = Boolean(resultView.summary || resultView.confirmedFacts.length || resultView.publicationRisks.length || job.error_message);
+        const hasResult = Boolean(job.result_available || resultView.summary || resultView.confirmedFacts.length || resultView.publicationRisks.length || job.error_message);
         const cancel = ['queued', 'awaiting_provider'].includes(String(job.status || ''))
           ? `<button class="mini-btn" data-intelligence-cancel="${escapeHtml(job.job_id)}" type="button">Cancel</button>`
           : '';
@@ -5000,7 +5048,8 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
       poll: backgroundAction,
       isComplete: () => {
         if (!intelligenceJobId) return false;
-        const job = (state.intelligence.data?.jobs || []).find(item => String(item.job_id || '') === intelligenceJobId);
+        const jobRows = state.intelligence.data?.jobs?.jobs || [];
+        const job = jobRows.find(item => String(item.job_id || '') === intelligenceJobId);
         return Boolean(job && !['queued', 'running'].includes(String(job.status || '').toLowerCase()));
       },
       onTimeout: () => showToast('The intelligence action is still running. The console will continue updating in the background.', 'info', 6000)

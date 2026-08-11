@@ -1110,26 +1110,14 @@ def collect_intelligence_status():
     if not result.get('ok') or not isinstance(parsed, dict):
         compact = compact_cli_result(result)
         raise RuntimeError(compact.get('stderr') or compact.get('stdout') or 'Intelligence status is unavailable')
-    models_payload = None
-    models_error = ''
-    try:
-        models_result, models_parsed = run_cli_json(['intelligence', 'bridge', 'models'], timeout=30)
-        if models_result.get('ok') and isinstance(models_parsed, dict):
-            models_payload = models_parsed
-        else:
-            compact = compact_cli_result(models_result)
-            models_error = compact.get('stderr') or compact.get('stdout') or 'Model catalog unavailable'
-    except Exception as exc:
-        models_error = str(exc)[:300]
-    investigations = {}
-    try:
-        investigation_result, investigation_payload = run_cli_json(
-            ['intelligence', 'autopilot', 'investigations', 'status', *secopsai_db_args()], timeout=45,
-        )
-        if investigation_result.get('ok') and isinstance(investigation_payload, dict):
-            investigations = investigation_payload
-    except Exception as exc:
-        investigations = {'error': str(exc)[:300], 'runs': [], 'summary': {}}
+    # ``intelligence status`` already includes the bounded bridge model
+    # catalog and investigation summary. Launching separate CLI processes for
+    # both on every refresh made the console slower and allowed the three
+    # snapshots to disagree. Keep the status response single-sourced.
+    bridge_payload = parsed.get('bridge') if isinstance(parsed.get('bridge'), dict) else {}
+    models_payload = bridge_payload.get('models') if isinstance(bridge_payload.get('models'), dict) else None
+    models_error = '' if models_payload else 'Model catalog unavailable'
+    investigations = parsed.get('investigations') if isinstance(parsed.get('investigations'), dict) else {}
     return {
         'ok': True,
         'mode': 'local-helper',
@@ -3496,6 +3484,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             try:
                 payload = collect_intelligence_status()
                 return json_response(self, 200 if payload.get('ok') else 503, payload)
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path.startswith('/api/secopsai/intelligence/jobs/'):
+            job_id = parsed.path.rsplit('/', 1)[-1].strip().upper()
+            if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid intelligence job ID'})
+            try:
+                result, payload = run_cli_json(
+                    ['intelligence', 'jobs', 'show', job_id, *secopsai_db_args()],
+                    timeout=60,
+                )
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 404,
+                    {'ok': bool(result.get('ok')), 'job': payload, 'cli': compact_cli_result(result)},
+                )
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 

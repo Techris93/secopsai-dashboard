@@ -139,6 +139,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "function intelligenceResultView" in app
     assert "function renderIntelligenceResultModal" in app
     assert "function intelligenceResultMarkdown" in app
+    assert "bridge.codex && typeof bridge.codex === 'object'" in app
+    assert "Ready · stale probe" in app
     assert "autopilot-configure" in app
     assert "data-agent-triage-rollback" in app
     assert "Agent finding and alert review" in html
