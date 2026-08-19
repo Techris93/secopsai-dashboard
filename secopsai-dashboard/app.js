@@ -1438,6 +1438,7 @@ function escapeHtml(str = "") {
 function humanizeMachineText(value) {
   return String(value || '')
     .replace(/\b[a-z0-9]+(?:_[a-z0-9]+)+\b/gi, token => token.replace(/_+/g, ' '))
+    .replace(/_/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

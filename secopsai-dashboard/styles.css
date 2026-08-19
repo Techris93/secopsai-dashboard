@@ -7867,7 +7867,6 @@ body {
 .page-header h2 {
   font-size: 1.4rem;
   letter-spacing: -0.01em;
-  border-bottom: 1.5px solid var(--text);
   padding-bottom: 8px;
   width: 100%;
 }
@@ -7966,7 +7965,7 @@ thead th {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
-  border-bottom: 1.5px solid var(--text);
+  border-bottom: 1px solid var(--border);
   background: var(--card-muted);
 }
 td { border-bottom: 1px solid var(--border); }
