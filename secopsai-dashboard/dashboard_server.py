@@ -994,6 +994,11 @@ def build_intelligence_args(action, payload):
         if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):
             raise ValueError('Invalid intelligence job ID')
         return ['intelligence', 'jobs', 'requeue', job_id, '--actor', 'mission-control', *secopsai_db_args()]
+    if action == 'select-model':
+        model = str(payload.get('model') or '').strip()
+        if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+            raise ValueError('Invalid bridge model')
+        return ['intelligence', 'bridge', 'select-model', model, *secopsai_db_args()]
     if action == 'run-once':
         model = str(payload.get('model') or '').strip()
         args = ['intelligence', 'bridge', 'run', '--once']

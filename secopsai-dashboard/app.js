@@ -4389,9 +4389,11 @@ function intelligenceModels() {
 function intelligenceSelectedModel() {
   const models = intelligenceModels();
   const ids = models.map(item => String(item?.id || ''));
+  const persisted = String(state.intelligence.data?.bridge?.selected_model || '');
+  if (persisted && (ids.includes(persisted) || !models.length)) return persisted;
   const stored = String(state.intelligence.selectedModel || '');
   if (stored && ids.includes(stored)) return stored;
-  const defaultModel = String(state.intelligence.data?.models?.default_model || state.intelligence.data?.bridge?.selected_model || '');
+  const defaultModel = String(state.intelligence.data?.models?.default_model || '');
   if (defaultModel && (ids.includes(defaultModel) || !models.length)) return defaultModel;
   return ids[0] || '';
 }
@@ -4642,7 +4644,9 @@ function renderIntelligenceModelSelect() {
   const hint = el('intelligence-model-hint');
   if (hint) {
     const fallbackText = effectiveChain.length ? ` Effective chain: ${effectiveChain.join(' → ')}.` : '';
-    hint.textContent = `Runs the next queued job on this model.${fallbackText}`;
+    hint.textContent = selected
+      ? `Runs the next queued job on ${selected}. Other models are not probed or used unless you explicitly configure fallbacks.`
+      : 'Pick a model. The next job and health probe will use only that selection.';
   }
   state.intelligence.selectedModel = selected;
   if (selected) sessionStorage.setItem('secopsai_bridge_model', selected);
@@ -10105,10 +10109,18 @@ function bindEvents() {
     }
     await runIntelligenceAction('enqueue', { intelligence_action: action, target_id: targetId }, event.currentTarget);
   });
-  el('intelligence-model-select')?.addEventListener('change', event => {
+  el('intelligence-model-select')?.addEventListener('change', async event => {
     state.intelligence.selectedModel = event.currentTarget.value || '';
     if (state.intelligence.selectedModel) sessionStorage.setItem('secopsai_bridge_model', state.intelligence.selectedModel);
     renderIntelligence();
+    if (state.intelligence.selectedModel) {
+      try {
+        await runIntelligenceAction('select-model', { model: state.intelligence.selectedModel });
+        await loadIntelligence();
+      } catch (error) {
+        showToast(error?.message || 'Unable to persist the selected model.', 'error');
+      }
+    }
   });
   el('intelligence-run-once-btn')?.addEventListener('click', event => {
     const model = el('intelligence-model-select')?.value || '';

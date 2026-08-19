@@ -17,6 +17,10 @@ def test_local_intelligence_actions_are_allowlisted():
         {"intelligence_action": "explain_finding", "target_id": "FND-ABC123"},
     )[:4] == ["intelligence", "enqueue", "--action", "explain_finding"]
     assert dashboard_server.build_intelligence_args("run-once", {})[:4] == ["intelligence", "bridge", "run", "--once"]
+    assert dashboard_server.build_intelligence_args(
+        "select-model",
+        {"model": "xai/grok-4.6"},
+    )[:4] == ["intelligence", "bridge", "select-model", "xai/grok-4.6"]
     service_status = dashboard_server.build_intelligence_args("service", {"service_action": "status"})
     assert service_status[:4] == ["intelligence", "bridge", "service", "status"]
     assert service_status[-2:] == ["--db-path", dashboard_server.SECOPSAI_DB_PATH]
@@ -154,6 +158,9 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "Registry outages and collector failures use deterministic recovery checks" in html
     assert "target.source" in app
     assert "function renderAutopilotModelSelect" in app
+    assert "select-model" in app
+    assert "Other models are not probed" in app
+    assert "Health checks and jobs use only this selection" in html
     assert "el('intelligence-autopilot-model')?.value" in app
     assert "function securitySourceLabel" in app
     assert "SecOpsAI Supply Chain" in app
