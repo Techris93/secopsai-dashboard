@@ -450,8 +450,20 @@
         </div>
         <div class="card" style="margin-top:18px;" id="artifact-fleet-panel">
           <div class="page-header compact-header"><div><h3 style="margin:0;">Artifact Fleet</h3><p class="small" style="margin:6px 0 0;">Metadata index, deterministic scan, minimized model triage, and analyst escalation.</p></div><button class="secondary-btn" id="artifact-fleet-refresh-btn" type="button">Refresh fleet</button></div>
+          <div class="evidence-notice info" id="artifact-fleet-safety-note">Buttons use the Automation action token and an allowlisted local helper command. They never install, execute, or activate an artifact. Exact single-artifact scans still require the reviewed CLI path.</div>
+          <div class="research-form-actions" id="artifact-fleet-actions" aria-label="Artifact Fleet actions">
+            <button class="primary-btn" id="artifact-fleet-cycle-btn" data-artifact-fleet-action="cycle" type="button">Run automated cycle</button>
+            <button class="secondary-btn" id="artifact-fleet-index-btn" data-artifact-fleet-action="index" type="button">Index metadata</button>
+            <button class="secondary-btn" id="artifact-fleet-scan-btn" data-artifact-fleet-action="scan" type="button">Scan pending</button>
+            <button class="secondary-btn" id="artifact-fleet-triage-btn" data-artifact-fleet-action="triage" type="button">Queue model triage</button>
+            <button class="secondary-btn" id="artifact-fleet-analyst-btn" data-artifact-fleet-action="analyst-queue" type="button">Refresh analyst queue</button>
+            <button class="secondary-btn" id="artifact-fleet-rules-btn" data-artifact-fleet-action="rules" type="button">Validate rule pack</button>
+            <button class="secondary-btn" id="artifact-fleet-benchmark-btn" data-artifact-fleet-action="benchmark" type="button">Run fixture benchmark</button>
+          </div>
           <div class="grid cols-4" id="artifact-fleet-summary"></div>
           <div id="artifact-fleet-queue" class="small" style="margin-top:12px;"></div>
+          <div id="artifact-fleet-health" class="small" style="margin-top:8px;"></div>
+          <pre class="intelligence-log" id="artifact-fleet-output" style="margin-top:12px;" aria-live="polite"></pre>
         </div>
         <div class="card" style="margin-top:18px;" id="enterprise-cli-fallback">
           <div class="page-header compact-header"><div><h3 style="margin:0;">CLI fallback</h3><p class="small" style="margin:6px 0 0;">Use the local helper for fixture checks when a hosted connector is not configured.</p></div></div>
@@ -867,6 +879,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             <a href="#guide-findings">Findings</a>
             <a href="#guide-research">Research Cases</a>
             <a href="#guide-ai-dependency-guard">AI Dependency Guard</a>
+            <a href="#guide-artifact-fleet">Artifact Fleet</a>
             <a href="#guide-native-triage">System audit and native triage</a>
             <a href="#guide-triage-ops">Findings · Supply chain</a>
             <a href="#guide-campaigns">Campaign Research</a>
@@ -1015,6 +1028,22 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <div class="guide-step"><span>5</span><p>For CI, use the GitHub Action mode <code>ai-dependency-guard</code>. Keep it warning-only for early rollout, then opt into <code>fail-on: high</code> once private package allowlists are tuned.</p></div>
               </div>
               <div class="guide-callout guide-good">Best use: scan AI-generated dependency changes before install, before CI cache population, and before letting an agent apply package suggestions to a real repo.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-artifact-fleet">
+              <div class="guide-section-head">
+                <span class="guide-pill">Artifact Fleet</span>
+                <h3>Artifact Fleet click workflow</h3>
+                <p>Use the Artifact Fleet panel under <strong>Enterprise Security</strong> for the staged OSS funnel: metadata index, safe static scan, minimized model queue, and analyst escalation.</p>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Start the local dashboard/helper, open <strong>Enterprise Security → Artifact Fleet</strong>, and click <strong>Refresh fleet</strong>. This also shows source health, queue metrics, and rule-pack status.</p></div>
+                <div class="guide-step"><span>2</span><p>Click <strong>Run automated cycle</strong> for the safe bounded sequence: index metadata, scan already-authorized local artifact paths, and prepare minimized triage contexts.</p></div>
+                <div class="guide-step"><span>3</span><p>Click <strong>Queue model triage</strong> only after selecting the intended model in Native Triage. It creates jobs for that selected model; it does not silently install packages, execute artifacts, or publish research.</p></div>
+                <div class="guide-step"><span>4</span><p>Use <strong>Refresh analyst queue</strong> to review suspicious or inconclusive results. Keep analyst decisions and publication approval separate from automated indexing and scanning.</p></div>
+                <div class="guide-step"><span>5</span><p>Use <strong>Validate rule pack</strong> after rule changes and <strong>Run fixture benchmark</strong> only for synthetic throughput checks. The benchmark is not proof of production-scale capacity.</p></div>
+              </div>
+              <div class="guide-callout guide-warning">The exact <code>scan-artifact</code>, <code>triage-show</code>, and research-handoff commands remain CLI-only because they require a reviewed artifact path or identifier. Browser actions are allowlisted and never execute untrusted package code.</div>
             </section>
 
             <section class="card guide-section" id="guide-native-triage">

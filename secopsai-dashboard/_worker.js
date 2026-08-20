@@ -734,6 +734,32 @@ function requireTriageOpsAdmin(request, env) {
   return null;
 }
 
+function requireArtifactFleetAdmin(request, env) {
+  const expected = String(
+    env.INTELLIGENCE_ADMIN_TOKEN || env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || env.TRIAGE_OPS_ADMIN_TOKEN || env.BLOG_OPS_ADMIN_TOKEN || "",
+  ).trim();
+  if (!expected) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Artifact Fleet actions require a configured local helper or Core intelligence token.",
+        code: "not_configured",
+        hint: "Use local helper mode and the Automation action token for artifact indexing, scanning, triage, and benchmarking.",
+      },
+      { status: 501 },
+    );
+  }
+  const direct = request.headers.get("x-secopsai-intelligence-token") || "";
+  const triage = request.headers.get("x-triage-ops-admin-token") || "";
+  const blog = request.headers.get("x-blog-ops-admin-token") || "";
+  const auth = request.headers.get("authorization") || "";
+  const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "";
+  if (![direct, triage, blog, bearer].includes(expected)) {
+    return jsonResponse({ ok: false, error: "Unauthorized Artifact Fleet action" }, { status: 401 });
+  }
+  return null;
+}
+
 function isTriageOpsWriteRoute(request, pathname) {
   if (request.method.toUpperCase() !== "POST") return false;
   if (pathname.startsWith("/api/secopsai/research-cases/")) return true;
@@ -1334,6 +1360,10 @@ async function proxySecopsaiHelper(request, env) {
   )) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
+  const intelligenceToken = request.headers.get("x-secopsai-intelligence-token") || "";
+  if (intelligenceToken && incomingUrl.pathname === "/api/secopsai/artifact-fleet") {
+    headers.set("X-SecOpsAI-Intelligence-Token", intelligenceToken);
+  }
 
   const init = {
     method: request.method,
@@ -1519,6 +1549,10 @@ async function routeRequest(request, env) {
       }
       if (request.method === "GET" && url.pathname === "/api/secopsai/artifact-fleet-status") {
         return jsonResponse({ ok: false, mode: "hosted", error: "Artifact Fleet requires a configured local helper or Core artifact-fleet endpoint" }, { status: 501 });
+      }
+      if (request.method === "POST" && url.pathname === "/api/secopsai/artifact-fleet") {
+        const artifactAuthResponse = requireArtifactFleetAdmin(request, env);
+        if (artifactAuthResponse) return artifactAuthResponse;
       }
       if (isTriageOpsWriteRoute(request, url.pathname)) {
         const writeAuthResponse = requireTriageOpsAdmin(request, env);

@@ -171,6 +171,17 @@ Safety model:
 
 The dashboard includes a protected **Triage Ops** tab for supply-chain `SCM-*` alerts. It is helper-backed, not browser-shell-backed. Hosted Cloudflare Pages proxies `/api/secopsai/triage-ops/*` only when `SECOPSAI_HELPER_BASE_URL` is intentionally configured. With that variable absent, hosted mode returns clear `not_configured` guidance and local usage is served by `dashboard_server.py`.
 
+The Enterprise Security page also includes an **Artifact Fleet** panel. Its
+buttons call the protected `/api/secopsai/artifact-fleet` allowlist for metadata
+indexing, pending safe scans, minimized model-job queueing, analyst queue
+refresh, rule-pack validation, the synthetic benchmark, and the bounded cycle.
+Hosted Pages does not execute local artifact commands; when no helper or Core
+artifact endpoint is configured it returns `501 not_configured` guidance. Use
+the local dashboard/helper for these actions, with the Automation action token.
+The exact `scan-artifact` path remains CLI-only to prevent browser-controlled
+filesystem access. Local Artifact Fleet state uses its own
+`SECOPSAI_ARTIFACT_FLEET_DB_PATH`, separate from the main SOC database.
+
 Required for hosted Triage Ops:
 
 - `SECOPSAI_HELPER_BASE_URL`

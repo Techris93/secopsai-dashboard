@@ -162,7 +162,8 @@ const state = {
   artifactFleet: {
     data: null,
     loading: false,
-    error: null
+    error: null,
+    output: ''
   },
   researchCases: {
     view: 'cases',
@@ -9620,6 +9621,65 @@ function renderArtifactFleet() {
       ? `Artifact Fleet unavailable: ${state.artifactFleet.error}. Use local helper mode for fixture scans and queue inspection.`
       : `Queue: ${Object.entries(queue).map(([key, value]) => `${humanizeMachineText(key)} ${value}`).join(' · ') || 'empty'}${result.dead_letters ? ` · dead letters ${result.dead_letters}` : ''}${analystText}`;
   }
+  const healthEl = el('artifact-fleet-health');
+  if (healthEl) {
+    const sources = Array.isArray(result.sources) ? result.sources : [];
+    const configured = sources.filter(item => item?.status === 'healthy').length;
+    const rules = result.rules || {};
+    const metricRows = Array.isArray(result.metrics) ? result.metrics.slice(0, 4) : [];
+    healthEl.textContent = state.artifactFleet.error
+      ? ''
+      : `Sources: ${configured}/${sources.length || 0} configured · rules: ${rules.status === 'valid' ? 'valid' : 'check required'}${metricRows.length ? ` · metrics: ${metricRows.map(item => `${humanizeMachineText(item.metric || item.stage || 'metric')} ${item.value}`).join(', ')}` : ''}`;
+  }
+  const output = el('artifact-fleet-output');
+  if (output) {
+    output.textContent = state.artifactFleet.output || '';
+    output.hidden = !state.artifactFleet.output;
+  }
+  const safetyNote = el('artifact-fleet-safety-note');
+  if (safetyNote) {
+    safetyNote.textContent = state.artifactFleet.error
+      ? `Artifact Fleet is unavailable here: ${state.artifactFleet.error}. Start the local helper for allowlisted actions; hosted mode does not run local artifact commands.`
+      : 'Buttons use the Automation action token and an allowlisted local helper command. They never install, execute, or activate an artifact. Exact single-artifact scans still require the reviewed CLI path.';
+  }
+}
+
+async function runArtifactFleetAction(action, payload = {}, button = null) {
+  const tokenInput = el('intelligence-admin-token');
+  state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
+  if (!state.intelligence.adminToken) {
+    showToast('Enter the Automation action token before running Artifact Fleet actions.', 'error');
+    tokenInput?.focus();
+    return null;
+  }
+  sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
+  setButtonBusy(button, true, 'Working…');
+  try {
+    const body = { action, ...payload };
+    if (action === 'triage' && !body.model && state.intelligence.selectedModel) body.model = state.intelligence.selectedModel;
+    const response = await dashboardApiFetch('/api/secopsai/artifact-fleet', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SecOpsAI-Intelligence-Token': state.intelligence.adminToken
+      },
+      body: JSON.stringify(body)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || `Artifact Fleet ${action} HTTP ${response.status}`);
+    state.artifactFleet.output = JSON.stringify(result.result || result, null, 2);
+    showToast(`Artifact Fleet action completed: ${humanizeSnake(action)}`, 'success');
+    await loadArtifactFleetStatus();
+    return result;
+  } catch (error) {
+    state.artifactFleet.error = error?.message || String(error);
+    state.artifactFleet.output = JSON.stringify({ ok: false, action, error: state.artifactFleet.error }, null, 2);
+    renderArtifactFleet();
+    showToast(state.artifactFleet.error, 'error');
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
 }
 
 async function loadLocalTriageState() {
@@ -10118,6 +10178,9 @@ function bindEvents() {
   el('workspace-switcher')?.addEventListener('click', () => showToast('This pilot uses one authenticated SecOpsAI workspace. Customer/site switching is available when multi-tenant workspaces are enabled.', 'info'));
   el('enterprise-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadEnterpriseStatus(), { successMessage: 'Enterprise status refreshed' }));
   el('artifact-fleet-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadArtifactFleetStatus(), { successMessage: 'Artifact Fleet status refreshed' }));
+  document.querySelectorAll('[data-artifact-fleet-action]').forEach(button => {
+    button.addEventListener('click', event => runArtifactFleetAction(event.currentTarget.dataset.artifactFleetAction, {}, event.currentTarget));
+  });
   el('confirm-dialog-confirm')?.addEventListener('click', () => finishConfirmation(true));
   el('confirm-dialog-cancel')?.addEventListener('click', () => finishConfirmation(false));
   el('confirm-dialog-close')?.addEventListener('click', () => finishConfirmation(false));

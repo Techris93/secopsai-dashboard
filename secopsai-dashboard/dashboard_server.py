@@ -27,6 +27,10 @@ SECOPSAI_DB_PATH = os.environ.get(
     'SECOPSAI_DB_PATH',
     str((SECOPSAI_ROOT / 'data' / 'openclaw' / 'findings' / 'openclaw_soc.db').resolve()),
 ).strip()
+SECOPSAI_ARTIFACT_FLEET_DB_PATH = os.environ.get(
+    'SECOPSAI_ARTIFACT_FLEET_DB_PATH',
+    str((SECOPSAI_ROOT / 'data' / 'artifact_fleet' / 'artifact_fleet.db').resolve()),
+).strip()
 OPENCLAW_WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace').resolve()
 # Stable finding identifiers use different namespace lengths (for example
 # ``OCF-...``, ``AIDG-...`` and ``EDGE-...``). Keep the namespace bounded,
@@ -848,6 +852,10 @@ def secopsai_db_args():
     return ['--db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else []
 
 
+def artifact_fleet_db_args():
+    return ['--db-path', SECOPSAI_ARTIFACT_FLEET_DB_PATH] if SECOPSAI_ARTIFACT_FLEET_DB_PATH else []
+
+
 def secopsai_session_args():
     return ['--session-dir', str(session_storage_path())]
 
@@ -1104,6 +1112,44 @@ def build_intelligence_args(action, payload):
                 args.extend([flag, 'on' if bool(payload.get(key)) else 'off'])
         return [*args, *secopsai_db_args()]
     raise ValueError('Unsupported intelligence operation')
+
+
+def build_artifact_fleet_args(action, payload):
+    """Build the narrow, browser-safe Artifact Fleet command allowlist.
+
+    The dashboard never accepts a shell string, local path, or arbitrary
+    executable. Registry indexing, pending scans, model-job enqueue, rule-pack
+    validation, queue inspection, and synthetic benchmarking are the only
+    supported button actions. Exact artifact inspection remains CLI-only so a
+    browser cannot cause an untrusted local path to be opened.
+    """
+    action = _clean_string(action, 40).lower()
+    since = validate_duration(payload.get('since') or '24h')
+    limit = validate_bounded_int(payload.get('limit'), default=1000, lower=1, upper=5000)
+    workers = validate_bounded_int(payload.get('workers'), default=4, lower=1, upper=32)
+    args = ['artifact-fleet']
+    if action == 'index':
+        return [*args, 'index', '--since', since, '--limit', str(limit), *artifact_fleet_db_args()]
+    if action == 'scan':
+        return [*args, 'scan', '--workers', str(workers), *artifact_fleet_db_args()]
+    if action == 'triage':
+        model = _clean_string(payload.get('model'), 160)
+        args.extend(['triage', '--limit', str(limit), '--enqueue-model'])
+        if model:
+            if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+                raise ValueError('Invalid bridge model')
+            args.extend(['--model', model])
+        return [*args, *artifact_fleet_db_args()]
+    if action == 'analyst-queue':
+        return [*args, 'analyst-queue', '--limit', str(min(limit, 500)), *artifact_fleet_db_args()]
+    if action == 'rules':
+        return [*args, 'rules', *artifact_fleet_db_args()]
+    if action == 'benchmark':
+        artifacts = validate_bounded_int(payload.get('artifacts'), default=1000, lower=1, upper=250000)
+        return [*args, 'benchmark', '--artifacts', str(artifacts), '--workers', str(workers), '--fixture-mode', *artifact_fleet_db_args()]
+    if action == 'cycle':
+        return [*args, 'cycle', '--since', since, '--limit', str(limit), '--workers', str(workers), *artifact_fleet_db_args()]
+    raise ValueError('Unsupported Artifact Fleet action')
 
 
 def collect_intelligence_status():
@@ -3502,9 +3548,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == '/api/secopsai/artifact-fleet-status':
             try:
-                result, payload = run_cli_json(['artifact-fleet', 'status', *secopsai_db_args()])
-                queue_result, queue_payload = run_cli_json(['artifact-fleet', 'analyst-queue', '--limit', '25', *secopsai_db_args()])
-                return json_response(self, 200 if result.get('ok') else 503, {'ok': bool(result.get('ok')), 'result': {**(payload or {}), 'analyst_queue': (queue_payload or {}).get('artifacts', [])}, 'cli': compact_cli_result(result), 'queue_cli': compact_cli_result(queue_result)})
+                result, payload = run_cli_json(['artifact-fleet', 'status', *artifact_fleet_db_args()])
+                queue_result, queue_payload = run_cli_json(['artifact-fleet', 'analyst-queue', '--limit', '25', *artifact_fleet_db_args()])
+                metrics_result, metrics_payload = run_cli_json(['artifact-fleet', 'metrics', *artifact_fleet_db_args()])
+                rules_result, rules_payload = run_cli_json(['artifact-fleet', 'rules', *artifact_fleet_db_args()])
+                return json_response(self, 200 if result.get('ok') else 503, {
+                    'ok': bool(result.get('ok')),
+                    'result': {
+                        **(payload or {}),
+                        'analyst_queue': (queue_payload or {}).get('artifacts', []),
+                        'metrics': (metrics_payload or {}).get('metrics', []),
+                        'rules': rules_payload or {},
+                    },
+                    'cli': compact_cli_result(result),
+                    'queue_cli': compact_cli_result(queue_result),
+                    'metrics_cli': compact_cli_result(metrics_result),
+                    'rules_cli': compact_cli_result(rules_result),
+                })
             except Exception as exc:
                 return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'artifact_fleet_not_configured'})
 
@@ -3977,6 +4037,27 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 )
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/artifact-fleet':
+            if require_intelligence_admin(self):
+                return
+            action = _clean_string(payload.get('action'), 40).lower()
+            try:
+                args = build_artifact_fleet_args(action, payload)
+                timeout = 300 if action in {'cycle', 'scan', 'benchmark'} else 120
+                result, parsed_result = run_cli_json(args, timeout=timeout)
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 400,
+                    {
+                        'ok': bool(result.get('ok')),
+                        'action': action,
+                        'result': parsed_result,
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'artifact_fleet_action_invalid'})
 
         if parsed.path == '/api/secopsai/research-watchlist':
             action = str(payload.get('action') or 'preview').strip().lower()

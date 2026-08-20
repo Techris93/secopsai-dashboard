@@ -104,6 +104,44 @@ def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
         )
 
 
+def test_artifact_fleet_actions_are_allowlisted_and_bounded():
+    cycle = dashboard_server.build_artifact_fleet_args("cycle", {"since": "24h", "limit": 1000, "workers": 4})
+    assert cycle[:5] == ["artifact-fleet", "cycle", "--since", "24h", "--limit"]
+    assert "--workers" in cycle
+    triage = dashboard_server.build_artifact_fleet_args("triage", {"limit": 500, "model": "xai/grok-4.6"})
+    assert "--enqueue-model" in triage
+    assert "xai/grok-4.6" in triage
+    benchmark = dashboard_server.build_artifact_fleet_args("benchmark", {"artifacts": 1000000, "workers": 99})
+    assert "250000" in benchmark
+    assert "32" in benchmark
+    with pytest.raises(ValueError):
+        dashboard_server.build_artifact_fleet_args("shell", {})
+    with pytest.raises(ValueError):
+        dashboard_server.build_artifact_fleet_args("cycle", {"since": "24h;rm -rf /"})
+    assert dashboard_server.SECOPSAI_ARTIFACT_FLEET_DB_PATH != dashboard_server.SECOPSAI_DB_PATH
+    assert dashboard_server.artifact_fleet_db_args()[-1] == dashboard_server.SECOPSAI_ARTIFACT_FLEET_DB_PATH
+
+
+def test_artifact_fleet_click_surface_is_present_and_static_only():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    for marker in (
+        "artifact-fleet-cycle-btn",
+        "artifact-fleet-index-btn",
+        "artifact-fleet-scan-btn",
+        "artifact-fleet-triage-btn",
+        "artifact-fleet-analyst-btn",
+        "artifact-fleet-rules-btn",
+        "artifact-fleet-benchmark-btn",
+        "artifact-fleet-output",
+    ):
+        assert marker in html
+    assert "runArtifactFleetAction" in app
+    assert "/api/secopsai/artifact-fleet" in server
+    assert "never install, execute, or activate" in html
+
+
 def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
