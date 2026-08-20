@@ -173,6 +173,8 @@ ECOSYSTEM_RE = re.compile(r'^(npm|pypi|crates|chrome-web-store|packagist|go|hugg
 COLLECTOR_ID_RE = re.compile(r'^COL-[A-Z0-9-]{3,40}$')
 CAMPAIGN_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,140}$')
 PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._:/-]{1,260}$')
+RUST_PACKAGE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')
+RUST_VERSION_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.+:_~!*/-]{0,159}$')
 NPM_WATCHLIST_PACKAGE_RE = re.compile(r'^(?:npm:)?(?:@[a-z0-9._~-]+/)?[a-z0-9._~-]+$', re.IGNORECASE)
 VERSION_RE = re.compile(r'^[A-Za-z0-9.+:_~!*-]{1,160}$')
 SAFE_SOURCE_URL_RE = re.compile(r'^https?://[^\s<>"\']{3,500}$', re.IGNORECASE)
@@ -1150,6 +1152,92 @@ def build_artifact_fleet_args(action, payload):
     if action == 'cycle':
         return [*args, 'cycle', '--since', since, '--limit', str(limit), '--workers', str(workers), *artifact_fleet_db_args()]
     raise ValueError('Unsupported Artifact Fleet action')
+
+
+def build_rust_package_research_args(action, payload):
+    """Build the protected Rust package research command allowlist."""
+    action = _clean_string(action, 20).lower()
+    if action in {'matrix', 'draft'}:
+        case_id = _clean_string(payload.get('case_id'), 32).upper()
+        if not re.fullmatch(r'RSC-[A-F0-9]{12}', case_id):
+            raise ValueError('A valid Research Case ID is required')
+        if action == 'matrix':
+            args = ['research', 'workflow', 'evidence-matrix', case_id, '--actor', 'mission-control', *secopsai_db_args()]
+        else:
+            args = ['research', 'case', 'draft-blog', case_id, *secopsai_db_args()]
+        return args
+    if action == 'queue':
+        artifact_id = _clean_string(payload.get('artifact_id'), 32).upper()
+        if not re.fullmatch(r'ART-[A-F0-9]{16}', artifact_id):
+            raise ValueError('A valid Artifact Fleet artifact ID is required')
+        model = _clean_string(payload.get('model'), 160)
+        args = ['artifact-fleet', 'triage', '--artifact-id', artifact_id, '--enqueue-model', *artifact_fleet_db_args()]
+        if model:
+            if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+                raise ValueError('Invalid bridge model')
+            args.extend(['--model', model])
+        args.extend(['--job-db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else [])
+        return args
+    if action not in {'preview', 'run'}:
+        raise ValueError('Rust package research action must be preview, run, matrix, draft, or queue')
+    package = _clean_string(payload.get('package'), 128)
+    version = _clean_string(payload.get('version'), 160)
+    if not RUST_PACKAGE_RE.fullmatch(package):
+        raise ValueError('Invalid Rust package name')
+    if not RUST_VERSION_RE.fullmatch(version):
+        raise ValueError('Invalid Rust package version')
+    args = ['research', 'rust-package', '--package', package, '--version', version]
+    compare_package = _clean_string(payload.get('compare_package'), 128)
+    compare_version = _clean_string(payload.get('compare_version'), 160)
+    if compare_package:
+        if not RUST_PACKAGE_RE.fullmatch(compare_package):
+            raise ValueError('Invalid comparison Rust package name')
+        if not compare_version or not RUST_VERSION_RE.fullmatch(compare_version):
+            raise ValueError('A valid comparison Rust package version is required')
+        args.extend(['--compare-package', compare_package, '--compare-version', compare_version])
+    elif compare_version:
+        raise ValueError('Comparison version requires a comparison package')
+    if action == 'preview':
+        args.append('--dry-run')
+    else:
+        case_id = _clean_string(payload.get('case_id'), 32).upper()
+        if case_id:
+            if not re.fullmatch(r'RSC-[A-F0-9]{12}', case_id):
+                raise ValueError('Invalid Research Case ID')
+            args.extend(['--case-id', case_id])
+        source_reference = _clean_string(payload.get('source_reference'), 4000)
+        if source_reference:
+            parsed_source = urllib.parse.urlparse(source_reference)
+            if not SAFE_SOURCE_URL_RE.fullmatch(source_reference) or parsed_source.scheme != 'https' or parsed_source.username or parsed_source.password or not parsed_source.hostname:
+                raise ValueError('Source reference must be an HTTPS URL')
+            args.extend(['--source-reference', source_reference])
+        owner = _clean_string(payload.get('owner') or 'SecOpsAI Research', 160)
+        args.extend(['--owner', owner])
+        model = _clean_string(payload.get('model'), 160)
+        if model:
+            if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+                raise ValueError('Invalid bridge model')
+            args.extend(['--model', model])
+        if payload.get('persist_findings'):
+            args.append('--persist-findings')
+        if payload.get('draft_blog'):
+            args.append('--draft-blog')
+        if payload.get('create_case') is False:
+            args.append('--no-create-case')
+    artifact_args = ['--artifact-db-path', SECOPSAI_ARTIFACT_FLEET_DB_PATH] if SECOPSAI_ARTIFACT_FLEET_DB_PATH else []
+    return [*args, *secopsai_db_args(), *artifact_args]
+
+
+def redact_rust_research_result(value):
+    """Keep local quarantine/database paths out of browser responses."""
+    if isinstance(value, dict):
+        return {
+            key: ("[local quarantine path]" if key in {"path", "artifact_path", "artifact_db_path"} else redact_rust_research_result(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_rust_research_result(item) for item in value]
+    return value
 
 
 def collect_intelligence_status():
@@ -4058,6 +4146,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 )
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'artifact_fleet_action_invalid'})
+
+        if parsed.path == '/api/secopsai/rust-package-research':
+            if require_intelligence_admin(self):
+                return
+            action = _clean_string(payload.get('action'), 20).lower()
+            try:
+                args = build_rust_package_research_args(action, payload)
+                result, parsed_result = run_cli_json(args, timeout=300 if action == 'run' else 120)
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 400,
+                    {
+                        'ok': bool(result.get('ok')),
+                        'action': action,
+                        'result': redact_rust_research_result(parsed_result),
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'rust_package_research_invalid'})
 
         if parsed.path == '/api/secopsai/research-watchlist':
             action = str(payload.get('action') or 'preview').strip().lower()

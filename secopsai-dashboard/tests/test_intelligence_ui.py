@@ -142,6 +142,44 @@ def test_artifact_fleet_click_surface_is_present_and_static_only():
     assert "never install, execute, or activate" in html
 
 
+def test_rust_package_research_actions_are_typed_and_allowlisted():
+    preview = dashboard_server.build_rust_package_research_args(
+        "preview",
+        {"package": "proc-macro1", "version": "1.0.107", "compare_package": "proc-macro2", "compare_version": "1.0.107"},
+    )
+    assert preview[:6] == ["research", "rust-package", "--package", "proc-macro1", "--version", "1.0.107"]
+    assert "--dry-run" in preview
+    run = dashboard_server.build_rust_package_research_args(
+        "run",
+        {"package": "proc-macro1", "version": "1.0.107", "source_reference": "https://research.example/report", "persist_findings": True, "draft_blog": True},
+    )
+    assert "--persist-findings" in run
+    assert "--draft-blog" in run
+    assert "--artifact-db-path" in run
+    matrix = dashboard_server.build_rust_package_research_args("matrix", {"case_id": "RSC-0123456789AB"})
+    assert matrix[:4] == ["research", "workflow", "evidence-matrix", "RSC-0123456789AB"]
+    draft = dashboard_server.build_rust_package_research_args("draft", {"case_id": "RSC-0123456789AB"})
+    assert draft[:4] == ["research", "case", "draft-blog", "RSC-0123456789AB"]
+    queue = dashboard_server.build_rust_package_research_args("queue", {"artifact_id": "ART-0123456789ABCDEF", "model": "xai/grok-4.6"})
+    assert "--job-db-path" in queue
+    assert "xai/grok-4.6" in queue
+    with pytest.raises(ValueError):
+        dashboard_server.build_rust_package_research_args("run", {"package": "bad;curl", "version": "1.0.0"})
+    with pytest.raises(ValueError):
+        dashboard_server.build_rust_package_research_args("run", {"package": "crate", "version": "1.0.0", "source_reference": "file:///tmp/private"})
+
+
+def test_rust_package_research_dashboard_surface_is_present():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    for marker in ("rust-package-research-panel", "rust-research-package", "rust-research-preview-btn", "rust-research-run-btn", "rust-research-compare-btn", "rust-research-matrix-btn", "rust-research-queue-btn", "rust-research-draft-btn", "rust-research-open-case-btn", "rust-research-copy-btn", "rust-research-create-case", "rust-research-output"):
+        assert marker in html
+    assert "runRustPackageResearchAction" in app
+    assert "/api/secopsai/rust-package-research" in server
+    assert "build_rust_package_research_args" in server
+
+
 def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")

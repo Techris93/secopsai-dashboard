@@ -102,6 +102,11 @@ Open **System → SecOpsAI Intelligence** to use either integration:
 
 Local action controls require `INTELLIGENCE_ADMIN_TOKEN` in `secopsai-dashboard/.env`. Hosted Pages uses server-side `SECOPSAI_CORE_INTELLIGENCE_TOKEN`; neither value belongs in browser configuration. See [the full integration guide](https://docs.secopsai.dev/intelligence-integrations/) for setup and security boundaries.
 
+Enterprise Security → Artifact Fleet includes **Run Rust Package Research**.
+It uses the protected helper route to verify crates.io metadata/checksums,
+quarantine exact crates, compare a supplied reference crate, and create
+reviewable Research Case evidence without running Cargo or package code.
+
 ## Product fit
 
 This dashboard now complements the latest `secopsai` repo work:

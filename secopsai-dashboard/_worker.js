@@ -742,7 +742,7 @@ function requireArtifactFleetAdmin(request, env) {
     return jsonResponse(
       {
         ok: false,
-        error: "Artifact Fleet actions require a configured local helper or Core intelligence token.",
+        error: "Artifact Fleet and Rust Package Research actions require a configured local helper or Core intelligence token.",
         code: "not_configured",
         hint: "Use local helper mode and the Automation action token for artifact indexing, scanning, triage, and benchmarking.",
       },
@@ -1361,7 +1361,7 @@ async function proxySecopsaiHelper(request, env) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
   const intelligenceToken = request.headers.get("x-secopsai-intelligence-token") || "";
-  if (intelligenceToken && incomingUrl.pathname === "/api/secopsai/artifact-fleet") {
+  if (intelligenceToken && ["/api/secopsai/artifact-fleet", "/api/secopsai/rust-package-research"].includes(incomingUrl.pathname)) {
     headers.set("X-SecOpsAI-Intelligence-Token", intelligenceToken);
   }
 
@@ -1551,6 +1551,10 @@ async function routeRequest(request, env) {
         return jsonResponse({ ok: false, mode: "hosted", error: "Artifact Fleet requires a configured local helper or Core artifact-fleet endpoint" }, { status: 501 });
       }
       if (request.method === "POST" && url.pathname === "/api/secopsai/artifact-fleet") {
+        const artifactAuthResponse = requireArtifactFleetAdmin(request, env);
+        if (artifactAuthResponse) return artifactAuthResponse;
+      }
+      if (request.method === "POST" && url.pathname === "/api/secopsai/rust-package-research") {
         const artifactAuthResponse = requireArtifactFleetAdmin(request, env);
         if (artifactAuthResponse) return artifactAuthResponse;
       }

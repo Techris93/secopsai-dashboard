@@ -182,6 +182,13 @@ The exact `scan-artifact` path remains CLI-only to prevent browser-controlled
 filesystem access. Local Artifact Fleet state uses its own
 `SECOPSAI_ARTIFACT_FLEET_DB_PATH`, separate from the main SOC database.
 
+The same panel exposes **Run Rust Package Research** through the protected
+`/api/secopsai/rust-package-research` helper route. It accepts only package,
+version, comparison, source-reference, model, and bounded workflow fields. The
+helper performs crates.io metadata/checksum validation and local quarantine
+without executing Cargo or package code. Hosted Pages returns safe
+`not_configured` guidance when no helper/Core endpoint is configured.
+
 Required for hosted Triage Ops:
 
 - `SECOPSAI_HELPER_BASE_URL`

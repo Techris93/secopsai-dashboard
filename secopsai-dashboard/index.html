@@ -451,6 +451,33 @@
         <div class="card" style="margin-top:18px;" id="artifact-fleet-panel">
           <div class="page-header compact-header"><div><h3 style="margin:0;">Artifact Fleet</h3><p class="small" style="margin:6px 0 0;">Metadata index, deterministic scan, minimized model triage, and analyst escalation.</p></div><button class="secondary-btn" id="artifact-fleet-refresh-btn" type="button">Refresh fleet</button></div>
           <div class="evidence-notice info" id="artifact-fleet-safety-note">Buttons use the Automation action token and an allowlisted local helper command. They never install, execute, or activate an artifact. Exact single-artifact scans still require the reviewed CLI path.</div>
+          <details class="research-action-drawer" id="rust-package-research-panel" style="margin-top:12px;">
+            <summary>Run Rust Package Research</summary>
+            <p class="small">Fetch exact crates.io metadata, quarantine the crate, verify its checksum, run static Artifact Fleet rules, optionally compare a verified package, and create a reviewable Research Case. No Cargo command or package code runs.</p>
+            <div class="research-form-grid">
+              <label><span>Crate package</span><input id="rust-research-package" maxlength="128" placeholder="proc-macro1" /></label>
+              <label><span>Exact version</span><input id="rust-research-version" maxlength="160" placeholder="1.0.107" /></label>
+              <label><span>Comparison crate</span><input id="rust-research-compare-package" maxlength="128" placeholder="proc-macro2" /></label>
+              <label><span>Comparison version</span><input id="rust-research-compare-version" maxlength="160" placeholder="1.0.107" /></label>
+              <label class="research-span-2"><span>Source reference (optional)</span><input id="rust-research-source" maxlength="4000" placeholder="https://research.example/report" /></label>
+              <label class="checkbox-row"><input id="rust-research-persist" type="checkbox" /><span>Persist high-confidence finding</span></label>
+              <label class="checkbox-row"><input id="rust-research-create-case" type="checkbox" checked /><span>Create Research Case</span></label>
+              <label class="checkbox-row"><input id="rust-research-draft" type="checkbox" /><span>Create review-only draft</span></label>
+            </div>
+            <div class="research-form-actions">
+              <button class="secondary-btn" id="rust-research-preview-btn" type="button">Preview metadata</button>
+              <button class="primary-btn" id="rust-research-run-btn" type="button">Run intake + static analysis</button>
+            </div>
+            <div class="research-form-actions" id="rust-research-followups" aria-label="Rust research follow-up actions">
+              <button class="secondary-btn" id="rust-research-compare-btn" type="button">Compare package</button>
+              <button class="secondary-btn" id="rust-research-matrix-btn" type="button" disabled>Build evidence matrix</button>
+              <button class="secondary-btn" id="rust-research-queue-btn" type="button" disabled>Queue model review</button>
+              <button class="secondary-btn" id="rust-research-draft-btn" type="button" disabled>Create review-only draft</button>
+              <button class="secondary-btn" id="rust-research-open-case-btn" type="button" disabled>Open Research Case</button>
+              <button class="secondary-btn" id="rust-research-copy-btn" type="button">Copy CLI fallback</button>
+            </div>
+            <pre class="intelligence-log" id="rust-research-output" aria-live="polite"></pre>
+          </details>
           <div class="research-form-actions" id="artifact-fleet-actions" aria-label="Artifact Fleet actions">
             <button class="primary-btn" id="artifact-fleet-cycle-btn" data-artifact-fleet-action="cycle" type="button">Run automated cycle</button>
             <button class="secondary-btn" id="artifact-fleet-index-btn" data-artifact-fleet-action="index" type="button">Index metadata</button>
@@ -1042,6 +1069,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <div class="guide-step"><span>3</span><p>Click <strong>Queue model triage</strong> only after selecting the intended model in Native Triage. It creates jobs for that selected model; it does not silently install packages, execute artifacts, or publish research.</p></div>
                 <div class="guide-step"><span>4</span><p>Use <strong>Refresh analyst queue</strong> to review suspicious or inconclusive results. Keep analyst decisions and publication approval separate from automated indexing and scanning.</p></div>
                 <div class="guide-step"><span>5</span><p>Use <strong>Validate rule pack</strong> after rule changes and <strong>Run fixture benchmark</strong> only for synthetic throughput checks. The benchmark is not proof of production-scale capacity.</p></div>
+                <div class="guide-step"><span>6</span><p>Expand <strong>Run Rust Package Research</strong> to preview crates.io metadata, verify an exact crate checksum, quarantine and statically scan it, compare a supplied legitimate crate, and route strong evidence into Research. Cargo and package code are never executed.</p></div>
               </div>
               <div class="guide-callout guide-warning">The exact <code>scan-artifact</code>, <code>triage-show</code>, and research-handoff commands remain CLI-only because they require a reviewed artifact path or identifier. Browser actions are allowlisted and never execute untrusted package code.</div>
             </section>

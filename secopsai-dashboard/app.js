@@ -163,7 +163,11 @@ const state = {
     data: null,
     loading: false,
     error: null,
-    output: ''
+    output: '',
+    rustOutput: '',
+    rustError: null,
+    rustResult: null,
+    rustCommand: ''
   },
   researchCases: {
     view: 'cases',
@@ -9642,6 +9646,23 @@ function renderArtifactFleet() {
       ? `Artifact Fleet is unavailable here: ${state.artifactFleet.error}. Start the local helper for allowlisted actions; hosted mode does not run local artifact commands.`
       : 'Buttons use the Automation action token and an allowlisted local helper command. They never install, execute, or activate an artifact. Exact single-artifact scans still require the reviewed CLI path.';
   }
+  const rustOutput = el('rust-research-output');
+  if (rustOutput) {
+    rustOutput.textContent = state.artifactFleet.rustOutput || '';
+    rustOutput.hidden = !state.artifactFleet.rustOutput;
+  }
+  const rustResult = state.artifactFleet.rustResult?.result || state.artifactFleet.rustResult || {};
+  const rustCaseId = String(rustResult.case_id || '').trim();
+  const rustArtifactId = String(rustResult.artifact?.artifact_id || rustResult.scan?.artifact_id || '').trim();
+  for (const [id, enabled] of [
+    ['rust-research-matrix-btn', Boolean(rustCaseId)],
+    ['rust-research-draft-btn', Boolean(rustCaseId)],
+    ['rust-research-open-case-btn', Boolean(rustCaseId)],
+    ['rust-research-queue-btn', Boolean(rustArtifactId)],
+  ]) {
+    const button = el(id);
+    if (button) button.disabled = !enabled;
+  }
 }
 
 async function runArtifactFleetAction(action, payload = {}, button = null) {
@@ -9676,6 +9697,127 @@ async function runArtifactFleetAction(action, payload = {}, button = null) {
     state.artifactFleet.output = JSON.stringify({ ok: false, action, error: state.artifactFleet.error }, null, 2);
     renderArtifactFleet();
     showToast(state.artifactFleet.error, 'error');
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function runRustPackageResearchAction(action, button = null) {
+  const tokenInput = el('intelligence-admin-token');
+  state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
+  if (!state.intelligence.adminToken) {
+    showToast('Enter the Automation action token before running Rust Package Research.', 'error');
+    tokenInput?.focus();
+    return null;
+  }
+  const payload = {
+    action,
+    package: el('rust-research-package')?.value?.trim() || '',
+    version: el('rust-research-version')?.value?.trim() || '',
+    compare_package: el('rust-research-compare-package')?.value?.trim() || '',
+    compare_version: el('rust-research-compare-version')?.value?.trim() || '',
+    source_reference: el('rust-research-source')?.value?.trim() || '',
+    persist_findings: Boolean(el('rust-research-persist')?.checked),
+    create_case: el('rust-research-create-case')?.checked !== false,
+    draft_blog: Boolean(el('rust-research-draft')?.checked),
+    model: state.intelligence.selectedModel || ''
+  };
+  if (!payload.package || !payload.version) {
+    showToast('Enter a crate package and exact version first.', 'error');
+    return null;
+  }
+  if (button?.id === 'rust-research-compare-btn' && (!payload.compare_package || !payload.compare_version)) {
+    showToast('Enter a comparison crate and exact version first.', 'error');
+    return null;
+  }
+  sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
+  setButtonBusy(button, true, 'Working…');
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/rust-package-research', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SecOpsAI-Intelligence-Token': state.intelligence.adminToken
+      },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || `Rust Package Research HTTP ${response.status}`);
+    state.artifactFleet.rustError = null;
+    state.artifactFleet.rustOutput = JSON.stringify(result.result || result, null, 2);
+    state.artifactFleet.rustResult = result;
+    const cliArg = value => `'${String(value).replaceAll("'", "'\\''")}'`;
+    state.artifactFleet.rustCommand = [
+      'secopsai research rust-package',
+      `--package ${cliArg(payload.package)}`,
+      `--version ${cliArg(payload.version)}`,
+      payload.compare_package ? `--compare-package ${cliArg(payload.compare_package)}` : '',
+      payload.compare_version ? `--compare-version ${cliArg(payload.compare_version)}` : '',
+      payload.source_reference ? `--source-reference ${cliArg(payload.source_reference)}` : '',
+      payload.persist_findings ? '--persist-findings' : '',
+      payload.draft_blog ? '--draft-blog' : '',
+      '--json',
+    ].filter(Boolean).join(' ');
+    showToast(`Rust Package Research completed: ${humanizeSnake(action)}`, 'success');
+    await loadArtifactFleetStatus();
+    return result;
+  } catch (error) {
+    state.artifactFleet.rustError = error?.message || String(error);
+    state.artifactFleet.rustOutput = JSON.stringify({ ok: false, action, error: state.artifactFleet.rustError }, null, 2);
+    renderArtifactFleet();
+    showToast(state.artifactFleet.rustError, 'error');
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function runRustResearchFollowup(action, button = null) {
+  const result = state.artifactFleet.rustResult?.result || state.artifactFleet.rustResult || {};
+  const caseId = String(result.case_id || '').trim();
+  const artifactId = String(result.artifact?.artifact_id || result.scan?.artifact_id || '').trim();
+  if (action === 'open-case') {
+    if (!caseId) return null;
+    state.researchCases.selectedId = caseId;
+    setPage('research');
+    await loadResearchCases({ render: true, preserveSelection: true });
+    return caseId;
+  }
+  if (action === 'copy-cli') {
+    if (state.artifactFleet.rustCommand) await copyTextWithStatus(state.artifactFleet.rustCommand, 'Rust research CLI copied');
+    return state.artifactFleet.rustCommand;
+  }
+  if (!caseId && action !== 'queue') {
+    showToast('Run Rust Package Research first so a Research Case is available.', 'error');
+    return null;
+  }
+  if (action === 'queue' && !artifactId) {
+    showToast('Run Rust Package Research first so an artifact is available.', 'error');
+    return null;
+  }
+  const tokenInput = el('intelligence-admin-token');
+  state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
+  if (!state.intelligence.adminToken) {
+    showToast('Enter the Automation action token before running this follow-up.', 'error');
+    tokenInput?.focus();
+    return null;
+  }
+  setButtonBusy(button, true, 'Working…');
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/rust-package-research', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-SecOpsAI-Intelligence-Token': state.intelligence.adminToken},
+      body: JSON.stringify({action, case_id: caseId, artifact_id: artifactId, model: state.intelligence.selectedModel || ''})
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Rust research follow-up HTTP ${response.status}`);
+    state.artifactFleet.rustOutput = JSON.stringify(payload.result || payload, null, 2);
+    showToast(`Rust research follow-up completed: ${humanizeSnake(action)}`, 'success');
+    await loadArtifactFleetStatus();
+    return payload;
+  } catch (error) {
+    showToast(error?.message || String(error), 'error');
     return null;
   } finally {
     setButtonBusy(button, false);
@@ -10178,6 +10320,14 @@ function bindEvents() {
   el('workspace-switcher')?.addEventListener('click', () => showToast('This pilot uses one authenticated SecOpsAI workspace. Customer/site switching is available when multi-tenant workspaces are enabled.', 'info'));
   el('enterprise-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadEnterpriseStatus(), { successMessage: 'Enterprise status refreshed' }));
   el('artifact-fleet-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadArtifactFleetStatus(), { successMessage: 'Artifact Fleet status refreshed' }));
+  el('rust-research-preview-btn')?.addEventListener('click', event => runRustPackageResearchAction('preview', event.currentTarget));
+  el('rust-research-run-btn')?.addEventListener('click', event => runRustPackageResearchAction('run', event.currentTarget));
+  el('rust-research-compare-btn')?.addEventListener('click', event => runRustPackageResearchAction('run', event.currentTarget));
+  el('rust-research-matrix-btn')?.addEventListener('click', event => runRustResearchFollowup('matrix', event.currentTarget));
+  el('rust-research-queue-btn')?.addEventListener('click', event => runRustResearchFollowup('queue', event.currentTarget));
+  el('rust-research-draft-btn')?.addEventListener('click', event => runRustResearchFollowup('draft', event.currentTarget));
+  el('rust-research-open-case-btn')?.addEventListener('click', event => runRustResearchFollowup('open-case', event.currentTarget));
+  el('rust-research-copy-btn')?.addEventListener('click', event => runRustResearchFollowup('copy-cli', event.currentTarget));
   document.querySelectorAll('[data-artifact-fleet-action]').forEach(button => {
     button.addEventListener('click', event => runArtifactFleetAction(event.currentTarget.dataset.artifactFleetAction, {}, event.currentTarget));
   });

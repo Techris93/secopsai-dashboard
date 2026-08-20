@@ -462,6 +462,21 @@ async function testTriageOpsHostedModeFailsClearlyWithoutHelper() {
   assert.equal(JSON.stringify(payload).includes("secret"), false);
 }
 
+async function testRustPackageResearchHostedModeFailsClearlyWithoutHelper() {
+  const response = await worker.fetch(
+    new Request("https://dashboard.example/api/secopsai/rust-package-research", {
+      method: "POST",
+      body: JSON.stringify({ action: "preview", package: "proc-macro1", version: "1.0.107" }),
+    }),
+    {},
+  );
+  assert.equal(response.status, 501);
+  const payload = await jsonFrom(response);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.code, "not_configured");
+  assert.equal(JSON.stringify(payload).includes("SECOPSAI_CORE_INTELLIGENCE_TOKEN"), false);
+}
+
 async function testTriageOpsWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/secopsai/triage-ops/close", {
@@ -1250,6 +1265,7 @@ await testIntegrationStatusExposesCampaignApi();
 await testDiscordNotifyRequiresDedicatedToken();
 await testDiscordNotifyAuthorizedForwardsWebhook();
 await testTriageOpsHostedModeFailsClearlyWithoutHelper();
+await testRustPackageResearchHostedModeFailsClearlyWithoutHelper();
 await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
