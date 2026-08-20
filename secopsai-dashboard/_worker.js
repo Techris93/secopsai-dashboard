@@ -520,6 +520,33 @@ async function handleHostedIntelligence(request, env) {
   return jsonResponse({ ok: false, error: "Unsupported hosted intelligence action. Bridge service controls run on the local sensor." }, { status: 400 });
 }
 
+async function handleHostedEnterprise(request, env) {
+  const rawUrl = String(env.SECOPSAI_CORE_API_URL || "").trim();
+  const readToken = String(env.SECOPSAI_CORE_READ_TOKEN || "").trim();
+  if (!rawUrl || !readToken) {
+    return jsonResponse({ ok: false, mode: "hosted-core", error: "Enterprise Core storage is not configured" }, { status: 501 });
+  }
+  const baseUrl = serviceBaseUrl(rawUrl, "SECOPSAI_CORE_API_URL");
+  try {
+    const [health, events] = await Promise.all([
+      secopsaiCoreRequest(baseUrl, "/api/v1/enterprise/health", readToken, "Enterprise Core health"),
+      secopsaiCoreRequest(baseUrl, "/api/v1/enterprise/events?limit=50", readToken, "Enterprise Core events"),
+    ]);
+    return jsonResponse({
+      ok: true,
+      mode: "hosted-core",
+      result: {
+        store: health,
+        events,
+        connectors: ["aws.cloudtrail", "aws.guardduty", "aws.securityhub", "gcp.audit", "gcp.scc", "kubernetes.audit"],
+        workflows: ["vulnerability-management", "dast", "grc", "questionnaires", "threat-modeling", "pentest"],
+      },
+    });
+  } catch (error) {
+    return jsonResponse({ ok: false, mode: "hosted-core", error: sanitizeHelperErrorDetail(error?.message || error) }, { status: 503 });
+  }
+}
+
 function unavailableCore(error, configured = false) {
   return {
     configured,
@@ -1484,6 +1511,11 @@ async function routeRequest(request, env) {
       }
       if (url.pathname === "/api/secopsai/intelligence") {
         return handleHostedIntelligence(request, env);
+      }
+      if (request.method === "GET" && url.pathname === "/api/secopsai/enterprise-status") {
+        const directHostedMode = Boolean(String(env.SECOPSAI_CORE_API_URL || "").trim());
+        if (directHostedMode) return handleHostedEnterprise(request, env);
+        return jsonResponse({ ok: false, mode: "hosted", error: "Enterprise Core storage is not configured" }, { status: 501 });
       }
       if (isTriageOpsWriteRoute(request, url.pathname)) {
         const writeAuthResponse = requireTriageOpsAdmin(request, env);

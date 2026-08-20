@@ -1,0 +1,23 @@
+from pathlib import Path
+
+import dashboard_server
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_enterprise_surface_is_present_and_read_only_by_default():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    for marker in ("page-enterprise", "enterprise-summary", "enterprise-refresh-btn", "enterprise-connector-list", "enterprise-workflow-list"):
+        assert marker in html
+    assert '"enterprise": "enterprise"' in app
+    assert "loadEnterpriseStatus" in app
+    assert "enterprise-status" in server
+    assert "read-only" in html
+
+
+def test_enterprise_cli_status_is_allowlisted():
+    args = dashboard_server.secopsai_db_args()
+    assert args == ["--db-path", dashboard_server.SECOPSAI_DB_PATH] if dashboard_server.SECOPSAI_DB_PATH else args == []

@@ -154,6 +154,11 @@ const state = {
     loading: false,
     error: null
   },
+  enterprise: {
+    data: null,
+    loading: false,
+    error: null
+  },
   researchCases: {
     view: 'cases',
     cases: [],
@@ -252,7 +257,7 @@ const taskModalState = { editingId: null, sourceFinding: null };
 const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
 const dragState = { taskId: null };
 let workView = 'table';
-const pages = ["mission-control", "tasks", "findings", "edge", "automation", "integrations", "triage-ops", "research-cases", "coverage", "blog-ops", "operator-guide"];
+const pages = ["mission-control", "tasks", "findings", "edge", "automation", "integrations", "enterprise", "triage-ops", "research-cases", "coverage", "blog-ops", "operator-guide"];
 const PAGE_ROUTES = Object.freeze({
   "mission-control": "overview",
   "tasks": "work",
@@ -260,6 +265,7 @@ const PAGE_ROUTES = Object.freeze({
   "edge": "assets",
   "automation": "automation",
   "integrations": "system",
+  "enterprise": "enterprise",
   "triage-ops": "findings/supply-chain",
   "research-cases": "research/cases",
   "coverage": "research/coverage",
@@ -311,6 +317,7 @@ const TOP_NAV_PAGE = Object.freeze({
   "edge": "edge",
   "automation": "automation",
   "integrations": "integrations",
+  "enterprise": "enterprise",
   "triage-ops": "findings",
   "research-cases": "research-cases",
   "coverage": "research-cases",
@@ -330,6 +337,7 @@ const PAGE_CONTEXT = {
   "edge": "Assets · inventory, sensors, and changes",
   "automation": "Automation · models, policies, and learning",
   "integrations": "System · health and integrations",
+  "enterprise": "Enterprise · cloud, governance, and scale",
   "triage-ops": "Findings · supply-chain review",
   "research-cases": "Research · evidence and disclosure",
   "coverage": "Research · global registry surveillance",
@@ -379,6 +387,7 @@ const CONTEXT_NAV = Object.freeze({
     ["Credentials", "integrations", SYSTEM_VIEW_ROUTES.credentials],
     ["Audit log", "integrations", SYSTEM_VIEW_ROUTES.audit]
   ],
+  "enterprise": [],
   "automation": [],
   "triage-ops": [
     ["All findings", "findings", PAGE_ROUTES.findings],
@@ -1853,6 +1862,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTa
   if (normalizedPageId === 'blog-ops') renderBlogOps();
   if (normalizedPageId === 'automation') renderAutomation();
   if (normalizedPageId === 'integrations') renderIntegrations();
+  if (normalizedPageId === 'enterprise') renderEnterprise();
   if (normalizedPageId === 'edge') renderEdgeWorkspace();
   if (normalizedPageId === 'triage-ops') {
     renderTriageOps();
@@ -7588,6 +7598,7 @@ function renderAll() {
   renderEdgeWorkspace();
   renderRunRequests();
   renderIntegrations();
+  renderEnterprise();
   renderAutomation();
   renderTriageOps();
   renderResearchCases();
@@ -9515,6 +9526,55 @@ async function loadIntegrationStatus() {
   }
 }
 
+async function loadEnterpriseStatus({ render = true } = {}) {
+  state.enterprise.loading = true;
+  if (render) renderEnterprise();
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/enterprise-status');
+    const payload = await response.json().catch(() => ({}));
+    state.enterprise.data = payload;
+    state.enterprise.error = response.ok ? null : (payload.error || `Enterprise status HTTP ${response.status}`);
+  } catch (error) {
+    state.enterprise.error = error?.message || String(error);
+    state.enterprise.data = { ok: false, error: state.enterprise.error };
+  } finally {
+    state.enterprise.loading = false;
+    if (render) renderEnterprise();
+  }
+  return state.enterprise.data;
+}
+
+function renderEnterprise() {
+  const data = state.enterprise.data || {};
+  const store = data.result?.store || data.store || {};
+  const configured = Boolean(data.ok && store.status === 'ready');
+  const summary = el('enterprise-summary');
+  if (summary) summary.innerHTML = [
+    ['Data plane', configured ? 'Ready' : 'Not configured', configured ? 'Local SQLite or hosted PostgreSQL adapter' : 'Start the local helper or configure Core enterprise storage'],
+    ['AWS / GCP', 'Read-only adapter', 'Cloud credentials are never stored in the browser'],
+    ['Kubernetes', 'Dry-run ready', 'Manifest and audit parsers do not mutate clusters'],
+    ['DAST', 'Approval required', 'Passive validation is available; active scans require authorization']
+  ].map(([value, label, scope]) => `<div class="card"><div class="metric">${escapeHtml(value)}</div><div class="metric-label">${escapeHtml(label)}</div><div class="metric-scope">${escapeHtml(scope)}</div></div>`).join('');
+  const connectors = el('enterprise-connector-list');
+  if (connectors) connectors.innerHTML = [
+    ['AWS CloudTrail / GuardDuty / Security Hub', 'Read-only parser and cursor contract'],
+    ['GCP Audit Logs / SCC', 'Read-only parser and cursor contract'],
+    ['Kubernetes audit and manifests', 'Audit normalization and posture checks'],
+    ['OpenClaw / Hermes / host / Edge / CI', 'Existing normalized telemetry paths']
+  ].map(([name, detail]) => `<div class="feed-item compact-feed-item"><strong>${escapeHtml(name)}</strong><div class="small">${escapeHtml(detail)}</div><span class="status-pill">${configured ? 'Available' : 'Local helper required'}</span></div>`).join('');
+  const workflows = el('enterprise-workflow-list');
+  if (workflows) workflows.innerHTML = [
+    ['Vulnerability management', 'Asset context, prioritization, SLAs, and remediation records'],
+    ['DAST', 'Authorized target registration and SARIF ingestion'],
+    ['GRC evidence', 'SOC 2, ISO, HIPAA, NIST, CIS, and NIS2 control records'],
+    ['Questionnaires / threat models / pen tests', 'Versioned, evidence-linked, approval-gated workflows']
+  ].map(([name, detail]) => `<div class="feed-item compact-feed-item"><strong>${escapeHtml(name)}</strong><div class="small">${escapeHtml(detail)}</div></div>`).join('');
+  const note = el('enterprise-safety-note');
+  if (note) note.textContent = state.enterprise.error
+    ? `Enterprise status unavailable: ${state.enterprise.error}. Use the local helper or configure the hosted Core enterprise endpoint.`
+    : 'Enterprise integrations are read-only by default. Cloud changes, active DAST, Kubernetes mutations, ticket creation, disclosure, and publication remain approval-gated.';
+}
+
 async function loadLocalTriageState() {
   try {
     const res = await dashboardApiFetch('/api/secopsai/triage-state');
@@ -9836,6 +9896,9 @@ async function refreshActiveSurface({ force = false } = {}) {
     } else if (page === 'automation') {
       await Promise.all([loadIntegrationStatus(), loadIntelligence({ render: false })]);
       renderAutomation();
+    } else if (page === 'enterprise') {
+      await loadEnterpriseStatus({ render: false });
+      renderEnterprise();
     } else if (page === 'triage-ops') {
       await loadTriageOpsAlerts({ render: false });
       renderTriageOps();
@@ -9917,6 +9980,12 @@ async function boot() {
   }
 
   try {
+    await loadEnterpriseStatus({ render: false });
+  } catch (err) {
+    console.warn('loadEnterpriseStatus failed during boot', err);
+  }
+
+  try {
     await loadLocalTriageState();
   } catch (err) {
     console.warn('loadLocalTriageState failed during boot', err);
@@ -9995,6 +10064,7 @@ function bindEvents() {
   el('top-help-btn')?.addEventListener('click', () => openHelpDrawer(currentPageFromLocation()));
   el('top-health-btn')?.addEventListener('click', () => setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.health }));
   el('workspace-switcher')?.addEventListener('click', () => showToast('This pilot uses one authenticated SecOpsAI workspace. Customer/site switching is available when multi-tenant workspaces are enabled.', 'info'));
+  el('enterprise-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadEnterpriseStatus(), { successMessage: 'Enterprise status refreshed' }));
   el('confirm-dialog-confirm')?.addEventListener('click', () => finishConfirmation(true));
   el('confirm-dialog-cancel')?.addEventListener('click', () => finishConfirmation(false));
   el('confirm-dialog-close')?.addEventListener('click', () => finishConfirmation(false));

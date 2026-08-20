@@ -3453,6 +3453,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'secopsai_campaign_api': True,
                     'secopsai_edge_api': True,
                     'secopsai_intelligence_api': True,
+                    'secopsai_enterprise_api': True,
                 },
                 'blog_ops': {
                     'mode': 'local-helper-cli',
@@ -3491,6 +3492,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return json_response(self, 200 if payload.get('ok') else 503, payload)
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/enterprise-status':
+            try:
+                result, payload = run_cli_json(['enterprise', 'status', *secopsai_db_args()])
+                return json_response(self, 200 if result.get('ok') else 503, {'ok': bool(result.get('ok')), 'result': payload, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'enterprise_not_configured'})
 
         if parsed.path.startswith('/api/secopsai/intelligence/jobs/'):
             job_id = parsed.path.rsplit('/', 1)[-1].strip().upper()
