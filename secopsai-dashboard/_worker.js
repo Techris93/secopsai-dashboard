@@ -1517,6 +1517,9 @@ async function routeRequest(request, env) {
         if (directHostedMode) return handleHostedEnterprise(request, env);
         return jsonResponse({ ok: false, mode: "hosted", error: "Enterprise Core storage is not configured" }, { status: 501 });
       }
+      if (request.method === "GET" && url.pathname === "/api/secopsai/artifact-fleet-status") {
+        return jsonResponse({ ok: false, mode: "hosted", error: "Artifact Fleet requires a configured local helper or Core artifact-fleet endpoint" }, { status: 501 });
+      }
       if (isTriageOpsWriteRoute(request, url.pathname)) {
         const writeAuthResponse = requireTriageOpsAdmin(request, env);
         if (writeAuthResponse) return writeAuthResponse;

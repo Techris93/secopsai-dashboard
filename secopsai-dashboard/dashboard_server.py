@@ -3500,6 +3500,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'enterprise_not_configured'})
 
+        if parsed.path == '/api/secopsai/artifact-fleet-status':
+            try:
+                result, payload = run_cli_json(['artifact-fleet', 'status', *secopsai_db_args()])
+                return json_response(self, 200 if result.get('ok') else 503, {'ok': bool(result.get('ok')), 'result': payload, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'artifact_fleet_not_configured'})
+
         if parsed.path.startswith('/api/secopsai/intelligence/jobs/'):
             job_id = parsed.path.rsplit('/', 1)[-1].strip().upper()
             if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):

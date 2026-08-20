@@ -159,6 +159,11 @@ const state = {
     loading: false,
     error: null
   },
+  artifactFleet: {
+    data: null,
+    loading: false,
+    error: null
+  },
   researchCases: {
     view: 'cases',
     cases: [],
@@ -9573,6 +9578,46 @@ function renderEnterprise() {
   if (note) note.textContent = state.enterprise.error
     ? `Enterprise status unavailable: ${state.enterprise.error}. Use the local helper or configure the hosted Core enterprise endpoint.`
     : 'Enterprise integrations are read-only by default. Cloud changes, active DAST, Kubernetes mutations, ticket creation, disclosure, and publication remain approval-gated.';
+  renderArtifactFleet();
+}
+
+async function loadArtifactFleetStatus({ render = true } = {}) {
+  state.artifactFleet.loading = true;
+  if (render) renderArtifactFleet();
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/artifact-fleet-status');
+    const payload = await response.json().catch(() => ({}));
+    state.artifactFleet.data = payload;
+    state.artifactFleet.error = response.ok ? null : (payload.error || `Artifact Fleet HTTP ${response.status}`);
+  } catch (error) {
+    state.artifactFleet.error = error?.message || String(error);
+    state.artifactFleet.data = { ok: false, error: state.artifactFleet.error };
+  } finally {
+    state.artifactFleet.loading = false;
+    if (render) renderArtifactFleet();
+  }
+  return state.artifactFleet.data;
+}
+
+function renderArtifactFleet() {
+  const data = state.artifactFleet.data || {};
+  const result = data.result || {};
+  const artifacts = result.artifacts || {};
+  const queue = result.queue || {};
+  const triage = result.triage || {};
+  const summary = el('artifact-fleet-summary');
+  if (summary) summary.innerHTML = [
+    [String(Object.values(artifacts).reduce((sum, value) => sum + Number(value || 0), 0)), 'Artifacts indexed', 'Metadata stage'],
+    [String(queue.scan_pending || 0), 'Scan queue', 'Awaiting safe artifact analysis'],
+    [String(triage.awaiting_model || 0), 'Model triage', 'Minimized context only'],
+    [String(triage.analyst_review || 0), 'Analyst review', 'Suspicious or inconclusive']
+  ].map(([value, label, scope]) => `<div class="card"><div class="metric">${escapeHtml(value)}</div><div class="metric-label">${escapeHtml(label)}</div><div class="metric-scope">${escapeHtml(scope)}</div></div>`).join('');
+  const queueEl = el('artifact-fleet-queue');
+  if (queueEl) {
+    queueEl.textContent = state.artifactFleet.error
+      ? `Artifact Fleet unavailable: ${state.artifactFleet.error}. Use local helper mode for fixture scans and queue inspection.`
+      : `Queue: ${Object.entries(queue).map(([key, value]) => `${humanizeMachineText(key)} ${value}`).join(' · ') || 'empty'}${result.dead_letters ? ` · dead letters ${result.dead_letters}` : ''}`;
+  }
 }
 
 async function loadLocalTriageState() {
@@ -9897,7 +9942,7 @@ async function refreshActiveSurface({ force = false } = {}) {
       await Promise.all([loadIntegrationStatus(), loadIntelligence({ render: false })]);
       renderAutomation();
     } else if (page === 'enterprise') {
-      await loadEnterpriseStatus({ render: false });
+      await Promise.all([loadEnterpriseStatus({ render: false }), loadArtifactFleetStatus({ render: false })]);
       renderEnterprise();
     } else if (page === 'triage-ops') {
       await loadTriageOpsAlerts({ render: false });
@@ -9984,6 +10029,11 @@ async function boot() {
   } catch (err) {
     console.warn('loadEnterpriseStatus failed during boot', err);
   }
+  try {
+    await loadArtifactFleetStatus({ render: false });
+  } catch (err) {
+    console.warn('loadArtifactFleetStatus failed during boot', err);
+  }
 
   try {
     await loadLocalTriageState();
@@ -10065,6 +10115,7 @@ function bindEvents() {
   el('top-health-btn')?.addEventListener('click', () => setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.health }));
   el('workspace-switcher')?.addEventListener('click', () => showToast('This pilot uses one authenticated SecOpsAI workspace. Customer/site switching is available when multi-tenant workspaces are enabled.', 'info'));
   el('enterprise-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadEnterpriseStatus(), { successMessage: 'Enterprise status refreshed' }));
+  el('artifact-fleet-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadArtifactFleetStatus(), { successMessage: 'Artifact Fleet status refreshed' }));
   el('confirm-dialog-confirm')?.addEventListener('click', () => finishConfirmation(true));
   el('confirm-dialog-cancel')?.addEventListener('click', () => finishConfirmation(false));
   el('confirm-dialog-close')?.addEventListener('click', () => finishConfirmation(false));

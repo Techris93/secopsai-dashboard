@@ -10,11 +10,12 @@ def test_enterprise_surface_is_present_and_read_only_by_default():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
-    for marker in ("page-enterprise", "enterprise-summary", "enterprise-refresh-btn", "enterprise-connector-list", "enterprise-workflow-list"):
+    for marker in ("page-enterprise", "enterprise-summary", "enterprise-refresh-btn", "enterprise-connector-list", "enterprise-workflow-list", "artifact-fleet-panel", "artifact-fleet-summary"):
         assert marker in html
     assert '"enterprise": "enterprise"' in app
     assert "loadEnterpriseStatus" in app
     assert "enterprise-status" in server
+    assert "artifact-fleet-status" in server
     assert "read-only" in html
 
 
