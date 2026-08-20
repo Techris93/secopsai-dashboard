@@ -30,5 +30,6 @@ def test_pages_deploy_workflow_is_token_safe_and_manual_or_main_only():
     assert "CLOUDFLARE_ACCOUNT_ID" in workflow
     assert "wrangler@latest pages deploy . --project-name secopsai-dashboard --branch main" in workflow
     assert "set -euo pipefail" in workflow
-    assert "secrets.CLOUDFLARE_API_TOKEN != ''" in workflow
+    assert "Check Cloudflare deployment configuration" in workflow
+    assert "steps.config.outputs.configured == 'true'" in workflow
     assert "echo $CLOUDFLARE" not in workflow
