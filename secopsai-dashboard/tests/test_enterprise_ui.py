@@ -24,9 +24,11 @@ def test_enterprise_cli_status_is_allowlisted():
 
 
 def test_pages_deploy_workflow_is_token_safe_and_manual_or_main_only():
-    workflow = (ROOT / ".github/workflows/deploy-pages.yml").read_text(encoding="utf-8")
+    workflow_path = ROOT.parent / ".github/workflows/deploy-pages.yml"
+    workflow = workflow_path.read_text(encoding="utf-8")
     assert "CLOUDFLARE_API_TOKEN" in workflow
     assert "CLOUDFLARE_ACCOUNT_ID" in workflow
     assert "wrangler@latest pages deploy . --project-name secopsai-dashboard --branch main" in workflow
     assert "set -euo pipefail" in workflow
+    assert "secrets.CLOUDFLARE_API_TOKEN != ''" in workflow
     assert "echo $CLOUDFLARE" not in workflow
