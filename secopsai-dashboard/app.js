@@ -9614,9 +9614,11 @@ function renderArtifactFleet() {
   ].map(([value, label, scope]) => `<div class="card"><div class="metric">${escapeHtml(value)}</div><div class="metric-label">${escapeHtml(label)}</div><div class="metric-scope">${escapeHtml(scope)}</div></div>`).join('');
   const queueEl = el('artifact-fleet-queue');
   if (queueEl) {
+    const analystRows = Array.isArray(result.analyst_queue) ? result.analyst_queue : [];
+    const analystText = analystRows.length ? ` · analyst queue: ${analystRows.slice(0, 5).map(item => item.artifact_id || 'artifact').join(', ')}` : '';
     queueEl.textContent = state.artifactFleet.error
       ? `Artifact Fleet unavailable: ${state.artifactFleet.error}. Use local helper mode for fixture scans and queue inspection.`
-      : `Queue: ${Object.entries(queue).map(([key, value]) => `${humanizeMachineText(key)} ${value}`).join(' · ') || 'empty'}${result.dead_letters ? ` · dead letters ${result.dead_letters}` : ''}`;
+      : `Queue: ${Object.entries(queue).map(([key, value]) => `${humanizeMachineText(key)} ${value}`).join(' · ') || 'empty'}${result.dead_letters ? ` · dead letters ${result.dead_letters}` : ''}${analystText}`;
   }
 }
 

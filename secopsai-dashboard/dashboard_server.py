@@ -3503,7 +3503,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if parsed.path == '/api/secopsai/artifact-fleet-status':
             try:
                 result, payload = run_cli_json(['artifact-fleet', 'status', *secopsai_db_args()])
-                return json_response(self, 200 if result.get('ok') else 503, {'ok': bool(result.get('ok')), 'result': payload, 'cli': compact_cli_result(result)})
+                queue_result, queue_payload = run_cli_json(['artifact-fleet', 'analyst-queue', '--limit', '25', *secopsai_db_args()])
+                return json_response(self, 200 if result.get('ok') else 503, {'ok': bool(result.get('ok')), 'result': {**(payload or {}), 'analyst_queue': (queue_payload or {}).get('artifacts', [])}, 'cli': compact_cli_result(result), 'queue_cli': compact_cli_result(queue_result)})
             except Exception as exc:
                 return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'artifact_fleet_not_configured'})
 
