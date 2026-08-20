@@ -21,3 +21,12 @@ def test_enterprise_surface_is_present_and_read_only_by_default():
 def test_enterprise_cli_status_is_allowlisted():
     args = dashboard_server.secopsai_db_args()
     assert args == ["--db-path", dashboard_server.SECOPSAI_DB_PATH] if dashboard_server.SECOPSAI_DB_PATH else args == []
+
+
+def test_pages_deploy_workflow_is_token_safe_and_manual_or_main_only():
+    workflow = (ROOT / ".github/workflows/deploy-pages.yml").read_text(encoding="utf-8")
+    assert "CLOUDFLARE_API_TOKEN" in workflow
+    assert "CLOUDFLARE_ACCOUNT_ID" in workflow
+    assert "wrangler@latest pages deploy . --project-name secopsai-dashboard --branch main" in workflow
+    assert "set -euo pipefail" in workflow
+    assert "echo $CLOUDFLARE" not in workflow

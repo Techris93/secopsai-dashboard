@@ -352,6 +352,11 @@ That lets you test the worker, `config.js`, and `/api/*` routes locally before d
 
 ## Step-by-step Cloudflare Pages setup
 
+The repository includes `.github/workflows/deploy-pages.yml`. It deploys the
+root Pages output on pushes to `main` and on manual dispatch, using only the
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` GitHub environment secrets.
+The workflow fails closed when either secret is missing and never prints them.
+
 ### 1. Push the dashboard repo
 
 Push the repository that contains this dashboard to GitHub.
