@@ -9157,3 +9157,151 @@ body.professional-ui {
   .professional-ui .specialist-action-bar .modal-actions-right { display: grid; width: 100%; }
   .professional-ui .specialist-action-bar button { width: 100%; }
 }
+
+/* Accessibility pass: retain the bright green control-room concept with readable secondary detail. */
+.professional-ui .brand-overline { font-size: .66rem; letter-spacing: .04em; }
+.professional-ui .brand p { font-size: .72rem; line-height: 1.35; }
+.professional-ui .nav-btn .desc { color: #b6cec5; font-size: .78rem; line-height: 1.4; }
+.professional-ui .nav-group-label,
+.professional-ui .sidebar-subnav-heading { color: #9bc0b4; font-size: .72rem; }
+.professional-ui .sidebar-subnav-btn { color: #c2d8d0; font-size: .8rem; }
+.professional-ui .page-header p,
+.professional-ui .small,
+.professional-ui .card-subtle,
+.professional-ui .module-head p { color: #53645d; font-size: .82rem; line-height: 1.55; }
+.professional-ui .metric-label,
+.professional-ui .kv-key,
+.professional-ui .empty,
+.professional-ui .empty-state,
+.professional-ui .empty-state.compact { color: #53645d; font-size: .78rem; }
+.professional-ui input::placeholder,
+.professional-ui textarea::placeholder { color: #66776f; }
+.professional-ui table { font-size: .82rem; }
+.professional-ui thead th { color: #40534b; font-size: .72rem; }
+.professional-ui .status-pill { font-size: .72rem; line-height: 1.25; }
+.professional-ui .automation-tab { min-height: 42px; padding: 9px 15px; color: #40534b; font-size: .78rem; }
+.professional-ui .model-routing-head span { color: #53645d; font-size: .82rem; line-height: 1.5; }
+.professional-ui .routing-source { padding: 5px 8px; font-size: .72rem; }
+.professional-ui .model-catalog-row { min-height: 52px; padding: 10px 12px; }
+.professional-ui .model-catalog-row strong { font-size: .86rem; }
+.professional-ui .model-catalog-row small { color: #53645d; font-size: .76rem; }
+.professional-ui .model-routing-order-title { color: #40534b; font-size: .72rem; }
+.professional-ui .model-routing-item strong { font-size: .82rem; }
+.professional-ui .research-stage { min-height: 70px; padding: 14px; }
+.professional-ui .research-stage > span { font-size: .72rem; }
+.professional-ui .research-stage strong { font-size: .82rem; }
+.professional-ui .research-stage small { color: #53645d; font-size: .74rem; line-height: 1.4; }
+.professional-ui .research-fleet-summary .enterprise-readiness-label { color: #53645d; font-size: .7rem; }
+.professional-ui .research-fleet-summary .enterprise-readiness-item > span:last-child { color: #53645d; font-size: .78rem; line-height: 1.45; }
+.professional-ui .research-form-grid.compact label > span { font-size: .72rem; }
+.professional-ui .research-options { color: #40534b; font-size: .82rem; }
+.professional-ui .research-evidence-row { min-height: 42px; padding: 9px 10px; }
+.professional-ui .research-evidence-row strong { color: #40534b; font-size: .8rem; }
+.professional-ui .research-readiness-message { font-size: .82rem; }
+.professional-ui .artifact-fleet-statusline { color: #40534b; font-size: .76rem; line-height: 1.5; }
+.professional-ui .research-fleet-actions summary { font-size: .76rem; }
+.professional-ui .specialist-status-item { min-height: 98px; padding: 14px; }
+.professional-ui .specialist-status-item span,
+.professional-ui .specialist-policy-controls label > span { color: #53645d; font-size: .7rem; }
+.professional-ui .specialist-status-item small { color: #53645d; font-size: .78rem; }
+.professional-ui .specialist-policy-strip { color: #294b40; font-size: .8rem; }
+.professional-ui .specialist-roster summary { font-size: .78rem; }
+.professional-ui .specialist-roster-item { min-height: 76px; padding: 12px; }
+.professional-ui .specialist-roster-item strong,
+.professional-ui .specialist-route-panel strong { font-size: .82rem; }
+.professional-ui .specialist-roster-item span { color: #53645d; font-size: .72rem; line-height: 1.45; }
+.professional-ui .specialist-route-panel { min-height: 104px; padding: 13px; }
+.professional-ui .specialist-route-panel p,
+.professional-ui .specialist-route-panel ul { color: #53645d; font-size: .78rem; line-height: 1.55; }
+.professional-ui .research-pipeline-panel {
+  border-color: #9fcbbd;
+  border-left-color: #0b8068;
+  background: #f3faf7;
+  color: #17211e;
+}
+.professional-ui .research-case-row {
+  border-color: #cbd8d2;
+  background: #ffffff;
+  color: #253a33;
+  box-shadow: 0 1px 0 rgba(23, 33, 30, 0.04);
+}
+.professional-ui .research-case-row:hover {
+  border-color: #6da896;
+  background: #f3faf7;
+}
+.professional-ui .research-case-row.selected {
+  border-color: #0b8068;
+  background: #e5f5ef;
+  box-shadow: inset 4px 0 0 #0b8068;
+}
+.professional-ui .research-case-row strong,
+.professional-ui .research-case-row.selected strong { color: #17211e; }
+.professional-ui .research-case-row .small { color: #53645d; }
+.professional-ui .detail-eyebrow {
+  border: 1px solid #9fcbbd;
+  background: #e5f5ef;
+  color: #086753;
+  font-size: .74rem;
+}
+.professional-ui .severity-pill {
+  border: 1px solid #bdcbc5;
+  background: #f4f8f6;
+  color: #35463f;
+}
+.professional-ui .severity-pill.high,
+.professional-ui .severity-pill.critical {
+  border-color: #d9a153;
+  background: #fff0dc;
+  color: #704000;
+}
+.professional-ui .severity-pill.medium {
+  border-color: #c7ad63;
+  background: #fff8dc;
+  color: #5d4a00;
+}
+.professional-ui .severity-pill.low,
+.professional-ui .severity-pill.info {
+  border-color: #9fcbbd;
+  background: #eaf7f2;
+  color: #086753;
+}
+.professional-ui .research-pipeline-heading h5,
+.professional-ui .research-list-head h5 { color: #17211e; }
+.professional-ui .research-pipeline-summary {
+  border-color: #c7d8d1;
+  background: #fff;
+  color: #253a33;
+}
+.professional-ui .research-pipeline-summary span,
+.professional-ui .research-pipeline-boundary,
+.professional-ui .research-pipeline-step > small { color: #53645d; }
+.professional-ui .research-pipeline-notice {
+  border-left-color: #a66b00;
+  background: #fff5df;
+  color: #513b12;
+}
+.professional-ui .research-pipeline-steps { border-color: #cbd8d2; }
+.professional-ui .research-pipeline-step { min-height: 48px; border-color: #d7e2dd; }
+.professional-ui .research-review-item { border-color: #cbd8d2; background: #fff; }
+.professional-ui .research-pipeline-operational {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 13px 14px;
+  border: 1px solid #d4b56f;
+  border-left: 4px solid #a66b00;
+  background: #fff7e7;
+  color: #513b12;
+}
+.professional-ui .research-pipeline-operational > div { display: grid; gap: 4px; }
+.professional-ui .research-pipeline-operational strong { color: #3f2d0b; font-size: .9rem; }
+.professional-ui .research-pipeline-operational span { font-size: .82rem; line-height: 1.5; }
+.professional-ui .research-pipeline-operational.tone-danger { border-color: #d9959e; border-left-color: #a8323e; background: #fff0f1; color: #721e29; }
+.professional-ui .research-pipeline-operational.tone-danger strong { color: #721e29; }
+
+@media (max-width: 720px) {
+  .professional-ui .research-pipeline-operational { display: grid; }
+  .professional-ui .research-pipeline-operational button { width: 100%; }
+}

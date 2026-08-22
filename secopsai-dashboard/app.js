@@ -270,6 +270,7 @@ const state = {
   surfaceRefreshTimer: null,
   surfaceRefreshInFlight: false,
   lastSurfaceRefreshAt: 0,
+  lastResearchSurfaceRefreshAt: 0,
   actionAutoRefresh: new Map(),
   researchPipelinePollTimer: null,
   nativeEventSource: null,
@@ -9178,6 +9179,7 @@ function bindResearchCaseDetailActions(researchCase) {
       actor: 'dashboard-operator'
     }, event.currentTarget);
   });
+  el('research-pipeline-open-automation-btn')?.addEventListener('click', () => setPage('automation'));
   document.querySelectorAll('#research-case-detail .research-pipeline-review-btn').forEach(button => button.addEventListener('click', async event => {
     const decision = button.dataset.decision;
     const itemId = button.dataset.itemId;
@@ -9486,6 +9488,52 @@ function bindResearchCaseDetailActions(researchCase) {
   }));
 }
 
+function researchPipelineOperationalState(pipeline) {
+  if (!pipeline) return { state: 'not_started', tone: 'neutral', pollMs: 0, message: '' };
+  const jobs = (pipeline.steps || []).map(step => step.intelligence_job).filter(Boolean);
+  const failed = jobs.find(job => job.status === 'failed');
+  if (failed) {
+    return {
+      state: 'blocked',
+      tone: 'danger',
+      pollMs: 30000,
+      message: failed.error_message || `Model job ${failed.job_id} failed and requires operator review.`,
+    };
+  }
+  const waiting = jobs.find(job => job.status === 'awaiting_provider');
+  if (waiting) {
+    return {
+      state: 'blocked',
+      tone: 'danger',
+      pollMs: 30000,
+      message: waiting.error_message || `The selected model provider is unavailable for ${waiting.job_id}.`,
+    };
+  }
+  const activeJobs = jobs.filter(job => ['queued', 'running'].includes(job.status));
+  const oldestTimestamp = activeJobs.reduce((oldest, job) => {
+    const parsed = Date.parse(job.updated_at || job.started_at || job.queued_at || '');
+    return Number.isFinite(parsed) ? Math.min(oldest, parsed) : oldest;
+  }, Number.POSITIVE_INFINITY);
+  const ageMs = Number.isFinite(oldestTimestamp) ? Date.now() - oldestTimestamp : 0;
+  if (activeJobs.length && ageMs > 10 * 60 * 1000) {
+    return {
+      state: 'stalled',
+      tone: 'warning',
+      pollMs: 30000,
+      message: `${activeJobs.length} model job${activeJobs.length === 1 ? '' : 's'} have not advanced for ${Math.max(10, Math.floor(ageMs / 60000))} minutes. Open Automation to check the bridge and selected model.`,
+    };
+  }
+  if (activeJobs.length || ['running', 'awaiting_ai'].includes(pipeline.status)) {
+    return {
+      state: 'active',
+      tone: 'good',
+      pollMs: 5000,
+      message: 'The Local Codex Bridge is running the selected model against minimized case context. This view updates automatically.',
+    };
+  }
+  return { state: 'settled', tone: 'neutral', pollMs: 0, message: '' };
+}
+
 function renderInvestigationPipeline(researchCase, ecosystems) {
   const pipelines = Array.isArray(researchCase.pipelines) ? researchCase.pipelines : [];
   const pipeline = pipelines[0] || null;
@@ -9497,6 +9545,7 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
   const revisionPrefix = pipeline ? `r${pipeline.revision || 1}:` : '';
   const reviewItems = (pipeline?.review_items || []).filter(item => item.status !== 'superseded' && (!revisionPrefix || String(item.source_key || '').startsWith(revisionPrefix)));
   const pendingReview = reviewItems.filter(item => ['pending', 'applying'].includes(item.status));
+  const operational = researchPipelineOperationalState(pipeline);
   const canStart = !pipeline || ['succeeded', 'canceled'].includes(pipeline.status);
   const comparisonNeeded = Boolean(summary.comparison_input_required || steps.some(step => step.step_key === 'collect_reference' && step.status === 'awaiting_input'));
   const canResume = pipeline && (pipeline.status === 'failed' || (comparisonNeeded && ['awaiting_input', 'awaiting_review', 'awaiting_ai'].includes(pipeline.status)));
@@ -9525,7 +9574,7 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
   const statusCopy = !pipeline
     ? 'No investigation pipeline has run for this case.'
     : pipeline.status === 'awaiting_ai'
-      ? 'The Local Codex Bridge is processing minimized case context. This view updates automatically.'
+      ? operational.message
       : pipeline.status === 'awaiting_review'
         ? `${pendingReview.length} proposal${pendingReview.length === 1 ? '' : 's'} require an analyst decision.`
         : pipeline.status === 'failed'
@@ -9536,11 +9585,14 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
               : 'All pipeline proposals were reviewed. External sandbox, disclosure, and publication remain separate human gates.'
             : 'The pipeline is durable and can continue from its recorded step.';
   const stepRows = steps.length ? steps.map(step => {
+    const job = step.intelligence_job || null;
+    const effectiveStatus = job?.status || step.status;
     const jobStatus = step.intelligence_job_id
-      ? ` · job <code>${escapeHtml(step.intelligence_job_id)}</code>`
+      ? ` · job <code>${escapeHtml(step.intelligence_job_id)}</code>${job?.attempt ? ` · attempt ${escapeHtml(String(job.attempt))}` : ''}`
       : '';
-    const message = step.error_message || step.result?.message || '';
-    return `<li class="research-pipeline-step ${escapeHtml(step.status)}"><span>${escapeHtml(statusLabel(step.step_key))}</span><span>${renderStatusPill(step.status)}${jobStatus}</span>${message ? `<small>${escapeHtml(message)}</small>` : ''}</li>`;
+    const message = job?.error_message || step.error_message || step.result?.message || '';
+    const updated = job?.updated_at ? `Last update ${fmtDate(job.updated_at)}` : '';
+    return `<li class="research-pipeline-step ${escapeHtml(effectiveStatus)}"><span>${escapeHtml(statusLabel(step.step_key))}</span><span>${renderStatusPill(effectiveStatus)}${jobStatus}</span>${message || updated ? `<small>${escapeHtml([message, updated].filter(Boolean).join(' · '))}</small>` : ''}</li>`;
   }).join('') : '<li class="research-pipeline-step pending"><span>Waiting to start</span></li>';
   const reviewCards = reviewItems.length ? reviewItems.map(item => {
     const editable = pipeline.status === 'awaiting_review' && ['pending', 'applying'].includes(item.status);
@@ -9559,6 +9611,7 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
       ${pipeline ? renderStatusPill(pipeline.status) : renderStatusPill('not_started', 'Not started')}
     </div>
     <div class="research-pipeline-summary"><strong>${escapeHtml(statusCopy)}</strong>${pipeline ? `<span><code>${escapeHtml(pipeline.pipeline_id)}</code> · revision ${escapeHtml(String(pipeline.revision || 1))}</span>` : ''}</div>
+    ${['stalled', 'blocked'].includes(operational.state) ? `<div class="research-pipeline-operational tone-${escapeHtml(operational.tone)}"><div><strong>${operational.state === 'blocked' ? 'Model analysis is blocked' : 'Model analysis needs attention'}</strong><span>${escapeHtml(operational.message)}</span></div><button class="secondary-btn" id="research-pipeline-open-automation-btn" type="button">Open Automation</button></div>` : ''}
     <div class="research-form-grid research-pipeline-targets">
       <label><span>Investigated package</span><input value="${escapeHtml(`${packageSubject.ecosystem || 'unknown'}:${packageSubject.name || 'No package subject'}`)}" readonly /></label>
       <label><span>Reference ecosystem</span><select id="research-pipeline-reference-ecosystem">${ecosystems.map(value => researchOption(value, reference.ecosystem || packageSubject.ecosystem || 'npm')).join('')}</select></label>
@@ -9835,6 +9888,8 @@ function renderResearchCaseDetail(researchCase) {
 
 function researchNextActionForCase(researchCase, pipeline, review) {
   if (!pipeline) return { title: 'Start evidence collection', label: 'Run investigation pipeline', buttonId: 'research-pipeline-start-btn', reason: 'Collect normalized package metadata, compare the reference, and prepare evidence-linked review items.' };
+  const operational = researchPipelineOperationalState(pipeline);
+  if (['stalled', 'blocked'].includes(operational.state)) return { title: 'Restore model analysis', label: 'Open Automation', buttonId: 'research-pipeline-open-automation-btn', reason: operational.message };
   if (pipeline.status === 'awaiting_review') return { title: 'Review agent proposals', label: 'Complete guarded agent review', buttonId: 'research-pipeline-auto-review-btn', reason: 'The pipeline has prepared bounded evidence and an evidence-linked verdict. Review the proposed conclusions before attaching them.' };
   if (pipeline.status === 'awaiting_input' || pipeline.status === 'failed') return { title: 'Resolve the pipeline blocker', label: pipeline.status === 'failed' ? 'Retry from checkpoint' : 'Add reference and rerun analysis', buttonId: 'research-pipeline-resume-btn', reason: pipeline.error_message || 'The pipeline needs an approved reference package or a retry from its last safe checkpoint.' };
   if (!review) return { title: 'Generate publication safety review', label: 'Run publication safety check', buttonId: 'research-publication-check-btn', reason: 'Check confidence, evidence completeness, disclosure state, and unsafe disclosure details before drafting public content.' };
@@ -9965,21 +10020,28 @@ function syncResearchPipelinePolling() {
   const pipeline = (state.researchCases.selected?.pipelines || [])[0];
   const shouldPoll = pipeline && ['running', 'awaiting_ai'].includes(pipeline.status);
   if (!shouldPoll) {
-    if (state.researchPipelinePollTimer) clearInterval(state.researchPipelinePollTimer);
+    if (state.researchPipelinePollTimer) clearTimeout(state.researchPipelinePollTimer);
     state.researchPipelinePollTimer = null;
     return;
   }
   if (state.researchPipelinePollTimer) return;
-  state.researchPipelinePollTimer = setInterval(async () => {
+  const delay = researchPipelineOperationalState(pipeline).pollMs || 30000;
+  state.researchPipelinePollTimer = setTimeout(async () => {
     const caseId = state.researchCases.selectedId;
-    if (!caseId) return;
+    if (!caseId) {
+      state.researchPipelinePollTimer = null;
+      return;
+    }
     try {
       await loadResearchCaseDetail(caseId, { render: false });
       renderResearchCases();
     } catch (error) {
       console.warn('research pipeline refresh failed', error);
+    } finally {
+      state.researchPipelinePollTimer = null;
+      syncResearchPipelinePolling();
     }
-  }, 5000);
+  }, delay);
 }
 
 async function loadIntegrationStatus() {
@@ -10966,10 +11028,12 @@ async function refreshActiveSurface({ force = false } = {}) {
       await loadTriageOpsAlerts({ render: false });
       renderTriageOps();
     } else if (page === 'research-cases') {
-      await Promise.all([
-        loadResearchCases({ render: false, preserveSelection: true }),
-        loadResearchDiscovery({ render: false })
-      ]);
+      const pipeline = (state.researchCases.selected?.pipelines || [])[0];
+      const pipelinePollActive = pipeline && ['running', 'awaiting_ai'].includes(pipeline.status);
+      if (!pipelinePollActive && (force || now - state.lastResearchSurfaceRefreshAt >= 30000)) {
+        await loadResearchCases({ render: false, preserveSelection: true });
+        state.lastResearchSurfaceRefreshAt = Date.now();
+      }
       renderResearchCases();
     } else if (page === 'coverage') {
       await loadCoverage({ render: false });

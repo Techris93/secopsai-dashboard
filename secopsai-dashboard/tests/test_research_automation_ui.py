@@ -259,6 +259,9 @@ def test_pipeline_gateway_rejects_untrusted_targets_and_decisions():
 
 def test_research_discovery_commands_are_allowlisted_and_cross_ecosystem():
     assert dashboard_server.build_research_discovery_args("capabilities") == ["research", "ecosystems"]
+    assert "--db-path" not in dashboard_server.build_research_discovery_command("capabilities")
+    assert "--db-path" not in dashboard_server.build_research_discovery_command("watchlist-list")
+    assert "--db-path" in dashboard_server.build_research_discovery_command("candidate-list")
     args = dashboard_server.build_research_discovery_args(
         "watchlist-add",
         {"ecosystem": "nuget", "watch_type": "brand", "identifier": "Braintree", "threshold": 78},
@@ -284,6 +287,18 @@ def test_research_discovery_selector_tracks_the_selected_ecosystem():
     assert "addEventListener('change', syncResearchDiscoveryWatchlistOptions)" in source
     assert "watchlist.ecosystem !== ecosystem" in source
     assert "Select a ${escapeHtml(ecosystem)} watchlist" in source
+
+
+def test_research_pipeline_exposes_stalled_model_state_without_polling_full_discovery():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "function researchPipelineOperationalState(pipeline)" in source
+    assert "Model analysis needs attention" in source
+    assert "research-pipeline-open-automation-btn" in source
+    assert "step.intelligence_job || null" in source
+    assert "if (!caseId) {\n      state.researchPipelinePollTimer = null;" in source
+    research_refresh = source[source.index("} else if (page === 'research-cases')") : source.index("} else if (page === 'coverage')")]
+    assert "loadResearchDiscovery" not in research_refresh
+    assert "lastResearchSurfaceRefreshAt >= 30000" in research_refresh
 
 
 def test_sandbox_approval_requires_public_acknowledgement():

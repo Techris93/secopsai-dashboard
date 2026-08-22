@@ -161,6 +161,12 @@ assert.match(app, /const currentButton = buttonId \? el\(buttonId\) : originalBu
 assert.match(app, /function renderContextNav\(pageId, routeOverride = null\)/);
 assert.match(app, /renderContextNav\(normalizedPageId, activeRoute\)/);
 assert.match(styles, /^\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/m);
+assert.match(styles, /Accessibility pass: retain the bright green control-room concept/);
+assert.match(styles, /\.professional-ui \.small,[\s\S]*font-size: \.82rem/);
+assert.match(styles, /\.professional-ui \.research-pipeline-operational/);
+assert.match(styles, /\.professional-ui \.research-case-row\.selected[\s\S]*background: #e5f5ef/);
+assert.match(styles, /\.professional-ui \.severity-pill\.high,[\s\S]*background: #fff0dc/);
+assert.match(styles, /\.professional-ui \.brand-overline \{ font-size: \.66rem/);
 assert.match(app, /function refreshActiveSurface/);
 assert.match(app, /surfaceRefreshInFlight/);
 assert.match(app, /setInterval\(\(\) => \{\s*refreshActiveSurface\(\);\s*\}, 5000\)/s);

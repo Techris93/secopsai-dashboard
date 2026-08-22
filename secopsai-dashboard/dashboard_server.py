@@ -2192,6 +2192,14 @@ def build_research_discovery_args(action, payload=None):
     raise ValueError('Unsupported research discovery action')
 
 
+def build_research_discovery_command(action, payload=None):
+    """Add the local SOC database only to commands that support it."""
+    args = build_research_discovery_args(action, payload)
+    if action not in {'capabilities', 'watchlist-list'}:
+        args.extend(secopsai_db_args())
+    return args
+
+
 def run_cli_json(args, timeout=120):
     result = run_secopsai_cli([*args, '--json'], timeout=timeout)
     parsed = parse_cli_json(result)
@@ -4098,7 +4106,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     ('limit', _clean_string((qs.get('limit') or [''])[0], 8)),
                     ('days', _clean_string((qs.get('days') or [''])[0], 4)),
                 ] if value}
-                result, parsed_result = run_cli_json([*build_research_discovery_args(action, payload), *secopsai_db_args()], timeout=90)
+                result, parsed_result = run_cli_json(build_research_discovery_command(action, payload), timeout=90)
                 return json_response(self, 200 if result['ok'] else 500, {'ok': result['ok'], 'view': view, 'result': parsed_result, 'cli': compact_cli_result(result)})
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
@@ -4581,8 +4589,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
             action = _clean_string(payload.get('action'), 40).lower()
             try:
-                args = build_research_discovery_args(action, payload)
-                result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=180)
+                args = build_research_discovery_command(action, payload)
+                result, parsed_result = run_cli_json(args, timeout=180)
                 return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'action': action, 'result': parsed_result, 'cli': compact_cli_result(result)})
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
