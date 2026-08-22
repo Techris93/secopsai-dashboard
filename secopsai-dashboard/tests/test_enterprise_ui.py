@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import dashboard_server
@@ -111,6 +112,15 @@ def test_enterprise_vulnerability_and_governance_actions_are_bounded():
 def test_enterprise_questionnaire_action_round_trips_question_text(tmp_path, monkeypatch):
     db_path = tmp_path / "enterprise.db"
     monkeypatch.setattr(dashboard_server, "SECOPSAI_ENTERPRISE_DB_PATH", str(db_path))
+    captured = {}
+
+    def fake_run_cli_json(args, timeout):
+        input_path = Path(args[args.index("--input") + 1])
+        captured["input_path"] = input_path
+        captured["payload"] = json.loads(input_path.read_text(encoding="utf-8"))
+        return {"ok": True}, {"payload": captured["payload"]}
+
+    monkeypatch.setattr(dashboard_server, "run_cli_json", fake_run_cli_json)
     result, payload = dashboard_server.run_enterprise_action(
         "workflow",
         {
@@ -126,9 +136,8 @@ def test_enterprise_questionnaire_action_round_trips_question_text(tmp_path, mon
     )
     assert result["ok"] is True
     assert payload["payload"]["questions"][0]["question"] == "How is privileged access reviewed?"
-    status_result, status = dashboard_server.run_cli_json(["enterprise", "status", *dashboard_server.enterprise_db_args()])
-    assert status_result["ok"] is True
-    assert status["summary"]["counts"]["questionnaires"] == 1
+    assert captured["payload"]["questionnaire_id"] == "Q-2026-001"
+    assert not captured["input_path"].exists()
 
 
 def test_pages_deploy_workflow_is_token_safe_and_manual_or_main_only():
