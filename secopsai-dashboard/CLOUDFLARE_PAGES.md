@@ -171,7 +171,16 @@ Safety model:
 
 The dashboard includes a protected **Triage Ops** tab for supply-chain `SCM-*` alerts. It is helper-backed, not browser-shell-backed. Hosted Cloudflare Pages proxies `/api/secopsai/triage-ops/*` only when `SECOPSAI_HELPER_BASE_URL` is intentionally configured. With that variable absent, hosted mode returns clear `not_configured` guidance and local usage is served by `dashboard_server.py`.
 
-The Enterprise Security page also includes an **Artifact Fleet** panel. Its
+The **Enterprise Security** page has three operator workspaces: Monitor, Assess,
+and Govern. Status is evidence-based: the data plane can be ready while a cloud
+source remains merely implemented; a source becomes configured after a source
+cursor exists and active only after normalized evidence is received. Bounded
+event imports, vulnerability prioritization, Kubernetes dry-run checks, DAST
+scope validation, controls, and assurance workflows use the protected typed
+`/api/secopsai/enterprise-action` route. Hosted mode requires a reachable helper
+for these local Core writes and otherwise returns `501 not_configured` guidance.
+
+The Assess workspace also includes an **Artifact Fleet** panel. Its
 buttons call the protected `/api/secopsai/artifact-fleet` allowlist for metadata
 indexing, pending safe scans, minimized model-job queueing, analyst queue
 refresh, rule-pack validation, the synthetic benchmark, and the bounded cycle.

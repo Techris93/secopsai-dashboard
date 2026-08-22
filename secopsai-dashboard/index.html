@@ -428,77 +428,223 @@
         </section>
       </section>
 
-      <section class="page" id="page-enterprise">
-        <div class="page-header">
+      <section class="page enterprise-workspace" id="page-enterprise">
+        <div class="page-header enterprise-workspace-header">
           <div>
             <h2>Enterprise Security</h2>
-            <p>Cloud connectors, normalized events, vulnerability prioritization, DAST, governance, and hosted data-plane readiness.</p>
+            <p>Connect enterprise telemetry, assess exposure, and govern security work from one evidence-led workspace.</p>
+            <div class="enterprise-refreshed" id="enterprise-refreshed">Status not loaded</div>
           </div>
-          <button class="secondary-btn" id="enterprise-refresh-btn" type="button">Refresh enterprise status</button>
+          <button class="secondary-btn" id="enterprise-refresh-btn" type="button">Refresh status</button>
         </div>
-        <div class="evidence-notice info" id="enterprise-safety-note">Enterprise integrations are read-only by default. Cloud changes, active DAST, Kubernetes mutations, ticket creation, disclosure, and publication remain approval-gated.</div>
-        <div class="grid cols-4" id="enterprise-summary"></div>
-        <div class="grid cols-2" style="margin-top:18px;">
-          <div class="card" id="enterprise-connectors">
-            <div class="page-header compact-header"><div><h3 style="margin:0;">Connector readiness</h3><p class="small" style="margin:6px 0 0;">AWS, GCP, Kubernetes, CI, and agent sources.</p></div></div>
-            <div id="enterprise-connector-list"></div>
-          </div>
-          <div class="card" id="enterprise-workflows">
-            <div class="page-header compact-header"><div><h3 style="margin:0;">Workflow coverage</h3><p class="small" style="margin:6px 0 0;">Vulnerability, DAST, GRC, questionnaires, threat models, and pen tests.</p></div></div>
-            <div id="enterprise-workflow-list"></div>
-          </div>
-        </div>
-        <div class="card" style="margin-top:18px;" id="artifact-fleet-panel">
-          <div class="page-header compact-header"><div><h3 style="margin:0;">Artifact Fleet</h3><p class="small" style="margin:6px 0 0;">Metadata index, deterministic scan, minimized model triage, and analyst escalation.</p></div><button class="secondary-btn" id="artifact-fleet-refresh-btn" type="button">Refresh fleet</button></div>
-          <div class="evidence-notice info" id="artifact-fleet-safety-note">Buttons use the Automation action token and an allowlisted local helper command. They never install, execute, or activate an artifact. Exact single-artifact scans still require the reviewed CLI path.</div>
-          <details class="research-action-drawer" id="rust-package-research-panel" style="margin-top:12px;">
-            <summary>Run Rust Package Research</summary>
-            <p class="small">Fetch exact crates.io metadata, quarantine the crate, verify its checksum, run static Artifact Fleet rules, optionally compare a verified package, and create a reviewable Research Case. No Cargo command or package code runs.</p>
-            <div class="research-form-grid">
-              <label><span>Crate package</span><input id="rust-research-package" maxlength="128" placeholder="proc-macro1" /></label>
-              <label><span>Exact version</span><input id="rust-research-version" maxlength="160" placeholder="1.0.107" /></label>
-              <label><span>Comparison crate</span><input id="rust-research-compare-package" maxlength="128" placeholder="proc-macro2" /></label>
-              <label><span>Comparison version</span><input id="rust-research-compare-version" maxlength="160" placeholder="1.0.107" /></label>
-              <label class="research-span-2"><span>Source reference (optional)</span><input id="rust-research-source" maxlength="4000" placeholder="https://research.example/report" /></label>
-              <label class="checkbox-row"><input id="rust-research-persist" type="checkbox" /><span>Persist high-confidence finding</span></label>
-              <label class="checkbox-row"><input id="rust-research-create-case" type="checkbox" checked /><span>Create Research Case</span></label>
-              <label class="checkbox-row"><input id="rust-research-draft" type="checkbox" /><span>Create review-only draft</span></label>
+
+        <div class="enterprise-readiness" id="enterprise-summary" aria-label="Enterprise readiness"></div>
+        <div class="enterprise-safety" id="enterprise-safety-note" role="status">Loading enterprise readiness…</div>
+
+        <nav class="enterprise-tabs" aria-label="Enterprise Security workspace">
+          <button class="enterprise-tab active" data-enterprise-tab="monitor" type="button" aria-selected="true">Monitor</button>
+          <button class="enterprise-tab" data-enterprise-tab="assess" type="button" aria-selected="false">Assess</button>
+          <button class="enterprise-tab" data-enterprise-tab="govern" type="button" aria-selected="false">Govern</button>
+        </nav>
+
+        <section class="enterprise-view active" data-enterprise-view="monitor">
+          <section class="enterprise-setup" id="enterprise-setup-panel">
+            <div class="enterprise-setup-mark" aria-hidden="true"></div>
+            <div class="enterprise-setup-copy">
+              <h3 id="enterprise-setup-title">Your workspace foundation is ready</h3>
+              <p id="enterprise-setup-summary">Connect or import an approved telemetry source to begin monitoring enterprise activity.</p>
             </div>
-            <div class="research-form-actions">
-              <button class="secondary-btn" id="rust-research-preview-btn" type="button">Preview metadata</button>
-              <button class="primary-btn" id="rust-research-run-btn" type="button">Run intake + static analysis</button>
+            <div class="enterprise-setup-actions">
+              <button class="primary-btn" id="enterprise-configure-source-btn" type="button">Import first source</button>
+              <button class="secondary-btn" id="enterprise-open-guide-btn" type="button">View setup guide</button>
             </div>
-            <div class="research-form-actions" id="rust-research-followups" aria-label="Rust research follow-up actions">
-              <button class="secondary-btn" id="rust-research-compare-btn" type="button">Compare package</button>
-              <button class="secondary-btn" id="rust-research-matrix-btn" type="button" disabled>Build evidence matrix</button>
-              <button class="secondary-btn" id="rust-research-queue-btn" type="button" disabled>Queue model review</button>
-              <button class="secondary-btn" id="rust-research-draft-btn" type="button" disabled>Create review-only draft</button>
-              <button class="secondary-btn" id="rust-research-open-case-btn" type="button" disabled>Open Research Case</button>
-              <button class="secondary-btn" id="rust-research-copy-btn" type="button">Copy CLI fallback</button>
+          </section>
+
+          <div class="enterprise-monitor-layout">
+            <div class="enterprise-monitor-main">
+              <section class="enterprise-surface" id="enterprise-connectors">
+                <div class="enterprise-section-head">
+                  <div><h3>Telemetry sources</h3><p>Implemented, configured, and actively sending data are shown as separate states.</p></div>
+                  <button class="secondary-btn" id="enterprise-import-toggle-btn" type="button">Import events</button>
+                </div>
+                <div id="enterprise-connector-list"></div>
+                <details class="enterprise-inline-drawer" id="enterprise-source-intake">
+                  <summary>Import approved telemetry</summary>
+                  <p>Paste an approved JSON event or list of events. SecOpsAI normalizes and redacts credential-shaped fields before storage. Live cloud credentials remain server-side.</p>
+                  <div class="enterprise-form-grid">
+                    <label><span>Source</span><select id="enterprise-ingest-source"><option value="aws.cloudtrail">AWS CloudTrail</option><option value="aws.guardduty">AWS GuardDuty</option><option value="aws.securityhub">AWS Security Hub</option><option value="gcp.audit">GCP Audit Logs</option><option value="gcp.scc">GCP Security Command Center</option><option value="kubernetes.audit">Kubernetes Audit</option></select></label>
+                    <label class="enterprise-span-2"><span>Event JSON</span><textarea id="enterprise-ingest-json" rows="9" spellcheck="false" placeholder='{"eventID":"evt-1","eventName":"ConsoleLogin"}'></textarea></label>
+                  </div>
+                  <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-ingest-btn" type="button">Normalize and import</button></div>
+                  <div class="enterprise-result" id="enterprise-ingest-output" aria-live="polite"></div>
+                </details>
+              </section>
+
+              <section class="enterprise-surface enterprise-next-actions">
+                <div class="enterprise-section-head"><div><h3>Next recommended actions</h3><p>Complete the highest-value setup steps in order.</p></div></div>
+                <div id="enterprise-next-actions"></div>
+              </section>
             </div>
-            <pre class="intelligence-log" id="rust-research-output" aria-live="polite"></pre>
-          </details>
-          <div class="research-form-actions" id="artifact-fleet-actions" aria-label="Artifact Fleet actions">
-            <button class="primary-btn" id="artifact-fleet-cycle-btn" data-artifact-fleet-action="cycle" type="button">Run automated cycle</button>
-            <button class="secondary-btn" id="artifact-fleet-index-btn" data-artifact-fleet-action="index" type="button">Index metadata</button>
-            <button class="secondary-btn" id="artifact-fleet-scan-btn" data-artifact-fleet-action="scan" type="button">Scan pending</button>
-            <button class="secondary-btn" id="artifact-fleet-triage-btn" data-artifact-fleet-action="triage" type="button">Queue model triage</button>
-            <button class="secondary-btn" id="artifact-fleet-analyst-btn" data-artifact-fleet-action="analyst-queue" type="button">Refresh analyst queue</button>
-            <button class="secondary-btn" id="artifact-fleet-rules-btn" data-artifact-fleet-action="rules" type="button">Validate rule pack</button>
-            <button class="secondary-btn" id="artifact-fleet-benchmark-btn" data-artifact-fleet-action="benchmark" type="button">Run fixture benchmark</button>
+
+            <aside class="enterprise-surface enterprise-activity" aria-label="Recent enterprise activity">
+              <div class="enterprise-section-head">
+                <div><h3>Activity</h3><p>Newest normalized events.</p></div>
+                <select id="enterprise-event-filter" aria-label="Filter enterprise activity"><option value="all">All sources</option><option value="aws">AWS</option><option value="gcp">GCP</option><option value="kubernetes">Kubernetes</option></select>
+              </div>
+              <div id="enterprise-activity-list"></div>
+              <div id="enterprise-activity-summary"></div>
+            </aside>
           </div>
-          <div class="grid cols-4" id="artifact-fleet-summary"></div>
-          <div id="artifact-fleet-queue" class="small" style="margin-top:12px;"></div>
-          <div id="artifact-fleet-health" class="small" style="margin-top:8px;"></div>
-          <pre class="intelligence-log" id="artifact-fleet-output" style="margin-top:12px;" aria-live="polite"></pre>
-        </div>
-        <div class="card" style="margin-top:18px;" id="enterprise-cli-fallback">
-          <div class="page-header compact-header"><div><h3 style="margin:0;">CLI fallback</h3><p class="small" style="margin:6px 0 0;">Use the local helper for fixture checks when a hosted connector is not configured.</p></div></div>
+        </section>
+
+        <section class="enterprise-view" data-enterprise-view="assess" hidden>
+          <div class="enterprise-assess-layout">
+            <nav class="enterprise-workflow-rail" aria-label="Assessment workflows">
+              <button class="active" data-enterprise-assessment="vulnerability" type="button"><strong>Vulnerability priority</strong><span>Score exposure and remediation SLA</span></button>
+              <button data-enterprise-assessment="kubernetes" type="button"><strong>Kubernetes posture</strong><span>Dry-run manifest checks</span></button>
+              <button data-enterprise-assessment="dast" type="button"><strong>DAST scope</strong><span>Validate an authorized target</span></button>
+              <button data-enterprise-assessment="artifact" type="button"><strong>Artifact research</strong><span>Scan packages without execution</span></button>
+            </nav>
+
+            <div class="enterprise-assess-content">
+              <section class="enterprise-assessment active" data-enterprise-assessment-view="vulnerability">
+                <div class="enterprise-section-head"><div><h3>Prioritize a vulnerability</h3><p>Combine CVSS, exploitability, asset context, exposure, and active exploitation into one explainable priority.</p></div></div>
+                <div class="enterprise-form-grid">
+                  <label><span>Advisory ID</span><input id="enterprise-vuln-advisory" placeholder="CVE-2026-1234" /></label>
+                  <label><span>Package or product</span><input id="enterprise-vuln-package" placeholder="example/package" /></label>
+                  <label><span>Version</span><input id="enterprise-vuln-version" placeholder="1.2.3" /></label>
+                  <label><span>Asset ID (optional)</span><input id="enterprise-vuln-asset" placeholder="service-api" /></label>
+                  <label><span>CVSS score</span><input id="enterprise-vuln-cvss" type="number" min="0" max="10" step="0.1" value="0" /></label>
+                  <label><span>Exploitability score</span><input id="enterprise-vuln-exploitability" type="number" min="0" max="10" step="0.1" value="0" /></label>
+                  <label><span>Asset criticality</span><select id="enterprise-vuln-criticality"><option value="normal">Normal</option><option value="important">Important</option><option value="critical">Critical</option></select></label>
+                  <div class="enterprise-checks"><label><input id="enterprise-vuln-kev" type="checkbox" /> CISA KEV match</label><label><input id="enterprise-vuln-active" type="checkbox" /> Active exploitation</label><label><input id="enterprise-vuln-exposed" type="checkbox" /> Internet exposed</label></div>
+                </div>
+                <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-vuln-run-btn" type="button">Prioritize vulnerability</button></div>
+                <div class="enterprise-result" id="enterprise-vuln-output" aria-live="polite"></div>
+                <div class="enterprise-record-list" id="enterprise-vulnerability-list"></div>
+              </section>
+
+              <section class="enterprise-assessment" data-enterprise-assessment-view="kubernetes" hidden>
+                <div class="enterprise-section-head"><div><h3>Check Kubernetes posture</h3><p>Perform a non-mutating manifest review for privileged workloads, risky host access, missing boundaries, and unsafe images.</p></div></div>
+                <label class="enterprise-block-label"><span>Kubernetes YAML</span><textarea id="enterprise-kubernetes-manifest" rows="18" spellcheck="false" placeholder="apiVersion: apps/v1&#10;kind: Deployment&#10;metadata:&#10;  name: app"></textarea></label>
+                <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-kubernetes-run-btn" type="button">Check manifest safely</button></div>
+                <div class="enterprise-result" id="enterprise-kubernetes-output" aria-live="polite"></div>
+              </section>
+
+              <section class="enterprise-assessment" data-enterprise-assessment-view="dast" hidden>
+                <div class="enterprise-section-head"><div><h3>Validate DAST scope</h3><p>Confirm target ownership and authorization, then produce a safe scan plan. This action does not launch the scanner.</p></div></div>
+                <div class="enterprise-form-grid">
+                  <label><span>Target ID</span><input id="enterprise-dast-target-id" placeholder="web-1" /></label>
+                  <label><span>HTTPS target URL</span><input id="enterprise-dast-url" type="url" placeholder="https://app.example" /></label>
+                  <label><span>Owner</span><input id="enterprise-dast-owner" placeholder="Application Security" /></label>
+                  <label><span>Authorization reference</span><input id="enterprise-dast-authorization" placeholder="change-123 or signed scope" /></label>
+                  <label><span>Mode</span><select id="enterprise-dast-mode"><option value="passive">Passive validation</option><option value="active">Active scan plan</option></select></label>
+                  <label class="enterprise-check"><input id="enterprise-dast-approved" type="checkbox" /><span>I have explicit authorization for an active scan plan</span></label>
+                </div>
+                <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-dast-run-btn" type="button">Validate target and scope</button></div>
+                <div class="enterprise-result" id="enterprise-dast-output" aria-live="polite"></div>
+              </section>
+
+              <section class="enterprise-assessment" data-enterprise-assessment-view="artifact" hidden>
+                <div class="enterprise-surface artifact-workbench" id="artifact-fleet-panel">
+                  <div class="enterprise-section-head"><div><h3>Artifact Fleet</h3><p>Index metadata, statically scan approved artifacts, minimize model context, and escalate only suspicious or inconclusive results.</p></div><button class="secondary-btn" id="artifact-fleet-refresh-btn" type="button">Refresh fleet</button></div>
+                  <div class="enterprise-safety compact" id="artifact-fleet-safety-note">Artifact code is never installed, executed, or activated.</div>
+                  <div class="enterprise-readiness artifact-readiness" id="artifact-fleet-summary"></div>
+                  <div class="artifact-fleet-statusline"><span id="artifact-fleet-queue"></span><span id="artifact-fleet-health"></span></div>
+                  <div class="enterprise-form-actions"><button class="primary-btn" id="artifact-fleet-cycle-btn" data-artifact-fleet-action="cycle" type="button">Run safe fleet cycle</button></div>
+
+                  <details class="enterprise-inline-drawer" id="rust-package-research-panel">
+                    <summary>Research an exact Rust crate</summary>
+                    <p>Fetch exact crates.io metadata, verify the checksum, quarantine the crate, run static rules, and optionally compare a verified crate. Cargo and package code never run.</p>
+                    <div class="enterprise-form-grid">
+                      <label><span>Crate package</span><input id="rust-research-package" maxlength="128" placeholder="proc-macro1" /></label>
+                      <label><span>Exact version</span><input id="rust-research-version" maxlength="160" placeholder="1.0.107" /></label>
+                      <label><span>Comparison crate (optional)</span><input id="rust-research-compare-package" maxlength="128" placeholder="proc-macro2" /></label>
+                      <label><span>Comparison version</span><input id="rust-research-compare-version" maxlength="160" placeholder="1.0.107" /></label>
+                      <label class="enterprise-span-2"><span>Source reference (optional)</span><input id="rust-research-source" maxlength="4000" placeholder="https://research.example/report" /></label>
+                    </div>
+                    <details class="enterprise-advanced-options"><summary>Finding and case options</summary><div class="enterprise-checks"><label><input id="rust-research-persist" type="checkbox" /> Persist a high-confidence finding</label><label><input id="rust-research-create-case" type="checkbox" checked /> Create a Research Case</label></div></details>
+                    <div class="enterprise-form-actions"><button class="secondary-btn" id="rust-research-preview-btn" type="button">Preview metadata</button><button class="primary-btn" id="rust-research-run-btn" type="button">Run package research</button></div>
+                    <div class="enterprise-followups" id="rust-research-followups" aria-label="Rust research follow-up actions">
+                      <button class="secondary-btn" id="rust-research-matrix-btn" type="button" disabled>Build evidence matrix</button>
+                      <button class="secondary-btn" id="rust-research-queue-btn" type="button" disabled>Queue model review</button>
+                      <button class="secondary-btn" id="rust-research-draft-btn" type="button" disabled>Create review-only draft</button>
+                      <button class="secondary-btn" id="rust-research-open-case-btn" type="button" disabled>Open Research Case</button>
+                    </div>
+                    <pre class="intelligence-log" id="rust-research-output" aria-live="polite"></pre>
+                  </details>
+
+                  <details class="enterprise-inline-drawer">
+                    <summary>Advanced fleet controls</summary>
+                    <p>Run individual fleet stages only when diagnosing or validating the automated cycle.</p>
+                    <div class="enterprise-followups" id="artifact-fleet-actions" aria-label="Advanced Artifact Fleet actions">
+                      <button class="secondary-btn" id="artifact-fleet-index-btn" data-artifact-fleet-action="index" type="button">Index metadata</button>
+                      <button class="secondary-btn" id="artifact-fleet-scan-btn" data-artifact-fleet-action="scan" type="button">Scan pending</button>
+                      <button class="secondary-btn" id="artifact-fleet-triage-btn" data-artifact-fleet-action="triage" type="button">Queue model triage</button>
+                      <button class="secondary-btn" id="artifact-fleet-analyst-btn" data-artifact-fleet-action="analyst-queue" type="button">Refresh analyst queue</button>
+                      <button class="secondary-btn" id="artifact-fleet-rules-btn" data-artifact-fleet-action="rules" type="button">Validate rule pack</button>
+                      <button class="secondary-btn" id="artifact-fleet-benchmark-btn" data-artifact-fleet-action="benchmark" type="button">Run fixture benchmark</button>
+                      <button class="secondary-btn" id="rust-research-copy-btn" type="button">Copy Rust CLI fallback</button>
+                    </div>
+                  </details>
+                  <pre class="intelligence-log" id="artifact-fleet-output" aria-live="polite"></pre>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="enterprise-view" data-enterprise-view="govern" hidden>
+          <div class="enterprise-readiness governance-readiness" id="enterprise-governance-summary"></div>
+          <div class="enterprise-govern-grid">
+            <section class="enterprise-surface">
+              <div class="enterprise-section-head"><div><h3>Create a compliance control</h3><p>Track ownership and implementation state against a supported framework.</p></div></div>
+              <div class="enterprise-form-grid">
+                <label><span>Control ID</span><input id="enterprise-control-id" placeholder="AC-1" /></label>
+                <label><span>Framework</span><select id="enterprise-control-framework"><option value="soc2">SOC 2</option><option value="iso27001">ISO 27001</option><option value="iso42001">ISO 42001</option><option value="hipaa">HIPAA</option><option value="nist-csf">NIST CSF</option><option value="cis">CIS</option><option value="nis2">NIS2</option></select></label>
+                <label class="enterprise-span-2"><span>Control title</span><input id="enterprise-control-title" placeholder="Quarterly privileged access review" /></label>
+                <label><span>Owner</span><input id="enterprise-control-owner" placeholder="Security" /></label>
+                <label><span>Status</span><select id="enterprise-control-status"><option value="not_started">Not started</option><option value="in_progress">In progress</option><option value="implemented">Implemented</option><option value="needs_review">Needs review</option><option value="complete">Complete</option></select></label>
+              </div>
+              <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-control-save-btn" type="button">Save control</button></div>
+              <div class="enterprise-result" id="enterprise-control-output" aria-live="polite"></div>
+            </section>
+
+            <section class="enterprise-surface">
+              <div class="enterprise-section-head"><div><h3>Create an assurance workflow</h3><p>Start an evidence-linked questionnaire, threat model, or authorized penetration test.</p></div></div>
+              <div class="enterprise-form-grid">
+                <label><span>Workflow type</span><select id="enterprise-workflow-kind"><option value="questionnaire">Security questionnaire</option><option value="threat-model">Threat model</option><option value="pentest">Penetration test</option></select></label>
+                <label><span>Record ID</span><input id="enterprise-workflow-id" placeholder="Q-2026-001" /></label>
+                <label class="enterprise-span-2"><span>Title</span><input id="enterprise-workflow-title" placeholder="Customer security review" /></label>
+                <label><span>Owner</span><input id="enterprise-workflow-owner" placeholder="Product Security" /></label>
+                <label data-enterprise-workflow-field="questionnaire"><span>Customer</span><input id="enterprise-workflow-customer" placeholder="Customer or internal review" /></label>
+                <label class="enterprise-span-2" data-enterprise-workflow-field="questionnaire"><span>Question</span><input id="enterprise-workflow-question" placeholder="How is privileged access reviewed?" /></label>
+                <label class="enterprise-span-2" data-enterprise-workflow-field="questionnaire"><span>Draft answer</span><textarea id="enterprise-workflow-answer" rows="4"></textarea></label>
+                <label data-enterprise-workflow-field="threat-model" hidden><span>Primary asset</span><input id="enterprise-workflow-asset" placeholder="Public API" /></label>
+                <label data-enterprise-workflow-field="threat-model" hidden><span>Threat</span><input id="enterprise-workflow-threat" placeholder="Token replay" /></label>
+                <label class="enterprise-span-2" data-enterprise-workflow-field="threat-model" hidden><span>Mitigation</span><input id="enterprise-workflow-mitigation" placeholder="Short-lived tokens and replay detection" /></label>
+                <label class="enterprise-span-2" data-enterprise-workflow-field="pentest" hidden><span>Authorized scope</span><input id="enterprise-workflow-scope" placeholder="https://app.example" /></label>
+                <label class="enterprise-span-2" data-enterprise-workflow-field="pentest" hidden><span>Authorization reference</span><input id="enterprise-workflow-authorization" placeholder="Signed rules of engagement or change ID" /></label>
+              </div>
+              <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-workflow-save-btn" type="button">Create draft workflow</button></div>
+              <div class="enterprise-result" id="enterprise-workflow-output" aria-live="polite"></div>
+            </section>
+          </div>
+
+          <div class="enterprise-govern-grid enterprise-records-grid">
+            <section class="enterprise-surface"><div class="enterprise-section-head"><div><h3>Compliance controls</h3><p>Latest saved records.</p></div></div><div class="enterprise-record-list" id="enterprise-control-list"></div></section>
+            <section class="enterprise-surface"><div class="enterprise-section-head"><div><h3>Assurance workflows</h3><p>Questionnaires, threat models, and penetration tests.</p></div></div><div class="enterprise-record-list" id="enterprise-workflow-list"></div></section>
+          </div>
+        </section>
+
+        <details class="enterprise-recovery" id="enterprise-cli-fallback">
+          <summary>Recovery and CLI fallback</summary>
+          <p>Use these local commands only when the protected dashboard helper is unavailable.</p>
           <pre class="intelligence-log">secopsai enterprise status --json
 secopsai enterprise ingest --source aws.cloudtrail --input fixture.json --json
 secopsai enterprise kubernetes-scan --path deployment.yaml --json
 secopsai enterprise dast-validate --target-id web-1 --url https://app.example --owner security --authorized-by change-123 --json</pre>
-        </div>
+        </details>
       </section>
 
       <section class="page" id="page-integrations">
@@ -906,6 +1052,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             <a href="#guide-findings">Findings</a>
             <a href="#guide-research">Research Cases</a>
             <a href="#guide-ai-dependency-guard">AI Dependency Guard</a>
+            <a href="#guide-enterprise">Enterprise Security</a>
             <a href="#guide-artifact-fleet">Artifact Fleet</a>
             <a href="#guide-native-triage">System audit and native triage</a>
             <a href="#guide-triage-ops">Findings · Supply chain</a>
@@ -1057,19 +1204,40 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
               <div class="guide-callout guide-good">Best use: scan AI-generated dependency changes before install, before CI cache population, and before letting an agent apply package suggestions to a real repo.</div>
             </section>
 
+            <section class="card guide-section" id="guide-enterprise">
+              <div class="guide-section-head">
+                <span class="guide-pill">Enterprise Security</span>
+                <h3>Monitor, assess, and govern with evidence</h3>
+                <p>The Enterprise workspace separates capability availability from real operational state. <strong>Implemented</strong> means the parser or workflow exists, <strong>Configured</strong> means a source cursor or record exists, and <strong>Active</strong> means recent evidence was received.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Monitor</strong><span>Import approved AWS, GCP, or Kubernetes events, confirm source health, review latest activity, and follow the ordered setup recommendations.</span></div>
+                <div class="guide-mini-card"><strong>Assess</strong><span>Prioritize vulnerabilities, dry-run Kubernetes posture checks, validate authorized DAST scope, and safely research package artifacts.</span></div>
+                <div class="guide-mini-card"><strong>Govern</strong><span>Create owned compliance controls and evidence-linked questionnaires, threat models, and penetration-test records.</span></div>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Open <strong>Enterprise Security</strong> and read the readiness rail. A ready data plane alone does not mean AWS, GCP, or Kubernetes is connected.</p></div>
+                <div class="guide-step"><span>2</span><p>Under <strong>Monitor</strong>, click <strong>Import events</strong>, choose the exact source, and paste one approved JSON event or a bounded JSON array. SecOpsAI normalizes it and redacts credential-shaped fields before storage.</p></div>
+                <div class="guide-step"><span>3</span><p>Use <strong>Assess</strong> for one bounded job at a time. Vulnerability prioritization is saved; Kubernetes review never mutates a cluster; DAST validates ownership and scope but does not launch a scanner.</p></div>
+                <div class="guide-step"><span>4</span><p>Use <strong>Govern</strong> to assign compliance control ownership or create a draft assurance workflow. External submissions and active penetration testing remain separate approved actions.</p></div>
+                <div class="guide-step"><span>5</span><p>Protected actions require the <strong>Automation action token</strong> under Administration. Hosted mode needs a configured helper; local mode uses the allowlisted local helper. The browser never runs a supplied shell command.</p></div>
+              </div>
+              <div class="guide-callout guide-good">The readiness rail and source table are operational evidence, not marketing claims. A source remains Implemented until a real cursor exists, and it becomes Active only after recent evidence arrives.</div>
+            </section>
+
             <section class="card guide-section" id="guide-artifact-fleet">
               <div class="guide-section-head">
                 <span class="guide-pill">Artifact Fleet</span>
                 <h3>Artifact Fleet click workflow</h3>
-                <p>Use the Artifact Fleet panel under <strong>Enterprise Security</strong> for the staged OSS funnel: metadata index, safe static scan, minimized model queue, and analyst escalation.</p>
+                <p>Use <strong>Enterprise Security → Assess → Artifact research</strong> for the staged OSS funnel: metadata index, safe static scan, minimized model queue, and analyst escalation.</p>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Start the local dashboard/helper, open <strong>Enterprise Security → Artifact Fleet</strong>, and click <strong>Refresh fleet</strong>. This also shows source health, queue metrics, and rule-pack status.</p></div>
-                <div class="guide-step"><span>2</span><p>Click <strong>Run automated cycle</strong> for the safe bounded sequence: index metadata, scan already-authorized local artifact paths, and prepare minimized triage contexts.</p></div>
+                <div class="guide-step"><span>1</span><p>Start the local dashboard/helper, open <strong>Enterprise Security → Assess → Artifact research</strong>, and click <strong>Refresh fleet</strong>. This also shows source health, queue metrics, and rule-pack status.</p></div>
+                <div class="guide-step"><span>2</span><p>Click <strong>Run safe fleet cycle</strong> for the bounded sequence: index metadata, scan already-authorized local artifact paths, and prepare minimized triage contexts.</p></div>
                 <div class="guide-step"><span>3</span><p>Click <strong>Queue model triage</strong> only after selecting the intended model in Native Triage. It creates jobs for that selected model; it does not silently install packages, execute artifacts, or publish research.</p></div>
                 <div class="guide-step"><span>4</span><p>Use <strong>Refresh analyst queue</strong> to review suspicious or inconclusive results. Keep analyst decisions and publication approval separate from automated indexing and scanning.</p></div>
                 <div class="guide-step"><span>5</span><p>Use <strong>Validate rule pack</strong> after rule changes and <strong>Run fixture benchmark</strong> only for synthetic throughput checks. The benchmark is not proof of production-scale capacity.</p></div>
-                <div class="guide-step"><span>6</span><p>Expand <strong>Run Rust Package Research</strong> to preview crates.io metadata, verify an exact crate checksum, quarantine and statically scan it, compare a supplied legitimate crate, and route strong evidence into Research. Cargo and package code are never executed.</p></div>
+                <div class="guide-step"><span>6</span><p>Expand <strong>Research an exact Rust crate</strong> to preview crates.io metadata, verify an exact crate checksum, quarantine and statically scan it, compare a supplied legitimate crate, and route strong evidence into Research. Cargo and package code are never executed.</p></div>
               </div>
               <div class="guide-callout guide-warning">The exact <code>scan-artifact</code>, <code>triage-show</code>, and research-handoff commands remain CLI-only because they require a reviewed artifact path or identifier. Browser actions are allowlisted and never execute untrusted package code.</div>
             </section>

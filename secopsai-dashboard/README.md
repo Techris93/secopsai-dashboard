@@ -17,6 +17,7 @@ The dashboard is now intentionally narrow:
   stale, and never-synced graph context
 - durable Research Cases for evidence, IOCs, disclosure, exports, and review-only publication handoff
 - Blog Ops workflow dispatch and review queue
+- Enterprise Security workspace for truthful connector readiness, normalized event intake, vulnerability priority, Kubernetes dry-run posture, DAST scope validation, and governance records
 - built-in operator guide for dashboard click paths and safety rules
 - Supabase-backed integration status
 - SecOpsAI Intelligence controls for the local Codex bridge and hosted read-only ChatGPT app
@@ -168,6 +169,27 @@ accepts only a sanitized report reference and reviewed behavior summary afterwar
 It never executes the sample or uploads it automatically.
 
 ## Pages
+
+### Enterprise Security
+
+Enterprise Security is organized around three operator jobs rather than a list
+of implemented modules:
+
+- **Monitor** distinguishes an implemented parser from a configured source and
+  from a source that has produced recent evidence. Operators can import bounded
+  approved AWS, GCP, or Kubernetes JSON through the protected local helper.
+- **Assess** prioritizes vulnerabilities, checks Kubernetes manifests without
+  mutating a cluster, validates an authorized DAST plan without launching it,
+  and exposes the safe Artifact Fleet research workflow.
+- **Govern** stores owned compliance controls and draft questionnaires, threat
+  models, and penetration-test engagements with latest-first operator records.
+
+Enterprise status uses its own SQLite/PostgreSQL adapter and returns real
+counts, source cursors, latest events, vulnerabilities, controls, workflows,
+and dead-letter state. A ready database is never presented as proof that a
+connector is active. Protected actions use the Automation action token and the
+typed `/api/secopsai/enterprise-action` helper route; the browser cannot supply
+filesystem paths or shell commands.
 
 ### Overview
 - active runs

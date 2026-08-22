@@ -31,6 +31,10 @@ SECOPSAI_ARTIFACT_FLEET_DB_PATH = os.environ.get(
     'SECOPSAI_ARTIFACT_FLEET_DB_PATH',
     str((SECOPSAI_ROOT / 'data' / 'artifact_fleet' / 'artifact_fleet.db').resolve()),
 ).strip()
+SECOPSAI_ENTERPRISE_DB_PATH = os.environ.get(
+    'SECOPSAI_ENTERPRISE_DB_PATH',
+    str((SECOPSAI_ROOT / 'data' / 'enterprise' / 'enterprise.db').resolve()),
+).strip()
 OPENCLAW_WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace').resolve()
 # Stable finding identifiers use different namespace lengths (for example
 # ``OCF-...``, ``AIDG-...`` and ``EDGE-...``). Keep the namespace bounded,
@@ -175,6 +179,16 @@ CAMPAIGN_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,140}$')
 PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._:/-]{1,260}$')
 RUST_PACKAGE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')
 RUST_VERSION_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.+:_~!*/-]{0,159}$')
+ENTERPRISE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$')
+ENTERPRISE_SOURCES = {
+    'aws.cloudtrail',
+    'aws.guardduty',
+    'aws.securityhub',
+    'gcp.audit',
+    'gcp.scc',
+    'kubernetes.audit',
+}
+ENTERPRISE_FRAMEWORKS = {'soc2', 'iso27001', 'iso42001', 'hipaa', 'nist-csf', 'cis', 'nis2'}
 NPM_WATCHLIST_PACKAGE_RE = re.compile(r'^(?:npm:)?(?:@[a-z0-9._~-]+/)?[a-z0-9._~-]+$', re.IGNORECASE)
 VERSION_RE = re.compile(r'^[A-Za-z0-9.+:_~!*-]{1,160}$')
 SAFE_SOURCE_URL_RE = re.compile(r'^https?://[^\s<>"\']{3,500}$', re.IGNORECASE)
@@ -858,6 +872,10 @@ def artifact_fleet_db_args():
     return ['--db-path', SECOPSAI_ARTIFACT_FLEET_DB_PATH] if SECOPSAI_ARTIFACT_FLEET_DB_PATH else []
 
 
+def enterprise_db_args():
+    return ['--db-path', SECOPSAI_ENTERPRISE_DB_PATH] if SECOPSAI_ENTERPRISE_DB_PATH else []
+
+
 def secopsai_session_args():
     return ['--session-dir', str(session_storage_path())]
 
@@ -1226,6 +1244,177 @@ def build_rust_package_research_args(action, payload):
             args.append('--no-create-case')
     artifact_args = ['--artifact-db-path', SECOPSAI_ARTIFACT_FLEET_DB_PATH] if SECOPSAI_ARTIFACT_FLEET_DB_PATH else []
     return [*args, *secopsai_db_args(), *artifact_args]
+
+
+def _enterprise_text(value, *, field, limit=300, required=True):
+    text = _clean_string(value, limit)
+    if required and not text:
+        raise ValueError(f'{field} is required')
+    if any(character in text for character in ('\x00', '\r', '\n')):
+        raise ValueError(f'{field} contains unsupported control characters')
+    return text
+
+
+def _enterprise_score(value, *, field):
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f'{field} must be a number from 0 to 10')
+    if score < 0 or score > 10:
+        raise ValueError(f'{field} must be a number from 0 to 10')
+    return score
+
+
+def build_enterprise_action_spec(action, payload):
+    """Build one typed Enterprise command without accepting paths or shell input."""
+    action = _clean_string(action, 40).lower()
+    db_args = enterprise_db_args()
+    if action == 'ingest-events':
+        source = _enterprise_text(payload.get('source'), field='Telemetry source', limit=80)
+        if source not in ENTERPRISE_SOURCES:
+            raise ValueError('Unsupported enterprise telemetry source')
+        events = payload.get('events')
+        if isinstance(events, dict):
+            events = [events]
+        if not isinstance(events, list) or not events or len(events) > 500 or not all(isinstance(item, dict) for item in events):
+            raise ValueError('Telemetry input must contain 1 to 500 JSON event objects')
+        return {
+            'args': ['enterprise', 'ingest', '--source', source, '--input', '{input}', '--limit', str(len(events)), *db_args],
+            'content': json.dumps({'events': events}, ensure_ascii=False),
+            'suffix': '.json',
+            'timeout': 120,
+        }
+    if action == 'kubernetes-scan':
+        manifest = str(payload.get('manifest') or '')
+        if not manifest.strip() or len(manifest.encode('utf-8')) > 500_000:
+            raise ValueError('Kubernetes manifest must be between 1 byte and 500 KB')
+        return {
+            'args': ['enterprise', 'kubernetes-scan', '--path', '{input}', *db_args],
+            'content': manifest,
+            'suffix': '.yaml',
+            'timeout': 90,
+        }
+    if action == 'dast-validate':
+        target_id = _enterprise_text(payload.get('target_id'), field='Target ID', limit=120)
+        if not ENTERPRISE_ID_RE.fullmatch(target_id):
+            raise ValueError('Target ID is invalid')
+        target_url = _enterprise_text(payload.get('url'), field='Target URL', limit=500)
+        parsed_url = urllib.parse.urlparse(target_url)
+        if parsed_url.scheme != 'https' or not parsed_url.hostname or parsed_url.username or parsed_url.password:
+            raise ValueError('DAST target must be an explicit HTTPS URL without credentials')
+        owner = _enterprise_text(payload.get('owner'), field='Target owner', limit=200)
+        authorized_by = _enterprise_text(payload.get('authorized_by'), field='Authorization reference', limit=300)
+        mode = _enterprise_text(payload.get('mode') or 'passive', field='DAST mode', limit=20)
+        if mode not in {'passive', 'active'}:
+            raise ValueError('DAST mode must be passive or active')
+        args = ['enterprise', 'dast-validate', '--target-id', target_id, '--url', target_url, '--owner', owner, '--authorized-by', authorized_by, '--mode', mode, *db_args]
+        if mode == 'active':
+            if payload.get('active_approved') is not True:
+                raise ValueError('Active DAST validation requires explicit approval')
+            args.append('--active-approved')
+        return {'args': args, 'content': None, 'suffix': '', 'timeout': 90}
+    if action == 'prioritize-vulnerability':
+        record = {
+            'vulnerability_id': _enterprise_text(payload.get('vulnerability_id'), field='Vulnerability ID', limit=120, required=False),
+            'advisory_id': _enterprise_text(payload.get('advisory_id'), field='Advisory ID', limit=160),
+            'package_name': _enterprise_text(payload.get('package_name'), field='Package or product', limit=260),
+            'package_version': _enterprise_text(payload.get('package_version'), field='Version', limit=160, required=False),
+            'asset_id': _enterprise_text(payload.get('asset_id'), field='Asset ID', limit=120, required=False),
+            'cvss_score': _enterprise_score(payload.get('cvss_score'), field='CVSS score'),
+            'exploitability_score': _enterprise_score(payload.get('exploitability_score'), field='Exploitability score'),
+            'asset_criticality': _enterprise_text(payload.get('asset_criticality') or 'normal', field='Asset criticality', limit=20),
+            'active_exploitation': bool(payload.get('active_exploitation')),
+            'kev': bool(payload.get('kev')),
+            'internet_exposed': bool(payload.get('internet_exposed')),
+            'status': 'open',
+        }
+        if record['asset_criticality'] not in {'normal', 'important', 'critical'}:
+            raise ValueError('Asset criticality is invalid')
+        return {
+            'args': ['enterprise', 'prioritize-vulnerability', '--input', '{input}', *db_args],
+            'content': json.dumps(record, ensure_ascii=False),
+            'suffix': '.json',
+            'timeout': 90,
+        }
+    if action == 'control':
+        control_id = _enterprise_text(payload.get('control_id'), field='Control ID', limit=120)
+        if not ENTERPRISE_ID_RE.fullmatch(control_id):
+            raise ValueError('Control ID is invalid')
+        framework = _enterprise_text(payload.get('framework'), field='Framework', limit=40)
+        if framework not in ENTERPRISE_FRAMEWORKS:
+            raise ValueError('Unsupported compliance framework')
+        status = _enterprise_text(payload.get('status') or 'not_started', field='Control status', limit=40)
+        if status not in {'not_started', 'in_progress', 'implemented', 'needs_review', 'complete'}:
+            raise ValueError('Control status is invalid')
+        return {
+            'args': [
+                'enterprise', 'control', '--control-id', control_id, '--framework', framework,
+                '--title', _enterprise_text(payload.get('title'), field='Control title', limit=300),
+                '--owner', _enterprise_text(payload.get('owner'), field='Control owner', limit=200),
+                '--status', status, *db_args,
+            ],
+            'content': None,
+            'suffix': '',
+            'timeout': 90,
+        }
+    if action == 'workflow':
+        kind = _enterprise_text(payload.get('kind'), field='Workflow type', limit=30)
+        if kind not in {'questionnaire', 'threat-model', 'pentest'}:
+            raise ValueError('Unsupported enterprise workflow type')
+        record = payload.get('record')
+        if not isinstance(record, dict) or len(json.dumps(record, ensure_ascii=False).encode('utf-8')) > 250_000:
+            raise ValueError('Workflow record must be a bounded JSON object')
+        id_field = {'questionnaire': 'questionnaire_id', 'threat-model': 'threat_model_id', 'pentest': 'engagement_id'}[kind]
+        record_id = _enterprise_text(record.get(id_field), field='Workflow ID', limit=120)
+        if not ENTERPRISE_ID_RE.fullmatch(record_id):
+            raise ValueError('Workflow ID is invalid')
+        for field, label, limit in (('title', 'Workflow title', 300), ('owner', 'Workflow owner', 200)):
+            record[field] = _enterprise_text(record.get(field), field=label, limit=limit)
+        if kind == 'questionnaire':
+            questions = record.get('questions') or []
+            if not isinstance(questions, list) or len(questions) > 2000:
+                raise ValueError('Questionnaire questions must be a bounded list')
+        elif kind == 'threat-model':
+            for key in ('assets', 'threats', 'mitigations'):
+                if not isinstance(record.get(key) or [], list) or len(record.get(key) or []) > 500:
+                    raise ValueError(f'Threat model {key} must be a bounded list')
+        else:
+            scope = record.get('scope') or []
+            if not isinstance(scope, list) or not scope or len(scope) > 200:
+                raise ValueError('Pen-test scope must contain 1 to 200 entries')
+            record['authorized_by'] = _enterprise_text(record.get('authorized_by'), field='Authorization reference', limit=300)
+        return {
+            'args': ['enterprise', 'workflow', kind, '--input', '{input}', *db_args],
+            'content': json.dumps(record, ensure_ascii=False),
+            'suffix': '.json',
+            'timeout': 90,
+        }
+    raise ValueError('Unsupported Enterprise action')
+
+
+def run_enterprise_action(action, payload):
+    spec = build_enterprise_action_spec(action, payload)
+    temp_path = None
+    try:
+        args = list(spec['args'])
+        if spec['content'] is not None:
+            with tempfile.NamedTemporaryFile(
+                'w', encoding='utf-8', suffix=spec['suffix'], prefix='secopsai-enterprise-', delete=False,
+            ) as handle:
+                handle.write(spec['content'])
+                temp_path = Path(handle.name)
+            try:
+                os.chmod(temp_path, 0o600)
+            except OSError:
+                pass
+            args = [str(temp_path) if value == '{input}' else value for value in args]
+        return run_cli_json(args, timeout=spec['timeout'])
+    finally:
+        if temp_path:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def redact_rust_research_result(value):
@@ -3629,7 +3818,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == '/api/secopsai/enterprise-status':
             try:
-                result, payload = run_cli_json(['enterprise', 'status', *secopsai_db_args()])
+                result, payload = run_cli_json(['enterprise', 'status', *enterprise_db_args()])
                 return json_response(self, 200 if result.get('ok') else 503, {'ok': bool(result.get('ok')), 'result': payload, 'cli': compact_cli_result(result)})
             except Exception as exc:
                 return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'enterprise_not_configured'})
@@ -4125,6 +4314,25 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 )
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/enterprise-action':
+            if require_intelligence_admin(self):
+                return
+            action = _clean_string(payload.get('action'), 40).lower()
+            try:
+                result, parsed_result = run_enterprise_action(action, payload)
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 400,
+                    {
+                        'ok': bool(result.get('ok')),
+                        'action': action,
+                        'result': parsed_result,
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'enterprise_action_invalid'})
 
         if parsed.path == '/api/secopsai/artifact-fleet':
             if require_intelligence_admin(self):

@@ -742,9 +742,9 @@ function requireArtifactFleetAdmin(request, env) {
     return jsonResponse(
       {
         ok: false,
-        error: "Artifact Fleet and Rust Package Research actions require a configured local helper or Core intelligence token.",
+        error: "Protected Enterprise, Artifact Fleet, and Rust Package Research actions require a configured local helper or Core intelligence token.",
         code: "not_configured",
-        hint: "Use local helper mode and the Automation action token for artifact indexing, scanning, triage, and benchmarking.",
+        hint: "Use local helper mode and the Automation action token for typed Enterprise workflows, artifact indexing, scanning, triage, and benchmarking.",
       },
       { status: 501 },
     );
@@ -1361,7 +1361,7 @@ async function proxySecopsaiHelper(request, env) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
   const intelligenceToken = request.headers.get("x-secopsai-intelligence-token") || "";
-  if (intelligenceToken && ["/api/secopsai/artifact-fleet", "/api/secopsai/rust-package-research"].includes(incomingUrl.pathname)) {
+  if (intelligenceToken && ["/api/secopsai/enterprise-action", "/api/secopsai/artifact-fleet", "/api/secopsai/rust-package-research"].includes(incomingUrl.pathname)) {
     headers.set("X-SecOpsAI-Intelligence-Token", intelligenceToken);
   }
 
@@ -1549,6 +1549,10 @@ async function routeRequest(request, env) {
       }
       if (request.method === "GET" && url.pathname === "/api/secopsai/artifact-fleet-status") {
         return jsonResponse({ ok: false, mode: "hosted", error: "Artifact Fleet requires a configured local helper or Core artifact-fleet endpoint" }, { status: 501 });
+      }
+      if (request.method === "POST" && url.pathname === "/api/secopsai/enterprise-action") {
+        const enterpriseAuthResponse = requireArtifactFleetAdmin(request, env);
+        if (enterpriseAuthResponse) return enterpriseAuthResponse;
       }
       if (request.method === "POST" && url.pathname === "/api/secopsai/artifact-fleet") {
         const artifactAuthResponse = requireArtifactFleetAdmin(request, env);

@@ -139,7 +139,7 @@ def test_artifact_fleet_click_surface_is_present_and_static_only():
         assert marker in html
     assert "runArtifactFleetAction" in app
     assert "/api/secopsai/artifact-fleet" in server
-    assert "never install, execute, or activate" in html
+    assert "never installed, executed, or activated" in html
 
 
 def test_rust_package_research_actions_are_typed_and_allowlisted():
@@ -173,8 +173,10 @@ def test_rust_package_research_dashboard_surface_is_present():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
-    for marker in ("rust-package-research-panel", "rust-research-package", "rust-research-preview-btn", "rust-research-run-btn", "rust-research-compare-btn", "rust-research-matrix-btn", "rust-research-queue-btn", "rust-research-draft-btn", "rust-research-open-case-btn", "rust-research-copy-btn", "rust-research-create-case", "rust-research-output"):
+    for marker in ("rust-package-research-panel", "rust-research-package", "rust-research-preview-btn", "rust-research-run-btn", "rust-research-matrix-btn", "rust-research-queue-btn", "rust-research-draft-btn", "rust-research-open-case-btn", "rust-research-copy-btn", "rust-research-create-case", "rust-research-output"):
         assert marker in html
+    assert "rust-research-compare-btn" not in html
+    assert "rust-research-draft\"" not in html
     assert "runRustPackageResearchAction" in app
     assert "/api/secopsai/rust-package-research" in server
     assert "build_rust_package_research_args" in server

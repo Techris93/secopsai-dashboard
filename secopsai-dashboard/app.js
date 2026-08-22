@@ -157,7 +157,11 @@ const state = {
   enterprise: {
     data: null,
     loading: false,
-    error: null
+    error: null,
+    activeTab: 'monitor',
+    activeAssessment: 'vulnerability',
+    eventFilter: 'all',
+    outputs: {}
   },
   artifactFleet: {
     data: null,
@@ -9554,36 +9558,337 @@ async function loadEnterpriseStatus({ render = true } = {}) {
   return state.enterprise.data;
 }
 
+function enterpriseStatusResult() {
+  const data = state.enterprise.data || {};
+  return data.result || data;
+}
+
+function enterpriseSummaryData() {
+  const result = enterpriseStatusResult();
+  return result.summary && typeof result.summary === 'object' ? result.summary : {};
+}
+
+function enterpriseCount(name) {
+  return Number(enterpriseSummaryData().counts?.[name] || 0);
+}
+
+function enterpriseTone(status) {
+  const normalized = String(status || '').toLowerCase();
+  if (['ready', 'active', 'healthy', 'complete', 'implemented', 'allow'].includes(normalized)) return 'good';
+  if (['degraded', 'failed', 'critical', 'deny', 'error'].includes(normalized)) return 'danger';
+  if (['configured', 'attention', 'needs_review', 'high', 'pending'].includes(normalized)) return 'warning';
+  return 'neutral';
+}
+
+function enterpriseReadinessItem(label, value, detail, tone = 'neutral') {
+  return `<div class="enterprise-readiness-item tone-${escapeHtml(tone)}"><span class="enterprise-readiness-label">${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><span>${escapeHtml(detail)}</span></div>`;
+}
+
+function enterpriseSourceGroupState(sourceNames, sources, events) {
+  const cursors = sources.filter(item => sourceNames.includes(String(item.source || '')));
+  const recent = events.filter(item => sourceNames.includes(String(item.source || '')));
+  if (cursors.some(item => String(item.status || '').toLowerCase() === 'degraded')) {
+    const latest = cursors.find(item => String(item.status || '').toLowerCase() === 'degraded') || {};
+    return { label: 'Attention', tone: 'danger', detail: latest.last_error_at ? `Last error ${fmtDate(latest.last_error_at)}` : 'Latest connector attempt failed' };
+  }
+  if (cursors.length && recent.length) {
+    const latest = sortLatestFirst(recent, ['received_at', 'observed_at'])[0] || {};
+    return { label: 'Active', tone: 'good', detail: `${recent.length} recent event${recent.length === 1 ? '' : 's'}${latest.received_at ? `, last ${fmtDate(latest.received_at)}` : ''}` };
+  }
+  if (cursors.length) {
+    const latest = sortLatestFirst(cursors, ['last_success_at', 'updated_at'])[0] || {};
+    return { label: 'Configured', tone: 'warning', detail: latest.last_success_at ? `Connected ${fmtDate(latest.last_success_at)}; no recent events` : 'Connector cursor exists; no recent events' };
+  }
+  return { label: 'Implemented', tone: 'neutral', detail: 'Parser is available; no source has been connected or imported' };
+}
+
+function enterpriseResultMarkup(output) {
+  if (!output) return '';
+  const details = Array.isArray(output.details) ? output.details.filter(Boolean) : [];
+  return `<div class="enterprise-result-card tone-${escapeHtml(output.tone || 'neutral')}">
+    <strong>${escapeHtml(output.title || 'Action complete')}</strong>
+    <p>${escapeHtml(output.summary || '')}</p>
+    ${details.length ? `<ul>${details.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}
+  </div>`;
+}
+
+function setEnterpriseOutput(outputId, output) {
+  state.enterprise.outputs[outputId] = output;
+  const target = el(outputId);
+  if (target) target.innerHTML = enterpriseResultMarkup(output);
+}
+
+function enterpriseActionOutput(action, payload) {
+  const result = payload?.result || payload || {};
+  if (action === 'ingest-events') {
+    const events = Array.isArray(result.events) ? result.events : [];
+    return {
+      tone: result.status === 'healthy' ? 'good' : 'danger',
+      title: result.status === 'healthy' ? 'Telemetry imported' : 'Telemetry import needs attention',
+      summary: `${events.length} event${events.length === 1 ? '' : 's'} normalized from ${result.source || 'the approved source'}.`,
+      details: result.error ? [result.error] : ['Credential-shaped fields are redacted before storage.', 'The source cursor and last successful import were recorded.']
+    };
+  }
+  if (action === 'kubernetes-scan') {
+    const findings = Array.isArray(result.findings) ? result.findings : [];
+    return {
+      tone: result.admission === 'deny' ? 'danger' : 'good',
+      title: result.admission === 'deny' ? 'Manifest would be blocked' : 'Manifest passed the dry-run gate',
+      summary: `${findings.length} deterministic posture finding${findings.length === 1 ? '' : 's'}; no cluster mutation was performed.`,
+      details: findings.slice(0, 8).map(item => `${String(item.severity || 'info').toUpperCase()} ${item.rule_id || 'rule'}: ${item.message || 'Review required'}`)
+    };
+  }
+  if (action === 'dast-validate') {
+    return {
+      tone: 'good',
+      title: 'DAST scope validated',
+      summary: `${humanizeSnake(result.mode || 'passive')} plan prepared for ${result.target?.url || 'the authorized target'}; no scan was launched.`,
+      details: ['Target ownership and authorization were recorded.', 'Execution remains not started until an approved runner launches the plan.']
+    };
+  }
+  if (action === 'prioritize-vulnerability') {
+    return {
+      tone: ['critical', 'high'].includes(String(result.priority_severity || '').toLowerCase()) ? 'danger' : 'warning',
+      title: `${humanizeSnake(result.priority_severity || 'review')} priority - score ${result.priority_score ?? 0}`,
+      summary: `${result.advisory_id || 'Advisory'} on ${result.package_name || 'the selected product'} was normalized, scored, and saved.`,
+      details: [...(result.priority_reasons || []), result.sla_due_at ? `Remediation SLA due ${fmtDate(result.sla_due_at)}` : '']
+    };
+  }
+  if (action === 'control') {
+    return { tone: 'good', title: 'Control saved', summary: `${result.control_id || 'Control'} is ${humanizeSnake(result.status || 'saved')} and owned by ${result.owner || 'the selected owner'}.`, details: [humanizeSnake(result.framework || '')] };
+  }
+  if (action === 'workflow') {
+    return { tone: 'good', title: 'Draft workflow created', summary: `${result.title || result.payload?.title || 'Workflow'} is saved as an evidence-linked draft.`, details: ['External submission and active testing remain approval-gated.'] };
+  }
+  return { tone: 'good', title: 'Enterprise action completed', summary: 'The protected helper accepted and completed the action.', details: [] };
+}
+
 function renderEnterprise() {
   const data = state.enterprise.data || {};
-  const store = data.result?.store || data.store || {};
-  const configured = Boolean(data.ok && store.status === 'ready');
+  const result = enterpriseStatusResult();
+  const store = result.store || {};
+  const status = enterpriseSummaryData();
+  const counts = status.counts || {};
+  const sources = Array.isArray(status.sources) ? status.sources : [];
+  const events = sortLatestFirst(Array.isArray(status.recent_events) ? status.recent_events : [], ['received_at', 'observed_at']);
+  const vulnerabilities = sortLatestFirst(Array.isArray(status.recent_vulnerabilities) ? status.recent_vulnerabilities : [], ['updated_at']);
+  const controls = sortLatestFirst(Array.isArray(status.recent_controls) ? status.recent_controls : [], ['updated_at']);
+  const workflows = sortLatestFirst(Array.isArray(status.recent_workflows) ? status.recent_workflows : [], ['updated_at']);
+  const configured = Boolean(data.ok !== false && store.status === 'ready');
+  const activeSources = sources.filter(item => String(item.status || '').toLowerCase() === 'healthy').length;
+  const degradedSources = sources.filter(item => String(item.status || '').toLowerCase() === 'degraded').length;
+  const assuranceCount = Number(counts.controls || 0) + Number(counts.questionnaires || 0) + Number(counts.threat_models || 0) + Number(counts.pentests || 0);
+
   const summary = el('enterprise-summary');
   if (summary) summary.innerHTML = [
-    ['Data plane', configured ? 'Ready' : 'Not configured', configured ? 'Local SQLite or hosted PostgreSQL adapter' : 'Start the local helper or configure Core enterprise storage'],
-    ['AWS / GCP', 'Read-only adapter', 'Cloud credentials are never stored in the browser'],
-    ['Kubernetes', 'Dry-run ready', 'Manifest and audit parsers do not mutate clusters'],
-    ['DAST', 'Approval required', 'Passive validation is available; active scans require authorization']
-  ].map(([value, label, scope]) => `<div class="card"><div class="metric">${escapeHtml(value)}</div><div class="metric-label">${escapeHtml(label)}</div><div class="metric-scope">${escapeHtml(scope)}</div></div>`).join('');
-  const connectors = el('enterprise-connector-list');
-  if (connectors) connectors.innerHTML = [
-    ['AWS CloudTrail / GuardDuty / Security Hub', 'Read-only parser and cursor contract'],
-    ['GCP Audit Logs / SCC', 'Read-only parser and cursor contract'],
-    ['Kubernetes audit and manifests', 'Audit normalization and posture checks'],
-    ['OpenClaw / Hermes / host / Edge / CI', 'Existing normalized telemetry paths']
-  ].map(([name, detail]) => `<div class="feed-item compact-feed-item"><strong>${escapeHtml(name)}</strong><div class="small">${escapeHtml(detail)}</div><span class="status-pill">${configured ? 'Available' : 'Local helper required'}</span></div>`).join('');
-  const workflows = el('enterprise-workflow-list');
-  if (workflows) workflows.innerHTML = [
-    ['Vulnerability management', 'Asset context, prioritization, SLAs, and remediation records'],
-    ['DAST', 'Authorized target registration and SARIF ingestion'],
-    ['GRC evidence', 'SOC 2, ISO, HIPAA, NIST, CIS, and NIS2 control records'],
-    ['Questionnaires / threat models / pen tests', 'Versioned, evidence-linked, approval-gated workflows']
-  ].map(([name, detail]) => `<div class="feed-item compact-feed-item"><strong>${escapeHtml(name)}</strong><div class="small">${escapeHtml(detail)}</div></div>`).join('');
+    enterpriseReadinessItem('Data plane', configured ? 'Ready' : 'Unavailable', configured ? `${humanizeSnake(store.backend || 'local')} store, organization ${store.organization_id || 'local'}` : 'Start the helper or configure the hosted Core endpoint', configured ? 'good' : 'danger'),
+    enterpriseReadinessItem('Telemetry', activeSources ? `${activeSources} connected` : 'Not connected', degradedSources ? `${degradedSources} source${degradedSources === 1 ? '' : 's'} need attention` : `${Number(counts.events || 0)} normalized event${Number(counts.events || 0) === 1 ? '' : 's'}`, degradedSources ? 'danger' : activeSources ? 'good' : 'neutral'),
+    enterpriseReadinessItem('Exposure', Number(counts.open_vulnerabilities || 0) ? `${counts.open_vulnerabilities} open` : 'No records', Number(counts.vulnerabilities || 0) ? `${counts.vulnerabilities} prioritized vulnerabilities` : 'Run an assessment to establish a baseline', Number(counts.open_vulnerabilities || 0) ? 'warning' : 'neutral'),
+    enterpriseReadinessItem('Assurance', assuranceCount ? `${assuranceCount} records` : 'Not started', `${Number(counts.controls || 0)} controls, ${workflows.length} recent workflows`, assuranceCount ? 'good' : 'neutral')
+  ].join('');
+
+  const refreshed = el('enterprise-refreshed');
+  if (refreshed) refreshed.textContent = state.enterprise.loading ? 'Refreshing operational evidence...' : status.generated_at ? `Evidence refreshed ${fmtDate(status.generated_at)}` : 'No operational evidence loaded';
+
+  document.querySelectorAll('[data-enterprise-tab]').forEach(button => {
+    const selected = button.dataset.enterpriseTab === state.enterprise.activeTab;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', String(selected));
+  });
+  document.querySelectorAll('[data-enterprise-view]').forEach(view => {
+    const selected = view.dataset.enterpriseView === state.enterprise.activeTab;
+    view.classList.toggle('active', selected);
+    view.hidden = !selected;
+  });
+  document.querySelectorAll('[data-enterprise-assessment]').forEach(button => button.classList.toggle('active', button.dataset.enterpriseAssessment === state.enterprise.activeAssessment));
+  document.querySelectorAll('[data-enterprise-assessment-view]').forEach(view => {
+    const selected = view.dataset.enterpriseAssessmentView === state.enterprise.activeAssessment;
+    view.classList.toggle('active', selected);
+    view.hidden = !selected;
+  });
+
   const note = el('enterprise-safety-note');
-  if (note) note.textContent = state.enterprise.error
-    ? `Enterprise status unavailable: ${state.enterprise.error}. Use the local helper or configure the hosted Core enterprise endpoint.`
-    : 'Enterprise integrations are read-only by default. Cloud changes, active DAST, Kubernetes mutations, ticket creation, disclosure, and publication remain approval-gated.';
+  if (note) {
+    note.className = `enterprise-safety ${state.enterprise.error ? 'tone-danger' : configured ? 'tone-good' : 'tone-warning'}`;
+    note.textContent = state.enterprise.error
+      ? `Enterprise status unavailable: ${state.enterprise.error}. Hosted mode needs a configured helper; local actions require the local dashboard stack.`
+      : 'Live truth: implemented means the capability exists, configured means a cursor or record exists, and active means recent evidence was received. Cloud changes, active scans, disclosure, and publication remain approval-gated.';
+  }
+
+  const setupTitle = el('enterprise-setup-title');
+  const setupSummary = el('enterprise-setup-summary');
+  const setupButton = el('enterprise-configure-source-btn');
+  if (setupTitle) setupTitle.textContent = !configured ? 'Connect the Enterprise data plane' : !sources.length ? 'Import your first approved telemetry source' : !events.length ? 'Your sources are configured; add current evidence' : 'Enterprise monitoring is receiving evidence';
+  if (setupSummary) setupSummary.textContent = !configured ? 'Start the local helper or configure the hosted Core endpoint before using Enterprise workflows.' : !sources.length ? 'Choose AWS, GCP, or Kubernetes and import an approved event. Credentials stay out of the browser.' : !events.length ? 'The connector cursor exists, but no recent normalized events are available yet.' : `${events.length} recent event${events.length === 1 ? '' : 's'} are ready for operator review.`;
+  if (setupButton) setupButton.textContent = !configured ? 'Open system health' : !sources.length ? 'Import first source' : 'Import current events';
+
+  const connectorGroups = [
+    { name: 'AWS security telemetry', detail: 'CloudTrail, GuardDuty, and Security Hub normalization', sources: ['aws.cloudtrail', 'aws.guardduty', 'aws.securityhub'], preferred: 'aws.cloudtrail' },
+    { name: 'Google Cloud security telemetry', detail: 'Audit Logs and Security Command Center normalization', sources: ['gcp.audit', 'gcp.scc'], preferred: 'gcp.audit' },
+    { name: 'Kubernetes audit telemetry', detail: 'Audit event normalization plus separate manifest posture review', sources: ['kubernetes.audit'], preferred: 'kubernetes.audit' },
+  ];
+  const connectors = el('enterprise-connector-list');
+  if (connectors) connectors.innerHTML = connectorGroups.map(group => {
+    const sourceState = enterpriseSourceGroupState(group.sources, sources, events);
+    return `<div class="enterprise-connector-row">
+      <div class="enterprise-connector-mark" aria-hidden="true">${escapeHtml(group.name.slice(0, 2).toUpperCase())}</div>
+      <div><strong>${escapeHtml(group.name)}</strong><span>${escapeHtml(group.detail)}</span></div>
+      <div class="enterprise-connector-state"><span class="enterprise-state tone-${escapeHtml(sourceState.tone)}">${escapeHtml(sourceState.label)}</span><small>${escapeHtml(sourceState.detail)}</small></div>
+      <button class="secondary-btn" data-enterprise-import-source="${escapeHtml(group.preferred)}" type="button">Import</button>
+    </div>`;
+  }).concat(`<div class="enterprise-connector-row">
+    <div class="enterprise-connector-mark" aria-hidden="true">AI</div>
+    <div><strong>Agent, host, Edge, and CI telemetry</strong><span>OpenClaw, Hermes, host sensors, Edge, and pipeline sources</span></div>
+    <div class="enterprise-connector-state"><span class="enterprise-state tone-neutral">Managed in System</span><small>Existing normalized telemetry routes remain separate from cloud connector cursors</small></div>
+    <button class="secondary-btn" data-enterprise-open-system type="button">Open System</button>
+  </div>`).join('');
+
+  const nextActions = [];
+  if (!configured) nextActions.push(['Restore helper connection', 'The Enterprise store cannot be reached.', 'system']);
+  else if (!sources.length) nextActions.push(['Import an approved source', 'Establish the first read-only source cursor and normalized event.', 'source']);
+  else if (!events.length) nextActions.push(['Add current telemetry', 'Configured sources have not produced recent evidence.', 'source']);
+  if (!Number(counts.vulnerabilities || 0)) nextActions.push(['Prioritize one real exposure', 'Create an explainable severity and remediation SLA baseline.', 'vulnerability']);
+  if (!Number(counts.controls || 0)) nextActions.push(['Create the first control', 'Assign ownership and implementation state to a compliance requirement.', 'govern']);
+  if (!workflows.length) nextActions.push(['Start an assurance workflow', 'Create a questionnaire, threat model, or authorized penetration-test record.', 'govern']);
+  const nextActionsEl = el('enterprise-next-actions');
+  if (nextActionsEl) nextActionsEl.innerHTML = nextActions.slice(0, 4).map(([title, detail, target], index) => `<button class="enterprise-next-action" data-enterprise-target="${escapeHtml(target)}" type="button"><span>${index + 1}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></span><b aria-hidden="true">-&gt;</b></button>`).join('') || '<div class="enterprise-empty"><strong>Baseline established</strong><span>No immediate setup gaps were found. Continue reviewing activity and current exposure.</span></div>';
+
+  const eventFilter = el('enterprise-event-filter');
+  if (eventFilter) eventFilter.value = state.enterprise.eventFilter;
+  const filteredEvents = events.filter(item => state.enterprise.eventFilter === 'all' || String(item.source || '').startsWith(state.enterprise.eventFilter));
+  const activityList = el('enterprise-activity-list');
+  if (activityList) activityList.innerHTML = filteredEvents.length ? filteredEvents.slice(0, 12).map(item => `<article class="enterprise-activity-item">
+    <span class="enterprise-activity-dot tone-${escapeHtml(enterpriseTone(item.severity))}" aria-hidden="true"></span>
+    <div><strong>${escapeHtml(humanizeMachineText(item.event_type || 'Security event'))}</strong><span>${escapeHtml(item.source || 'unknown source')}</span></div>
+    <time>${escapeHtml(fmtDate(item.received_at || item.observed_at))}</time>
+  </article>`).join('') : '<div class="enterprise-empty"><strong>No matching activity</strong><span>Import an approved event or change the source filter.</span></div>';
+  const activitySummary = el('enterprise-activity-summary');
+  if (activitySummary) activitySummary.textContent = `${filteredEvents.length} of ${events.length} recent events shown`;
+
+  const vulnerabilityList = el('enterprise-vulnerability-list');
+  if (vulnerabilityList) vulnerabilityList.innerHTML = vulnerabilities.length ? vulnerabilities.slice(0, 8).map(item => `<article class="enterprise-record">
+    <span class="enterprise-state tone-${escapeHtml(enterpriseTone(item.severity))}">${escapeHtml(humanizeSnake(item.severity || 'unknown'))}</span>
+    <div><strong>${escapeHtml(item.advisory_id || item.vulnerability_id || 'Vulnerability')}</strong><span>${escapeHtml([item.package_name, item.package_version].filter(Boolean).join('@') || 'Product not recorded')}</span></div>
+    <small>${escapeHtml(item.sla_due_at ? `SLA ${fmtDate(item.sla_due_at)}` : `Updated ${fmtDate(item.updated_at)}`)}</small>
+  </article>`).join('') : '<div class="enterprise-empty"><strong>No prioritized vulnerabilities</strong><span>Use the form above to create the first explainable exposure record.</span></div>';
+
+  const governanceSummary = el('enterprise-governance-summary');
+  if (governanceSummary) governanceSummary.innerHTML = [
+    enterpriseReadinessItem('Controls', String(Number(counts.controls || 0)), 'Owned compliance requirements', Number(counts.controls || 0) ? 'good' : 'neutral'),
+    enterpriseReadinessItem('Evidence', String(Number(counts.evidence || 0)), 'Linked assurance records', Number(counts.evidence || 0) ? 'good' : 'neutral'),
+    enterpriseReadinessItem('Questionnaires', String(Number(counts.questionnaires || 0)), 'Customer and internal reviews', Number(counts.questionnaires || 0) ? 'good' : 'neutral'),
+    enterpriseReadinessItem('Threat models / pen tests', String(Number(counts.threat_models || 0) + Number(counts.pentests || 0)), 'Engineering assurance workflows', Number(counts.threat_models || 0) + Number(counts.pentests || 0) ? 'good' : 'neutral')
+  ].join('');
+  const controlList = el('enterprise-control-list');
+  if (controlList) controlList.innerHTML = controls.length ? controls.slice(0, 10).map(item => `<article class="enterprise-record"><span class="enterprise-state tone-${escapeHtml(enterpriseTone(item.status))}">${escapeHtml(humanizeSnake(item.status || 'not started'))}</span><div><strong>${escapeHtml(item.control_id || 'Control')}</strong><span>${escapeHtml(item.title || humanizeSnake(item.framework || ''))}</span></div><small>${escapeHtml(item.owner || 'Unassigned')}</small></article>`).join('') : '<div class="enterprise-empty"><strong>No controls saved</strong><span>Create a control above to start an evidence-backed governance baseline.</span></div>';
+  const workflowList = el('enterprise-workflow-list');
+  if (workflowList) workflowList.innerHTML = workflows.length ? workflows.slice(0, 10).map(item => `<article class="enterprise-record"><span class="enterprise-state tone-neutral">${escapeHtml(humanizeSnake(item.kind || 'workflow'))}</span><div><strong>${escapeHtml(item.record_id || 'Workflow')}</strong><span>${escapeHtml(item.title || 'Untitled assurance workflow')}</span></div><small>${escapeHtml(item.owner || 'Unassigned')}</small></article>`).join('') : '<div class="enterprise-empty"><strong>No assurance workflows</strong><span>Create a questionnaire, threat model, or penetration-test record above.</span></div>';
+
+  for (const outputId of ['enterprise-ingest-output', 'enterprise-vuln-output', 'enterprise-kubernetes-output', 'enterprise-dast-output', 'enterprise-control-output', 'enterprise-workflow-output']) {
+    const target = el(outputId);
+    if (target) target.innerHTML = enterpriseResultMarkup(state.enterprise.outputs[outputId]);
+  }
+  const workflowKind = el('enterprise-workflow-kind')?.value || 'questionnaire';
+  document.querySelectorAll('[data-enterprise-workflow-field]').forEach(field => { field.hidden = field.dataset.enterpriseWorkflowField !== workflowKind; });
   renderArtifactFleet();
+}
+
+async function runEnterpriseAction(action, payload, button, outputId) {
+  if (!state.intelligence.adminToken) {
+    showToast('Add the Automation action token in Administration before running protected Enterprise actions.', 'error');
+    setPage('automation');
+    return null;
+  }
+  sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
+  setButtonBusy(button, true, 'Working...');
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/enterprise-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-SecOpsAI-Intelligence-Token': state.intelligence.adminToken },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || `Enterprise ${action} HTTP ${response.status}`);
+    setEnterpriseOutput(outputId, enterpriseActionOutput(action, result));
+    showToast(`Enterprise action completed: ${humanizeSnake(action)}`, 'success');
+    await loadEnterpriseStatus();
+    return result;
+  } catch (error) {
+    const message = error?.message || String(error);
+    setEnterpriseOutput(outputId, { tone: 'danger', title: 'Action could not be completed', summary: message, details: ['Review the inputs and helper status, then retry.'] });
+    showToast(message, 'error');
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function openEnterpriseImport(source = '') {
+  state.enterprise.activeTab = 'monitor';
+  renderEnterprise();
+  const drawer = el('enterprise-source-intake');
+  if (drawer) drawer.open = true;
+  if (source && el('enterprise-ingest-source')) el('enterprise-ingest-source').value = source;
+  drawer?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function selectEnterpriseTab(tab) {
+  if (!['monitor', 'assess', 'govern'].includes(tab)) return;
+  state.enterprise.activeTab = tab;
+  renderEnterprise();
+}
+
+function selectEnterpriseAssessment(assessment) {
+  if (!['vulnerability', 'kubernetes', 'dast', 'artifact'].includes(assessment)) return;
+  state.enterprise.activeTab = 'assess';
+  state.enterprise.activeAssessment = assessment;
+  renderEnterprise();
+}
+
+function enterpriseWorkflowRecord() {
+  const kind = el('enterprise-workflow-kind')?.value || 'questionnaire';
+  const recordId = el('enterprise-workflow-id')?.value?.trim() || '';
+  const common = {
+    title: el('enterprise-workflow-title')?.value?.trim() || '',
+    owner: el('enterprise-workflow-owner')?.value?.trim() || '',
+  };
+  if (kind === 'questionnaire') {
+    return {
+      kind,
+      record: {
+        ...common,
+        questionnaire_id: recordId,
+        customer: el('enterprise-workflow-customer')?.value?.trim() || '',
+        questions: [{
+          question_id: `${recordId || 'questionnaire'}-Q1`,
+          question: el('enterprise-workflow-question')?.value?.trim() || '',
+          answer: el('enterprise-workflow-answer')?.value?.trim() || '',
+          status: 'draft',
+        }]
+      }
+    };
+  }
+  if (kind === 'threat-model') {
+    return {
+      kind,
+      record: {
+        ...common,
+        threat_model_id: recordId,
+        assets: [el('enterprise-workflow-asset')?.value?.trim() || ''].filter(Boolean).map(name => ({ name })),
+        threats: [el('enterprise-workflow-threat')?.value?.trim() || ''].filter(Boolean).map(name => ({ name })),
+        mitigations: [el('enterprise-workflow-mitigation')?.value?.trim() || ''].filter(Boolean).map(description => ({ description })),
+      }
+    };
+  }
+  return {
+    kind,
+    record: {
+      ...common,
+      engagement_id: recordId,
+      scope: [el('enterprise-workflow-scope')?.value?.trim() || ''].filter(Boolean),
+      authorized_by: el('enterprise-workflow-authorization')?.value?.trim() || '',
+    }
+  };
 }
 
 async function loadArtifactFleetStatus({ render = true } = {}) {
@@ -9612,11 +9917,11 @@ function renderArtifactFleet() {
   const triage = result.triage || {};
   const summary = el('artifact-fleet-summary');
   if (summary) summary.innerHTML = [
-    [String(Object.values(artifacts).reduce((sum, value) => sum + Number(value || 0), 0)), 'Artifacts indexed', 'Metadata stage'],
-    [String(queue.scan_pending || 0), 'Scan queue', 'Awaiting safe artifact analysis'],
-    [String(triage.awaiting_model || 0), 'Model triage', 'Minimized context only'],
-    [String(triage.analyst_review || 0), 'Analyst review', 'Suspicious or inconclusive']
-  ].map(([value, label, scope]) => `<div class="card"><div class="metric">${escapeHtml(value)}</div><div class="metric-label">${escapeHtml(label)}</div><div class="metric-scope">${escapeHtml(scope)}</div></div>`).join('');
+    ['Artifacts indexed', String(Object.values(artifacts).reduce((sum, value) => sum + Number(value || 0), 0)), 'Metadata stage', 'neutral'],
+    ['Scan queue', String(queue.scan_pending || 0), 'Awaiting safe static analysis', Number(queue.scan_pending || 0) ? 'warning' : 'neutral'],
+    ['Model triage', String(triage.awaiting_model || 0), 'Minimized context only', Number(triage.awaiting_model || 0) ? 'warning' : 'neutral'],
+    ['Analyst review', String(triage.analyst_review || 0), 'Suspicious or inconclusive', Number(triage.analyst_review || 0) ? 'danger' : 'neutral']
+  ].map(([label, value, scope, tone]) => enterpriseReadinessItem(label, value, scope, tone)).join('');
   const queueEl = el('artifact-fleet-queue');
   if (queueEl) {
     const analystRows = Array.isArray(result.analyst_queue) ? result.analyst_queue : [];
@@ -9669,8 +9974,8 @@ async function runArtifactFleetAction(action, payload = {}, button = null) {
   const tokenInput = el('intelligence-admin-token');
   state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
   if (!state.intelligence.adminToken) {
-    showToast('Enter the Automation action token before running Artifact Fleet actions.', 'error');
-    tokenInput?.focus();
+    showToast('Add the Automation action token in Administration before running Artifact Fleet actions.', 'error');
+    setPage('automation');
     return null;
   }
   sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
@@ -9707,8 +10012,8 @@ async function runRustPackageResearchAction(action, button = null) {
   const tokenInput = el('intelligence-admin-token');
   state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
   if (!state.intelligence.adminToken) {
-    showToast('Enter the Automation action token before running Rust Package Research.', 'error');
-    tokenInput?.focus();
+    showToast('Add the Automation action token in Administration before running Rust Package Research.', 'error');
+    setPage('automation');
     return null;
   }
   const payload = {
@@ -9720,15 +10025,11 @@ async function runRustPackageResearchAction(action, button = null) {
     source_reference: el('rust-research-source')?.value?.trim() || '',
     persist_findings: Boolean(el('rust-research-persist')?.checked),
     create_case: el('rust-research-create-case')?.checked !== false,
-    draft_blog: Boolean(el('rust-research-draft')?.checked),
+    draft_blog: false,
     model: state.intelligence.selectedModel || ''
   };
   if (!payload.package || !payload.version) {
     showToast('Enter a crate package and exact version first.', 'error');
-    return null;
-  }
-  if (button?.id === 'rust-research-compare-btn' && (!payload.compare_package || !payload.compare_version)) {
-    showToast('Enter a comparison crate and exact version first.', 'error');
     return null;
   }
   sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
@@ -9799,8 +10100,8 @@ async function runRustResearchFollowup(action, button = null) {
   const tokenInput = el('intelligence-admin-token');
   state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
   if (!state.intelligence.adminToken) {
-    showToast('Enter the Automation action token before running this follow-up.', 'error');
-    tokenInput?.focus();
+    showToast('Add the Automation action token in Administration before running this follow-up.', 'error');
+    setPage('automation');
     return null;
   }
   setButtonBusy(button, true, 'Working…');
@@ -10319,10 +10620,75 @@ function bindEvents() {
   el('top-health-btn')?.addEventListener('click', () => setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.health }));
   el('workspace-switcher')?.addEventListener('click', () => showToast('This pilot uses one authenticated SecOpsAI workspace. Customer/site switching is available when multi-tenant workspaces are enabled.', 'info'));
   el('enterprise-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadEnterpriseStatus(), { successMessage: 'Enterprise status refreshed' }));
+  document.querySelectorAll('[data-enterprise-tab]').forEach(button => button.addEventListener('click', () => selectEnterpriseTab(button.dataset.enterpriseTab)));
+  document.querySelectorAll('[data-enterprise-assessment]').forEach(button => button.addEventListener('click', () => selectEnterpriseAssessment(button.dataset.enterpriseAssessment)));
+  el('enterprise-configure-source-btn')?.addEventListener('click', () => {
+    if ((enterpriseStatusResult().store || {}).status !== 'ready') setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.health });
+    else openEnterpriseImport();
+  });
+  el('enterprise-import-toggle-btn')?.addEventListener('click', () => openEnterpriseImport());
+  el('enterprise-open-guide-btn')?.addEventListener('click', () => {
+    setPage('operator-guide');
+    window.setTimeout(() => el('guide-enterprise')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  });
+  el('enterprise-connector-list')?.addEventListener('click', event => {
+    const importButton = event.target.closest('[data-enterprise-import-source]');
+    if (importButton) openEnterpriseImport(importButton.dataset.enterpriseImportSource);
+    if (event.target.closest('[data-enterprise-open-system]')) setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.integrations });
+  });
+  el('enterprise-next-actions')?.addEventListener('click', event => {
+    const target = event.target.closest('[data-enterprise-target]')?.dataset.enterpriseTarget;
+    if (target === 'system') setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.health });
+    else if (target === 'source') openEnterpriseImport();
+    else if (target === 'vulnerability') selectEnterpriseAssessment('vulnerability');
+    else if (target === 'govern') selectEnterpriseTab('govern');
+  });
+  el('enterprise-event-filter')?.addEventListener('change', event => { state.enterprise.eventFilter = event.currentTarget.value; renderEnterprise(); });
+  el('enterprise-ingest-btn')?.addEventListener('click', async event => {
+    let events;
+    try {
+      const parsed = JSON.parse(el('enterprise-ingest-json')?.value || '');
+      events = Array.isArray(parsed) ? parsed : [parsed];
+      if (!events.length || events.some(item => !item || typeof item !== 'object' || Array.isArray(item))) throw new Error('Use one JSON event object or an array of event objects.');
+    } catch (error) {
+      setEnterpriseOutput('enterprise-ingest-output', { tone: 'danger', title: 'Event JSON is invalid', summary: error?.message || String(error), details: ['Nothing was imported.'] });
+      return;
+    }
+    await runEnterpriseAction('ingest-events', { source: el('enterprise-ingest-source')?.value || '', events }, event.currentTarget, 'enterprise-ingest-output');
+  });
+  el('enterprise-vuln-run-btn')?.addEventListener('click', event => runEnterpriseAction('prioritize-vulnerability', {
+    advisory_id: el('enterprise-vuln-advisory')?.value?.trim() || '',
+    package_name: el('enterprise-vuln-package')?.value?.trim() || '',
+    package_version: el('enterprise-vuln-version')?.value?.trim() || '',
+    asset_id: el('enterprise-vuln-asset')?.value?.trim() || '',
+    cvss_score: Number(el('enterprise-vuln-cvss')?.value || 0),
+    exploitability_score: Number(el('enterprise-vuln-exploitability')?.value || 0),
+    asset_criticality: el('enterprise-vuln-criticality')?.value || 'normal',
+    kev: Boolean(el('enterprise-vuln-kev')?.checked),
+    active_exploitation: Boolean(el('enterprise-vuln-active')?.checked),
+    internet_exposed: Boolean(el('enterprise-vuln-exposed')?.checked),
+  }, event.currentTarget, 'enterprise-vuln-output'));
+  el('enterprise-kubernetes-run-btn')?.addEventListener('click', event => runEnterpriseAction('kubernetes-scan', { manifest: el('enterprise-kubernetes-manifest')?.value || '' }, event.currentTarget, 'enterprise-kubernetes-output'));
+  el('enterprise-dast-run-btn')?.addEventListener('click', event => runEnterpriseAction('dast-validate', {
+    target_id: el('enterprise-dast-target-id')?.value?.trim() || '',
+    url: el('enterprise-dast-url')?.value?.trim() || '',
+    owner: el('enterprise-dast-owner')?.value?.trim() || '',
+    authorized_by: el('enterprise-dast-authorization')?.value?.trim() || '',
+    mode: el('enterprise-dast-mode')?.value || 'passive',
+    active_approved: Boolean(el('enterprise-dast-approved')?.checked),
+  }, event.currentTarget, 'enterprise-dast-output'));
+  el('enterprise-control-save-btn')?.addEventListener('click', event => runEnterpriseAction('control', {
+    control_id: el('enterprise-control-id')?.value?.trim() || '',
+    framework: el('enterprise-control-framework')?.value || '',
+    title: el('enterprise-control-title')?.value?.trim() || '',
+    owner: el('enterprise-control-owner')?.value?.trim() || '',
+    status: el('enterprise-control-status')?.value || 'not_started',
+  }, event.currentTarget, 'enterprise-control-output'));
+  el('enterprise-workflow-kind')?.addEventListener('change', () => renderEnterprise());
+  el('enterprise-workflow-save-btn')?.addEventListener('click', event => runEnterpriseAction('workflow', enterpriseWorkflowRecord(), event.currentTarget, 'enterprise-workflow-output'));
   el('artifact-fleet-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadArtifactFleetStatus(), { successMessage: 'Artifact Fleet status refreshed' }));
   el('rust-research-preview-btn')?.addEventListener('click', event => runRustPackageResearchAction('preview', event.currentTarget));
   el('rust-research-run-btn')?.addEventListener('click', event => runRustPackageResearchAction('run', event.currentTarget));
-  el('rust-research-compare-btn')?.addEventListener('click', event => runRustPackageResearchAction('run', event.currentTarget));
   el('rust-research-matrix-btn')?.addEventListener('click', event => runRustResearchFollowup('matrix', event.currentTarget));
   el('rust-research-queue-btn')?.addEventListener('click', event => runRustResearchFollowup('queue', event.currentTarget));
   el('rust-research-draft-btn')?.addEventListener('click', event => runRustResearchFollowup('draft', event.currentTarget));

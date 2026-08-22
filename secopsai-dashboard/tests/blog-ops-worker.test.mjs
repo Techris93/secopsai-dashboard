@@ -477,6 +477,52 @@ async function testRustPackageResearchHostedModeFailsClearlyWithoutHelper() {
   assert.equal(JSON.stringify(payload).includes("SECOPSAI_CORE_INTELLIGENCE_TOKEN"), false);
 }
 
+async function testEnterpriseActionHostedModeFailsClearlyWithoutHelper() {
+  const response = await worker.fetch(
+    new Request("https://dashboard.example/api/secopsai/enterprise-action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-SecOpsAI-Intelligence-Token": "enterprise-admin" },
+      body: JSON.stringify({ action: "kubernetes-scan", manifest: "apiVersion: v1\nkind: Pod" }),
+    }),
+    { INTELLIGENCE_ADMIN_TOKEN: "enterprise-admin" },
+  );
+  assert.equal(response.status, 501);
+  const payload = await jsonFrom(response);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.code, "not_configured");
+  assert.equal(JSON.stringify(payload).includes("enterprise-admin"), false);
+}
+
+async function testEnterpriseActionForwardsOnlyTheScopedActionToken() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ ok: true, result: { admission: "allow" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://dashboard.example/api/secopsai/enterprise-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-SecOpsAI-Intelligence-Token": "enterprise-admin" },
+        body: JSON.stringify({ action: "kubernetes-scan", manifest: "apiVersion: v1\nkind: Pod" }),
+      }),
+      { SECOPSAI_HELPER_BASE_URL: "https://helper.example", INTELLIGENCE_ADMIN_TOKEN: "enterprise-admin" },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://helper.example/api/secopsai/enterprise-action");
+    const headers = new Headers(calls[0].init.headers);
+    assert.equal(headers.get("X-SecOpsAI-Intelligence-Token"), "enterprise-admin");
+    assert.equal(headers.get("Authorization"), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testTriageOpsWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/secopsai/triage-ops/close", {
@@ -1266,6 +1312,8 @@ await testDiscordNotifyRequiresDedicatedToken();
 await testDiscordNotifyAuthorizedForwardsWebhook();
 await testTriageOpsHostedModeFailsClearlyWithoutHelper();
 await testRustPackageResearchHostedModeFailsClearlyWithoutHelper();
+await testEnterpriseActionHostedModeFailsClearlyWithoutHelper();
+await testEnterpriseActionForwardsOnlyTheScopedActionToken();
 await testTriageOpsWriteNeedsAdminToken();
 await testTriageOpsAuthorizedWriteProxiesToHelper();
 await testTriageOpsEvidenceVerdictIsReadOnlyProxy();
