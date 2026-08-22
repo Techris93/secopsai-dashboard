@@ -198,6 +198,10 @@ SECRETISH_RE = re.compile(r'(?i)\b([a-z0-9_ -]*(?:token|secret|api[_ -]?key|pass
 INTELLIGENCE_JOB_ID_RE = re.compile(r'^AIJ-[A-F0-9]{16}$')
 INTELLIGENCE_TARGET_RE = re.compile(r'^[A-Za-z0-9:._-]{0,240}$')
 INTELLIGENCE_MODEL_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._\-/\[\]]{0,159}$')
+SPECIALIST_RUN_ID_RE = re.compile(r'^SOR-[A-F0-9]{16}$')
+SPECIALIST_PROFILE_RE = re.compile(r'^[a-z][a-z0-9_-]{1,31}/[a-z][a-z0-9_-]{1,63}$')
+SPECIALIST_TIERS = {'recommend', 'read_only', 'worktree', 'pr_ready'}
+SPECIALIST_POLICY_MODES = {'off', 'recommend', 'guarded'}
 INTELLIGENCE_BRIDGE_ACTIONS = {
     'explain_finding',
     'triage_finding',
@@ -207,6 +211,8 @@ INTELLIGENCE_BRIDGE_ACTIONS = {
     'generate_analyst_brief',
     'review_publication_safety',
     'recommend_remediation',
+    'execute_specialist_work',
+    'review_specialist_work',
 }
 INTELLIGENCE_SERVICE_ACTIONS = {'install', 'start', 'stop', 'status', 'logs', 'uninstall'}
 CAMPAIGN_FIXTURE_PATHS = [
@@ -1156,6 +1162,107 @@ def build_intelligence_args(action, payload):
                 args.extend([flag, 'on' if bool(payload.get(key)) else 'off'])
         return [*args, *secopsai_db_args()]
     raise ValueError('Unsupported intelligence operation')
+
+
+def _specialist_task(payload):
+    raw = payload.get('task')
+    if not isinstance(raw, dict):
+        raise ValueError('Specialist task must be an object')
+    limits = {
+        'task_id': 160,
+        'title': 300,
+        'description': 8000,
+        'domain': 80,
+        'priority': 40,
+        'status': 40,
+        'owner_role': 120,
+        'reviewer_role': 120,
+        'repo_alias': 40,
+    }
+    task = {}
+    for key, limit in limits.items():
+        value = _clean_string(raw.get(key), limit)
+        if value:
+            task[key] = value
+    if not task.get('title'):
+        raise ValueError('Specialist task title is required')
+    if task.get('repo_alias') and task['repo_alias'] not in {'secopsai', 'secopsai-dashboard'}:
+        raise ValueError('Specialist repository is not allowlisted')
+    evidence = raw.get('evidence_refs') or []
+    if not isinstance(evidence, list) or len(evidence) > 25:
+        raise ValueError('Specialist evidence_refs must be a list of at most 25 values')
+    task['evidence_refs'] = [_clean_string(value, 300) for value in evidence if _clean_string(value, 300)]
+    task['external_facing'] = bool(raw.get('external_facing'))
+    task['requires_security_review'] = bool(raw.get('requires_security_review'))
+    encoded = json.dumps(task, sort_keys=True, separators=(',', ':'))
+    if len(encoded.encode('utf-8')) > 24 * 1024:
+        raise ValueError('Specialist task exceeds 24576 bytes')
+    return task
+
+
+def build_specialist_args(action, payload):
+    action = _clean_string(action, 30).lower()
+    if action == 'auto-route':
+        task = _specialist_task(payload)
+        return [
+            'specialists', 'auto-route', '--input-json', json.dumps(task, sort_keys=True),
+            '--requested-by', 'mission-control-policy', *secopsai_db_args(),
+        ]
+    if action in {'route', 'create'}:
+        task = _specialist_task(payload)
+        tier = _clean_string(payload.get('tier') or 'recommend', 20).lower()
+        if tier not in SPECIALIST_TIERS:
+            raise ValueError('Unsupported specialist automation tier')
+        profile = _clean_string(payload.get('profile_id'), 100)
+        if profile and not SPECIALIST_PROFILE_RE.fullmatch(profile):
+            raise ValueError('Invalid specialist profile ID')
+        args = ['specialists', action, '--input-json', json.dumps(task, sort_keys=True), '--tier', tier]
+        if profile:
+            args.extend(['--profile', profile])
+        if action == 'create':
+            args.extend(['--requested-by', 'mission-control'])
+            if bool(payload.get('enqueue')):
+                if tier != 'read_only':
+                    raise ValueError('Only read-only specialist runs can be queued during creation')
+                args.append('--enqueue')
+        return [*args, *secopsai_db_args()]
+    if action in {'approve', 'execute', 'cancel'}:
+        run_id = _clean_string(payload.get('run_id'), 20).upper()
+        if not SPECIALIST_RUN_ID_RE.fullmatch(run_id):
+            raise ValueError('Invalid specialist run ID')
+        return ['specialists', action, run_id, '--actor', 'mission-control', *secopsai_db_args()]
+    if action == 'policy':
+        mode = _clean_string(payload.get('mode'), 20).lower()
+        maximum_tier = _clean_string(payload.get('maximum_automatic_tier') or 'recommend', 20).lower()
+        if mode not in SPECIALIST_POLICY_MODES:
+            raise ValueError('Specialist policy mode must be off, recommend, or guarded')
+        if maximum_tier not in {'recommend', 'read_only'}:
+            raise ValueError('Automatic specialist policy cannot exceed read-only')
+        return [
+            'specialists', 'policy', '--mode', mode,
+            '--maximum-automatic-tier', maximum_tier,
+            '--actor', 'mission-control', *secopsai_db_args(),
+        ]
+    raise ValueError('Unsupported specialist action')
+
+
+def redact_specialist_payload(payload):
+    def clean(value, parent=''):
+        if isinstance(value, list):
+            return [clean(item, parent) for item in value]
+        if not isinstance(value, dict):
+            return value
+        output = {}
+        for key, item in value.items():
+            if key == 'worktree_path' or (parent == 'worktree' and key == 'path'):
+                continue
+            if parent == 'git' and key == 'patch':
+                output['patch_available_locally'] = bool(item)
+                continue
+            output[key] = clean(item, key)
+        return output
+
+    return clean(payload)
 
 
 def build_artifact_fleet_args(action, payload):
@@ -3800,6 +3907,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'secopsai_campaign_api': True,
                     'secopsai_edge_api': True,
                     'secopsai_intelligence_api': True,
+                    'secopsai_specialists_api': True,
                     'secopsai_enterprise_api': True,
                 },
                 'blog_ops': {
@@ -3837,6 +3945,34 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             try:
                 payload = collect_intelligence_status()
                 return json_response(self, 200 if payload.get('ok') else 503, payload)
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/specialists':
+            try:
+                result, payload = run_cli_json(['specialists', 'status', '--limit', '25', *secopsai_db_args()], timeout=60)
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 503,
+                    {'ok': bool(result.get('ok')), 'result': redact_specialist_payload(payload), 'cli': compact_cli_result(result)},
+                )
+            except Exception as exc:
+                return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'specialists_not_configured'})
+
+        if parsed.path.startswith('/api/secopsai/specialists/'):
+            run_id = parsed.path.rsplit('/', 1)[-1].strip().upper()
+            if not SPECIALIST_RUN_ID_RE.fullmatch(run_id):
+                return json_response(self, 400, {'ok': False, 'error': 'Invalid specialist run ID'})
+            try:
+                result, payload = run_cli_json(
+                    ['specialists', 'show', run_id, *secopsai_db_args()],
+                    timeout=60,
+                )
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 404,
+                    {'ok': bool(result.get('ok')), 'run': redact_specialist_payload(payload), 'cli': compact_cli_result(result)},
+                )
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
@@ -4338,6 +4474,27 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 )
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/specialists':
+            action = _clean_string(payload.get('action'), 30).lower()
+            if action != 'route' and require_intelligence_admin(self):
+                return
+            try:
+                args = build_specialist_args(action, payload)
+                timeout = 1900 if action == 'execute' else 120
+                result, parsed_result = run_cli_json(args, timeout=timeout)
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 400,
+                    {
+                        'ok': bool(result.get('ok')),
+                        'action': action,
+                        'result': redact_specialist_payload(parsed_result),
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'specialist_action_invalid'})
 
         if parsed.path == '/api/secopsai/enterprise-action':
             if require_intelligence_admin(self):

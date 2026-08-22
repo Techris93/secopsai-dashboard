@@ -8916,6 +8916,7 @@ body.professional-ui {
 .professional-ui .modal-card,
 .professional-ui .confirm-dialog-card,
 .professional-ui .intelligence-result-modal-card { background: #fff; color: #17211e; border-color: #b9c9c1; }
+.professional-ui .modal-head h3 { color: #17211e; }
 .professional-ui .intelligence-result-head,
 .professional-ui .intelligence-result-body,
 .professional-ui .intelligence-result-actions { background: #fff; border-color: #d7e1dc; }
@@ -9057,4 +9058,102 @@ body.professional-ui {
   .professional-ui .research-fleet-actions > * { width: 100%; }
   .professional-ui .model-routing-item { grid-template-columns: 24px minmax(0,1fr); }
   .professional-ui .model-routing-item > div { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3,1fr); }
+}
+
+/* Work specialist orchestration */
+.professional-ui .specialist-orchestrator-card {
+  position: relative;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border-color: #b8ccc3;
+  background: linear-gradient(135deg, #ffffff 0%, #f3faf7 100%);
+}
+.professional-ui .specialist-orchestrator-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, #087963, #24a47f 56%, #b7dece);
+}
+.professional-ui .specialist-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+.professional-ui .specialist-status-item {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #cedbd5;
+  background: #fff;
+}
+.professional-ui .specialist-status-item span {
+  display: block;
+  color: #6b7a74;
+  font: 700 .61rem var(--asd-mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.professional-ui .specialist-status-item strong {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: #17211e;
+  font-size: .86rem;
+}
+.professional-ui .specialist-status-item small { display: block; margin-top: 4px; color: #687770; line-height: 1.45; }
+.professional-ui .specialist-policy-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid #0b8068;
+  background: #eaf7f2;
+  color: #315249;
+  font-size: .72rem;
+}
+.professional-ui .specialist-policy-controls {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 10px;
+}
+.professional-ui .specialist-policy-controls label { display: grid; gap: 5px; }
+.professional-ui .specialist-policy-controls label > span { color: #5f6f68; font: 700 .61rem var(--asd-mono); text-transform: uppercase; }
+.professional-ui .specialist-roster { margin-top: 12px; border: 1px solid #ccd9d3; background: #fff; }
+.professional-ui .specialist-roster summary { padding: 10px 12px; color: #315249; font: 700 .68rem var(--asd-mono); cursor: pointer; }
+.professional-ui .specialist-roster-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0 12px 12px; }
+.professional-ui .specialist-roster-item { padding: 10px; border: 1px solid #d7e1dc; background: #f8fbf9; }
+.professional-ui .specialist-roster-item strong { display: block; color: #20332c; font-size: .75rem; }
+.professional-ui .specialist-roster-item span { display: block; margin-top: 4px; color: #718079; font: .62rem var(--asd-mono); overflow-wrap: anywhere; }
+.professional-ui .specialist-runs { margin-top: 14px; }
+.professional-ui .prompt-specialist-card { margin-bottom: 12px; border-color: #a9c9bc; background: #f5faf8; }
+.professional-ui .specialist-route-controls { margin-top: 12px; }
+.professional-ui .specialist-route-summary { margin-top: 12px; }
+.professional-ui .specialist-route-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.professional-ui .specialist-route-panel { padding: 10px; border: 1px solid #d0ddd7; background: #fff; }
+.professional-ui .specialist-route-panel strong { display: block; color: #1f342d; font-size: .75rem; }
+.professional-ui .specialist-route-panel p,
+.professional-ui .specialist-route-panel ul { margin: 6px 0 0; color: #64736d; font-size: .69rem; line-height: 1.48; }
+.professional-ui .specialist-route-panel ul { padding-left: 17px; }
+.professional-ui .specialist-action-bar { margin-top: 12px; padding-top: 12px; border-top: 1px solid #cedbd5; }
+.professional-ui .specialist-action-bar .small { max-width: 520px; }
+
+@media (max-width: 1000px) {
+  .professional-ui .specialist-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .professional-ui .specialist-roster-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .professional-ui .specialist-policy-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .professional-ui .specialist-status-grid,
+  .professional-ui .specialist-roster-grid,
+  .professional-ui .specialist-route-grid,
+  .professional-ui .specialist-policy-controls { grid-template-columns: 1fr; }
+  .professional-ui .specialist-action-bar,
+  .professional-ui .specialist-action-bar .modal-actions-right { display: grid; width: 100%; }
+  .professional-ui .specialist-action-bar button { width: 100%; }
 }

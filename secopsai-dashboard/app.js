@@ -146,6 +146,12 @@ const state = {
     selectedJobId: null,
     serviceOutput: ''
   },
+  specialists: {
+    data: null,
+    loading: false,
+    error: null,
+    selectedRunId: null
+  },
   edgeWorkspace: {
     view: 'inventory',
     selectedAssetId: null,
@@ -276,7 +282,19 @@ const state = {
 };
 
 const taskModalState = { editingId: null, sourceFinding: null };
-const promptModalState = { item: null, role: null, brief: null, mode: 'smart-local', runRequestId: null, relatedRunId: null, pollTimer: null, launchedFromTaskModal: false };
+const promptModalState = {
+  item: null,
+  role: null,
+  brief: null,
+  mode: 'smart-local',
+  runRequestId: null,
+  relatedRunId: null,
+  pollTimer: null,
+  specialistPollTimer: null,
+  launchedFromTaskModal: false,
+  specialistContract: null,
+  specialistRun: null
+};
 const dragState = { taskId: null };
 let workView = 'table';
 const pages = ["mission-control", "tasks", "findings", "edge", "automation", "integrations", "enterprise", "triage-ops", "research-cases", "coverage", "blog-ops", "operator-guide"];
@@ -2695,22 +2713,22 @@ function syncPromptRunButtonState() {
   btn.disabled = false;
   btn.classList.remove('is-disabled-soft');
   if (status === 'queued') {
-    btn.textContent = 'Queued';
+    btn.textContent = 'Compatibility run queued';
     btn.disabled = true;
     btn.classList.add('is-disabled-soft');
     return;
   }
   if (status === 'running' || status === 'picked_up') {
-    btn.textContent = 'Running';
+    btn.textContent = 'Compatibility run active';
     btn.disabled = true;
     btn.classList.add('is-disabled-soft');
     return;
   }
   if (['completed','completed_with_gaps','needs_review','failed','cancelled'].includes(status)) {
-    btn.textContent = 'Run again';
+    btn.textContent = 'Queue compatibility again';
     return;
   }
-  btn.textContent = 'Queue run';
+  btn.textContent = 'Queue compatibility run';
 }
 
 function setRunStatusUI({ status = 'idle', line = 'Not started', detail = '', detailHtml = '', viewUrl = null } = {}) {
@@ -2752,6 +2770,10 @@ function stopRunStatusPolling() {
     clearInterval(promptModalState.pollTimer);
     promptModalState.pollTimer = null;
   }
+  if (promptModalState.specialistPollTimer) {
+    clearInterval(promptModalState.specialistPollTimer);
+    promptModalState.specialistPollTimer = null;
+  }
 }
 
 function refreshPromptBrief() {
@@ -2777,17 +2799,28 @@ function openPromptModal(item, roleLabel = null) {
   promptModalState.mode = el('prompt-mode-select')?.value || promptModalState.mode || 'smart-local';
   promptModalState.runRequestId = null;
   promptModalState.relatedRunId = null;
+  promptModalState.specialistContract = null;
+  promptModalState.specialistRun = null;
   stopRunStatusPolling();
 
   el('prompt-modal-title').textContent = 'Work brief';
   const route = findRouteForRole(role);
   const reviewer = item?.reviewer_role || null;
-  el('prompt-modal-meta').textContent = `Suggested owner: ${role}${reviewer ? ` • Reviewer: ${reviewer}` : ''}${route ? ` • Route metadata: #${route.channel_name}` : ''} • Direct dashboard-side sending retired`;
+  el('prompt-modal-meta').textContent = `Work item: ${item?.title || 'Untitled'} • Legacy owner hint: ${role}${reviewer ? ` • Legacy reviewer: ${reviewer}` : ''}${route ? ` • Compatibility route: #${route.channel_name}` : ''}`;
   if (el('prompt-mode-select')) el('prompt-mode-select').value = promptModalState.mode;
+  if (el('prompt-specialist-select')) el('prompt-specialist-select').value = '';
+  if (el('prompt-specialist-tier')) el('prompt-specialist-tier').value = 'recommend';
   refreshPromptBrief();
+  renderPromptSpecialist();
   syncPromptRunButtonState();
   setRunStatusUI({ status: 'idle', line: 'Not started', detail: '' });
   el('prompt-modal').classList.remove('hidden');
+  Promise.resolve()
+    .then(async () => {
+      if (!state.specialists.data) await loadSpecialists();
+      await routePromptSpecialist(el('prompt-specialist-route-btn'));
+    })
+    .catch(error => showToast(error?.message || String(error), 'error'));
 }
 
 function closePromptModal() {
@@ -3331,7 +3364,301 @@ function filteredFindings(items = sortedFindings()) {
   });
 }
 
+function specialistStatusResult() {
+  const data = state.specialists.data || {};
+  return data.result || data;
+}
+
+function specialistProfiles() {
+  return specialistStatusResult()?.catalog?.profiles || [];
+}
+
+function specialistFallbackLabel(modelRouting = {}) {
+  const mode = String(modelRouting.fallback_mode || 'disabled');
+  const models = Array.isArray(modelRouting.fallback_models) ? modelRouting.fallback_models : [];
+  if (mode === 'disabled') return 'Disabled; no silent model switching';
+  return `${humanizeSnake(mode)} · ${models.length ? models.join(' → ') : 'no fallback models configured'}`;
+}
+
+function renderSpecialistOverview() {
+  const summary = el('specialist-status-grid');
+  const policyStrip = el('specialist-policy-strip');
+  const roster = el('specialist-roster');
+  const runsEl = el('specialist-runs');
+  if (!summary || !policyStrip || !roster || !runsEl) return;
+  const data = specialistStatusResult();
+  if (state.specialists.loading && !state.specialists.data) {
+    summary.innerHTML = '<div class="empty-state compact">Loading specialist roster and OpenCodex routing…</div>';
+    return;
+  }
+  if (state.specialists.error && !state.specialists.data) {
+    summary.innerHTML = `<div class="empty-state compact"><strong>Local Specialist Orchestrator unavailable</strong><div class="small">${escapeHtml(state.specialists.error)} Start the local helper to route or run repository work.</div></div>`;
+    policyStrip.innerHTML = '<strong>Hosted-safe behavior:</strong> no helper-backed execution is attempted when the local orchestrator is unavailable.';
+    roster.innerHTML = '';
+    runsEl.innerHTML = '';
+    return;
+  }
+  const catalog = data.catalog || {};
+  const model = data.model_routing || {};
+  const policy = data.policy || {};
+  const runs = Array.isArray(data.runs) ? data.runs : [];
+  const activeRuns = runs.filter(run => !['completed', 'needs_review', 'failed', 'canceled'].includes(String(run.status || ''))).length;
+  summary.innerHTML = `
+    <div class="specialist-status-item"><span>Reviewed roster</span><strong>${escapeHtml(String(catalog.profile_count || 0))} specialists</strong><small>Catalog ${escapeHtml(String(catalog.version || 'unknown'))} · pinned and catalog-validated</small></div>
+    <div class="specialist-status-item"><span>Selected OpenCodex model</span><strong>${escapeHtml(model.primary_model || 'Not selected')}</strong><small>${escapeHtml(model.source || 'runtime')} routing snapshot</small></div>
+    <div class="specialist-status-item"><span>Fallback policy</span><strong>${escapeHtml(humanizeSnake(model.fallback_mode || 'disabled'))}</strong><small>${escapeHtml(specialistFallbackLabel(model))}</small></div>
+    <div class="specialist-status-item"><span>Active work</span><strong>${escapeHtml(String(activeRuns))} active</strong><small>${escapeHtml(String(runs.length))} recent durable run${runs.length === 1 ? '' : 's'}</small></div>`;
+  policyStrip.innerHTML = `<strong>Automation policy: ${escapeHtml(humanizeSnake(policy.mode || 'recommend'))}</strong><span>Automatic ceiling: ${escapeHtml(humanizeSnake(policy.maximum_automatic_tier || 'recommend'))}</span><span>Independent review: ${policy.independent_review === false ? 'off' : 'required'}</span><span>Worktrees, PR-ready delivery, merge, deploy, publish, disclosure, cloud mutation, secrets, and destructive actions are never automatic.</span>`;
+  const policyMode = el('specialist-policy-mode');
+  const policyTier = el('specialist-policy-tier');
+  if (policyMode && document.activeElement !== policyMode) policyMode.value = policy.mode || 'recommend';
+  if (policyTier && document.activeElement !== policyTier) policyTier.value = policy.maximum_automatic_tier || 'recommend';
+  if (policyTier) policyTier.disabled = (policyMode?.value || policy.mode) !== 'guarded';
+  const catalogVersion = String(catalog.version || 'unknown');
+  const upstreamCommit = String(catalog.upstream?.commit || '').slice(0, 12);
+  roster.innerHTML = `<div class="specialist-roster-grid">${specialistProfiles().map(profile => `
+    <div class="specialist-roster-item"><strong>${escapeHtml(profile.name || profile.id)}</strong><span>${escapeHtml(profile.id || '')} · catalog ${escapeHtml(catalogVersion)}</span><small>${escapeHtml(profile.source_path || 'reviewed local profile')}${profile.source_sha256 ? ` · sha256 ${escapeHtml(String(profile.source_sha256).slice(0, 12))}…` : ''}${upstreamCommit ? ` · upstream ${escapeHtml(upstreamCommit)}` : ''}</small></div>`).join('')}</div>`;
+  runsEl.innerHTML = !runs.length
+    ? '<div class="empty-state compact"><strong>No specialist runs yet.</strong><div class="small">Open a work item, review the recommendation, and choose an automation tier.</div></div>'
+    : `<div class="module-head compact-header"><div><h4>Recent specialist runs</h4><p>Latest first · model and policy are captured when each run is created.</p></div></div><div class="table-wrap"><table><thead><tr><th>Work</th><th>Specialist</th><th>Tier</th><th>Model</th><th>Status</th><th>Updated</th></tr></thead><tbody>${runs.slice(0, 10).map(run => `
+      <tr><td><strong>${escapeHtml(run.title || run.run_id)}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div></td><td>${escapeHtml(humanizeSnake(String(run.primary_profile_id || '').split('/').pop() || 'unknown'))}</td><td>${escapeHtml(humanizeSnake(run.automation_tier || 'recommend'))}</td><td><span class="mono">${escapeHtml(run.selected_model || 'not selected')}</span></td><td>${renderStatusPill(run.status || 'unknown', humanizeSnake(run.status || 'unknown'))}</td><td>${escapeHtml(fmtDate(run.updated_at || run.created_at))}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function populatePromptSpecialistSelect() {
+  const select = el('prompt-specialist-select');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `<option value="">Automatic recommendation</option>${specialistProfiles().map(profile => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name || profile.id)}</option>`).join('')}`;
+  if ([...select.options].some(option => option.value === current)) select.value = current;
+}
+
+function specialistTaskFromItem(item = {}) {
+  return {
+    task_id: item.id ? String(item.id) : '',
+    title: String(item.title || 'Untitled work'),
+    description: String(item.description || ''),
+    domain: String(item.domain || ''),
+    priority: String(item.priority || 'normal'),
+    status: String(item.status || 'inbox'),
+    owner_role: String(item.owner_role || ''),
+    reviewer_role: String(item.reviewer_role || ''),
+    external_facing: Boolean(item.external_facing),
+    requires_security_review: Boolean(item.requires_security_review),
+    evidence_refs: item.id ? [`work-item:${item.id}`] : []
+  };
+}
+
+async function loadSpecialists({ render = true } = {}) {
+  state.specialists.loading = true;
+  if (render) renderSpecialistOverview();
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/specialists');
+    const payload = await response.json().catch(() => ({}));
+    state.specialists.data = payload;
+    state.specialists.error = response.ok ? null : (payload.error || `Specialist status HTTP ${response.status}`);
+  } catch (error) {
+    state.specialists.error = error?.message || String(error);
+  } finally {
+    state.specialists.loading = false;
+    if (render) renderSpecialistOverview();
+    populatePromptSpecialistSelect();
+  }
+  return state.specialists.data;
+}
+
+async function specialistApiAction(action, payload = {}, button = null, { write = true } = {}) {
+  const tokenInput = el('intelligence-admin-token');
+  state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
+  if (write && !state.intelligence.adminToken) {
+    showToast('Enter the Automation action token in Administration → Automation before using this protected action.', 'error');
+    tokenInput?.focus();
+    return null;
+  }
+  if (state.intelligence.adminToken) sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
+  setButtonBusy(button, true, action === 'route' ? 'Routing…' : 'Working…');
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/specialists', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(write && state.intelligence.adminToken ? { 'X-SecOpsAI-Intelligence-Token': state.intelligence.adminToken } : {})
+      },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || `Specialist action HTTP ${response.status}`);
+    return result.result || result;
+  } catch (error) {
+    showToast(error?.message || String(error), 'error');
+    return null;
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+async function saveSpecialistPolicy(button = null) {
+  const mode = el('specialist-policy-mode')?.value || 'recommend';
+  const maximumTier = mode === 'guarded' ? (el('specialist-policy-tier')?.value || 'recommend') : 'recommend';
+  const result = await specialistApiAction('policy', {
+    mode,
+    maximum_automatic_tier: maximumTier
+  }, button);
+  if (!result) return;
+  showToast('Specialist automatic routing policy saved.', 'success');
+  await loadSpecialists();
+}
+
+async function autoRouteNextWorkItem(button = null) {
+  const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 };
+  const next = filteredWorkItems()
+    .filter(item => !['done', 'review'].includes(String(item.status || '').toLowerCase()))
+    .sort((a, b) => (priorityOrder[String(b.priority || 'normal').toLowerCase()] || 0) - (priorityOrder[String(a.priority || 'normal').toLowerCase()] || 0))[0];
+  if (!next) {
+    showToast('No open work item matches the current Work filters.', 'info');
+    return;
+  }
+  const result = await specialistApiAction('auto-route', { task: specialistTaskFromItem(next) }, button);
+  if (!result) return;
+  if (!result.routed) {
+    showToast(result.reason || 'Automatic specialist routing is disabled.', 'info');
+  } else {
+    const run = result.run || {};
+    showToast(`${next.title}: ${humanizeSnake(result.effective_tier || 'recommend')} route created${run.run_id ? ` (${run.run_id})` : ''}.`, 'success', 6000);
+  }
+  await loadSpecialists();
+}
+
+function specialistContractForPrompt() {
+  return promptModalState.specialistRun?.contract || promptModalState.specialistContract || null;
+}
+
+function renderPromptSpecialist() {
+  populatePromptSpecialistSelect();
+  const target = el('prompt-specialist-summary');
+  if (!target) return;
+  const contract = specialistContractForPrompt();
+  const run = promptModalState.specialistRun;
+  const tier = el('prompt-specialist-tier')?.value || 'recommend';
+  const createButton = el('prompt-specialist-create-btn');
+  const refreshRunButton = el('prompt-specialist-refresh-run-btn');
+  const approveButton = el('prompt-specialist-approve-btn');
+  const executeButton = el('prompt-specialist-execute-btn');
+  const cancelButton = el('prompt-specialist-cancel-btn');
+  const labels = { recommend: 'Save recommendation', read_only: 'Queue read-only analysis', worktree: 'Create approval request', pr_ready: 'Prepare PR-ready worktree' };
+  if (createButton) createButton.textContent = labels[tier] || 'Create specialist run';
+  if (!contract) {
+    target.innerHTML = '<div class="empty-state compact">Calculating a deterministic specialist route…</div>';
+    [refreshRunButton, approveButton, executeButton, cancelButton].forEach(button => button?.classList.add('hidden'));
+    return;
+  }
+  const routing = contract.routing || {};
+  const specialist = contract.specialist || {};
+  const model = contract.model_routing || {};
+  const policy = contract.execution_policy || {};
+  const repository = contract.repository || {};
+  const evidence = contract.evidence_requirements || {};
+  const status = run?.status || 'preview';
+  const modelMissing = !model.primary_model && tier !== 'recommend';
+  if (createButton) {
+    createButton.disabled = modelMissing || Boolean(run && !['completed', 'needs_review', 'failed', 'canceled'].includes(String(run.status || '')));
+    createButton.title = modelMissing ? 'Select and persist an OpenCodex model in Automation first.' : '';
+  }
+  approveButton?.classList.toggle('hidden', status !== 'awaiting_approval');
+  executeButton?.classList.toggle('hidden', !(status === 'ready' && ['worktree', 'pr_ready'].includes(String(run?.automation_tier || tier))));
+  cancelButton?.classList.toggle('hidden', !run || ['completed', 'needs_review', 'failed', 'canceled'].includes(status));
+  refreshRunButton?.classList.toggle('hidden', !run);
+  const reasons = routing.reasons || [];
+  const missing = evidence.missing || [];
+  const allowed = policy.allowed_actions || [];
+  target.innerHTML = `
+    ${run ? `<div class="specialist-policy-strip"><strong>${escapeHtml(run.run_id || '')}</strong><span>${renderStatusPill(status, humanizeSnake(status))}</span><span>Approval: ${escapeHtml(humanizeSnake(run.approval_state || 'not required'))}</span></div>` : ''}
+    <div class="specialist-route-grid">
+      <div class="specialist-route-panel"><strong>Primary specialist</strong><p>${escapeHtml(routing.primary_profile_name || specialist.profile?.name || 'Unknown')}<br><span class="mono">${escapeHtml(routing.primary_profile_id || specialist.profile?.id || '')}</span><br>Catalog ${escapeHtml(specialist.catalog_version || 'unknown')} · ${escapeHtml(specialist.profile?.source_path || 'reviewed local profile')}<br>Confidence ${escapeHtml(routing.confidence || 'unknown')} · risk ${escapeHtml(routing.risk || 'unknown')}</p></div>
+      <div class="specialist-route-panel"><strong>Independent reviewer</strong><p>${escapeHtml(routing.reviewer_profile_name || specialist.reviewer?.name || 'Unknown')}<br><span class="mono">${escapeHtml(routing.reviewer_profile_id || specialist.reviewer?.id || '')}</span><br>${escapeHtml(specialist.reviewer?.source_path || 'reviewed local profile')}<br>Required before operator acceptance.</p></div>
+      <div class="specialist-route-panel"><strong>OpenCodex model snapshot</strong><p><span class="mono">${escapeHtml(model.primary_model || 'Not selected')}</span><br>${escapeHtml(specialistFallbackLabel(model))}<br>Source: ${escapeHtml(model.source || 'runtime')}</p></div>
+      <div class="specialist-route-panel"><strong>Execution boundary</strong><p>${escapeHtml(humanizeSnake(policy.tier || tier))} · ${policy.approval_required ? 'approval required' : 'no execution approval required'}<br>${escapeHtml(String(policy.max_runtime_seconds || 0))} second budget · ${escapeHtml(String(policy.max_retries ?? 0))} retry budget<br>${escapeHtml(String(policy.max_files_changed || 0))} file limit · network and external tools disabled<br>Repository: ${escapeHtml(repository.alias || contract.repo_alias || 'not selected')}<br>Reviewed base: <span class="mono">${escapeHtml(repository.base_commit ? repository.base_commit.slice(0, 12) : humanizeSnake(repository.snapshot_status || 'unavailable'))}</span></p></div>
+      <div class="specialist-route-panel"><strong>Why this route</strong>${reasons.length ? `<ul>${reasons.map(reason => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>` : '<p>No routing reason returned.</p>'}</div>
+      <div class="specialist-route-panel"><strong>Evidence and permissions</strong>${missing.length ? `<ul>${missing.map(reason => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>` : '<p>Minimum intake evidence is present.</p>'}<p>Allowed: ${escapeHtml(allowed.join('; ') || 'recommendation only')}.</p></div>
+    </div>
+    ${modelMissing ? '<div class="error" style="margin-top:10px;">No persisted OpenCodex model is available. Select one in Administration → Automation. SecOpsAI will not choose another model silently.</div>' : ''}
+    ${run?.result?.output?.summary ? `<div class="specialist-route-panel" style="margin-top:8px;"><strong>Primary result</strong><p>${escapeHtml(run.result.output.summary)}</p></div>` : ''}
+    ${run?.review?.output?.summary ? `<div class="specialist-route-panel" style="margin-top:8px;"><strong>Independent review</strong><p>${escapeHtml(run.review.output.summary)}</p></div>` : ''}`;
+}
+
+async function routePromptSpecialist(button = null) {
+  if (!promptModalState.item) return null;
+  const contract = await specialistApiAction('route', {
+    task: specialistTaskFromItem(promptModalState.item),
+    tier: el('prompt-specialist-tier')?.value || 'recommend',
+    profile_id: el('prompt-specialist-select')?.value || ''
+  }, button, { write: false });
+  if (contract) {
+    promptModalState.specialistContract = contract;
+    promptModalState.specialistRun = null;
+    renderPromptSpecialist();
+  }
+  return contract;
+}
+
+async function createPromptSpecialistRun(button = null) {
+  const tier = el('prompt-specialist-tier')?.value || 'recommend';
+  const run = await specialistApiAction('create', {
+    task: specialistTaskFromItem(promptModalState.item || {}),
+    tier,
+    profile_id: el('prompt-specialist-select')?.value || '',
+    enqueue: tier === 'read_only'
+  }, button);
+  if (!run) return;
+  promptModalState.specialistRun = run;
+  state.specialists.selectedRunId = run.run_id || null;
+  showToast(tier === 'read_only' ? 'Read-only OpenCodex specialist analysis queued.' : 'Specialist run created.', 'success');
+  renderPromptSpecialist();
+  await loadSpecialists();
+  startPromptSpecialistPolling();
+}
+
+async function refreshPromptSpecialistRun() {
+  const runId = promptModalState.specialistRun?.run_id;
+  if (!runId) return;
+  try {
+    const response = await dashboardApiFetch(`/api/secopsai/specialists/${encodeURIComponent(runId)}`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Specialist run HTTP ${response.status}`);
+    promptModalState.specialistRun = payload.run;
+    renderPromptSpecialist();
+    if (['completed', 'needs_review', 'failed', 'canceled'].includes(String(payload.run?.status || ''))) {
+      if (promptModalState.specialistPollTimer) clearInterval(promptModalState.specialistPollTimer);
+      promptModalState.specialistPollTimer = null;
+      await loadSpecialists();
+    }
+  } catch (error) {
+    showToast(error?.message || String(error), 'error');
+  }
+}
+
+function startPromptSpecialistPolling() {
+  if (promptModalState.specialistPollTimer) clearInterval(promptModalState.specialistPollTimer);
+  const status = String(promptModalState.specialistRun?.status || '');
+  if (!['queued', 'running', 'awaiting_review'].includes(status)) return;
+  promptModalState.specialistPollTimer = setInterval(() => refreshPromptSpecialistRun(), 4000);
+}
+
+async function mutatePromptSpecialistRun(action, button) {
+  const run = promptModalState.specialistRun;
+  if (!run?.run_id) return;
+  if (action === 'approve' && !(await requestConfirmation('Approve this isolated worktree run?', { title: 'Approve specialist worktree', context: 'The selected OpenCodex model may edit only the allowlisted repository inside a new isolated worktree. Merge, push, deploy, publish, disclosure, secrets, and destructive actions remain blocked.', confirmLabel: 'Approve worktree' }))) return;
+  if (action === 'execute' && !(await requestConfirmation('Run the approved specialist in its isolated worktree now?', { title: 'Run OpenCodex specialist', context: 'The run uses the captured model and explicit fallback policy. Its diff remains local and must pass independent review before operator acceptance.', confirmLabel: 'Run in worktree' }))) return;
+  if (action === 'cancel' && !(await requestConfirmation('Cancel this specialist run?', { title: 'Cancel specialist run', context: 'Audit history and any existing recovery worktree will be preserved.', confirmLabel: 'Cancel run' }))) return;
+  const updated = await specialistApiAction(action, { run_id: run.run_id }, button);
+  if (!updated) return;
+  promptModalState.specialistRun = updated;
+  renderPromptSpecialist();
+  await loadSpecialists();
+  startPromptSpecialistPolling();
+}
+
 function renderTasks() {
+  renderSpecialistOverview();
   const statuses = [["inbox", "Inbox"],["planned", "Planned"],["in_progress", "In Progress"],["review", "Review"],["blocked", "Blocked"],["done", "Done"]];
   const board = el("task-board");
   const table = el('work-table');
@@ -9672,7 +9999,9 @@ async function loadIntegrationStatus() {
         secopsai_research_api: false,
         secopsai_campaign_api: false,
         secopsai_events_api: false,
-        secopsai_edge_api: false
+        secopsai_edge_api: false,
+        secopsai_intelligence_api: false,
+        secopsai_specialists_api: false
       },
       ai_guard: aiGuardConfig()
     };
@@ -10616,8 +10945,11 @@ async function refreshActiveSurface({ force = false } = {}) {
   state.surfaceRefreshInFlight = true;
   try {
     const page = currentPageFromLocation();
-    if (['mission-control', 'tasks', 'findings'].includes(page)) {
+    if (['mission-control', 'findings'].includes(page)) {
       await refreshOperationalWorkspace();
+    } else if (page === 'tasks') {
+      await Promise.all([refreshOperationalWorkspace(), loadSpecialists({ render: false })]);
+      renderSpecialistOverview();
     } else if (page === 'edge') {
       await loadEdgeWorkspace({ render: false });
       renderEdgeWorkspace();
@@ -10711,6 +11043,13 @@ async function boot() {
   }
 
   try {
+    await loadSpecialists({ render: false });
+  } catch (err) {
+    console.warn('loadSpecialists failed during boot', err);
+    errors.push(`specialist orchestrator: ${err.message || String(err)}`);
+  }
+
+  try {
     await loadEnterpriseStatus({ render: false });
   } catch (err) {
     console.warn('loadEnterpriseStatus failed during boot', err);
@@ -10796,6 +11135,12 @@ function bindEvents() {
   el('mobile-menu-btn')?.addEventListener('click', toggleMobileNav);
   el('work-table-view-btn')?.addEventListener('click', () => { workView = 'table'; renderTasks(); });
   el('work-board-view-btn')?.addEventListener('click', () => { workView = 'board'; renderTasks(); });
+  el('specialist-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadSpecialists(), { successMessage: 'Specialist Orchestrator refreshed' }));
+  el('specialist-policy-mode')?.addEventListener('change', event => {
+    if (el('specialist-policy-tier')) el('specialist-policy-tier').disabled = event.currentTarget.value !== 'guarded';
+  });
+  el('specialist-policy-save-btn')?.addEventListener('click', event => saveSpecialistPolicy(event.currentTarget));
+  el('specialist-route-next-btn')?.addEventListener('click', event => autoRouteNextWorkItem(event.currentTarget));
   el('top-search-btn')?.addEventListener('click', openCommandPalette);
   el('top-help-btn')?.addEventListener('click', () => openHelpDrawer(currentPageFromLocation()));
   el('top-health-btn')?.addEventListener('click', () => setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.health }));
@@ -11210,6 +11555,13 @@ function bindEvents() {
   el('prompt-close-btn')?.addEventListener('click', closePromptModal);
   el('prompt-copy-btn')?.addEventListener('click', copyPromptToClipboard);
   el('prompt-run-btn')?.addEventListener('click', runPromptNow);
+  el('prompt-specialist-route-btn')?.addEventListener('click', event => routePromptSpecialist(event.currentTarget));
+  el('prompt-specialist-create-btn')?.addEventListener('click', event => createPromptSpecialistRun(event.currentTarget));
+  el('prompt-specialist-refresh-run-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => refreshPromptSpecialistRun(), { successMessage: 'Specialist run refreshed' }));
+  el('prompt-specialist-approve-btn')?.addEventListener('click', event => mutatePromptSpecialistRun('approve', event.currentTarget));
+  el('prompt-specialist-execute-btn')?.addEventListener('click', event => mutatePromptSpecialistRun('execute', event.currentTarget));
+  el('prompt-specialist-cancel-btn')?.addEventListener('click', event => mutatePromptSpecialistRun('cancel', event.currentTarget));
+  ['prompt-specialist-select', 'prompt-specialist-tier'].forEach(id => el(id)?.addEventListener('change', () => routePromptSpecialist(el('prompt-specialist-route-btn'))));
   el('prompt-mode-select')?.addEventListener('change', (event) => {
     promptModalState.mode = event?.target?.value || 'smart-local';
     refreshPromptBrief();

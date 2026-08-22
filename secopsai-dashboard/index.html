@@ -180,6 +180,31 @@
           </div>
         </div>
         <div class="small" id="work-scope-note" style="margin-bottom:12px;">The default queue contains assignments linked to findings, research, approvals, or external work. Internal delivery history is available only through All work.</div>
+        <section class="card specialist-orchestrator-card" aria-labelledby="specialist-orchestrator-title">
+          <div class="module-head compact-header">
+            <div>
+              <span class="eyebrow">OpenCodex execution</span>
+              <h3 id="specialist-orchestrator-title">Specialist Orchestrator</h3>
+              <p>Routes each work item to one reviewed specialist profile, captures your persisted OpenCodex model and explicit fallback policy, then enforces evidence, approval, and independent-review gates.</p>
+            </div>
+            <button class="secondary-btn" id="specialist-refresh-btn" type="button">Refresh orchestrator</button>
+          </div>
+          <div class="specialist-status-grid" id="specialist-status-grid" aria-live="polite">
+            <div class="empty-state compact">Loading specialist roster and OpenCodex routing…</div>
+          </div>
+          <div class="specialist-policy-strip" id="specialist-policy-strip"></div>
+          <div class="specialist-policy-controls" aria-label="Specialist automatic routing policy">
+            <label><span>Auto-routing mode</span><select id="specialist-policy-mode"><option value="off">Off</option><option value="recommend">Recommend only</option><option value="guarded">Guarded automation</option></select></label>
+            <label><span>Automatic ceiling</span><select id="specialist-policy-tier"><option value="recommend">Recommendation only</option><option value="read_only">Read-only analysis</option></select></label>
+            <button class="secondary-btn" id="specialist-policy-save-btn" type="button">Save policy</button>
+            <button class="primary-btn" id="specialist-route-next-btn" type="button">Route next priority item</button>
+          </div>
+          <details class="specialist-roster" id="specialist-roster-details">
+            <summary>Reviewed specialist roster</summary>
+            <div id="specialist-roster"></div>
+          </details>
+          <div class="specialist-runs" id="specialist-runs"></div>
+        </section>
         <div class="grid cols-4" id="work-filters" style="margin-bottom:18px;">
           <div class="card"><label><span class="small">Work scope</span><select id="task-filter-scope"><option value="operator" selected>Operator assignments</option><option value="all">Internal delivery history</option></select></label><div class="small" style="margin-top:8px;">Operator assignments exclude implementation and dashboard-development records.</div></div>
           <div class="card"><label><span class="small">Search</span><input id="task-search" type="text" placeholder="Title, description, role..." /></label></div>
@@ -195,7 +220,7 @@
         </div>
         <div class="work-table" id="work-table"></div>
         <div class="kanban hidden" id="task-board"></div>
-        <div class="small" style="margin-top:14px;">Tip: drag task cards between columns to update status instantly. Use this dashboard to manage state; let OpenClaw-native orchestrators handle actual conversations and dispatch.</div>
+        <div class="small" style="margin-top:14px;">Tip: use Open brief to preview a specialist route and safely queue OpenCodex work. OpenClaw and Hermes remain optional compatibility dispatch runtimes; they are not the model provider.</div>
       </section>
 
       <section class="page" id="page-findings">
@@ -1103,6 +1128,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             <a href="#guide-access">Passwords and recovery</a>
             <a href="#guide-overview">Overview</a>
             <a href="#guide-tasks">Tasks</a>
+            <a href="#guide-specialists">Specialist Orchestrator</a>
             <a href="#guide-findings">Findings</a>
             <a href="#guide-research">Research Cases</a>
             <a href="#guide-ai-dependency-guard">AI Dependency Guard</a>
@@ -1209,12 +1235,34 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <p>Tasks is the work queue for ownership, deadlines, blockers, and run visibility. Use it to turn findings into tracked work.</p>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Click <strong>Tasks</strong> and scan each column: Inbox, Planned, In Progress, Review, Blocked, and Done.</p></div>
+                <div class="guide-step"><span>1</span><p>Click <strong>Work</strong> and scan the table or board: Inbox, Planned, In Progress, Review, Blocked, and Done.</p></div>
                 <div class="guide-step"><span>2</span><p>Open a task card to edit owner, reviewer, priority, due date, security-review flag, and description.</p></div>
-                <div class="guide-step"><span>3</span><p>Use <strong>Open work brief</strong> when you need a copyable implementation or investigation brief.</p></div>
-                <div class="guide-step"><span>4</span><p>Use <strong>Save and queue</strong> only when the task is ready to become a run request. Otherwise use <strong>Save task</strong>.</p></div>
+                <div class="guide-step"><span>3</span><p>Use <strong>Open brief</strong> to preview its Specialist Orchestrator contract. The separate compatibility brief remains available for OpenClaw or Hermes handoff.</p></div>
+                <div class="guide-step"><span>4</span><p>Use recommendation-only while the task lacks evidence. Queue read-only analysis for diagnosis, or request a separately approved worktree only when repository scope is clear.</p></div>
               </div>
               <div class="guide-callout">Tip: if the task came from a finding, keep the original finding ID in the description so review can trace the evidence.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-specialists">
+              <div class="guide-section-head">
+                <span class="guide-pill">Work · OpenCodex</span>
+                <h3>Route one task to one reviewed specialist</h3>
+                <p>The specialist defines bounded expertise and expected evidence. Your persisted OpenCodex model performs the work. OpenClaw and Hermes are optional compatibility runtimes, not model providers.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Recommendation</strong><span>Saves an explainable route and execution contract without invoking a model.</span></div>
+                <div class="guide-mini-card"><strong>Read-only analysis</strong><span>Queues bounded analysis on the captured model and an independent reviewer; repository edits are not allowed.</span></div>
+                <div class="guide-mini-card"><strong>Approved worktree</strong><span>Creates an isolated local worktree only after explicit approval. PR-ready means a reviewed local diff, not an opened pull request.</span></div>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Open <strong>Administration → Automation → Models</strong>. Select and save the intended OpenCodex primary model. Add ordered fallbacks only when you explicitly want them.</p></div>
+                <div class="guide-step"><span>2</span><p>Open <strong>Work</strong>. Confirm catalog version, selected model, fallback policy, automatic ceiling, reviewed roster, and recent runs in <strong>Specialist Orchestrator</strong>.</p></div>
+                <div class="guide-step"><span>3</span><p>Open a work item and select <strong>Open brief</strong>. Review the primary specialist, independent reviewer, routing reasons, confidence, risk, evidence gaps, allowed actions, stop conditions, and exact model snapshot.</p></div>
+                <div class="guide-step"><span>4</span><p>Keep <strong>Automatic recommendation</strong> unless a reviewed specialist override is supported by the task evidence. An override changes expertise only; it never changes permissions or model routing.</p></div>
+                <div class="guide-step"><span>5</span><p>Choose the smallest tier that can complete the job. Worktree and PR-ready tiers require an Automation action token, a saved run, explicit approval, and a separate execution confirmation.</p></div>
+                <div class="guide-step"><span>6</span><p>Review structured output, tests, limitations, audit history, local diff, and independent review. Failed worktrees are preserved for recovery and are never overwritten automatically.</p></div>
+              </div>
+              <div class="guide-callout guide-warning">Automatic routing never exceeds read-only analysis. Specialist runs cannot merge, push, open or approve pull requests, deploy, publish, disclose, mutate cloud or Kubernetes resources, change billing/access, read secrets, or delete evidence.</div>
             </section>
 
             <section class="card guide-section" id="guide-findings">
@@ -1586,6 +1634,38 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <div class="small" id="prompt-mode-hint" style="flex:2 1 320px;">Smart local brief selected. Uses task metadata plus heuristics to infer likely repos, paths, and constraints now.</div>
         </div>
       </div>
+      <section class="card prompt-specialist-card" aria-labelledby="prompt-specialist-title">
+        <div class="module-head compact-header">
+          <div>
+            <span class="eyebrow">Reviewed routing</span>
+            <h4 id="prompt-specialist-title">Specialist Orchestrator</h4>
+            <p>The specialist supplies bounded expertise. Your persisted OpenCodex model performs the work; models never change silently.</p>
+          </div>
+          <button id="prompt-specialist-route-btn" class="secondary-btn" type="button">Refresh recommendation</button>
+        </div>
+        <div class="form-grid specialist-route-controls">
+          <label><span>Specialist</span><select id="prompt-specialist-select"><option value="">Automatic recommendation</option></select></label>
+          <label><span>Automation tier</span><select id="prompt-specialist-tier">
+            <option value="recommend">Recommendation only</option>
+            <option value="read_only">Read-only analysis</option>
+            <option value="worktree">Isolated worktree</option>
+            <option value="pr_ready">PR-ready delivery</option>
+          </select></label>
+        </div>
+        <div id="prompt-specialist-summary" class="specialist-route-summary" aria-live="polite">
+          <div class="empty-state compact">Open a work item to calculate its route.</div>
+        </div>
+        <div class="modal-actions specialist-action-bar">
+          <div class="small">Worktree and PR-ready tiers require explicit approval. Merge, deploy, publish, disclosure, secrets, and destructive actions stay blocked.</div>
+          <div class="modal-actions-right">
+            <button id="prompt-specialist-refresh-run-btn" class="secondary-btn hidden" type="button">Refresh run</button>
+            <button id="prompt-specialist-cancel-btn" class="secondary-btn hidden" type="button">Cancel run</button>
+            <button id="prompt-specialist-approve-btn" class="secondary-btn hidden" type="button">Approve worktree</button>
+            <button id="prompt-specialist-execute-btn" class="primary-btn hidden" type="button">Run in worktree</button>
+            <button id="prompt-specialist-create-btn" class="primary-btn" type="button">Save recommendation</button>
+          </div>
+        </div>
+      </section>
       <div class="card" id="prompt-run-status" style="margin-bottom:12px; display:none;">
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
           <div>
@@ -1599,10 +1679,10 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
       </div>
       <textarea id="prompt-output" rows="16" readonly class="prompt-output"></textarea>
       <div class="modal-actions">
-        <div class="small">Copy this brief into OpenClaw-native orchestrator flows or ACP runs. Direct dashboard-side sending is retired.</div>
+        <div class="small">Compatibility path: copy or queue this brief to the existing OpenClaw/Hermes runtime. This is separate from the OpenCodex Specialist Orchestrator above.</div>
         <div class="modal-actions-right">
           <button id="prompt-copy-btn" class="secondary-btn">Copy brief</button>
-          <button id="prompt-run-btn" class="primary-btn">Queue run</button>
+          <button id="prompt-run-btn" class="secondary-btn">Queue compatibility run</button>
           <button id="prompt-close-btn" class="secondary-btn">Close</button>
         </div>
       </div>
