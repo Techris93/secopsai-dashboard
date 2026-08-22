@@ -180,7 +180,7 @@ scope validation, controls, and assurance workflows use the protected typed
 `/api/secopsai/enterprise-action` route. Hosted mode requires a reachable helper
 for these local Core writes and otherwise returns `501 not_configured` guidance.
 
-The Assess workspace also includes an **Artifact Fleet** panel. Its
+The canonical **Administration → Automation → Research pipeline** workspace includes the **Artifact Fleet** panel. Its
 buttons call the protected `/api/secopsai/artifact-fleet` allowlist for metadata
 indexing, pending safe scans, minimized model-job queueing, analyst queue
 refresh, rule-pack validation, the synthetic benchmark, and the bounded cycle.
@@ -191,7 +191,7 @@ The exact `scan-artifact` path remains CLI-only to prevent browser-controlled
 filesystem access. Local Artifact Fleet state uses its own
 `SECOPSAI_ARTIFACT_FLEET_DB_PATH`, separate from the main SOC database.
 
-The same panel exposes **Run Rust Package Research** through the protected
+The same workspace exposes **Exact crates.io package intake** through the protected
 `/api/secopsai/rust-package-research` helper route. It accepts only package,
 version, comparison, source-reference, model, and bounded workflow fields. The
 helper performs crates.io metadata/checksum validation and local quarantine

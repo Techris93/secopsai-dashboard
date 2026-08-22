@@ -289,6 +289,14 @@
           </div>
         </div>
         <div class="system-view-summary" id="automation-view-summary" role="status" aria-live="polite"></div>
+        <nav class="automation-tabs" aria-label="Automation workspace views">
+          <button class="automation-tab active" id="automation-models-tab" data-automation-tab="models" type="button">Models</button>
+          <button class="automation-tab" data-automation-tab="review" type="button">Alert review</button>
+          <button class="automation-tab" data-automation-tab="investigations" type="button">Investigations</button>
+          <button class="automation-tab" data-automation-tab="research" type="button">Research pipeline</button>
+          <button class="automation-tab" data-automation-tab="learning" type="button">Learning</button>
+          <button class="automation-tab" data-automation-tab="jobs" type="button">Jobs</button>
+        </nav>
         <section class="intelligence-console" aria-labelledby="intelligence-title">
           <div class="intelligence-console-head">
             <div>
@@ -300,7 +308,7 @@
           </div>
           <div class="grid cols-4 intelligence-summary" id="intelligence-summary"></div>
           <div class="intelligence-grid">
-            <section class="intelligence-module" id="automation-bridge-section" aria-labelledby="local-bridge-title">
+            <section class="intelligence-module" id="automation-bridge-section" data-automation-view="models" aria-labelledby="local-bridge-title">
               <div class="module-head">
                 <div><h4 id="local-bridge-title">Local model bridge</h4><p>Runs approved analysis actions through your local OpenCodex catalog or ChatGPT sign-in.</p></div>
                 <span class="status-pill" id="intelligence-bridge-pill">Checking</span>
@@ -311,9 +319,31 @@
                 <select id="intelligence-model-select" aria-describedby="intelligence-model-hint"></select>
               </label>
               <p class="small" id="intelligence-model-hint">Pick the model to persist. Health checks and jobs use only this selection unless you explicitly configure fallbacks.</p>
+              <div class="model-routing-workspace" id="intelligence-model-routing">
+                <div class="model-routing-head"><div><strong>Fallback policy</strong><span>Optional and ordered. Your selected model always runs first.</span></div><span class="routing-source" id="intelligence-routing-source">Not saved</span></div>
+                <label class="intelligence-credential-field">
+                  <span>When the primary model is unavailable</span>
+                  <select id="intelligence-fallback-mode">
+                    <option value="disabled">Stop and keep the job queued</option>
+                    <option value="quota_auth">Use fallbacks for quota or authentication failures</option>
+                    <option value="any_provider">Use fallbacks for provider availability failures</option>
+                  </select>
+                </label>
+                <label class="intelligence-credential-field">
+                  <span>Find a model</span>
+                  <input id="intelligence-model-search" name="secopsai-model-catalog-filter" type="search" placeholder="Search provider or model ID" autocomplete="off" data-1p-ignore="true" data-lpignore="true" />
+                </label>
+                <div class="model-catalog" id="intelligence-model-catalog" aria-label="Fallback model catalog"></div>
+                <div class="model-routing-order" id="intelligence-fallback-order"></div>
+                <div class="intelligence-actions">
+                  <button class="primary-btn" id="intelligence-routing-save-btn" type="button">Save model routing</button>
+                  <button class="secondary-btn" id="intelligence-routing-recommended-btn" type="button">Use recommended fallbacks</button>
+                  <button class="secondary-btn" id="intelligence-routing-clear-btn" type="button">Primary model only</button>
+                </div>
+              </div>
               <label class="intelligence-credential-field" id="intelligence-token-field">
                 <span>Automation action token</span>
-                <input id="intelligence-admin-token" type="password" autocomplete="current-password" aria-describedby="intelligence-token-hint" placeholder="Paste the INTELLIGENCE_ADMIN_TOKEN here" />
+                <input id="intelligence-admin-token" name="secopsai-automation-token" type="password" autocomplete="one-time-code" data-1p-ignore="true" data-lpignore="true" aria-describedby="intelligence-token-hint" placeholder="Paste the INTELLIGENCE_ADMIN_TOKEN here" />
               </label>
               <p class="small" id="intelligence-token-hint">Required for <strong>Run learning cycle</strong>, model review, investigation controls, and service controls. Paste the value configured as <code>INTELLIGENCE_ADMIN_TOKEN</code> in the local helper, or the same approved Triage Ops token when your installation shares it. It is retained only in this browser tab.</p>
               <div class="intelligence-actions" id="intelligence-service-actions">
@@ -326,7 +356,7 @@
               <pre class="intelligence-log" id="intelligence-service-output" hidden></pre>
             </section>
 
-            <section class="intelligence-module" id="automation-chatgpt-section" aria-labelledby="chatgpt-app-title">
+            <section class="intelligence-module" id="automation-chatgpt-section" data-automation-view="models" aria-labelledby="chatgpt-app-title">
               <div class="module-head">
                 <div><h4 id="chatgpt-app-title">ChatGPT app</h4><p>Read authorized SecOpsAI findings, assets, and research from inside ChatGPT.</p></div>
                 <span class="status-pill" id="intelligence-mcp-pill">Checking</span>
@@ -339,7 +369,7 @@
             </section>
           </div>
 
-          <section class="intelligence-module intelligence-request" id="automation-request-section" aria-labelledby="intelligence-request-title">
+          <section class="intelligence-module intelligence-request" id="automation-request-section" data-automation-view="review" aria-labelledby="intelligence-request-title">
             <div class="module-head">
               <div><h4 id="intelligence-request-title">Request analysis</h4><p>Actions use normalized SecOpsAI context. They cannot publish, close findings, run scans, or execute package code.</p></div>
             </div>
@@ -351,7 +381,7 @@
             <div class="small" id="intelligence-request-hint">Select a target-specific action to use the currently selected finding or research case automatically.</div>
           </section>
 
-          <section class="intelligence-module intelligence-autopilot" id="automation-alert-review-section" aria-labelledby="intelligence-autopilot-title">
+          <section class="intelligence-module intelligence-autopilot" id="automation-alert-review-section" data-automation-view="review" aria-labelledby="intelligence-autopilot-title">
             <div class="module-head">
               <div><h4 id="intelligence-autopilot-title">Agent finding and alert review</h4><p>Continuously reviews host, Edge, supply-chain, and registry-research alerts with the selected model. Only evidence-corroborated, reversible decisions can be applied.</p></div>
               <span class="status-pill" id="intelligence-autopilot-pill">Checking</span>
@@ -375,7 +405,7 @@
             <div id="intelligence-autopilot-proposals"></div>
           </section>
 
-          <section class="intelligence-module investigation-autopilot" id="automation-investigations-section" aria-labelledby="investigation-autopilot-title">
+          <section class="intelligence-module investigation-autopilot" id="automation-investigations-section" data-automation-view="investigations" aria-labelledby="investigation-autopilot-title">
             <div class="module-head">
               <div><h4 id="investigation-autopilot-title">High-priority investigations</h4><p>Collects exact package evidence, performs bounded static analysis, compares verified releases, extracts IOC candidates, and requests an evidence-complete model verdict.</p></div>
               <button class="secondary-btn" id="investigation-run-due" type="button">Run due investigations</button>
@@ -385,7 +415,7 @@
             <div id="investigation-autopilot-runs"></div>
           </section>
 
-          <section class="intelligence-module daily-automation" id="automation-daily-section" aria-labelledby="daily-automation-title">
+          <section class="intelligence-module daily-automation" id="automation-daily-section" data-automation-view="investigations" aria-labelledby="daily-automation-title">
             <div class="module-head">
               <div><h4 id="daily-automation-title">Daily workflow automation</h4><p>Runs surveillance, candidate promotion, evidence investigations, model review queues, and guarded learning as one durable workflow.</p></div>
               <span class="status-pill" id="daily-automation-pill">Checking</span>
@@ -408,7 +438,68 @@
             <div id="daily-automation-steps"></div>
           </section>
 
-          <section class="intelligence-module detection-learning" id="automation-learning-section" aria-labelledby="detection-learning-title">
+          <section class="intelligence-module research-production" id="automation-research-section" data-automation-view="research" aria-labelledby="automation-research-title">
+            <div class="module-head research-production-head">
+              <div>
+                <div class="section-kicker">SAFE ARTIFACT RESEARCH</div>
+                <h4 id="automation-research-title">Investigation to publication</h4>
+                <p>Collect exact registry evidence, run deterministic static and YARA checks, send only minimized evidence to your selected model, escalate to an analyst, and prepare a review-only publication.</p>
+              </div>
+              <button class="secondary-btn" id="artifact-fleet-refresh-btn" type="button">Refresh pipeline</button>
+            </div>
+            <div class="research-stage-ribbon" id="research-production-stages" aria-label="Research production stages">
+              <div class="research-stage active"><span>1</span><strong>Registry intake</strong><small>Exact package metadata</small></div>
+              <div class="research-stage"><span>2</span><strong>Static + YARA</strong><small>No artifact execution</small></div>
+              <div class="research-stage"><span>3</span><strong>Model triage</strong><small>Minimized evidence</small></div>
+              <div class="research-stage"><span>4</span><strong>Analyst review</strong><small>Evidence decision</small></div>
+              <div class="research-stage"><span>5</span><strong>Review-only draft</strong><small>Publication gate</small></div>
+            </div>
+            <div class="intelligence-boundary-note research-safety" id="artifact-fleet-safety-note">Artifact code is never installed, executed, or activated. Final publication remains an operator decision.</div>
+            <div class="grid cols-4 intelligence-summary research-fleet-summary" id="artifact-fleet-summary"></div>
+            <div class="research-pipeline-layout">
+              <section class="research-intake-card" id="rust-package-research-panel">
+                <div class="research-card-head"><div><span class="section-kicker">EXACT CRATES.IO INTAKE</span><h4>Run Rust package research</h4></div><span class="status-pill">Static only</span></div>
+                <p class="small">Fetch exact crates.io metadata, verify the checksum, quarantine the crate, inspect <code>build.rs</code>, and optionally compare a verified crate. Cargo and package code never run.</p>
+                <div class="research-form-grid compact">
+                  <label><span>Crate package</span><input id="rust-research-package" maxlength="128" placeholder="proc-macro1" /></label>
+                  <label><span>Exact version</span><input id="rust-research-version" maxlength="160" placeholder="1.0.107" /></label>
+                  <label><span>Verified comparison crate</span><input id="rust-research-compare-package" maxlength="128" placeholder="proc-macro2" /></label>
+                  <label><span>Comparison version</span><input id="rust-research-compare-version" maxlength="160" placeholder="1.0.107" /></label>
+                  <label class="research-span-2"><span>Source reference (optional enrichment)</span><input id="rust-research-source" maxlength="4000" placeholder="https://research.example/report" /></label>
+                </div>
+                <div class="research-options"><label><input id="rust-research-persist" type="checkbox" /> Persist only a high-confidence finding</label><label><input id="rust-research-create-case" type="checkbox" checked /> Create or update a Research Case</label></div>
+                <div class="intelligence-actions"><button class="secondary-btn" id="rust-research-preview-btn" type="button">Preview metadata</button><button class="primary-btn" id="rust-research-run-btn" type="button">Run safe research pipeline</button></div>
+                <pre class="intelligence-log" id="rust-research-output" aria-live="polite" hidden></pre>
+              </section>
+              <aside class="research-readiness-card">
+                <div class="research-card-head"><div><span class="section-kicker">PUBLICATION READINESS</span><h4>Evidence gate</h4></div><strong id="rust-research-readiness-score">0/8</strong></div>
+                <div class="research-evidence-checklist" id="rust-research-readiness"></div>
+                <div class="research-readiness-message" id="rust-research-readiness-message">Run an exact package intake to start an evidence-backed case.</div>
+                <div class="research-followups" id="rust-research-followups" aria-label="Rust research follow-up actions">
+                  <button class="secondary-btn" id="rust-research-matrix-btn" type="button" disabled>Build evidence matrix</button>
+                  <button class="secondary-btn" id="rust-research-queue-btn" type="button" disabled>Queue selected model</button>
+                  <button class="secondary-btn" id="rust-research-open-case-btn" type="button" disabled>Open Research Case</button>
+                  <button class="primary-btn" id="rust-research-draft-btn" type="button" disabled>Create review-only draft</button>
+                </div>
+              </aside>
+            </div>
+            <div class="artifact-fleet-statusline"><span id="artifact-fleet-queue"></span><span id="artifact-fleet-health"></span></div>
+            <div class="research-fleet-actions">
+              <button class="primary-btn" id="artifact-fleet-cycle-btn" data-artifact-fleet-action="cycle" type="button">Run automated safe cycle</button>
+              <details><summary>Advanced fleet controls</summary><div class="intelligence-actions" id="artifact-fleet-actions">
+                <button class="secondary-btn" id="artifact-fleet-index-btn" data-artifact-fleet-action="index" type="button">Index metadata</button>
+                <button class="secondary-btn" id="artifact-fleet-scan-btn" data-artifact-fleet-action="scan" type="button">Scan pending</button>
+                <button class="secondary-btn" id="artifact-fleet-triage-btn" data-artifact-fleet-action="triage" type="button">Queue model triage</button>
+                <button class="secondary-btn" id="artifact-fleet-analyst-btn" data-artifact-fleet-action="analyst-queue" type="button">Refresh analyst queue</button>
+                <button class="secondary-btn" id="artifact-fleet-rules-btn" data-artifact-fleet-action="rules" type="button">Validate rule pack</button>
+                <button class="secondary-btn" id="artifact-fleet-benchmark-btn" data-artifact-fleet-action="benchmark" type="button">Run fixture benchmark</button>
+                <button class="secondary-btn" id="rust-research-copy-btn" type="button">Copy CLI fallback</button>
+              </div></details>
+            </div>
+            <pre class="intelligence-log" id="artifact-fleet-output" aria-live="polite" hidden></pre>
+          </section>
+
+          <section class="intelligence-module detection-learning" id="automation-learning-section" data-automation-view="learning" aria-labelledby="detection-learning-title">
             <div class="module-head">
               <div><h4 id="detection-learning-title">Detection Learning</h4><p>Retains every alert outcome as feedback. Verified true and false outcomes become training examples; unknown, true-negative, and false-negative feedback remains available for active learning and replay.</p></div>
               <button class="primary-btn" id="detection-learning-run" type="button">Run learning cycle</button>
@@ -419,7 +510,7 @@
             <div id="detection-learning-deployments"></div>
           </section>
 
-          <section class="intelligence-module" id="automation-jobs-section" aria-labelledby="intelligence-jobs-title">
+          <section class="intelligence-module" id="automation-jobs-section" data-automation-view="jobs" aria-labelledby="intelligence-jobs-title">
             <div class="module-head">
               <div><h4 id="intelligence-jobs-title">Analysis jobs</h4><p>Every request and result is durable, bounded, and reviewable.</p></div>
             </div>
@@ -546,48 +637,10 @@
               </section>
 
               <section class="enterprise-assessment" data-enterprise-assessment-view="artifact" hidden>
-                <div class="enterprise-surface artifact-workbench" id="artifact-fleet-panel">
-                  <div class="enterprise-section-head"><div><h3>Artifact Fleet</h3><p>Index metadata, statically scan approved artifacts, minimize model context, and escalate only suspicious or inconclusive results.</p></div><button class="secondary-btn" id="artifact-fleet-refresh-btn" type="button">Refresh fleet</button></div>
-                  <div class="enterprise-safety compact" id="artifact-fleet-safety-note">Artifact code is never installed, executed, or activated.</div>
-                  <div class="enterprise-readiness artifact-readiness" id="artifact-fleet-summary"></div>
-                  <div class="artifact-fleet-statusline"><span id="artifact-fleet-queue"></span><span id="artifact-fleet-health"></span></div>
-                  <div class="enterprise-form-actions"><button class="primary-btn" id="artifact-fleet-cycle-btn" data-artifact-fleet-action="cycle" type="button">Run safe fleet cycle</button></div>
-
-                  <details class="enterprise-inline-drawer" id="rust-package-research-panel">
-                    <summary>Research an exact Rust crate</summary>
-                    <p>Fetch exact crates.io metadata, verify the checksum, quarantine the crate, run static rules, and optionally compare a verified crate. Cargo and package code never run.</p>
-                    <div class="enterprise-form-grid">
-                      <label><span>Crate package</span><input id="rust-research-package" maxlength="128" placeholder="proc-macro1" /></label>
-                      <label><span>Exact version</span><input id="rust-research-version" maxlength="160" placeholder="1.0.107" /></label>
-                      <label><span>Comparison crate (optional)</span><input id="rust-research-compare-package" maxlength="128" placeholder="proc-macro2" /></label>
-                      <label><span>Comparison version</span><input id="rust-research-compare-version" maxlength="160" placeholder="1.0.107" /></label>
-                      <label class="enterprise-span-2"><span>Source reference (optional)</span><input id="rust-research-source" maxlength="4000" placeholder="https://research.example/report" /></label>
-                    </div>
-                    <details class="enterprise-advanced-options"><summary>Finding and case options</summary><div class="enterprise-checks"><label><input id="rust-research-persist" type="checkbox" /> Persist a high-confidence finding</label><label><input id="rust-research-create-case" type="checkbox" checked /> Create a Research Case</label></div></details>
-                    <div class="enterprise-form-actions"><button class="secondary-btn" id="rust-research-preview-btn" type="button">Preview metadata</button><button class="primary-btn" id="rust-research-run-btn" type="button">Run package research</button></div>
-                    <div class="enterprise-followups" id="rust-research-followups" aria-label="Rust research follow-up actions">
-                      <button class="secondary-btn" id="rust-research-matrix-btn" type="button" disabled>Build evidence matrix</button>
-                      <button class="secondary-btn" id="rust-research-queue-btn" type="button" disabled>Queue model review</button>
-                      <button class="secondary-btn" id="rust-research-draft-btn" type="button" disabled>Create review-only draft</button>
-                      <button class="secondary-btn" id="rust-research-open-case-btn" type="button" disabled>Open Research Case</button>
-                    </div>
-                    <pre class="intelligence-log" id="rust-research-output" aria-live="polite"></pre>
-                  </details>
-
-                  <details class="enterprise-inline-drawer">
-                    <summary>Advanced fleet controls</summary>
-                    <p>Run individual fleet stages only when diagnosing or validating the automated cycle.</p>
-                    <div class="enterprise-followups" id="artifact-fleet-actions" aria-label="Advanced Artifact Fleet actions">
-                      <button class="secondary-btn" id="artifact-fleet-index-btn" data-artifact-fleet-action="index" type="button">Index metadata</button>
-                      <button class="secondary-btn" id="artifact-fleet-scan-btn" data-artifact-fleet-action="scan" type="button">Scan pending</button>
-                      <button class="secondary-btn" id="artifact-fleet-triage-btn" data-artifact-fleet-action="triage" type="button">Queue model triage</button>
-                      <button class="secondary-btn" id="artifact-fleet-analyst-btn" data-artifact-fleet-action="analyst-queue" type="button">Refresh analyst queue</button>
-                      <button class="secondary-btn" id="artifact-fleet-rules-btn" data-artifact-fleet-action="rules" type="button">Validate rule pack</button>
-                      <button class="secondary-btn" id="artifact-fleet-benchmark-btn" data-artifact-fleet-action="benchmark" type="button">Run fixture benchmark</button>
-                      <button class="secondary-btn" id="rust-research-copy-btn" type="button">Copy Rust CLI fallback</button>
-                    </div>
-                  </details>
-                  <pre class="intelligence-log" id="artifact-fleet-output" aria-live="polite"></pre>
+                <div class="enterprise-surface enterprise-handoff">
+                  <div class="enterprise-section-head"><div><h3>Artifact research moved to Automation</h3><p>The Artifact Fleet and exact-package workflow now share one canonical Research Pipeline, avoiding duplicate controls and conflicting status.</p></div></div>
+                  <div class="enterprise-safety compact">Enterprise exposure records remain here. Registry artifact intake, model triage, analyst escalation, and review-only drafting live in Automation.</div>
+                  <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-open-research-pipeline-btn" type="button">Open Research Pipeline</button></div>
                 </div>
               </section>
             </div>
@@ -1046,6 +1099,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <aside class="card guide-toc" aria-label="Operator guide table of contents">
             <h3>Guide sections</h3>
             <a href="#guide-automations">Safe automations</a>
+            <a href="#guide-model-routing">Model routing</a>
             <a href="#guide-access">Passwords and recovery</a>
             <a href="#guide-overview">Overview</a>
             <a href="#guide-tasks">Tasks</a>
@@ -1091,6 +1145,26 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 </div>
               </div>
               <div class="guide-callout guide-warning">Automation stops at evidence collection and candidate generation. Protected response work still requires an admin token, confirmation, and a reviewed analyst note.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-model-routing">
+              <div class="guide-section-head">
+                <span class="guide-pill">Automation · Models</span>
+                <h3>Choose one primary model and explicit fallbacks</h3>
+                <p>The selected primary model is a durable Core setting, not a temporary dropdown value. SecOpsAI does not replace it after refresh or restart.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Primary model only</strong><span>Use this when model identity matters more than continuity. Unavailable work remains queued for that model.</span></div>
+                <div class="guide-mini-card"><strong>Quota or authentication</strong><span>Use ordered fallbacks only when the primary reports a usage limit or authentication problem.</span></div>
+                <div class="guide-mini-card"><strong>Provider availability</strong><span>Also permits fallback for timeouts, connection failures, provider 5xx errors, or an unavailable provider/model.</span></div>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>Open <strong>Automation → Models</strong> and select any model in the OpenCodex catalog as the primary.</p></div>
+                <div class="guide-step"><span>2</span><p>Choose the fallback policy. Leave it on <strong>Primary model only</strong> when no automatic provider change is wanted.</p></div>
+                <div class="guide-step"><span>3</span><p>Search the catalog, select fallback models, and use <strong>Up</strong> or <strong>Down</strong> to set their exact order.</p></div>
+                <div class="guide-step"><span>4</span><p>Click <strong>Save model routing</strong>. Confirm the effective chain shown beneath the primary model before processing jobs.</p></div>
+              </div>
+              <div class="guide-callout guide-warning">Fallback never hides validation, schema, or safety failures. Those failures remain visible for review instead of being retried on another model.</div>
             </section>
 
             <section class="card guide-section" id="guide-access">
@@ -1229,12 +1303,12 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
               <div class="guide-section-head">
                 <span class="guide-pill">Artifact Fleet</span>
                 <h3>Artifact Fleet click workflow</h3>
-                <p>Use <strong>Enterprise Security → Assess → Artifact research</strong> for the staged OSS funnel: metadata index, safe static scan, minimized model queue, and analyst escalation.</p>
+                <p>Use <strong>Automation → Research pipeline</strong> for the staged OSS funnel: metadata index, safe static scan, minimized model queue, analyst escalation, and review-only drafting.</p>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>Start the local dashboard/helper, open <strong>Enterprise Security → Assess → Artifact research</strong>, and click <strong>Refresh fleet</strong>. This also shows source health, queue metrics, and rule-pack status.</p></div>
+                <div class="guide-step"><span>1</span><p>Start the local dashboard/helper, open <strong>Automation → Research pipeline</strong>, and click <strong>Refresh fleet</strong>. This also shows source health, queue metrics, and rule-pack status.</p></div>
                 <div class="guide-step"><span>2</span><p>Click <strong>Run safe fleet cycle</strong> for the bounded sequence: index metadata, scan already-authorized local artifact paths, and prepare minimized triage contexts.</p></div>
-                <div class="guide-step"><span>3</span><p>Click <strong>Queue model triage</strong> only after selecting the intended model in Native Triage. It creates jobs for that selected model; it does not silently install packages, execute artifacts, or publish research.</p></div>
+                <div class="guide-step"><span>3</span><p>Click <strong>Queue model triage</strong> only after saving the intended route under <strong>Automation → Models</strong>. It creates jobs for that route; it does not silently install packages, execute artifacts, or publish research.</p></div>
                 <div class="guide-step"><span>4</span><p>Use <strong>Refresh analyst queue</strong> to review suspicious or inconclusive results. Keep analyst decisions and publication approval separate from automated indexing and scanning.</p></div>
                 <div class="guide-step"><span>5</span><p>Use <strong>Validate rule pack</strong> after rule changes and <strong>Run fixture benchmark</strong> only for synthetic throughput checks. The benchmark is not proof of production-scale capacity.</p></div>
                 <div class="guide-step"><span>6</span><p>Expand <strong>Research an exact Rust crate</strong> to preview crates.io metadata, verify an exact crate checksum, quarantine and statically scan it, compare a supplied legitimate crate, and route strong evidence into Research. Cargo and package code are never executed.</p></div>

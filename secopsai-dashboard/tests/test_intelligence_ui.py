@@ -21,6 +21,18 @@ def test_local_intelligence_actions_are_allowlisted():
         "select-model",
         {"model": "xai/grok-4.6"},
     )[:4] == ["intelligence", "bridge", "select-model", "xai/grok-4.6"]
+    routing = dashboard_server.build_intelligence_args(
+        "configure-models",
+        {
+            "primary_model": "xai/grok-4.6",
+            "fallback_models": ["google-antigravity/gemini-3.5-flash-low", "gpt-5.6-sol"],
+            "fallback_mode": "quota_auth",
+        },
+    )
+    assert routing[:7] == [
+        "intelligence", "bridge", "configure-models", "--primary", "xai/grok-4.6", "--fallback-mode", "quota_auth"
+    ]
+    assert routing.count("--fallback") == 2
     service_status = dashboard_server.build_intelligence_args("service", {"service_action": "status"})
     assert service_status[:4] == ["intelligence", "bridge", "service", "status"]
     assert service_status[-2:] == ["--db-path", dashboard_server.SECOPSAI_DB_PATH]
@@ -102,6 +114,11 @@ def test_local_intelligence_rejects_arbitrary_prompts_commands_and_ids():
             "service",
             {"service_action": "install", "model": "kimi/model;curl example.invalid"},
         )
+    with pytest.raises(ValueError):
+        dashboard_server.build_intelligence_args(
+            "configure-models",
+            {"primary_model": "xai/grok-4.6", "fallback_models": ["bad;curl"], "fallback_mode": "quota_auth"},
+        )
 
 
 def test_artifact_fleet_actions_are_allowlisted_and_bounded():
@@ -180,6 +197,34 @@ def test_rust_package_research_dashboard_surface_is_present():
     assert "runRustPackageResearchAction" in app
     assert "/api/secopsai/rust-package-research" in server
     assert "build_rust_package_research_args" in server
+    assert 'id="automation-research-section"' in html
+    assert 'data-automation-view="research"' in html
+    assert 'id="enterprise-open-research-pipeline-btn"' in html
+    assert html.count('id="rust-package-research-panel"') == 1
+
+
+def test_model_routing_ui_persists_the_new_selection_before_refresh():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    for marker in (
+        "intelligence-model-select",
+        "intelligence-fallback-mode",
+        "intelligence-model-search",
+        "intelligence-model-catalog",
+        "intelligence-routing-save-btn",
+        "intelligence-routing-recommended-btn",
+    ):
+        assert f'id="{marker}"' in html
+    assert "pendingSelectedModel" in app
+    assert "runIntelligenceAction('configure-models'" in app
+    assert "fallback_models" in app
+    assert "fallback_mode" in app
+    assert "Other models are not probed or used" not in app
+    assert "setPage(currentPageFromLocation(), { skipHistory: true, scrollToTarget: false })" in app
+    assert 'name="secopsai-model-catalog-filter"' in html
+    assert 'name="secopsai-automation-token"' in html
+    assert 'id="intelligence-admin-token" type="password" autocomplete="current-password"' not in html
+    assert "search.value = state.intelligence.modelSearch" in app
 
 
 def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
@@ -236,8 +281,9 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "Registry outages and collector failures use deterministic recovery checks" in html
     assert "target.source" in app
     assert "function renderAutopilotModelSelect" in app
-    assert "select-model" in app
-    assert "Other models are not probed" in app
+    assert "configure-models" in app
+    assert "Effective chain:" in app
+    assert "No fallback models are enabled" in app
     assert "Health checks and jobs use only this selection" in html
     assert "el('intelligence-autopilot-model')?.value" in app
     assert "function securitySourceLabel" in app

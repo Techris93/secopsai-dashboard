@@ -1027,6 +1027,30 @@ def build_intelligence_args(action, payload):
         if not INTELLIGENCE_MODEL_RE.fullmatch(model):
             raise ValueError('Invalid bridge model')
         return ['intelligence', 'bridge', 'select-model', model, *secopsai_db_args()]
+    if action == 'configure-models':
+        primary = str(payload.get('primary_model') or '').strip()
+        if not INTELLIGENCE_MODEL_RE.fullmatch(primary):
+            raise ValueError('Invalid primary bridge model')
+        fallback_mode = str(payload.get('fallback_mode') or 'disabled').strip().lower()
+        if fallback_mode not in {'disabled', 'quota_auth', 'any_provider'}:
+            raise ValueError('Invalid bridge fallback mode')
+        raw_fallbacks = payload.get('fallback_models') or []
+        if not isinstance(raw_fallbacks, list) or len(raw_fallbacks) > 8:
+            raise ValueError('Fallback models must be a list of at most 8 model IDs')
+        fallbacks = []
+        for item in raw_fallbacks:
+            model = str(item or '').strip()
+            if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+                raise ValueError('Invalid bridge fallback model')
+            if model != primary and model not in fallbacks:
+                fallbacks.append(model)
+        args = [
+            'intelligence', 'bridge', 'configure-models', '--primary', primary,
+            '--fallback-mode', fallback_mode,
+        ]
+        for model in fallbacks:
+            args.extend(['--fallback', model])
+        return [*args, *secopsai_db_args()]
     if action == 'run-once':
         model = str(payload.get('model') or '').strip()
         args = ['intelligence', 'bridge', 'run', '--once']

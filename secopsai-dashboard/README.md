@@ -4,6 +4,44 @@ The Research page includes a Core-backed discovery panel for cross-ecosystem wat
 
 This directory contains the live dashboard app for SecOpsAI.
 
+## Mission Control product tour
+
+**SecOpsAI Mission Control is the evidence-first operator console for detection,
+investigation, source-first package research, guarded model automation, and
+reviewed security publishing.** The screenshots use representative sample data;
+they contain no live credentials, private telemetry, or customer records.
+
+[![SecOpsAI Mission Control overview](https://raw.githubusercontent.com/Techris93/secopsai/main/docs/assets/mission-control/overview.png)](https://github.com/Techris93/secopsai/blob/main/docs/assets/mission-control/overview.png)
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="https://github.com/Techris93/secopsai/blob/main/docs/assets/mission-control/model-routing.png"><img src="https://raw.githubusercontent.com/Techris93/secopsai/main/docs/assets/mission-control/model-routing.png" alt="SecOpsAI model routing workspace with primary and fallback model controls" /></a>
+      <br /><strong>Models.</strong> Choose and persist any catalog model, then control whether ordered fallbacks are disabled, quota/auth-only, or provider-availability aware.
+    </td>
+    <td width="50%">
+      <a href="https://github.com/Techris93/secopsai/blob/main/docs/assets/mission-control/research-pipeline.png"><img src="https://raw.githubusercontent.com/Techris93/secopsai/main/docs/assets/mission-control/research-pipeline.png" alt="SecOpsAI safe package research pipeline and evidence readiness" /></a>
+      <br /><strong>Research pipeline.</strong> Turn registry metadata and no-execution artifact evidence into an auditable Research Case and review-only draft.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="https://github.com/Techris93/secopsai/blob/main/docs/assets/mission-control/findings.png"><img src="https://raw.githubusercontent.com/Techris93/secopsai/main/docs/assets/mission-control/findings.png" alt="SecOpsAI evidence-backed findings backlog" /></a>
+      <br /><strong>Findings.</strong> Work the latest detections first with evidence state, environment impact, ownership, and the next safe action visible.
+    </td>
+    <td width="50%">
+      <a href="https://github.com/Techris93/secopsai/blob/main/docs/assets/mission-control/publications.png"><img src="https://raw.githubusercontent.com/Techris93/secopsai/main/docs/assets/mission-control/publications.png" alt="SecOpsAI editorial review and publication lifecycle" /></a>
+      <br /><strong>Publications.</strong> Review claims and attached media, approve content, publish approved files to staging, and deploy separately.
+    </td>
+  </tr>
+</table>
+
+[![SecOpsAI Enterprise Security workspace](https://raw.githubusercontent.com/Techris93/secopsai/main/docs/assets/mission-control/enterprise.png)](https://github.com/Techris93/secopsai/blob/main/docs/assets/mission-control/enterprise.png)
+
+Every high-impact boundary stays explicit: package code is not executed,
+fallback models are opt-in, active DAST requires authorization, publication
+requires editorial review, and deployment is a separate protected action.
+
 The dashboard is now intentionally narrow:
 - overview of operational state
 - findings queue and correlation
@@ -31,6 +69,18 @@ The **Administration → Automation** page contains one operator surface for two
 - **Local Codex bridge** queues fixed, read-only analysis actions and processes them with the Codex CLI login already owned by the operator. The dashboard never stores a ChatGPT credential.
 - **ChatGPT app** exposes nine read-only SecOpsAI tools through the hosted OAuth MCP endpoint. ChatGPT authenticates the model session; SecOpsAI OAuth independently authorizes access to SecOpsAI data.
 
+Use **Administration → Automation → Models** to choose any model returned by
+OpenCodex, persist it as the primary, and optionally configure an ordered
+fallback chain. Fallback is explicit: primary-only, quota/authentication-only,
+or provider-availability failures. With primary-only selected, an unavailable
+model leaves the job queued instead of silently consuming another provider.
+
+Use **Administration → Automation → Research pipeline** for the canonical
+Artifact Fleet and exact crates.io workflow. It replaces the former duplicate
+Enterprise controls and presents one evidence path from registry metadata and
+static/YARA findings through selected-model triage, analyst review, and a
+review-only draft.
+
 For a local dashboard, configure an action credential in `.env`:
 
 ```bash
@@ -44,7 +94,7 @@ Existing pilot installations may continue to use `TRIAGE_OPS_ADMIN_TOKEN` when a
 
 ### Daily workflow automation
 
-**Administration → Automation → Daily workflow automation** coordinates due
+**Administration → Automation → Investigations** coordinates due
 registry surveillance, candidate draft promotion, alert feedback and model
 review queueing, evidence investigations, guarded detection learning, and
 operational alert delivery. Configure the interval and bounded limits, click

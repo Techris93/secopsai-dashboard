@@ -1,6 +1,12 @@
 # Autonomous triage
 
-Open **Automation → SecOpsAI Intelligence** to choose a Kimi, Grok, Gemini, or Codex model from the local OpenCodex catalog. The same panel controls continuous review of canonical SecOpsAI findings.
+Open **Automation → Models** to choose and persist any Kimi, Grok, Gemini,
+Codex, or other model returned by the local OpenCodex catalog. Add and reorder
+fallbacks only when they are intended, then select whether they apply to
+quota/authentication failures or broader provider-availability failures. With
+fallbacks disabled, work remains queued for the chosen primary model. The
+**Automation → Alert review** workspace controls continuous review of canonical
+SecOpsAI findings.
 
 ## Modes
 
@@ -16,7 +22,7 @@ Model proposals are never treated as proof. SecOpsAI records them in shadow mode
 
 ## Daily workflow automation
 
-Use **Administration → Automation → Daily workflow automation** for the full
+Use **Administration → Automation → Investigations** for the full
 scheduled workflow. Save the policy once, then use **Run full workflow now** to
 perform the first cycle. Later cycles are started by the existing research
 worker when the configured interval is due.

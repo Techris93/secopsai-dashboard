@@ -23,11 +23,14 @@ def test_enterprise_surface_has_monitor_assess_and_govern_workflows():
         "enterprise-dast-run-btn",
         "enterprise-control-save-btn",
         "enterprise-workflow-save-btn",
-        "artifact-fleet-panel",
-        "artifact-fleet-summary",
+        "enterprise-open-research-pipeline-btn",
         "guide-enterprise",
     ):
         assert marker in html
+    # Artifact Fleet has one canonical surface under Automation -> Research
+    # pipeline. Enterprise links there instead of duplicating the controls.
+    assert html.count('id="artifact-fleet-summary"') == 1
+    assert "artifact-fleet-panel" not in html
     assert '"enterprise": "enterprise"' in app
     assert "loadEnterpriseStatus" in app
     assert "runEnterpriseAction" in app

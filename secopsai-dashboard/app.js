@@ -137,6 +137,12 @@ const state = {
     error: null,
     adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || sessionStorage.getItem('secopsai_triage_ops_admin_token') || '',
     selectedModel: sessionStorage.getItem('secopsai_bridge_model') || '',
+    pendingSelectedModel: '',
+    view: 'models',
+    fallbackModels: [],
+    fallbackMode: 'disabled',
+    modelSearch: '',
+    routingDirty: false,
     selectedJobId: null,
     serviceOutput: ''
   },
@@ -171,7 +177,9 @@ const state = {
     rustOutput: '',
     rustError: null,
     rustResult: null,
-    rustCommand: ''
+    rustCommand: '',
+    rustCompletedActions: [],
+    rustFollowupResults: {}
   },
   researchCases: {
     view: 'cases',
@@ -316,12 +324,21 @@ const ASSET_VIEW_ROUTES = Object.freeze({
   schedules: 'assets/schedules',
   wifi: 'assets/wifi'
 });
+const AUTOMATION_VIEW_ROUTES = Object.freeze({
+  models: 'automation/models',
+  review: 'automation/review',
+  investigations: 'automation/investigations',
+  research: 'automation/research',
+  learning: 'automation/learning',
+  jobs: 'automation/jobs'
+});
 const ROUTE_PAGES = Object.freeze({
   ...Object.fromEntries(Object.entries(PAGE_ROUTES).map(([page, route]) => [route, page])),
   ...Object.fromEntries(Object.entries(RESEARCH_VIEW_ROUTES).map(([, route]) => [route, 'research-cases'])),
   ...Object.fromEntries(Object.entries(BLOG_VIEW_ROUTES).map(([, route]) => [route, 'blog-ops'])),
   ...Object.fromEntries(Object.entries(SYSTEM_VIEW_ROUTES).map(([, route]) => [route, 'integrations'])),
   ...Object.fromEntries(Object.entries(ASSET_VIEW_ROUTES).map(([, route]) => [route, 'edge'])),
+  ...Object.fromEntries(Object.entries(AUTOMATION_VIEW_ROUTES).map(([, route]) => [route, 'automation'])),
   'system/automation': 'automation'
 });
 const TOP_NAV_PAGE = Object.freeze({
@@ -402,7 +419,14 @@ const CONTEXT_NAV = Object.freeze({
     ["Audit log", "integrations", SYSTEM_VIEW_ROUTES.audit]
   ],
   "enterprise": [],
-  "automation": [],
+  "automation": [
+    ["Models", "automation", AUTOMATION_VIEW_ROUTES.models],
+    ["Alert review", "automation", AUTOMATION_VIEW_ROUTES.review],
+    ["Investigations", "automation", AUTOMATION_VIEW_ROUTES.investigations],
+    ["Research pipeline", "automation", AUTOMATION_VIEW_ROUTES.research],
+    ["Learning", "automation", AUTOMATION_VIEW_ROUTES.learning],
+    ["Jobs", "automation", AUTOMATION_VIEW_ROUTES.jobs]
+  ],
   "triage-ops": [
     ["All findings", "findings", PAGE_ROUTES.findings],
     ["Supply chain", "triage-ops", PAGE_ROUTES['triage-ops']]
@@ -419,6 +443,12 @@ const CONTEXT_SCROLL_TARGETS = Object.freeze({
   'assets/sensors': 'edge-sensors',
   'assets/schedules': 'edge-schedules',
   'assets/wifi': 'edge-wifi',
+  'automation/models': 'automation-models-tab',
+  'automation/review': 'automation-alert-review-section',
+  'automation/investigations': 'automation-investigations-section',
+  'automation/research': 'automation-research-section',
+  'automation/learning': 'automation-learning-section',
+  'automation/jobs': 'automation-jobs-section',
   'research/inbox': 'research-inbox-title',
   'research/cases': 'research-case-list',
   'research/campaigns': 'research-campaigns-title',
@@ -471,16 +501,7 @@ const PAGE_SUBSECTION_DEFS = Object.freeze({
     ['Changes', 'edge-change-timeline-section'],
     ['Wi-Fi', 'edge-wifi-section']
   ],
-  automation: [
-    ['Bridge', 'automation-bridge-section'],
-    ['ChatGPT app', 'automation-chatgpt-section'],
-    ['Requests', 'automation-request-section'],
-    ['Alert review', 'automation-alert-review-section'],
-    ['Investigations', 'automation-investigations-section'],
-    ['Daily workflow', 'automation-daily-section'],
-    ['Detection learning', 'automation-learning-section'],
-    ['Analysis jobs', 'automation-jobs-section']
-  ],
+  automation: [],
   integrations: [
     ['Health', 'integration-summary'],
     ['Integrations', 'integration-config'],
@@ -489,6 +510,14 @@ const PAGE_SUBSECTION_DEFS = Object.freeze({
     ['Sessions', 'system-sessions-section'],
     ['Session detail', 'system-session-detail-section'],
     ['Orchestrator runs', 'system-runs-section']
+  ],
+  automation: [
+    ['Models', AUTOMATION_VIEW_ROUTES.models],
+    ['Alert review', AUTOMATION_VIEW_ROUTES.review],
+    ['Investigations', AUTOMATION_VIEW_ROUTES.investigations],
+    ['Research pipeline', AUTOMATION_VIEW_ROUTES.research],
+    ['Learning', AUTOMATION_VIEW_ROUTES.learning],
+    ['Jobs', AUTOMATION_VIEW_ROUTES.jobs]
   ],
   'triage-ops': [
     ['Access', 'triage-access-section'],
@@ -569,6 +598,14 @@ const PAGE_ROUTE_SUBSECTION_DEFS = Object.freeze({
     ['Integrations', SYSTEM_VIEW_ROUTES.integrations],
     ['Credentials', SYSTEM_VIEW_ROUTES.credentials],
     ['Audit log', SYSTEM_VIEW_ROUTES.audit]
+  ],
+  automation: [
+    ['Models', AUTOMATION_VIEW_ROUTES.models],
+    ['Alert review', AUTOMATION_VIEW_ROUTES.review],
+    ['Investigations', AUTOMATION_VIEW_ROUTES.investigations],
+    ['Research pipeline', AUTOMATION_VIEW_ROUTES.research],
+    ['Learning', AUTOMATION_VIEW_ROUTES.learning],
+    ['Jobs', AUTOMATION_VIEW_ROUTES.jobs]
   ],
   'triage-ops': [
     ['All findings', PAGE_ROUTES.findings],
@@ -858,7 +895,7 @@ async function enterAuthenticatedDashboard(session) {
   }
   state.auth.activeUserId = userId;
   showAuthenticatedShell(session);
-  setPage('mission-control');
+  setPage(currentPageFromLocation(), { skipHistory: true, scrollToTarget: false });
   setStatus('<span class="dot"></span> Loading authorized workspace…');
   await boot();
 }
@@ -1705,11 +1742,18 @@ function assetViewForRoute(route) {
   return match?.[0] || 'inventory';
 }
 
+function automationViewForRoute(route) {
+  const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const match = Object.entries(AUTOMATION_VIEW_ROUTES).find(([, value]) => value === normalized);
+  return match?.[0] || 'models';
+}
+
 function routeForPage(pageId) {
   if (pageId === 'research-cases') return RESEARCH_VIEW_ROUTES[state.researchCases.view || 'cases'] || RESEARCH_VIEW_ROUTES.cases;
   if (pageId === 'blog-ops') return BLOG_VIEW_ROUTES[state.blogOps.view || 'review'] || BLOG_VIEW_ROUTES.review;
   if (pageId === 'integrations') return SYSTEM_VIEW_ROUTES[state.integrationView || 'health'] || SYSTEM_VIEW_ROUTES.health;
   if (pageId === 'edge') return ASSET_VIEW_ROUTES[state.edgeWorkspace.view || 'inventory'] || ASSET_VIEW_ROUTES.inventory;
+  if (pageId === 'automation') return AUTOMATION_VIEW_ROUTES[state.intelligence.view || 'models'] || AUTOMATION_VIEW_ROUTES.models;
   return PAGE_ROUTES[pageId] || PAGE_ROUTES.mission-control;
 }
 
@@ -1726,6 +1770,9 @@ function currentPageFromLocation() {
   }
   if (String(route).replace(/^#\/?/, '').startsWith('assets/')) {
     state.edgeWorkspace.view = assetViewForRoute(route);
+  }
+  if (String(route).replace(/^#\/?/, '').startsWith('automation/')) {
+    state.intelligence.view = automationViewForRoute(route);
   }
   return pageIdForRoute(route);
 }
@@ -1852,6 +1899,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTa
   if (normalizedPageId === 'blog-ops' && routeOverride) state.blogOps.view = blogViewForRoute(routeOverride);
   if (normalizedPageId === 'integrations' && routeOverride) state.integrationView = systemViewForRoute(routeOverride);
   if (normalizedPageId === 'edge' && routeOverride) state.edgeWorkspace.view = assetViewForRoute(routeOverride);
+  if (normalizedPageId === 'automation' && routeOverride) state.intelligence.view = automationViewForRoute(routeOverride);
   pages.forEach((id) => {
     const page = el(`page-${id}`);
     if (page) page.classList.toggle("active", id === normalizedPageId);
@@ -4183,11 +4231,31 @@ function renderSessionDetail(session) {
 }
 
 function renderAutomation() {
+  const view = state.intelligence.view || 'models';
+  const viewCopy = {
+    models: ['Model routing', 'Choose any catalog model, persist it as the primary, and configure explicit ordered fallbacks.'],
+    review: ['Alert review', 'Queue bounded analysis and control evidence-gated review policy without granting publication rights.'],
+    investigations: ['Investigations', 'Track high-priority evidence collection and the coordinated daily workflow.'],
+    research: ['Research pipeline', 'Move exact registry artifacts through safe static analysis, minimized model triage, analyst review, and a review-only draft.'],
+    learning: ['Detection learning', 'Evaluate evidence-backed rule changes in replay, shadow, and canary stages before activation.'],
+    jobs: ['Analysis jobs', 'Inspect durable requests, provider outcomes, complete results, and recovery actions.']
+  }[view] || ['Model routing', 'Choose and persist an approved analysis model.'];
   const summary = el('automation-view-summary');
   if (summary) {
-    summary.innerHTML = '<span class="eyebrow">Automation workspace</span><strong>Guarded model assistance</strong><span>Review model availability, decision policy, investigation activity, learning proposals, and durable analysis results.</span>';
+    summary.innerHTML = `<span class="eyebrow">Automation workspace</span><strong>${escapeHtml(viewCopy[0])}</strong><span>${escapeHtml(viewCopy[1])}</span>`;
   }
+  const page = el('page-automation');
+  if (page) page.dataset.automationView = view;
+  document.querySelectorAll('[data-automation-tab]').forEach(button => {
+    const active = button.dataset.automationTab === view;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  document.querySelectorAll('#page-automation [data-automation-view]').forEach(section => {
+    section.hidden = section.dataset.automationView !== view;
+  });
   renderIntelligence();
+  if (view === 'research') renderArtifactFleet();
 }
 
 function renderIntegrations() {
@@ -4413,6 +4481,8 @@ function intelligenceModels() {
 function intelligenceSelectedModel() {
   const models = intelligenceModels();
   const ids = models.map(item => String(item?.id || ''));
+  const pending = String(state.intelligence.pendingSelectedModel || '');
+  if (pending && (ids.includes(pending) || !models.length)) return pending;
   const persisted = String(state.intelligence.data?.bridge?.selected_model || '');
   if (persisted && (ids.includes(persisted) || !models.length)) return persisted;
   const stored = String(state.intelligence.selectedModel || '');
@@ -4640,6 +4710,10 @@ function renderIntelligenceModelSelect() {
   const models = intelligenceModels();
   const selected = intelligenceSelectedModel();
   const fallback = Array.isArray(state.intelligence.data?.bridge?.fallback_models) ? state.intelligence.data.bridge.fallback_models : [];
+  if (!state.intelligence.routingDirty) {
+    state.intelligence.fallbackModels = fallback.filter(model => model !== selected);
+    state.intelligence.fallbackMode = String(state.intelligence.data?.bridge?.fallback_mode || (fallback.length ? 'quota_auth' : 'disabled'));
+  }
   const effectiveChain = Array.isArray(state.intelligence.data?.bridge?.effective_model_chain)
     ? state.intelligence.data.bridge.effective_model_chain
     : [selected, ...fallback].filter(Boolean);
@@ -4669,11 +4743,76 @@ function renderIntelligenceModelSelect() {
   if (hint) {
     const fallbackText = effectiveChain.length ? ` Effective chain: ${effectiveChain.join(' → ')}.` : '';
     hint.textContent = selected
-      ? `Runs the next queued job on ${selected}. Other models are not probed or used unless you explicitly configure fallbacks.`
+      ? `Runs the next queued job on ${selected}.${fallbackText || ' No fallback models are enabled.'}`
       : 'Pick a model. The next job and health probe will use only that selection.';
   }
   state.intelligence.selectedModel = selected;
   if (selected) sessionStorage.setItem('secopsai_bridge_model', selected);
+  renderIntelligenceRouting();
+}
+
+function renderIntelligenceRouting() {
+  const primary = intelligenceSelectedModel();
+  const models = intelligenceModels();
+  const query = String(state.intelligence.modelSearch || '').trim().toLowerCase();
+  const search = el('intelligence-model-search');
+  if (search && document.activeElement !== search && search.value !== state.intelligence.modelSearch) {
+    search.value = state.intelligence.modelSearch;
+  }
+  const configured = state.intelligence.fallbackModels.filter(model => model && model !== primary);
+  const mode = el('intelligence-fallback-mode');
+  if (mode && document.activeElement !== mode) mode.value = state.intelligence.fallbackMode || 'disabled';
+  const source = el('intelligence-routing-source');
+  if (source) source.textContent = state.intelligence.routingDirty
+    ? 'Unsaved changes'
+    : `${humanizeSnake(state.intelligence.data?.bridge?.routing_source || 'runtime')} policy`;
+  const catalog = el('intelligence-model-catalog');
+  if (catalog) {
+    const visible = models.filter(item => {
+      const id = String(item?.id || '');
+      return id && id !== primary && (!query || `${id} ${item?.provider || ''}`.toLowerCase().includes(query));
+    });
+    catalog.innerHTML = visible.length ? visible.map(item => {
+      const id = String(item.id || '');
+      const selected = configured.includes(id);
+      return `<label class="model-catalog-row ${selected ? 'selected' : ''}"><input type="checkbox" data-routing-fallback="${escapeHtml(id)}" ${selected ? 'checked' : ''}/><span><strong>${escapeHtml(id)}</strong><small>${escapeHtml(humanizeSnake(item.provider || 'provider'))}</small></span></label>`;
+    }).join('') : '<div class="empty-state compact">No models match this search.</div>';
+  }
+  const order = el('intelligence-fallback-order');
+  if (order) order.innerHTML = configured.length
+    ? `<div class="model-routing-order-title">Fallback order</div>${configured.map((model, index) => `<div class="model-routing-item"><span>${index + 1}</span><strong>${escapeHtml(model)}</strong><div><button class="mini-btn" data-routing-move="up" data-routing-model="${escapeHtml(model)}" ${index === 0 ? 'disabled' : ''} type="button">Up</button><button class="mini-btn" data-routing-move="down" data-routing-model="${escapeHtml(model)}" ${index === configured.length - 1 ? 'disabled' : ''} type="button">Down</button><button class="mini-btn" data-routing-remove="${escapeHtml(model)}" type="button">Remove</button></div></div>`).join('')}`
+    : '<div class="empty-state compact">No fallback models configured. Jobs remain queued if the primary model is unavailable.</div>';
+}
+
+function setRoutingFallback(model, enabled) {
+  const primary = intelligenceSelectedModel();
+  const next = state.intelligence.fallbackModels.filter(item => item !== model && item !== primary);
+  if (enabled && model && model !== primary) next.push(model);
+  state.intelligence.fallbackModels = next.slice(0, 8);
+  state.intelligence.routingDirty = true;
+  renderIntelligenceRouting();
+}
+
+async function saveIntelligenceRouting(button = null) {
+  const primary = intelligenceSelectedModel();
+  if (!primary) {
+    showToast('Select a primary model first.', 'error');
+    return null;
+  }
+  const mode = state.intelligence.fallbackModels.length
+    ? (state.intelligence.fallbackMode || 'quota_auth')
+    : 'disabled';
+  const result = await runIntelligenceAction('configure-models', {
+    primary_model: primary,
+    fallback_models: mode === 'disabled' ? [] : state.intelligence.fallbackModels,
+    fallback_mode: mode
+  }, button);
+  if (result) {
+    state.intelligence.pendingSelectedModel = '';
+    state.intelligence.routingDirty = false;
+    await loadIntelligence();
+  }
+  return result;
 }
 
 function renderAutopilotModelSelect(settings = {}) {
@@ -9959,9 +10098,44 @@ function renderArtifactFleet() {
   const rustResult = state.artifactFleet.rustResult?.result || state.artifactFleet.rustResult || {};
   const rustCaseId = String(rustResult.case_id || '').trim();
   const rustArtifactId = String(rustResult.artifact?.artifact_id || rustResult.scan?.artifact_id || '').trim();
+  const completedActions = new Set(state.artifactFleet.rustCompletedActions || []);
+  const exactComparisonRequested = Boolean(
+    el('rust-research-compare-package')?.value?.trim()
+    || rustResult.comparison_package
+    || rustResult.comparison
+  );
+  const readiness = [
+    ['Registry metadata collected', Boolean(rustResult.metadata || rustResult.package || completedActions.has('metadata'))],
+    ['Registry checksum verified', Boolean(rustResult.artifact?.sha256)],
+    ['Static and YARA evidence recorded', Boolean(rustResult.scan?.artifact_id)],
+    ['Verified package comparison recorded', exactComparisonRequested ? Boolean(rustResult.comparison) : false],
+    ['Research Case created', Boolean(rustCaseId)],
+    ['Evidence matrix built', Boolean(rustResult.evidence_matrix || completedActions.has('matrix'))],
+    ['Selected-model triage queued', Boolean(rustResult.model_job || completedActions.has('queue'))],
+    ['Review-only draft created', completedActions.has('draft')],
+  ];
+  const readyCount = readiness.filter(([, ready]) => ready).length;
+  const readinessEl = el('rust-research-readiness');
+  if (readinessEl) readinessEl.innerHTML = readiness.map(([label, ready]) => `<div class="research-evidence-row ${ready ? 'complete' : ''}"><span aria-hidden="true">${ready ? '✓' : '○'}</span><strong>${escapeHtml(label)}</strong></div>`).join('');
+  const readinessScore = el('rust-research-readiness-score');
+  if (readinessScore) readinessScore.textContent = `${readyCount}/8`;
+  const readinessMessage = el('rust-research-readiness-message');
+  if (readinessMessage) readinessMessage.textContent = readyCount === 8
+    ? 'The review-only draft exists. An analyst must still verify claims and approve publication.'
+    : rustCaseId
+      ? `${8 - readyCount} evidence step${8 - readyCount === 1 ? '' : 's'} remain. Draft creation does not publish or deploy.`
+      : 'Run an exact package intake to create evidence. A malware claim is never inferred from a package name alone.';
+  const stages = el('research-production-stages');
+  if (stages) {
+    const stageReady = [readyCount >= 1, readyCount >= 3, readyCount >= 7, false, readyCount >= 8];
+    stages.querySelectorAll('.research-stage').forEach((stage, index) => {
+      stage.classList.toggle('complete', Boolean(stageReady[index]));
+      stage.classList.toggle('active', index === stageReady.findIndex(value => !value));
+    });
+  }
   for (const [id, enabled] of [
     ['rust-research-matrix-btn', Boolean(rustCaseId)],
-    ['rust-research-draft-btn', Boolean(rustCaseId)],
+    ['rust-research-draft-btn', Boolean(rustCaseId && (rustResult.evidence_matrix || completedActions.has('matrix')))],
     ['rust-research-open-case-btn', Boolean(rustCaseId)],
     ['rust-research-queue-btn', Boolean(rustArtifactId)],
   ]) {
@@ -10048,6 +10222,10 @@ async function runRustPackageResearchAction(action, button = null) {
     state.artifactFleet.rustError = null;
     state.artifactFleet.rustOutput = JSON.stringify(result.result || result, null, 2);
     state.artifactFleet.rustResult = result;
+    state.artifactFleet.rustCompletedActions = [...new Set([
+      ...state.artifactFleet.rustCompletedActions,
+      action === 'preview' ? 'metadata' : 'intake'
+    ])];
     const cliArg = value => `'${String(value).replaceAll("'", "'\\''")}'`;
     state.artifactFleet.rustCommand = [
       'secopsai research rust-package',
@@ -10081,7 +10259,8 @@ async function runRustResearchFollowup(action, button = null) {
   if (action === 'open-case') {
     if (!caseId) return null;
     state.researchCases.selectedId = caseId;
-    setPage('research');
+    state.researchCases.view = 'cases';
+    setPage('research-cases', { routeOverride: RESEARCH_VIEW_ROUTES.cases });
     await loadResearchCases({ render: true, preserveSelection: true });
     return caseId;
   }
@@ -10114,6 +10293,8 @@ async function runRustResearchFollowup(action, button = null) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.ok === false) throw new Error(payload.error || `Rust research follow-up HTTP ${response.status}`);
     state.artifactFleet.rustOutput = JSON.stringify(payload.result || payload, null, 2);
+    state.artifactFleet.rustCompletedActions = [...new Set([...state.artifactFleet.rustCompletedActions, action])];
+    state.artifactFleet.rustFollowupResults[action] = payload.result || payload;
     showToast(`Rust research follow-up completed: ${humanizeSnake(action)}`, 'success');
     await loadArtifactFleetStatus();
     return payload;
@@ -10686,6 +10867,7 @@ function bindEvents() {
   }, event.currentTarget, 'enterprise-control-output'));
   el('enterprise-workflow-kind')?.addEventListener('change', () => renderEnterprise());
   el('enterprise-workflow-save-btn')?.addEventListener('click', event => runEnterpriseAction('workflow', enterpriseWorkflowRecord(), event.currentTarget, 'enterprise-workflow-output'));
+  el('enterprise-open-research-pipeline-btn')?.addEventListener('click', () => setPage('automation', { routeOverride: AUTOMATION_VIEW_ROUTES.research, scrollToTarget: false }));
   el('artifact-fleet-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadArtifactFleetStatus(), { successMessage: 'Artifact Fleet status refreshed' }));
   el('rust-research-preview-btn')?.addEventListener('click', event => runRustPackageResearchAction('preview', event.currentTarget));
   el('rust-research-run-btn')?.addEventListener('click', event => runRustPackageResearchAction('run', event.currentTarget));
@@ -10811,18 +10993,65 @@ function bindEvents() {
     }
     await runIntelligenceAction('enqueue', { intelligence_action: action, target_id: targetId }, event.currentTarget);
   });
+  document.querySelectorAll('[data-automation-tab]').forEach(button => button.addEventListener('click', () => {
+    const view = button.dataset.automationTab || 'models';
+    state.intelligence.view = view;
+    setPage('automation', { routeOverride: AUTOMATION_VIEW_ROUTES[view] || AUTOMATION_VIEW_ROUTES.models, scrollToTarget: false });
+    if (view === 'research' && !state.artifactFleet.data && !state.artifactFleet.loading) loadArtifactFleetStatus();
+  }));
   el('intelligence-model-select')?.addEventListener('change', async event => {
-    state.intelligence.selectedModel = event.currentTarget.value || '';
-    if (state.intelligence.selectedModel) sessionStorage.setItem('secopsai_bridge_model', state.intelligence.selectedModel);
-    renderIntelligence();
-    if (state.intelligence.selectedModel) {
-      try {
-        await runIntelligenceAction('select-model', { model: state.intelligence.selectedModel });
-        await loadIntelligence();
-      } catch (error) {
-        showToast(error?.message || 'Unable to persist the selected model.', 'error');
-      }
-    }
+    const selectedModel = event.currentTarget.value || '';
+    state.intelligence.pendingSelectedModel = selectedModel;
+    state.intelligence.selectedModel = selectedModel;
+    state.intelligence.fallbackModels = state.intelligence.fallbackModels.filter(model => model !== selectedModel);
+    state.intelligence.routingDirty = true;
+    if (selectedModel) sessionStorage.setItem('secopsai_bridge_model', selectedModel);
+    renderIntelligenceModelSelect();
+    if (selectedModel) await saveIntelligenceRouting();
+  });
+  el('intelligence-fallback-mode')?.addEventListener('change', event => {
+    state.intelligence.fallbackMode = event.currentTarget.value || 'disabled';
+    state.intelligence.routingDirty = true;
+    renderIntelligenceRouting();
+  });
+  el('intelligence-model-search')?.addEventListener('input', event => {
+    state.intelligence.modelSearch = event.currentTarget.value || '';
+    renderIntelligenceRouting();
+  });
+  el('intelligence-model-catalog')?.addEventListener('change', event => {
+    const checkbox = event.target.closest?.('[data-routing-fallback]');
+    if (checkbox) setRoutingFallback(checkbox.dataset.routingFallback, checkbox.checked);
+  });
+  el('intelligence-fallback-order')?.addEventListener('click', event => {
+    const remove = event.target.closest?.('[data-routing-remove]');
+    if (remove) return setRoutingFallback(remove.dataset.routingRemove, false);
+    const move = event.target.closest?.('[data-routing-move]');
+    if (!move) return;
+    const model = move.dataset.routingModel;
+    const index = state.intelligence.fallbackModels.indexOf(model);
+    const target = move.dataset.routingMove === 'up' ? index - 1 : index + 1;
+    if (index < 0 || target < 0 || target >= state.intelligence.fallbackModels.length) return;
+    [state.intelligence.fallbackModels[index], state.intelligence.fallbackModels[target]] = [state.intelligence.fallbackModels[target], state.intelligence.fallbackModels[index]];
+    state.intelligence.routingDirty = true;
+    renderIntelligenceRouting();
+  });
+  el('intelligence-routing-save-btn')?.addEventListener('click', event => saveIntelligenceRouting(event.currentTarget));
+  el('intelligence-routing-recommended-btn')?.addEventListener('click', () => {
+    const primary = intelligenceSelectedModel();
+    const recommended = Array.isArray(state.intelligence.data?.bridge?.recommended_fallback_models)
+      ? state.intelligence.data.bridge.recommended_fallback_models
+      : [];
+    const available = new Set(intelligenceModels().map(item => String(item.id || '')));
+    state.intelligence.fallbackModels = recommended.filter(model => model !== primary && available.has(model)).slice(0, 6);
+    state.intelligence.fallbackMode = state.intelligence.fallbackModels.length ? 'quota_auth' : 'disabled';
+    state.intelligence.routingDirty = true;
+    renderIntelligenceRouting();
+  });
+  el('intelligence-routing-clear-btn')?.addEventListener('click', () => {
+    state.intelligence.fallbackModels = [];
+    state.intelligence.fallbackMode = 'disabled';
+    state.intelligence.routingDirty = true;
+    renderIntelligenceRouting();
   });
   el('intelligence-run-once-btn')?.addEventListener('click', event => {
     const model = el('intelligence-model-select')?.value || '';
