@@ -8,6 +8,8 @@ const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const index = read('index.html');
 const app = read('app.js');
 const styles = read('styles.css');
+const readmeTour = read('tests/fixtures/readme-product-tour.html');
+const repositoryReadme = fs.readFileSync(path.resolve(root, '..', 'README.md'), 'utf8');
 
 assert.match(index, /professional-ui/);
 for (const [page, route] of [
@@ -82,6 +84,34 @@ assert.match(app, /function applyFindingSavedView/);
 assert.match(app, /function restoreFindingSavedView/);
 assert.match(app, /if \(linkedSecurityRecord\) return true/);
 assert.match(app, /Secret values are never displayed/);
+
+for (const view of [
+  'overview',
+  'model-routing',
+  'artifact-fleet',
+  'research',
+  'findings',
+  'publications',
+  'enterprise',
+]) {
+  const key = view.includes('-') ? `['"]${view}['"]` : view;
+  assert.match(readmeTour, new RegExp(`${key}\\s*:`), `missing README tour view: ${view}`);
+}
+assert.match(readmeTour, /Representative sample workspace/);
+assert.match(readmeTour, /No credentials, customer records, private telemetry, or local-only paths/);
+assert.doesNotMatch(readmeTour, /\/Users\//);
+assert.doesNotMatch(readmeTour, /@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+for (const marker of [
+  'SecOpsAI Mission Control',
+  'One Console, Clear Operator Jobs',
+  'Local Quick Start',
+  'Operating Modes',
+  'Repository Layout',
+  'representative sample data',
+]) {
+  assert.ok(repositoryReadme.includes(marker), `missing repository README contract: ${marker}`);
+}
+assert.doesNotMatch(repositoryReadme, /\/Users\//);
 
 for (const marker of ['SecOpsAI Intelligence', 'intelligence-action-select', 'intelligence-jobs-table', 'intelligence-copy-mcp-btn', 'intelligence-result-modal', 'intelligence-result-copy', 'intelligence-result-open-case']) {
   assert.ok(index.includes(marker), `missing intelligence surface: ${marker}`);

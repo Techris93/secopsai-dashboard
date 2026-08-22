@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SecOpsAI README product tour</title>
+  <style>
+    html, body, iframe { width: 100%; height: 100%; margin: 0; border: 0; background: #eef4f1; }
+  </style>
+</head>
+<body>
+  <iframe id="preview" title="SecOpsAI representative product tour"></iframe>
+  <script>
+    const view = new URLSearchParams(window.location.search).get('view') || 'overview';
+
+    const metric = (value, label, tone = '') => `
+      <div class="tour-metric ${tone}"><strong>${value}</strong><span>${label}</span></div>`;
+
+    const status = (label, tone = 'ok') => `<span class="tour-status ${tone}">${label}</span>`;
+
+    const pageHeader = (eyebrow, title, description, action = 'Refresh status') => `
+      <div class="tour-header">
+        <div><span class="tour-eyebrow">${eyebrow}</span><h2>${title}</h2><p>${description}</p></div>
+        <button class="secondary-btn" type="button">${action}</button>
+      </div>
+      <div class="tour-sample"><strong>Representative sample workspace</strong><span>No credentials, customer records, private telemetry, or local-only paths.</span></div>`;
+
+    const screens = {
+      overview: {
+        page: 'mission-control',
+        route: 'Overview',
+        html: `
+          ${pageHeader('MISSION CONTROL', 'Overview', 'Prioritized security work, review queues, and system health in one operator workspace.', 'Refresh workspace')}
+          <div class="tour-metrics">
+            ${metric('18', 'Open findings', 'critical')}${metric('4', 'Awaiting review', 'warning')}${metric('7', 'Active research cases')}${metric('99.8%', 'Source freshness SLA')}
+          </div>
+          <div class="tour-grid tour-grid-overview">
+            <section class="tour-card tour-priorities">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">LATEST FIRST</span><h3>Operational priorities</h3></div>${status('4 need attention', 'warning')}</div>
+              <div class="tour-priority"><span class="tour-severity critical">Critical</span><div><strong>Suspicious crates.io build script</strong><small>Checksum verified - 7 static hits</small></div><b>Analyst review</b></div>
+              <div class="tour-priority"><span class="tour-severity high">High</span><div><strong>GitHub token anomaly</strong><small>3 corroborating audit events</small></div><b>Validate scope</b></div>
+              <div class="tour-priority"><span class="tour-severity medium">Medium</span><div><strong>AI dependency guard</strong><small>Unverified generated import</small></div><b>Review candidate</b></div>
+              <div class="tour-priority"><span class="tour-severity info">Info</span><div><strong>CloudTrail freshness warning</strong><small>Source is 11 minutes behind SLA</small></div><b>Check connector</b></div>
+            </section>
+            <section class="tour-card">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">LIVE READINESS</span><h3>System health</h3></div>${status('Healthy')}</div>
+              <div class="tour-health"><div><span>Detection intake</span><strong>14 events/min</strong></div>${status('Healthy')}</div>
+              <div class="tour-health"><div><span>Artifact Fleet</span><strong>12 scans queued</strong></div>${status('Ready')}</div>
+              <div class="tour-health"><div><span>Selected model route</span><strong>xai/grok-4.6</strong></div>${status('Ready')}</div>
+              <div class="tour-health"><div><span>Publications</span><strong>2 drafts need review</strong></div>${status('Review', 'warning')}</div>
+            </section>
+          </div>
+          <section class="tour-card tour-pipeline-card">
+            <div class="tour-card-head"><div><span class="tour-eyebrow">EVIDENCE TO DECISION</span><h3>Research production</h3></div><button class="secondary-btn" type="button">Open research pipeline</button></div>
+            <div class="tour-pipeline">
+              <div><span>1</span><strong>Registry discovery</strong><small>68,742 indexed today</small></div>
+              <i></i><div><span>2</span><strong>Static + YARA</strong><small>12 pending</small></div>
+              <i></i><div><span>3</span><strong>Minimized model triage</strong><small>4 pending</small></div>
+              <i></i><div><span>4</span><strong>Analyst review</strong><small>2 pending</small></div>
+              <i></i><div><span>5</span><strong>Review-only drafts</strong><small>1 ready</small></div>
+            </div>
+          </section>`
+      },
+      'model-routing': {
+        page: 'automation',
+        route: 'Automation / Models',
+        html: `
+          ${pageHeader('ADMINISTRATION / AUTOMATION', 'Model routing', 'Persist a primary analysis model and explicitly control if an ordered fallback chain may run.', 'Probe selected chain')}
+          <div class="tour-tabs"><b>Models</b><span>Alert review</span><span>Investigations</span><span>Research pipeline</span><span>Learning</span><span>Jobs</span></div>
+          <div class="tour-grid tour-routing-grid">
+            <section class="tour-card">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">PRIMARY ROUTE</span><h3>Model policy</h3></div>${status('30 models')}</div>
+              <label class="tour-field"><span>Primary model</span><select><option>xai/grok-4.6</option></select></label>
+              <div class="tour-routing-body">
+                <div>
+                  <label class="tour-field"><span>Find a model</span><input value="" placeholder="Search provider or model ID" /></label>
+                  <div class="tour-model-group"><strong>OpenAI / Codex</strong><div><span>gpt-5.4-mini</span>${status('Ready')}</div><div><span>gpt-5.6-sol</span>${status('Ready')}</div></div>
+                  <div class="tour-model-group"><strong>xAI</strong><div class="selected"><span>xai/grok-4.6</span>${status('Selected')}</div><div><span>xai/grok-4.5</span>${status('Ready')}</div></div>
+                  <div class="tour-model-group"><strong>Google</strong><div><span>google-antigravity/gemini-3.5-flash-low</span>${status('Ready')}</div></div>
+                </div>
+                <div>
+                  <span class="tour-field-label">Fallback chain</span>
+                  <div class="tour-fallback"><b>1</b><span>google-antigravity/gemini-3.5-flash-low</span></div>
+                  <div class="tour-fallback"><b>2</b><span>kimi/kimi-k2.7-code</span></div>
+                  <label class="tour-field"><span>Fallback mode</span><select><option>Quota or authentication failures only</option></select></label>
+                  <div class="tour-note">The selected primary always runs first. Fallbacks are disabled unless the operator saves this policy.</div>
+                </div>
+              </div>
+              <div class="tour-actions"><button class="primary-btn">Save routing policy</button><button class="secondary-btn">Primary model only</button></div>
+            </section>
+            <section class="tour-card tour-route-health">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">CURRENT CONFIGURATION</span><h3>Effective route</h3></div>${status('Policy persisted')}</div>
+              <div class="tour-route-step active"><b>1</b><div><strong>xai/grok-4.6</strong><small>Primary model - ready</small></div>${status('Ready')}</div>
+              <div class="tour-route-line"></div>
+              <div class="tour-route-step"><b>2</b><div><strong>Gemini 3.5 Flash Low</strong><small>Fallback - quota/auth only</small></div>${status('Standby', 'neutral')}</div>
+              <div class="tour-route-line"></div>
+              <div class="tour-route-step"><b>3</b><div><strong>Kimi K2.7 Code</strong><small>Fallback - quota/auth only</small></div>${status('Standby', 'neutral')}</div>
+              <div class="tour-boundary"><strong>Safety boundary</strong><p>Schema validation, context limits, and approval gates apply to every model. A model cannot publish, disclose, or execute package code.</p></div>
+            </section>
+          </div>`
+      },
+      'artifact-fleet': {
+        page: 'automation',
+        route: 'Automation / Research pipeline',
+        html: `
+          ${pageHeader('AUTOMATION / RESEARCH PIPELINE', 'Safe package research', 'Collect exact registry evidence, inspect artifacts without execution, and prepare an analyst-reviewed report.', 'Refresh pipeline')}
+          <div class="tour-pipeline tour-stage-band">
+            <div><span>1</span><strong>Registry intake</strong><small>68,742 indexed today</small></div><i></i>
+            <div><span>2</span><strong>Static + YARA</strong><small>12 pending</small></div><i></i>
+            <div><span>3</span><strong>Model triage</strong><small>4 pending</small></div><i></i>
+            <div><span>4</span><strong>Analyst review</strong><small>2 pending</small></div><i></i>
+            <div><span>5</span><strong>Review-only draft</strong><small>1 ready</small></div>
+          </div>
+          <div class="tour-grid tour-research-grid">
+            <section class="tour-card">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">EXACT CRATES.IO INTAKE</span><h3>Run Rust package research</h3></div>${status('Static only')}</div>
+              <p class="tour-copy">Fetch metadata, verify the registry checksum, quarantine the exact crate, inspect <code>build.rs</code>, and compare a verified reference. Cargo and package code never run.</p>
+              <div class="tour-form-grid"><label class="tour-field"><span>Crate package</span><input value="proc-macro1" /></label><label class="tour-field"><span>Exact version</span><input value="1.0.107" /></label><label class="tour-field"><span>Comparison crate</span><input value="proc-macro2" /></label><label class="tour-field"><span>Comparison version</span><input value="1.0.107" /></label></div>
+              <div class="tour-switches"><span><b></b> Persist high-confidence finding</span><span><b></b> Create Research Case</span><span><b></b> Prepare review-only draft</span></div>
+              <div class="tour-actions"><button class="primary-btn">Run safe research pipeline</button><button class="secondary-btn">Preview metadata</button><button class="secondary-btn">Copy CLI fallback</button></div>
+            </section>
+            <section class="tour-card">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">PUBLICATION READINESS</span><h3>Evidence gate</h3></div>${status('6 / 8', 'warning')}</div>
+              <div class="tour-checks"><div class="done"><b>1</b><span>Metadata and checksum verified</span></div><div class="done"><b>2</b><span><code>build.rs</code> reviewed statically</span></div><div class="done"><b>3</b><span>YARA and static evidence present</span></div><div class="done"><b>4</b><span>Verified comparison complete</span></div><div class="done"><b>5</b><span>IOCs extracted with provenance</span></div><div class="done"><b>6</b><span>Research Case linked</span></div><div><b>7</b><span>Selected-model review pending</span></div><div><b>8</b><span>Analyst decision required</span></div></div>
+              <div class="tour-followups"><button class="secondary-btn">Build evidence matrix</button><button class="secondary-btn">Queue selected model</button><button class="secondary-btn">Open Research Case</button><button class="primary-btn" disabled>Create review-only draft</button></div>
+            </section>
+          </div>
+          <div class="tour-fleet-footer"><span><strong>Fleet queue:</strong> 1 indexed / 0 scan pending / 1 model triage</span><span><strong>Rule pack:</strong> Valid</span><button class="primary-btn">Run automated safe cycle</button></div>`
+      },
+      research: {
+        page: 'research-cases',
+        route: 'Research / Cases',
+        html: `
+          ${pageHeader('RESEARCH / CASES', 'Evidence-led investigation', 'Turn a credible package lead into a durable, source-backed case without executing the artifact.', 'Refresh case')}
+          <div class="tour-case-head"><div><span class="tour-eyebrow">RSC-2A4C09F8D611</span><h3>proc-macro1 impersonation investigation</h3><p>Updated 22 Aug, 18:42 UTC - crates.io package</p></div><div>${status('High', 'critical')} ${status('Investigating', 'warning')}</div></div>
+          <div class="tour-case-stages"><span class="done">Lead</span><span class="done">Safe intake</span><span class="active">Analysis</span><span>Verdict</span><span>Disclosure</span><span>Publication</span></div>
+          <div class="tour-grid tour-case-grid">
+            <section class="tour-card">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">CURRENT EVIDENCE</span><h3>Artifact and behavior evidence</h3></div>${status('7 records')}</div>
+              <div class="tour-evidence"><div><strong>Package</strong><span>proc-macro1 v1.0.107</span></div><div><strong>Artifact SHA-256</strong><code>61198155...34d4</code></div><div><strong>Static behavior</strong><span>Downloader and process execution in build.rs</span></div><div><strong>Network IOC</strong><code>23.254.165.112:9089</code></div><div><strong>Comparison</strong><span>proc-macro2 v1.0.107 verified</span></div><div><strong>Execution</strong><span>Not performed</span></div></div>
+              <div class="tour-agent-summary"><strong>Selected-model assessment</strong><p>Evidence supports a high-confidence impersonation and download-and-execute risk. Runtime payload behavior remains unverified until separately approved sandbox analysis.</p></div>
+            </section>
+            <section class="tour-card">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">ANALYST DECISION</span><h3>Evidence review queue</h3></div>${status('2 pending', 'warning')}</div>
+              <article class="tour-review-item"><div><strong>Proposed fact</strong>${status('Pending', 'warning')}</div><p>The crate checksum, registry metadata, and suspicious build script are recorded with provenance.</p><small>Confidence 96% - 3 evidence references</small><div><button class="primary-btn">Accept</button><button class="secondary-btn">Reject</button></div></article>
+              <article class="tour-review-item"><div><strong>Unsupported claim</strong>${status('Pending', 'warning')}</div><p>Victim impact and payload execution are not established by the static evidence.</p><small>Confidence 99% - publication guardrail</small><div><button class="primary-btn">Accept guardrail</button><button class="secondary-btn">Reject</button></div></article>
+              <div class="tour-boundary"><strong>Human-controlled boundary</strong><p>Sandbox submission, disclosure delivery, and final publication still require explicit operator approval.</p></div>
+            </section>
+          </div>`
+      },
+      findings: {
+        page: 'findings',
+        route: 'Findings',
+        html: `
+          ${pageHeader('OPERATIONS / FINDINGS', 'Detection backlog', 'Prioritize evidence-backed security findings, understand exposure, and choose the next safe action.', 'Refresh evidence')}
+          <div class="tour-metrics">${metric('4', 'Critical evidence-backed', 'critical')}${metric('6', 'Need analyst review', 'warning')}${metric('23', 'Resolved this week')}${metric('3.1%', 'False-positive rate')}</div>
+          <section class="tour-card tour-table-card">
+            <div class="tour-card-head"><div><span class="tour-eyebrow">LATEST FIRST</span><h3>Findings queue</h3></div><div><button class="secondary-btn">Filters</button> <button class="primary-btn">Refresh evidence</button></div></div>
+            <table class="tour-table"><thead><tr><th>Severity</th><th>Finding</th><th>Type</th><th>Evidence</th><th>Environment</th><th>Updated</th><th>Decision</th></tr></thead><tbody>
+              <tr><td><span class="tour-severity critical">Critical</span></td><td><strong>SCM-8F1A - proc-macro1@1.0.107</strong><small>Suspicious build.rs and downloader behavior</small></td><td>Supply chain</td><td>7 static hits - checksum verified</td><td>No local usage</td><td>Today 17:42</td><td><button class="secondary-btn">Investigate</button></td></tr>
+              <tr><td><span class="tour-severity high">High</span></td><td><strong>GHS-31C2 - Repository access anomaly</strong><small>Token used for unusual enumeration</small></td><td>Developer security</td><td>3 correlated audit events</td><td>1 affected org</td><td>Today 16:18</td><td><button class="secondary-btn">Review evidence</button></td></tr>
+              <tr><td><span class="tour-severity high">High</span></td><td><strong>AIDG-441B - Generated dependency</strong><small>Package absent from public registry</small></td><td>AI Dependency Guard</td><td>Transcript + manifest evidence</td><td>Pull request only</td><td>Today 14:06</td><td><button class="secondary-btn">Open finding</button></td></tr>
+              <tr><td><span class="tour-severity medium">Medium</span></td><td><strong>K8S-901E - Broad service account</strong><small>Dry-run manifest posture result</small></td><td>Kubernetes</td><td>Manifest path + rule explanation</td><td>Staging</td><td>Yesterday</td><td><button class="secondary-btn">Create task</button></td></tr>
+            </tbody></table>
+          </section>
+          <div class="tour-grid tour-evidence-grid"><section class="tour-card"><div class="tour-card-head"><h3>Selected finding evidence</h3>${status('Verified')}</div><div class="tour-evidence compact"><div><strong>Artifact provenance</strong><span>crates.io API - checksum matched</span></div><div><strong>Behavior rule</strong><span>Rust build script invokes outbound downloader</span></div><div><strong>Local exposure</strong><span>Not observed in this repository</span></div></div></section><section class="tour-card"><div class="tour-card-head"><h3>Recommended response</h3>${status('Analyst required', 'warning')}</div><p class="tour-copy">Keep the package blocked, preserve the archive in quarantine, compare source provenance, and complete analyst review before disclosure or publication.</p><div class="tour-actions"><button class="primary-btn">Move to investigation</button><button class="secondary-btn">Generate mitigation</button></div></section></div>`
+      },
+      publications: {
+        page: 'blog-ops',
+        route: 'Publications',
+        html: `
+          ${pageHeader('RESEARCH / PUBLICATIONS', 'Publication operations', 'Review source-backed drafts, verify attached media, stage approved posts, and deploy the archive separately.', 'Refresh newsroom')}
+          <div class="tour-metrics">${metric('5', 'Need review', 'warning')}${metric('3', 'Approved')}${metric('2', 'Staged for deploy')}${metric('86', 'Published archive')}</div>
+          <div class="tour-grid tour-publication-grid">
+            <section class="tour-card">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">EDITORIAL QUEUE</span><h3>Drafts</h3></div>${status('Latest first')}</div>
+              <button class="tour-draft selected"><span><strong>Malicious Rust crates impersonate proc-macro2</strong><small>Finding-backed research - 8 evidence items</small></span>${status('Review', 'warning')}</button>
+              <button class="tour-draft"><span><strong>GitHub token breach response guide</strong><small>Developer security - staged</small></span>${status('Approved')}</button>
+              <button class="tour-draft"><span><strong>AI dependency guard field notes</strong><small>Slopsquatting research - 2 blockers</small></span>${status('Draft', 'neutral')}</button>
+            </section>
+            <section class="tour-card">
+              <div class="tour-card-head"><div><span class="tour-eyebrow">RESEARCH DRAFT REVIEW</span><h3>Evidence-backed summary</h3></div>${status('Ready to review')}</div>
+              <h4 class="tour-article-title">Malicious Rust crates impersonate proc-macro2</h4>
+              <p class="tour-copy">Static artifact analysis identified build-time downloader behavior, platform-specific payload references, browser credential targeting, persistence, and fallback command-and-control indicators.</p>
+              <div class="tour-evidence compact"><div><strong>Packages</strong><span>proc-macro1 1.0.107 - proc-macro-en 1.0.10</span></div><div><strong>Evidence</strong><span>2 package hashes - 4 payload hashes - 3 source references</span></div><div><strong>Safety</strong><span>No package code or payload was executed</span></div></div>
+              <div class="tour-media"><div><strong>Approved source image</strong><span>Alt text verified - source attribution recorded</span></div>${status('Attached')}</div>
+              <div class="tour-actions"><button class="primary-btn">Approve</button><button class="secondary-btn">Needs review</button><button class="secondary-btn">Reject</button></div>
+              <div class="tour-lifecycle"><div><strong>Publishing lifecycle</strong><span>Approval does not deploy. Publish stages reviewed files; deploy updates Cloudflare and then marks them Deployed.</span></div><button class="secondary-btn">Publish approved</button><button class="primary-btn">Deploy blog</button></div>
+            </section>
+          </div>`
+      },
+      enterprise: {
+        page: 'enterprise',
+        route: 'Enterprise',
+        html: `
+          ${pageHeader('ADMINISTRATION / ENTERPRISE', 'Enterprise security', 'Connect enterprise telemetry, prioritize exposure, and manage governed security workflows.', 'Refresh enterprise status')}
+          <div class="tour-metrics">${metric('5', 'Read-only connectors ready')}${metric('11', 'Prioritized vulnerabilities', 'warning')}${metric('14', 'Control evidence records')}${metric('0', 'Unapproved active scans')}</div>
+          <div class="tour-grid tour-enterprise-grid">
+            <section class="tour-card"><div class="tour-card-head"><div><span class="tour-eyebrow">MONITOR</span><h3>Connector readiness</h3></div>${status('Healthy')}</div><div class="tour-health"><div><span>AWS security events</span><strong>CloudTrail - GuardDuty - Security Hub</strong></div>${status('Available')}</div><div class="tour-health"><div><span>GCP security events</span><strong>Audit Logs - Security Command Center</strong></div>${status('Available')}</div><div class="tour-health"><div><span>Kubernetes</span><strong>Audit events - manifest posture</strong></div>${status('Dry-run')}</div><div class="tour-health"><div><span>OpenClaw and Hermes</span><strong>Agent and tool-call telemetry</strong></div>${status('Streaming')}</div></section>
+            <section class="tour-card"><div class="tour-card-head"><div><span class="tour-eyebrow">ASSESS</span><h3>Vulnerability priorities</h3></div><button class="primary-btn">Refresh priorities</button></div><table class="tour-table compact"><thead><tr><th>Asset</th><th>Risk</th><th>Context</th><th>SLA</th><th>Owner</th></tr></thead><tbody><tr><td><strong>checkout-api</strong></td><td><span class="tour-severity critical">Critical</span></td><td>Internet-facing - exploitable</td><td>24 hours</td><td>Payments</td></tr><tr><td><strong>build-runner</strong></td><td><span class="tour-severity high">High</span></td><td>CI secrets reachable</td><td>3 days</td><td>Platform</td></tr><tr><td><strong>analyst-console</strong></td><td><span class="tour-severity medium">Medium</span></td><td>Internal - patched image ready</td><td>14 days</td><td>Security</td></tr></tbody></table></section>
+          </div>
+          <div class="tour-grid tour-enterprise-actions"><section class="tour-card"><span class="tour-eyebrow">AUTHORIZED TESTING</span><h3>DAST authorization</h3><p>Passive validation is available. Active scans remain blocked until scope, owner, and authorization are recorded.</p><button class="secondary-btn">Validate scope</button></section><section class="tour-card"><span class="tour-eyebrow">GOVERN</span><h3>Control evidence</h3><p>Evidence-linked controls for SOC 2, ISO 27001/42001, HIPAA, NIST CSF, CIS, and NIS2.</p><button class="secondary-btn">Open controls</button></section><section class="tour-card"><span class="tour-eyebrow">ASSURANCE</span><h3>Customer workflows</h3><p>Versioned questionnaires, threat models, penetration tests, owners, evidence, and approvals.</p><button class="secondary-btn">Open assurance</button></section></div>`
+      }
+    };
+
+    const selected = screens[view] || screens.overview;
+
+    fetch('/index.html').then(response => response.text()).then(source => {
+      const withoutScripts = source
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/href="\.\/styles\.css([^\"]*)"/i, 'href="/styles.css$1"');
+      const frame = document.getElementById('preview');
+      frame.addEventListener('load', () => {
+        const doc = frame.contentDocument;
+        doc.getElementById('auth-gate').hidden = true;
+        doc.getElementById('auth-gate').style.display = 'none';
+        const shell = doc.getElementById('app-shell');
+        shell.classList.remove('auth-pending');
+        shell.removeAttribute('aria-hidden');
+        doc.body.classList.add('documentation-preview');
+        doc.querySelectorAll('.page').forEach(page => page.remove());
+        doc.querySelectorAll('.overlay, .modal, .help-drawer, .toast-region').forEach(element => element.remove());
+        const main = doc.querySelector('main.main');
+        const page = doc.createElement('section');
+        page.className = 'page active documentation-tour';
+        page.id = `readme-tour-${view}`;
+        page.innerHTML = selected.html;
+        main.appendChild(page);
+        doc.querySelectorAll('.nav-btn').forEach(button => button.classList.toggle('active', button.dataset.page === selected.page));
+        doc.getElementById('top-strip-context').textContent = selected.route;
+        doc.getElementById('top-strip-time').textContent = 'SAMPLE WORKSPACE';
+        doc.getElementById('global-status').innerHTML = '<strong>Sample workspace</strong><br><span>Privacy-safe documentation data</span>';
+        const style = doc.createElement('style');
+        style.textContent = `
+          .documentation-preview { overflow: hidden; background: #eef4f1; }
+          .documentation-preview .app-shell { min-height: 900px; height: 900px; }
+          .documentation-preview .sidebar { min-height: 900px; }
+          .documentation-preview .main { padding: 0 22px 18px; overflow: hidden; background: #f5f8f6; }
+          .documentation-preview .top-strip { margin: 0 -22px 16px; }
+          .documentation-preview .topbar-secondary { min-height: 38px; }
+          .documentation-preview .context-nav { display: none; }
+          .documentation-preview #top-strip-time { margin-left: auto; color: #5c756d; }
+          .documentation-preview .sidebar-subnav { display: none !important; }
+          .documentation-preview .sidebar-footer { padding: 12px; color: #d7e5df; background: #173229; border: 1px solid #355b4e; border-radius: 9px; box-shadow: none; }
+          .documentation-preview .sidebar-footer-label { color: #84aa9e; }
+          .documentation-preview #global-status { padding: 0; color: #d7e5df; background: transparent; border: 0; font-family: Inter, sans-serif; line-height: 1.35; }
+          .documentation-preview #global-status strong { color: #f4f8f6; font-size: 11px; }
+          .documentation-preview #global-status span { color: #9fbbb2; font-size: 9px; }
+          .documentation-tour { display: block !important; padding: 0; max-width: 1370px; margin: 0 auto; }
+          .tour-header { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 10px; }
+          .tour-header h2 { margin: 2px 0 4px; color: #17221f; font-family: Manrope, Inter, sans-serif; font-size: 29px; letter-spacing: -0.03em; }
+          .tour-header p, .tour-copy { margin: 0; color: #61706b; font-size: 13px; line-height: 1.45; }
+          .tour-eyebrow { color: #268b76; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+          .tour-sample { display: flex; gap: 14px; align-items: center; padding: 8px 12px; margin-bottom: 11px; color: #355d52; background: #e8f7f1; border: 1px solid #b8dfd2; border-radius: 7px; font-size: 11px; }
+          .tour-sample span { color: #5b746d; }
+          .tour-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 11px; }
+          .tour-metric { display: grid; gap: 4px; min-height: 73px; padding: 12px 14px; background: white; border: 1px solid #d6e0dc; border-top: 3px solid #3d9f89; border-radius: 8px; box-shadow: 0 6px 18px rgba(25, 51, 43, .05); }
+          .tour-metric.critical { border-top-color: #d96961; }.tour-metric.warning { border-top-color: #d69a40; }
+          .tour-metric strong { color: #17221f; font-size: 24px; line-height: 1; }.tour-metric span { color: #708079; font-size: 11px; }
+          .tour-grid { display: grid; gap: 11px; }.tour-grid-overview { grid-template-columns: 1.55fr .9fr; }.tour-routing-grid { grid-template-columns: 1.7fr .85fr; }.tour-research-grid, .tour-case-grid, .tour-evidence-grid { grid-template-columns: 1.25fr .9fr; }.tour-publication-grid { grid-template-columns: .75fr 1.45fr; }.tour-enterprise-grid { grid-template-columns: .9fr 1.35fr; }
+          .tour-card { min-width: 0; padding: 14px 16px; background: #fff; border: 1px solid #d6e0dc; border-radius: 9px; box-shadow: 0 8px 24px rgba(25, 51, 43, .065); }
+          .tour-card h3 { margin: 2px 0 0; color: #1c2925; font-size: 16px; }.tour-card h4 { margin: 4px 0 7px; color: #1c2925; font-size: 14px; }
+          .tour-card-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 10px; }
+          .tour-status { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px; color: #267462; background: #e6f5ef; border: 1px solid #b9ddcf; border-radius: 999px; font-size: 10px; font-weight: 750; white-space: nowrap; }
+          .tour-status.warning { color: #8a5a17; background: #fff4df; border-color: #ead1a5; }.tour-status.critical { color: #a8443f; background: #fff0ef; border-color: #e6bab6; }.tour-status.neutral { color: #61706b; background: #f0f3f2; border-color: #d6dedb; }
+          .tour-severity { display: inline-flex; justify-content: center; min-width: 53px; padding: 3px 7px; border-radius: 5px; font-size: 9px; font-weight: 800; text-transform: uppercase; }.tour-severity.critical { color: #a63f39; background: #ffebe9; }.tour-severity.high { color: #905a11; background: #fff1d9; }.tour-severity.medium { color: #44668e; background: #e9f2ff; }.tour-severity.info { color: #347366; background: #e6f5ef; }
+          .tour-priority { display: grid; grid-template-columns: 64px 1fr 102px; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #e5ebe8; font-size: 11px; }.tour-priority:first-of-type { border-top: 0; }.tour-priority strong, .tour-priority small { display: block; }.tour-priority strong { color: #22302c; font-size: 11px; }.tour-priority small { margin-top: 3px; color: #77837f; font-size: 9px; }.tour-priority b { color: #4d625b; font-size: 10px; font-weight: 650; }
+          .tour-health { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #e5ebe8; }.tour-health:first-of-type { border-top: 0; }.tour-health span, .tour-health strong { display: block; }.tour-health span { color: #384944; font-size: 11px; }.tour-health strong { margin-top: 2px; color: #78847f; font-size: 9px; font-weight: 550; }
+          .tour-pipeline-card { margin-top: 11px; }.tour-pipeline { display: grid; grid-template-columns: 1fr 15px 1fr 15px 1fr 15px 1fr 15px 1fr; gap: 6px; align-items: center; }.tour-pipeline > div { display: grid; grid-template-columns: 24px 1fr; column-gap: 8px; align-items: center; padding: 10px; background: #f8fbf9; border: 1px solid #d7e2de; border-radius: 7px; }.tour-pipeline > div > span { grid-row: 1 / 3; display: grid; place-items: center; width: 22px; height: 22px; color: #174b40; background: #8fd8c7; border-radius: 50%; font-size: 10px; font-weight: 800; }.tour-pipeline strong, .tour-pipeline small { display: block; }.tour-pipeline strong { color: #283934; font-size: 10px; }.tour-pipeline small { margin-top: 2px; color: #72817b; font-size: 8px; }.tour-pipeline i { display: block; width: 15px; height: 1px; background: #69ae9e; }
+          .tour-tabs { display: flex; gap: 26px; align-items: center; height: 38px; margin: -1px 0 11px; padding: 0 12px; background: #fff; border: 1px solid #d8e1de; border-radius: 7px; color: #586b64; font-size: 11px; }.tour-tabs b { align-self: stretch; display: flex; align-items: center; color: #1d7462; border-bottom: 2px solid #2d9a83; }
+          .tour-field { display: grid; gap: 5px; margin-bottom: 9px; }.tour-field > span, .tour-field-label { color: #4f625b; font-size: 10px; font-weight: 750; }.tour-field input, .tour-field select { min-height: 34px !important; padding: 7px 9px; font-size: 11px; }
+          .tour-routing-body { display: grid; grid-template-columns: 1fr .9fr; gap: 14px; padding-top: 10px; border-top: 1px solid #e1e8e5; }.tour-model-group { margin-top: 8px; }.tour-model-group > strong { color: #344b44; font-size: 10px; }.tour-model-group > div { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; margin-top: 4px; background: #f8faf9; border: 1px solid #e2e9e6; border-radius: 5px; color: #465a53; font-size: 9px; }.tour-model-group > div.selected { color: #176755; background: #e9f8f3; border-color: #77c5b2; }
+          .tour-fallback { display: grid; grid-template-columns: 25px 1fr; gap: 8px; align-items: center; margin-top: 7px; padding: 8px; background: #f8faf9; border: 1px solid #dbe4e0; border-radius: 6px; color: #3c5049; font-size: 9px; }.tour-fallback b { display: grid; place-items: center; width: 22px; height: 22px; color: #176755; background: #e5f5ef; border-radius: 50%; }
+          .tour-note, .tour-boundary { margin-top: 10px; padding: 10px 12px; color: #52675f; background: #eef7f3; border: 1px solid #cee4dc; border-radius: 6px; font-size: 9px; line-height: 1.45; }.tour-boundary strong { color: #245e51; }.tour-boundary p { margin: 4px 0 0; }
+          .tour-actions { display: flex; gap: 7px; align-items: center; margin-top: 10px; }.tour-actions button, .tour-followups button, .tour-lifecycle button, .tour-fleet-footer button, .tour-review-item button { min-height: 31px !important; padding: 6px 10px !important; font-size: 9px !important; }
+          .tour-route-step { display: grid; grid-template-columns: 31px 1fr auto; gap: 10px; align-items: center; }.tour-route-step > b { display: grid; place-items: center; width: 28px; height: 28px; color: #3e6c61; border: 2px solid #a8cfc4; border-radius: 50%; }.tour-route-step.active > b { color: #fff; background: #2f9a82; border-color: #2f9a82; }.tour-route-step strong, .tour-route-step small { display: block; }.tour-route-step strong { color: #273a34; font-size: 11px; }.tour-route-step small { margin-top: 3px; color: #74837d; font-size: 9px; }.tour-route-line { height: 26px; margin-left: 14px; border-left: 1px solid #9cc8bd; }
+          .tour-stage-band { margin-bottom: 11px; padding: 9px; background: #fff; border: 1px solid #d6e0dc; border-radius: 8px; }
+          .tour-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; margin-top: 11px; }.tour-switches { display: flex; gap: 13px; flex-wrap: wrap; color: #576b64; font-size: 9px; }.tour-switches span { display: flex; gap: 5px; align-items: center; }.tour-switches b { width: 24px; height: 13px; background: #56b99f; border-radius: 99px; box-shadow: inset -10px 0 0 #fff; border: 1px solid #43a38a; }
+          .tour-checks { display: grid; gap: 6px; }.tour-checks > div { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: center; color: #566861; font-size: 10px; }.tour-checks b { display: grid; place-items: center; width: 21px; height: 21px; border: 1px solid #aab9b3; border-radius: 50%; font-size: 9px; }.tour-checks .done b { color: #fff; background: #309a81; border-color: #309a81; }.tour-followups { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 11px; }
+          .tour-fleet-footer { display: flex; align-items: center; gap: 22px; margin-top: 11px; padding: 9px 12px; color: #586a64; background: #fff; border: 1px solid #d6e0dc; border-radius: 8px; font-size: 9px; }.tour-fleet-footer button { margin-left: auto; }
+          .tour-case-head { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 12px 15px; margin-bottom: 10px; background: #fff; border: 1px solid #d6e0dc; border-radius: 8px; }.tour-case-head h3 { margin: 2px 0; color: #1d2b27; font-size: 18px; }.tour-case-head p { margin: 0; color: #75827d; font-size: 9px; }
+          .tour-case-stages { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 10px; }.tour-case-stages span { padding: 7px; color: #71807a; background: #f6f9f7; border: 1px solid #d7e1dd; border-radius: 6px; text-align: center; font-size: 9px; font-weight: 700; }.tour-case-stages span.done { color: #266b5d; background: #e9f6f1; }.tour-case-stages span.active { color: #fff; background: #2d8f79; border-color: #2d8f79; }
+          .tour-evidence { display: grid; gap: 0; }.tour-evidence > div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 9px 0; border-top: 1px solid #e5ebe8; font-size: 10px; }.tour-evidence > div:first-child { border-top: 0; }.tour-evidence strong { color: #3c514a; }.tour-evidence span, .tour-evidence code { color: #697872; }.tour-evidence.compact > div { padding: 7px 0; }
+          .tour-agent-summary { margin-top: 9px; padding: 11px; color: #35534a; background: #eaf7f2; border: 1px solid #bfdfd5; border-radius: 7px; }.tour-agent-summary strong { font-size: 10px; }.tour-agent-summary p { margin: 5px 0 0; font-size: 9px; line-height: 1.45; }
+          .tour-review-item { margin-top: 8px; padding: 10px; background: #f8faf9; border: 1px solid #dfe7e4; border-left: 3px solid #d69a40; border-radius: 6px; }.tour-review-item > div { display: flex; justify-content: space-between; gap: 10px; align-items: center; }.tour-review-item strong { color: #2a4039; }.tour-review-item p { margin: 7px 0; color: #485d56; font-size: 9px; line-height: 1.4; }.tour-review-item small { display: block; margin-bottom: 8px; color: #76837e; font-size: 8px; }.tour-review-item button + button { margin-left: 5px; }
+          .tour-table-card { margin-bottom: 11px; }.tour-table { width: 100%; border-collapse: collapse; }.tour-table th { padding: 7px 8px !important; color: #687973 !important; background: #f5f8f6 !important; font-size: 8px !important; letter-spacing: .08em !important; }.tour-table tbody tr td { padding: 8px !important; color: #52655e !important; background: #fff !important; font-size: 9px !important; vertical-align: middle !important; }.tour-table tbody tr:nth-child(even) td { background: #f8faf9 !important; }.tour-table tbody tr:hover td { background: #eef7f3 !important; }.tour-table td strong, .tour-table td small { display: block; }.tour-table td strong { color: #2d403a; font-size: 9px; }.tour-table td small { margin-top: 3px; color: #798680; font-size: 8px; }.tour-table button { min-height: 29px !important; padding: 5px 8px !important; font-size: 8px !important; }.tour-table.compact td, .tour-table.compact th { padding: 10px 8px !important; }
+          .tour-draft { display: flex; justify-content: space-between; gap: 10px; width: 100%; min-height: 63px !important; margin-top: 7px; padding: 10px; color: #364b44; background: #f8faf9; border: 1px solid #dfe7e4; border-radius: 6px; text-align: left; }.tour-draft.selected { background: #edf8f4; border-color: #72bfae; }.tour-draft strong, .tour-draft small { display: block; }.tour-draft strong { font-size: 10px; }.tour-draft small { margin-top: 4px; color: #75837e; font-size: 8px; }.tour-article-title { font-size: 17px !important; }.tour-media { display: flex; justify-content: space-between; align-items: center; margin-top: 9px; padding: 10px; background: #f0f7f4; border: 1px solid #d1e3dd; border-radius: 6px; }.tour-media strong, .tour-media span { display: block; }.tour-media strong { color: #355149; font-size: 10px; }.tour-media span { margin-top: 3px; color: #71807b; font-size: 8px; }.tour-lifecycle { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid #dfe7e4; }.tour-lifecycle strong, .tour-lifecycle span { display: block; }.tour-lifecycle strong { color: #334942; font-size: 10px; }.tour-lifecycle span { margin-top: 3px; color: #72807b; font-size: 8px; }
+          .tour-enterprise-actions { grid-template-columns: repeat(3, 1fr); margin-top: 11px; }.tour-enterprise-actions .tour-card { padding: 12px 14px; }.tour-enterprise-actions h3 { margin: 3px 0 5px; }.tour-enterprise-actions p { min-height: 35px; margin: 0 0 8px; color: #687771; font-size: 9px; line-height: 1.4; }.tour-enterprise-actions button { min-height: 29px !important; padding: 5px 9px !important; font-size: 8px !important; }
+          .documentation-preview code { font-size: .95em; }
+        `;
+        doc.head.appendChild(style);
+      }, { once: true });
+      frame.srcdoc = withoutScripts;
+    });
+  </script>
+</body>
+</html>
