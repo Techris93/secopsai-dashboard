@@ -1,7 +1,15 @@
 window.__SECOPSAI_APP_LOADED = true;
 window.__SECOPSAI_DEBUG = { htmlLoaded: true, configLoaded: Boolean(window.SECOPSAI_CONFIG), appLoaded: true };
 
+function isExternalBrowserInjectionError(event) {
+  const message = String(event?.message || '');
+  const filename = String(event?.filename || '');
+  return /cannot redefine property:\s*ethereum/i.test(message)
+    && (!filename || /^(?:chrome|moz|safari)-extension:\/\//i.test(filename));
+}
+
 window.addEventListener('error', event => {
+  if (isExternalBrowserInjectionError(event)) return;
   const status = document.getElementById('global-status');
   if (status) status.textContent = `JS error: ${event.message || 'unknown error'}`;
 });
@@ -760,6 +768,10 @@ function togglePrimarySectionNavigation(button) {
   setPage(requestedPage, { routeOverride: button?.dataset.route || null, scrollToTarget: false });
 }
 
+function collapseSidebarForInitialRoute(pageId = currentPageFromLocation()) {
+  collapsedSidebarPrimaryPage = primaryPageFor(pageId);
+}
+
 function scrollToContextTarget(route) {
   const normalized = String(route || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
   const targetId = CONTEXT_SCROLL_TARGETS[normalized];
@@ -914,7 +926,9 @@ async function enterAuthenticatedDashboard(session) {
   }
   state.auth.activeUserId = userId;
   showAuthenticatedShell(session);
-  setPage(currentPageFromLocation(), { skipHistory: true, scrollToTarget: false });
+  const initialPage = currentPageFromLocation();
+  collapseSidebarForInitialRoute(initialPage);
+  setPage(initialPage, { skipHistory: true, scrollToTarget: false });
   setStatus('<span class="dot"></span> Loading authorized workspace…');
   await boot();
 }
@@ -5017,19 +5031,7 @@ async function openIntelligenceResearchCase() {
   const caseId = String(job?.target_id || '');
   if (!caseId.startsWith('RSC-')) return;
   closeIntelligenceResult();
-  setPage('research-cases');
-  state.researchCases.selectedId = caseId;
-  state.researchCases.loading = true;
-  renderResearchCases();
-  try {
-    await loadResearchCaseDetail(caseId, { render: false });
-    state.researchCases.error = null;
-  } catch (error) {
-    state.researchCases.error = error?.message || String(error);
-  } finally {
-    state.researchCases.loading = false;
-    renderResearchCases();
-  }
+  await openResearchCase(caseId);
 }
 
 function renderIntelligenceModelSelect() {
@@ -8469,6 +8471,8 @@ function researchCasesEndpoint(suffix = '') {
   return `${cfg.researchCasesEndpoint || '/api/secopsai/research-cases'}${suffix}`;
 }
 
+const RESEARCH_CASE_ID_PATTERN = /^RSC-[A-F0-9]{12}$/i;
+
 function researchOption(value, current, label = null) {
   return `<option value="${escapeHtml(value)}" ${String(value) === String(current) ? 'selected' : ''}>${escapeHtml(label || statusLabel(value))}</option>`;
 }
@@ -8535,6 +8539,40 @@ async function loadResearchCases({ render = true, preserveSelection = true } = {
   } finally {
     state.researchCases.loading = false;
     if (render) renderResearchCases();
+  }
+}
+
+async function openResearchCase(caseId) {
+  const normalizedCaseId = String(caseId || '').trim().toUpperCase();
+  state.researchCases.view = 'cases';
+  state.researchCases.selectedId = normalizedCaseId || null;
+  state.researchCases.selected = null;
+  state.researchCases.error = null;
+  state.researchCases.loading = true;
+  setPage('research-cases', { routeOverride: RESEARCH_VIEW_ROUTES.cases, scrollToTarget: false });
+  renderResearchCases();
+
+  if (!RESEARCH_CASE_ID_PATTERN.test(normalizedCaseId)) {
+    state.researchCases.error = normalizedCaseId
+      ? `Research case ${normalizedCaseId} is invalid or unavailable.`
+      : 'No research case ID was provided.';
+    state.researchCases.loading = false;
+    renderResearchCases();
+    return false;
+  }
+
+  try {
+    await loadResearchCases({ render: false, preserveSelection: true });
+    await loadResearchCaseDetail(normalizedCaseId, { render: false });
+    state.researchCases.error = null;
+    return true;
+  } catch (error) {
+    state.researchCases.selected = null;
+    state.researchCases.error = `Unable to open research case ${normalizedCaseId}: ${error?.message || String(error)}`;
+    return false;
+  } finally {
+    state.researchCases.loading = false;
+    renderResearchCases();
   }
 }
 
@@ -10649,11 +10687,7 @@ async function runRustResearchFollowup(action, button = null) {
   const artifactId = String(result.artifact?.artifact_id || result.scan?.artifact_id || '').trim();
   if (action === 'open-case') {
     if (!caseId) return null;
-    state.researchCases.selectedId = caseId;
-    state.researchCases.view = 'cases';
-    setPage('research-cases', { routeOverride: RESEARCH_VIEW_ROUTES.cases });
-    await loadResearchCases({ render: true, preserveSelection: true });
-    return caseId;
+    return openResearchCase(caseId);
   }
   if (action === 'copy-cli') {
     if (state.artifactFleet.rustCommand) await copyTextWithStatus(state.artifactFleet.rustCommand, 'Rust research CLI copied');
@@ -11525,9 +11559,7 @@ function bindEvents() {
     const cancel = event.target.closest('[data-investigation-cancel]');
     const openCase = event.target.closest('[data-investigation-case]');
     if (openCase) {
-      navigateTo('research/cases');
-      state.researchCases.selectedId = openCase.dataset.investigationCase;
-      await loadResearchCases();
+      await openResearchCase(openCase.dataset.investigationCase);
       return;
     }
     if (retry) await runIntelligenceAction('investigation-retry', { run_id: retry.dataset.investigationRetry }, retry);
@@ -11728,6 +11760,11 @@ function bindEvents() {
       successMessage: 'Research discovery refreshed'
     });
   });
+  el('research-inbox-refresh-btn')?.addEventListener('click', event => runRefreshAction(
+    event.currentTarget,
+    () => loadResearchDiscovery(),
+    { successMessage: 'Discovery candidates refreshed', errorMessage: 'Candidate refresh failed' }
+  ));
   el('research-discovery-ecosystem')?.addEventListener('change', syncResearchDiscoveryWatchlistOptions);
   el('research-discovery-add-watchlist-btn')?.addEventListener('click', event => runResearchDiscoveryAction('watchlist-add', {
     ecosystem: el('research-discovery-ecosystem')?.value || 'npm',
@@ -11905,7 +11942,9 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-  setPage(currentPageFromLocation(), { skipHistory: true });
+  const initialPage = currentPageFromLocation();
+  collapseSidebarForInitialRoute(initialPage);
+  setPage(initialPage, { skipHistory: true });
   bindEvents();
   restoreFindingSavedView();
   startTopStripClock();

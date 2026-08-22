@@ -220,7 +220,9 @@ def test_model_routing_ui_persists_the_new_selection_before_refresh():
     assert "fallback_models" in app
     assert "fallback_mode" in app
     assert "Other models are not probed or used" not in app
-    assert "setPage(currentPageFromLocation(), { skipHistory: true, scrollToTarget: false })" in app
+    assert "const initialPage = currentPageFromLocation();" in app
+    assert "collapseSidebarForInitialRoute(initialPage);" in app
+    assert "setPage(initialPage, { skipHistory: true, scrollToTarget: false })" in app
     assert 'name="secopsai-model-catalog-filter"' in html
     assert 'name="secopsai-automation-token"' in html
     assert 'id="intelligence-admin-token" type="password" autocomplete="current-password"' not in html
