@@ -48,6 +48,8 @@ Before/after local captures were taken at:
 
 - `/tmp/secopsai-dashboard-contrast-before.png`
 - `/tmp/secopsai-dashboard-contrast-after.png`
+- `/tmp/secopsai-dashboard-contrast-workspace-final-v3.png` (final workspace
+  capture after the dynamic-surface corrections)
 
 The browser computed-style audit was rerun after the fix across the Overview,
 Findings, Assets, Work, Research, Publications, Automation, System,
@@ -55,6 +57,8 @@ Enterprise, Triage Ops, Global Coverage, and Guide routes, plus dialogs, forms,
 tables, buttons, and status elements. No content-plane element below 4.5:1
 remained in the representative inventory. The dark navigation rail was
 checked separately; its muted text is at least 9.6:1 against the rail surface.
+The Research route includes Campaign Research and Artifact Fleet panels; both
+were included in the Research-state pass.
 
 The regression contract is in
 `tests/test_dashboard_contrast.py`. It checks the central tokens, WCAG AA
