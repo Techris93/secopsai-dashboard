@@ -116,9 +116,10 @@ assert.doesNotMatch(repositoryReadme, /\/Users\//);
 for (const marker of ['SecOpsAI Intelligence', 'intelligence-action-select', 'intelligence-jobs-table', 'intelligence-copy-mcp-btn', 'intelligence-result-modal', 'intelligence-result-copy', 'intelligence-result-open-case']) {
   assert.ok(index.includes(marker), `missing intelligence surface: ${marker}`);
 }
-for (const marker of ['rust-package-research-panel', 'rust-research-preview-btn', 'rust-research-run-btn', 'rust-research-create-case']) {
-  assert.ok(index.includes(marker), `missing Rust Package Research surface: ${marker}`);
+for (const marker of ['source-first-research-panel', 'source-research-ecosystem', 'source-research-preview-btn', 'source-research-run-btn', 'source-research-create-case']) {
+  assert.ok(index.includes(marker), `missing Source-First Artifact Research surface: ${marker}`);
 }
+assert.ok(!index.includes('EXACT CRATES.IO INTAKE'));
 for (const marker of ['intelligence-model-select', 'intelligence-model-hint']) {
   assert.ok(index.includes(marker), `missing model selection surface: ${marker}`);
 }
@@ -157,7 +158,7 @@ assert.doesNotMatch(index, /styles\.css\?v=20260803-subsection-navigation/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function humanizeMachineText/);
 assert.match(app, /function runRefreshAction/);
-assert.match(app, /function runRustPackageResearchAction/);
+assert.match(app, /function runSourceFirstResearchAction/);
 assert.match(app, /const currentButton = buttonId \? el\(buttonId\) : originalButton/);
 assert.match(app, /function renderContextNav\(pageId, routeOverride = null\)/);
 assert.match(app, /renderContextNav\(normalizedPageId, activeRoute\)/);

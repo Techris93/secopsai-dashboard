@@ -176,7 +176,7 @@ ALLOWED_CAMPAIGN_ECOSYSTEMS = {
 ECOSYSTEM_RE = re.compile(r'^(npm|pypi|crates|chrome-web-store|packagist|go|huggingface|maven|nuget|open-vsx|rubygems)$', re.IGNORECASE)
 COLLECTOR_ID_RE = re.compile(r'^COL-[A-Z0-9-]{3,40}$')
 CAMPAIGN_ID_RE = re.compile(r'^[A-Za-z0-9_.-]{1,140}$')
-PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._:/-]{1,260}$')
+PACKAGE_RE = re.compile(r'^[A-Za-z0-9@._:/+\-]{1,512}$')
 RUST_PACKAGE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')
 RUST_VERSION_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.+:_~!*/-]{0,159}$')
 ENTERPRISE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$')
@@ -192,6 +192,16 @@ ENTERPRISE_FRAMEWORKS = {'soc2', 'iso27001', 'iso42001', 'hipaa', 'nist-csf', 'c
 NPM_WATCHLIST_PACKAGE_RE = re.compile(r'^(?:npm:)?(?:@[a-z0-9._~-]+/)?[a-z0-9._~-]+$', re.IGNORECASE)
 VERSION_RE = re.compile(r'^[A-Za-z0-9.+:_~!*-]{1,160}$')
 SAFE_SOURCE_URL_RE = re.compile(r'^https?://[^\s<>"\']{3,500}$', re.IGNORECASE)
+SOURCE_FIRST_ECOSYSTEMS = {
+    'npm', 'pypi', 'crates', 'packagist', 'go', 'maven', 'nuget', 'rubygems',
+    'open-vsx', 'huggingface', 'github', 'container', 'chrome-web-store',
+}
+SOURCE_FIRST_RESEARCH_TYPES = {
+    'malicious_package', 'package_compromise', 'typosquatting', 'dependency_confusion',
+    'slopsquatting', 'lifecycle_behavior', 'vulnerability_advisory', 'github_token_breach',
+    'extension_compromise', 'credential_theft', 'malware_apt_c2', 'cloud_kubernetes_abuse',
+    'cross_ecosystem_campaign', 'general_threat_intel', 'package_artifact',
+}
 PAGES_PROJECT_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$')
 BRANCH_RE = re.compile(r'^[A-Za-z0-9._/-]{1,120}$')
 SECRETISH_RE = re.compile(r'(?i)\b([a-z0-9_ -]*(?:token|secret|api[_ -]?key|password|authorization)[a-z0-9_ -]*)\s*[:=]\s*([^\s,"\']{8,})')
@@ -1377,6 +1387,82 @@ def build_rust_package_research_args(action, payload):
     return [*args, *secopsai_db_args(), *artifact_args]
 
 
+def build_source_first_research_args(action, payload):
+    """Build typed, browser-safe commands for the universal research intake."""
+    action = _clean_string(action, 20).lower()
+    if action in {'matrix', 'draft'}:
+        case_id = _clean_string(payload.get('case_id'), 32).upper()
+        if not RESEARCH_CASE_ID_RE.fullmatch(case_id):
+            raise ValueError('A valid Research Case ID is required')
+        if action == 'matrix':
+            return ['research', 'workflow', 'evidence-matrix', case_id, '--actor', 'mission-control', *secopsai_db_args()]
+        return ['research', 'case', 'draft-blog', case_id, *secopsai_db_args()]
+    if action == 'queue':
+        artifact_id = _clean_string(payload.get('artifact_id'), 32).upper()
+        if not re.fullmatch(r'ART-[A-F0-9]{16}', artifact_id):
+            raise ValueError('A valid Artifact Fleet artifact ID is required')
+        model = _clean_string(payload.get('model'), 160)
+        args = ['artifact-fleet', 'triage', '--artifact-id', artifact_id, '--enqueue-model', *artifact_fleet_db_args()]
+        if model:
+            if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+                raise ValueError('Invalid bridge model')
+            args.extend(['--model', model])
+        args.extend(['--job-db-path', SECOPSAI_DB_PATH] if SECOPSAI_DB_PATH else [])
+        return args
+    if action not in {'preview', 'run'}:
+        raise ValueError('Source-first research action must be preview, run, matrix, draft, or queue')
+    ecosystem = _clean_string(payload.get('ecosystem'), 40).lower()
+    if ecosystem not in SOURCE_FIRST_ECOSYSTEMS:
+        raise ValueError('Unsupported research ecosystem')
+    research_type = _clean_string(payload.get('research_type') or 'package_artifact', 80).lower()
+    if research_type not in SOURCE_FIRST_RESEARCH_TYPES:
+        raise ValueError('Unsupported research type')
+    package = _clean_string(payload.get('package'), 512)
+    if not package or not PACKAGE_RE.fullmatch(package) or '..' in package or '\\' in package:
+        raise ValueError('Invalid package or artifact identifier')
+    version = _clean_string(payload.get('version'), 160)
+    if version and not VERSION_RE.fullmatch(version):
+        raise ValueError('Invalid version or revision')
+    args = ['research', 'investigate', '--ecosystem', ecosystem, '--research-type', research_type, '--package', package]
+    if version:
+        args.extend(['--version', version])
+    for key, flag, limit in (
+        ('namespace', '--namespace', 160),
+        ('source_reference', '--source-reference', 4000),
+        ('source_repository', '--source-repository', 4000),
+        ('comparison_ecosystem', '--comparison-ecosystem', 40),
+        ('comparison_package', '--comparison-package', 512),
+        ('comparison_version', '--comparison-version', 160),
+    ):
+        value = _clean_string(payload.get(key), limit)
+        if not value:
+            continue
+        if key in {'source_reference', 'source_repository'}:
+            parsed = urllib.parse.urlparse(value)
+            if not SAFE_SOURCE_URL_RE.fullmatch(value) or parsed.scheme != 'https' or parsed.username or parsed.password or not parsed.hostname:
+                raise ValueError(f'{flag} must be a credential-free HTTPS URL')
+        if key == 'comparison_ecosystem' and value.lower() not in SOURCE_FIRST_ECOSYSTEMS:
+            raise ValueError('Unsupported comparison ecosystem')
+        if key in {'comparison_package'} and not PACKAGE_RE.fullmatch(value):
+            raise ValueError('Invalid comparison package or artifact identifier')
+        if key == 'comparison_version' and not VERSION_RE.fullmatch(value):
+            raise ValueError('Invalid comparison version')
+        args.extend([flag, value])
+    model = _clean_string(payload.get('model'), 160)
+    if model:
+        if not INTELLIGENCE_MODEL_RE.fullmatch(model):
+            raise ValueError('Invalid bridge model')
+        args.extend(['--model', model])
+    if payload.get('persist_findings'):
+        args.append('--persist-findings')
+    if payload.get('create_case') is False:
+        args.append('--no-create-case')
+    if action == 'preview':
+        args.append('--dry-run')
+    args.extend([*secopsai_db_args(), *(['--artifact-db-path', SECOPSAI_ARTIFACT_FLEET_DB_PATH] if SECOPSAI_ARTIFACT_FLEET_DB_PATH else [])])
+    return args
+
+
 def _enterprise_text(value, *, field, limit=300, required=True):
     text = _clean_string(value, limit)
     if required and not text:
@@ -1557,6 +1643,18 @@ def redact_rust_research_result(value):
         }
     if isinstance(value, list):
         return [redact_rust_research_result(item) for item in value]
+    return value
+
+
+def redact_source_first_research_result(value):
+    """Keep local quarantine paths out of generic research responses."""
+    if isinstance(value, dict):
+        return {
+            key: ('[local quarantine path]' if key in {'path', 'artifact_path', 'artifact_db_path'} else redact_source_first_research_result(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_source_first_research_result(item) for item in value]
     return value
 
 
@@ -4563,6 +4661,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 )
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'rust_package_research_invalid'})
+
+        if parsed.path == '/api/secopsai/source-first-research':
+            if require_intelligence_admin(self):
+                return
+            action = _clean_string(payload.get('action'), 20).lower()
+            try:
+                args = build_source_first_research_args(action, payload)
+                result, parsed_result = run_cli_json(args, timeout=300 if action == 'run' else 120)
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 400,
+                    {
+                        'ok': bool(result.get('ok')),
+                        'action': action,
+                        'result': redact_source_first_research_result(parsed_result),
+                        'cli': compact_cli_result(result),
+                    },
+                )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc), 'code': 'source_first_research_invalid'})
 
         if parsed.path == '/api/secopsai/research-watchlist':
             action = str(payload.get('action') or 'preview').strip().lower()

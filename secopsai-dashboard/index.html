@@ -482,29 +482,32 @@
             <div class="intelligence-boundary-note research-safety" id="artifact-fleet-safety-note">Artifact code is never installed, executed, or activated. Final publication remains an operator decision.</div>
             <div class="grid cols-4 intelligence-summary research-fleet-summary" id="artifact-fleet-summary"></div>
             <div class="research-pipeline-layout">
-              <section class="research-intake-card" id="rust-package-research-panel">
-                <div class="research-card-head"><div><span class="section-kicker">EXACT CRATES.IO INTAKE</span><h4>Run Rust package research</h4></div><span class="status-pill">Static only</span></div>
-                <p class="small">Fetch exact crates.io metadata, verify the checksum, quarantine the crate, inspect <code>build.rs</code>, and optionally compare a verified crate. Cargo and package code never run.</p>
+              <section class="research-intake-card" id="source-first-research-panel">
+                <div class="research-card-head"><div><span class="section-kicker">SOURCE-FIRST ARTIFACT RESEARCH</span><h4>Research a package or artifact</h4></div><span class="status-pill">Static only</span></div>
+                <p class="small">Use one safe, adapter-driven workflow for npm, PyPI, crates.io, Packagist, Go, Maven, NuGet, RubyGems, Open VSX, Hugging Face, GitHub sources, containers, and approved local artifacts. Nothing is installed, activated, or executed.</p>
                 <div class="research-form-grid compact">
-                  <label><span>Crate package</span><input id="rust-research-package" maxlength="128" placeholder="proc-macro1" /></label>
-                  <label><span>Exact version</span><input id="rust-research-version" maxlength="160" placeholder="1.0.107" /></label>
-                  <label><span>Verified comparison crate</span><input id="rust-research-compare-package" maxlength="128" placeholder="proc-macro2" /></label>
-                  <label><span>Comparison version</span><input id="rust-research-compare-version" maxlength="160" placeholder="1.0.107" /></label>
-                  <label class="research-span-2"><span>Source reference (optional enrichment)</span><input id="rust-research-source" maxlength="4000" placeholder="https://research.example/report" /></label>
+                  <label><span>Research type</span><select id="source-research-type"><option value="package_artifact">Package or artifact</option><option value="malicious_package">Malicious package</option><option value="package_compromise">Package compromise</option><option value="vulnerability_advisory">Vulnerability advisory</option><option value="extension_compromise">Extension compromise</option><option value="github_token_breach">GitHub/token breach</option><option value="malware_apt_c2">Malware/APT/C2</option><option value="cross_ecosystem_campaign">Cross-ecosystem campaign</option><option value="slopsquatting">AI/slopsquatting dependency</option></select></label>
+                  <label><span>Ecosystem</span><select id="source-research-ecosystem"><option value="npm">npm</option><option value="pypi">PyPI</option><option value="crates">crates.io</option><option value="packagist">Packagist / Composer</option><option value="go">Go modules</option><option value="maven">Maven</option><option value="nuget">NuGet</option><option value="rubygems">RubyGems</option><option value="open-vsx">Open VSX / VS Code</option><option value="huggingface">Hugging Face</option><option value="github">GitHub repository</option><option value="container">Container image</option><option value="chrome-web-store">Chrome extension</option></select></label>
+                  <label><span id="source-research-subject-label">Package or artifact</span><input id="source-research-subject" maxlength="512" placeholder="@scope/package or vendor/package" /></label>
+                  <label><span>Version or revision</span><input id="source-research-version" maxlength="160" placeholder="1.2.3, tag, or commit" /></label>
+                  <label><span id="source-research-compare-label">Comparison subject (optional)</span><input id="source-research-compare-subject" maxlength="512" placeholder="Verified package or artifact" /></label>
+                  <label><span>Comparison version</span><input id="source-research-compare-version" maxlength="160" placeholder="Known-good version" /></label>
+                  <label class="research-span-2"><span>Source reference (optional enrichment)</span><input id="source-research-source" maxlength="4000" placeholder="https://source.example/report" /></label>
+                  <label class="research-span-2"><span>Source repository (optional)</span><input id="source-research-repository" maxlength="4000" placeholder="https://github.com/org/repository" /></label>
                 </div>
-                <div class="research-options"><label><input id="rust-research-persist" type="checkbox" /> Persist only a high-confidence finding</label><label><input id="rust-research-create-case" type="checkbox" checked /> Create or update a Research Case</label></div>
-                <div class="intelligence-actions"><button class="secondary-btn" id="rust-research-preview-btn" type="button">Preview metadata</button><button class="primary-btn" id="rust-research-run-btn" type="button">Run safe research pipeline</button></div>
-                <pre class="intelligence-log" id="rust-research-output" aria-live="polite" hidden></pre>
+                <div class="research-options"><label><input id="source-research-persist" type="checkbox" /> Persist only a high-confidence finding</label><label><input id="source-research-create-case" type="checkbox" checked /> Create or update a Research Case</label></div>
+                <div class="intelligence-actions"><button class="secondary-btn" id="source-research-preview-btn" type="button">Preview metadata</button><button class="primary-btn" id="source-research-run-btn" type="button">Run safe research</button></div>
+                <pre class="intelligence-log" id="source-research-output" aria-live="polite" hidden></pre>
               </section>
               <aside class="research-readiness-card">
-                <div class="research-card-head"><div><span class="section-kicker">PUBLICATION READINESS</span><h4>Evidence gate</h4></div><strong id="rust-research-readiness-score">0/8</strong></div>
-                <div class="research-evidence-checklist" id="rust-research-readiness"></div>
-                <div class="research-readiness-message" id="rust-research-readiness-message">Run an exact package intake to start an evidence-backed case.</div>
-                <div class="research-followups" id="rust-research-followups" aria-label="Rust research follow-up actions">
-                  <button class="secondary-btn" id="rust-research-matrix-btn" type="button" disabled>Build evidence matrix</button>
-                  <button class="secondary-btn" id="rust-research-queue-btn" type="button" disabled>Queue selected model</button>
-                  <button class="secondary-btn" id="rust-research-open-case-btn" type="button" disabled>Open Research Case</button>
-                  <button class="primary-btn" id="rust-research-draft-btn" type="button" disabled>Create review-only draft</button>
+                <div class="research-card-head"><div><span class="section-kicker">PUBLICATION READINESS</span><h4>Evidence gate</h4></div><strong id="source-research-readiness-score">0/8</strong></div>
+                <div class="research-evidence-checklist" id="source-research-readiness"></div>
+                <div class="research-readiness-message" id="source-research-readiness-message">Preview metadata, then run safe research to build an evidence-backed case.</div>
+                <div class="research-followups" id="source-research-followups" aria-label="Source-first research follow-up actions">
+                  <button class="secondary-btn" id="source-research-matrix-btn" type="button" disabled>Build evidence matrix</button>
+                  <button class="secondary-btn" id="source-research-queue-btn" type="button" disabled>Queue selected model</button>
+                  <button class="secondary-btn" id="source-research-open-case-btn" type="button" disabled>Open Research Case</button>
+                  <button class="primary-btn" id="source-research-draft-btn" type="button" disabled>Create review-only draft</button>
                 </div>
               </aside>
             </div>
@@ -518,7 +521,7 @@
                 <button class="secondary-btn" id="artifact-fleet-analyst-btn" data-artifact-fleet-action="analyst-queue" type="button">Refresh analyst queue</button>
                 <button class="secondary-btn" id="artifact-fleet-rules-btn" data-artifact-fleet-action="rules" type="button">Validate rule pack</button>
                 <button class="secondary-btn" id="artifact-fleet-benchmark-btn" data-artifact-fleet-action="benchmark" type="button">Run fixture benchmark</button>
-                <button class="secondary-btn" id="rust-research-copy-btn" type="button">Copy CLI fallback</button>
+                <button class="secondary-btn" id="source-research-copy-btn" type="button">Copy CLI fallback</button>
               </div></details>
             </div>
             <pre class="intelligence-log" id="artifact-fleet-output" aria-live="polite" hidden></pre>
@@ -663,7 +666,7 @@
 
               <section class="enterprise-assessment" data-enterprise-assessment-view="artifact" hidden>
                 <div class="enterprise-surface enterprise-handoff">
-                  <div class="enterprise-section-head"><div><h3>Artifact research moved to Automation</h3><p>The Artifact Fleet and exact-package workflow now share one canonical Research Pipeline, avoiding duplicate controls and conflicting status.</p></div></div>
+                  <div class="enterprise-section-head"><div><h3>Artifact research moved to Automation</h3><p>The Artifact Fleet and Source-First Artifact Research workflow share one canonical pipeline, avoiding duplicate controls and conflicting status.</p></div></div>
                   <div class="enterprise-safety compact">Enterprise exposure records remain here. Registry artifact intake, model triage, analyst escalation, and review-only drafting live in Automation.</div>
                   <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-open-research-pipeline-btn" type="button">Open Research Pipeline</button></div>
                 </div>
@@ -1359,7 +1362,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <div class="guide-step"><span>3</span><p>Click <strong>Queue model triage</strong> only after saving the intended route under <strong>Automation → Models</strong>. It creates jobs for that route; it does not silently install packages, execute artifacts, or publish research.</p></div>
                 <div class="guide-step"><span>4</span><p>Use <strong>Refresh analyst queue</strong> to review suspicious or inconclusive results. Keep analyst decisions and publication approval separate from automated indexing and scanning.</p></div>
                 <div class="guide-step"><span>5</span><p>Use <strong>Validate rule pack</strong> after rule changes and <strong>Run fixture benchmark</strong> only for synthetic throughput checks. The benchmark is not proof of production-scale capacity.</p></div>
-                <div class="guide-step"><span>6</span><p>Expand <strong>Research an exact Rust crate</strong> to preview crates.io metadata, verify an exact crate checksum, quarantine and statically scan it, compare a supplied legitimate crate, and route strong evidence into Research. Cargo and package code are never executed.</p></div>
+                  <div class="guide-step"><span>6</span><p>Open <strong>Source-First Artifact Research</strong> to choose a research type and ecosystem, preview metadata, quarantine and statically scan an approved artifact, compare a supplied reference, and route strong evidence into Research. Package code is never installed or executed; crates.io is one supported adapter.</p></div>
               </div>
               <div class="guide-callout guide-warning">The exact <code>scan-artifact</code>, <code>triage-show</code>, and research-handoff commands remain CLI-only because they require a reviewed artifact path or identifier. Browser actions are allowlisted and never execute untrusted package code.</div>
             </section>
@@ -1594,7 +1597,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260722-asd-console-theme"></script>
-  <script src="./app.js?v=20260823-action-audit"></script>
+  <script src="./app.js?v=20260823-source-first-research"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

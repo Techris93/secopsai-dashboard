@@ -188,12 +188,12 @@ const state = {
     loading: false,
     error: null,
     output: '',
-    rustOutput: '',
-    rustError: null,
-    rustResult: null,
-    rustCommand: '',
-    rustCompletedActions: [],
-    rustFollowupResults: {}
+    researchOutput: '',
+    researchError: null,
+    researchResult: null,
+    researchCommand: '',
+    researchCompletedActions: [],
+    researchFollowupResults: {}
   },
   researchCases: {
     view: 'cases',
@@ -4578,7 +4578,7 @@ function renderAutomation() {
     models: ['Model routing', 'Choose any catalog model, persist it as the primary, and configure explicit ordered fallbacks.'],
     review: ['Alert review', 'Queue bounded analysis and control evidence-gated review policy without granting publication rights.'],
     investigations: ['Investigations', 'Track high-priority evidence collection and the coordinated daily workflow.'],
-    research: ['Research pipeline', 'Move exact registry artifacts through safe static analysis, minimized model triage, analyst review, and a review-only draft.'],
+    research: ['Research pipeline', 'Move package, artifact, repository, and extension evidence through safe static analysis, minimized model triage, analyst review, and a review-only draft.'],
     learning: ['Detection learning', 'Evaluate evidence-backed rule changes in replay, shadow, and canary stages before activation.'],
     jobs: ['Analysis jobs', 'Inspect durable requests, provider outcomes, complete results, and recovery actions.']
   }[view] || ['Model routing', 'Choose and persist an approved analysis model.'];
@@ -10530,41 +10530,41 @@ function renderArtifactFleet() {
       ? `Artifact Fleet is unavailable here: ${state.artifactFleet.error}. Start the local helper for allowlisted actions; hosted mode does not run local artifact commands.`
       : 'Buttons use the Automation action token and an allowlisted local helper command. They never install, execute, or activate an artifact. Exact single-artifact scans still require the reviewed CLI path.';
   }
-  const rustOutput = el('rust-research-output');
-  if (rustOutput) {
-    rustOutput.textContent = state.artifactFleet.rustOutput || '';
-    rustOutput.hidden = !state.artifactFleet.rustOutput;
+  const researchOutput = el('source-research-output');
+  if (researchOutput) {
+    researchOutput.textContent = state.artifactFleet.researchOutput || '';
+    researchOutput.hidden = !state.artifactFleet.researchOutput;
   }
-  const rustResult = state.artifactFleet.rustResult?.result || state.artifactFleet.rustResult || {};
-  const rustCaseId = String(rustResult.case_id || '').trim();
-  const rustArtifactId = String(rustResult.artifact?.artifact_id || rustResult.scan?.artifact_id || '').trim();
-  const completedActions = new Set(state.artifactFleet.rustCompletedActions || []);
+  const researchResult = state.artifactFleet.researchResult?.result || state.artifactFleet.researchResult || {};
+  const researchCaseId = String(researchResult.case_id || researchResult.research?.case_id || '').trim();
+  const researchArtifactId = String(researchResult.artifact?.artifact_id || researchResult.scan?.artifact_id || '').trim();
+  const completedActions = new Set(state.artifactFleet.researchCompletedActions || []);
   const exactComparisonRequested = Boolean(
-    el('rust-research-compare-package')?.value?.trim()
-    || rustResult.comparison_package
-    || rustResult.comparison
+    el('source-research-compare-subject')?.value?.trim()
+    || researchResult.comparison_package
+    || researchResult.comparison
   );
   const readiness = [
-    ['Registry metadata collected', Boolean(rustResult.metadata || rustResult.package || completedActions.has('metadata'))],
-    ['Registry checksum verified', Boolean(rustResult.artifact?.sha256)],
-    ['Static and YARA evidence recorded', Boolean(rustResult.scan?.artifact_id)],
-    ['Verified package comparison recorded', exactComparisonRequested ? Boolean(rustResult.comparison) : false],
-    ['Research Case created', Boolean(rustCaseId)],
-    ['Evidence matrix built', Boolean(rustResult.evidence_matrix || completedActions.has('matrix'))],
-    ['Selected-model triage queued', Boolean(rustResult.model_job || completedActions.has('queue'))],
+    ['Source metadata collected', Boolean(researchResult.metadata || researchResult.package || completedActions.has('metadata'))],
+    ['Artifact identity recorded', Boolean(researchResult.artifact?.sha256)],
+    ['Static and YARA evidence recorded', Boolean(researchResult.scan?.artifact_id)],
+    ['Verified comparison recorded', exactComparisonRequested ? Boolean(researchResult.comparison) : false],
+    ['Research Case created', Boolean(researchCaseId)],
+    ['Evidence matrix built', Boolean(researchResult.evidence_matrix || completedActions.has('matrix'))],
+    ['Selected-model triage queued', Boolean(researchResult.model_job || completedActions.has('queue'))],
     ['Review-only draft created', completedActions.has('draft')],
   ];
   const readyCount = readiness.filter(([, ready]) => ready).length;
-  const readinessEl = el('rust-research-readiness');
+  const readinessEl = el('source-research-readiness');
   if (readinessEl) readinessEl.innerHTML = readiness.map(([label, ready]) => `<div class="research-evidence-row ${ready ? 'complete' : ''}"><span aria-hidden="true">${ready ? '✓' : '○'}</span><strong>${escapeHtml(label)}</strong></div>`).join('');
-  const readinessScore = el('rust-research-readiness-score');
+  const readinessScore = el('source-research-readiness-score');
   if (readinessScore) readinessScore.textContent = `${readyCount}/8`;
-  const readinessMessage = el('rust-research-readiness-message');
+  const readinessMessage = el('source-research-readiness-message');
   if (readinessMessage) readinessMessage.textContent = readyCount === 8
     ? 'The review-only draft exists. An analyst must still verify claims and approve publication.'
-    : rustCaseId
+    : researchCaseId
       ? `${8 - readyCount} evidence step${8 - readyCount === 1 ? '' : 's'} remain. Draft creation does not publish or deploy.`
-      : 'Run an exact package intake to create evidence. A malware claim is never inferred from a package name alone.';
+      : 'Run source-first research to create evidence. A malware claim is never inferred from a package name alone.';
   const stages = el('research-production-stages');
   if (stages) {
     const stageReady = [readyCount >= 1, readyCount >= 3, readyCount >= 7, false, readyCount >= 8];
@@ -10574,10 +10574,10 @@ function renderArtifactFleet() {
     });
   }
   for (const [id, enabled] of [
-    ['rust-research-matrix-btn', Boolean(rustCaseId)],
-    ['rust-research-draft-btn', Boolean(rustCaseId && (rustResult.evidence_matrix || completedActions.has('matrix')))],
-    ['rust-research-open-case-btn', Boolean(rustCaseId)],
-    ['rust-research-queue-btn', Boolean(rustArtifactId)],
+    ['source-research-matrix-btn', Boolean(researchCaseId)],
+    ['source-research-draft-btn', Boolean(researchCaseId && (researchResult.evidence_matrix || completedActions.has('matrix')))],
+    ['source-research-open-case-btn', Boolean(researchCaseId)],
+    ['source-research-queue-btn', Boolean(researchArtifactId)],
   ]) {
     const button = el(id);
     if (button) button.disabled = !enabled;
@@ -10622,34 +10622,64 @@ async function runArtifactFleetAction(action, payload = {}, button = null) {
   }
 }
 
-async function runRustPackageResearchAction(action, button = null) {
+function sourceResearchPayload(action) {
+  return {
+    action,
+    research_type: el('source-research-type')?.value || 'package_artifact',
+    ecosystem: el('source-research-ecosystem')?.value || 'npm',
+    package: el('source-research-subject')?.value?.trim() || '',
+    version: el('source-research-version')?.value?.trim() || '',
+    compare_package: el('source-research-compare-subject')?.value?.trim() || '',
+    compare_version: el('source-research-compare-version')?.value?.trim() || '',
+    source_reference: el('source-research-source')?.value?.trim() || '',
+    source_repository: el('source-research-repository')?.value?.trim() || '',
+    persist_findings: Boolean(el('source-research-persist')?.checked),
+    create_case: el('source-research-create-case')?.checked !== false,
+    model: state.intelligence.selectedModel || ''
+  };
+}
+
+function updateSourceResearchForm() {
+  const ecosystem = el('source-research-ecosystem')?.value || '';
+  const subjectLabel = el('source-research-subject-label');
+  const subject = el('source-research-subject');
+  const compareLabel = el('source-research-compare-label');
+  if (ecosystem === 'crates') {
+    if (subjectLabel) subjectLabel.textContent = 'Crate package';
+    if (subject) subject.placeholder = 'proc-macro1';
+    if (compareLabel) compareLabel.textContent = 'Comparison crate (optional)';
+  } else if (ecosystem === 'github') {
+    if (subjectLabel) subjectLabel.textContent = 'Repository';
+    if (subject) subject.placeholder = 'owner/repository';
+    if (compareLabel) compareLabel.textContent = 'Comparison repository (optional)';
+  } else if (ecosystem === 'open-vsx' || ecosystem === 'chrome-web-store') {
+    if (subjectLabel) subjectLabel.textContent = 'Extension ID';
+    if (subject) subject.placeholder = 'publisher.extension';
+    if (compareLabel) compareLabel.textContent = 'Known-good extension (optional)';
+  } else {
+    if (subjectLabel) subjectLabel.textContent = 'Package or artifact';
+    if (subject) subject.placeholder = ecosystem === 'packagist' ? 'vendor/package' : '@scope/package or package';
+    if (compareLabel) compareLabel.textContent = 'Comparison subject (optional)';
+  }
+}
+
+async function runSourceFirstResearchAction(action, button = null) {
   const tokenInput = el('intelligence-admin-token');
   state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
   if (!state.intelligence.adminToken) {
-    showToast('Add the Automation action token in Administration before running Rust Package Research.', 'error');
+    showToast('Add the Automation action token in Administration before running source-first research.', 'error');
     setPage('automation');
     return null;
   }
-  const payload = {
-    action,
-    package: el('rust-research-package')?.value?.trim() || '',
-    version: el('rust-research-version')?.value?.trim() || '',
-    compare_package: el('rust-research-compare-package')?.value?.trim() || '',
-    compare_version: el('rust-research-compare-version')?.value?.trim() || '',
-    source_reference: el('rust-research-source')?.value?.trim() || '',
-    persist_findings: Boolean(el('rust-research-persist')?.checked),
-    create_case: el('rust-research-create-case')?.checked !== false,
-    draft_blog: false,
-    model: state.intelligence.selectedModel || ''
-  };
-  if (!payload.package || !payload.version) {
-    showToast('Enter a crate package and exact version first.', 'error');
+  const payload = sourceResearchPayload(action);
+  if (!payload.package) {
+    showToast('Enter a package, extension, repository, or artifact identifier first.', 'error');
     return null;
   }
   sessionStorage.setItem('secopsai_intelligence_admin_token', state.intelligence.adminToken);
   setButtonBusy(button, true, 'Working…');
   try {
-    const response = await dashboardApiFetch('/api/secopsai/rust-package-research', {
+    const response = await dashboardApiFetch('/api/secopsai/source-first-research', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -10658,42 +10688,44 @@ async function runRustPackageResearchAction(action, button = null) {
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.ok === false) throw new Error(result.error || `Rust Package Research HTTP ${response.status}`);
-    state.artifactFleet.rustError = null;
-    state.artifactFleet.rustOutput = JSON.stringify(result.result || result, null, 2);
-    state.artifactFleet.rustResult = result;
-    state.artifactFleet.rustCompletedActions = [...new Set([
-      ...state.artifactFleet.rustCompletedActions,
+    if (!response.ok || result.ok === false) throw new Error(result.error || `Source-first research HTTP ${response.status}`);
+    state.artifactFleet.researchError = null;
+    state.artifactFleet.researchOutput = JSON.stringify(result.result || result, null, 2);
+    state.artifactFleet.researchResult = result;
+    state.artifactFleet.researchCompletedActions = [...new Set([
+      ...state.artifactFleet.researchCompletedActions,
       action === 'preview' ? 'metadata' : 'intake'
     ])];
     const cliArg = value => `'${String(value).replaceAll("'", "'\\''")}'`;
-    state.artifactFleet.rustCommand = [
-      'secopsai research rust-package',
+    state.artifactFleet.researchCommand = [
+      'secopsai research investigate',
+      `--ecosystem ${cliArg(payload.ecosystem)}`,
+      `--research-type ${cliArg(payload.research_type)}`,
       `--package ${cliArg(payload.package)}`,
       `--version ${cliArg(payload.version)}`,
-      payload.compare_package ? `--compare-package ${cliArg(payload.compare_package)}` : '',
-      payload.compare_version ? `--compare-version ${cliArg(payload.compare_version)}` : '',
+      payload.compare_package ? `--comparison-package ${cliArg(payload.compare_package)}` : '',
+      payload.compare_version ? `--comparison-version ${cliArg(payload.compare_version)}` : '',
       payload.source_reference ? `--source-reference ${cliArg(payload.source_reference)}` : '',
+      payload.source_repository ? `--source-repository ${cliArg(payload.source_repository)}` : '',
       payload.persist_findings ? '--persist-findings' : '',
-      payload.draft_blog ? '--draft-blog' : '',
       '--json',
     ].filter(Boolean).join(' ');
-    showToast(`Rust Package Research completed: ${humanizeSnake(action)}`, 'success');
+    showToast(`Source-first research completed: ${humanizeSnake(action)}`, 'success');
     await loadArtifactFleetStatus();
     return result;
   } catch (error) {
-    state.artifactFleet.rustError = error?.message || String(error);
-    state.artifactFleet.rustOutput = JSON.stringify({ ok: false, action, error: state.artifactFleet.rustError }, null, 2);
+    state.artifactFleet.researchError = error?.message || String(error);
+    state.artifactFleet.researchOutput = JSON.stringify({ ok: false, action, error: state.artifactFleet.researchError }, null, 2);
     renderArtifactFleet();
-    showToast(state.artifactFleet.rustError, 'error');
+    showToast(state.artifactFleet.researchError, 'error');
     return null;
   } finally {
     setButtonBusy(button, false);
   }
 }
 
-async function runRustResearchFollowup(action, button = null) {
-  const result = state.artifactFleet.rustResult?.result || state.artifactFleet.rustResult || {};
+async function runSourceResearchFollowup(action, button = null) {
+  const result = state.artifactFleet.researchResult?.result || state.artifactFleet.researchResult || {};
   const caseId = String(result.case_id || '').trim();
   const artifactId = String(result.artifact?.artifact_id || result.scan?.artifact_id || '').trim();
   if (action === 'open-case') {
@@ -10701,15 +10733,15 @@ async function runRustResearchFollowup(action, button = null) {
     return openResearchCase(caseId);
   }
   if (action === 'copy-cli') {
-    if (state.artifactFleet.rustCommand) await copyTextWithStatus(state.artifactFleet.rustCommand, 'Rust research CLI copied');
-    return state.artifactFleet.rustCommand;
+    if (state.artifactFleet.researchCommand) await copyTextWithStatus(state.artifactFleet.researchCommand, 'Source-first research CLI copied');
+    return state.artifactFleet.researchCommand;
   }
   if (!caseId && action !== 'queue') {
-    showToast('Run Rust Package Research first so a Research Case is available.', 'error');
+    showToast('Run source-first research first so a Research Case is available.', 'error');
     return null;
   }
   if (action === 'queue' && !artifactId) {
-    showToast('Run Rust Package Research first so an artifact is available.', 'error');
+    showToast('Run source-first research first so an artifact is available.', 'error');
     return null;
   }
   const tokenInput = el('intelligence-admin-token');
@@ -10721,17 +10753,17 @@ async function runRustResearchFollowup(action, button = null) {
   }
   setButtonBusy(button, true, 'Working…');
   try {
-    const response = await dashboardApiFetch('/api/secopsai/rust-package-research', {
+    const response = await dashboardApiFetch('/api/secopsai/source-first-research', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-SecOpsAI-Intelligence-Token': state.intelligence.adminToken},
       body: JSON.stringify({action, case_id: caseId, artifact_id: artifactId, model: state.intelligence.selectedModel || ''})
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Rust research follow-up HTTP ${response.status}`);
-    state.artifactFleet.rustOutput = JSON.stringify(payload.result || payload, null, 2);
-    state.artifactFleet.rustCompletedActions = [...new Set([...state.artifactFleet.rustCompletedActions, action])];
-    state.artifactFleet.rustFollowupResults[action] = payload.result || payload;
-    showToast(`Rust research follow-up completed: ${humanizeSnake(action)}`, 'success');
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Source-first research follow-up HTTP ${response.status}`);
+    state.artifactFleet.researchOutput = JSON.stringify(payload.result || payload, null, 2);
+    state.artifactFleet.researchCompletedActions = [...new Set([...state.artifactFleet.researchCompletedActions, action])];
+    state.artifactFleet.researchFollowupResults[action] = payload.result || payload;
+    showToast(`Source-first research follow-up completed: ${humanizeSnake(action)}`, 'success');
     await loadArtifactFleetStatus();
     return payload;
   } catch (error) {
@@ -11323,13 +11355,15 @@ function bindEvents() {
   el('enterprise-workflow-save-btn')?.addEventListener('click', event => runEnterpriseAction('workflow', enterpriseWorkflowRecord(), event.currentTarget, 'enterprise-workflow-output'));
   el('enterprise-open-research-pipeline-btn')?.addEventListener('click', () => setPage('automation', { routeOverride: AUTOMATION_VIEW_ROUTES.research, scrollToTarget: false }));
   el('artifact-fleet-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadArtifactFleetStatus(), { successMessage: 'Artifact Fleet status refreshed' }));
-  el('rust-research-preview-btn')?.addEventListener('click', event => runRustPackageResearchAction('preview', event.currentTarget));
-  el('rust-research-run-btn')?.addEventListener('click', event => runRustPackageResearchAction('run', event.currentTarget));
-  el('rust-research-matrix-btn')?.addEventListener('click', event => runRustResearchFollowup('matrix', event.currentTarget));
-  el('rust-research-queue-btn')?.addEventListener('click', event => runRustResearchFollowup('queue', event.currentTarget));
-  el('rust-research-draft-btn')?.addEventListener('click', event => runRustResearchFollowup('draft', event.currentTarget));
-  el('rust-research-open-case-btn')?.addEventListener('click', event => runRustResearchFollowup('open-case', event.currentTarget));
-  el('rust-research-copy-btn')?.addEventListener('click', event => runRustResearchFollowup('copy-cli', event.currentTarget));
+  el('source-research-preview-btn')?.addEventListener('click', event => runSourceFirstResearchAction('preview', event.currentTarget));
+  el('source-research-run-btn')?.addEventListener('click', event => runSourceFirstResearchAction('run', event.currentTarget));
+  el('source-research-matrix-btn')?.addEventListener('click', event => runSourceResearchFollowup('matrix', event.currentTarget));
+  el('source-research-queue-btn')?.addEventListener('click', event => runSourceResearchFollowup('queue', event.currentTarget));
+  el('source-research-draft-btn')?.addEventListener('click', event => runSourceResearchFollowup('draft', event.currentTarget));
+  el('source-research-open-case-btn')?.addEventListener('click', event => runSourceResearchFollowup('open-case', event.currentTarget));
+  el('source-research-copy-btn')?.addEventListener('click', event => runSourceResearchFollowup('copy-cli', event.currentTarget));
+  el('source-research-ecosystem')?.addEventListener('change', updateSourceResearchForm);
+  updateSourceResearchForm();
   document.querySelectorAll('[data-artifact-fleet-action]').forEach(button => {
     button.addEventListener('click', event => runArtifactFleetAction(event.currentTarget.dataset.artifactFleetAction, {}, event.currentTarget));
   });

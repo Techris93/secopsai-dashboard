@@ -159,48 +159,48 @@ def test_artifact_fleet_click_surface_is_present_and_static_only():
     assert "never installed, executed, or activated" in html
 
 
-def test_rust_package_research_actions_are_typed_and_allowlisted():
-    preview = dashboard_server.build_rust_package_research_args(
+def test_source_first_research_actions_are_typed_and_allowlisted():
+    preview = dashboard_server.build_source_first_research_args(
         "preview",
-        {"package": "proc-macro1", "version": "1.0.107", "compare_package": "proc-macro2", "compare_version": "1.0.107"},
+        {"ecosystem": "crates", "research_type": "package_compromise", "package": "proc-macro1", "version": "1.0.107", "comparison_package": "proc-macro2", "comparison_version": "1.0.107"},
     )
-    assert preview[:6] == ["research", "rust-package", "--package", "proc-macro1", "--version", "1.0.107"]
+    assert preview[:6] == ["research", "investigate", "--ecosystem", "crates", "--research-type", "package_compromise"]
+    assert "proc-macro1" in preview
     assert "--dry-run" in preview
-    run = dashboard_server.build_rust_package_research_args(
+    run = dashboard_server.build_source_first_research_args(
         "run",
-        {"package": "proc-macro1", "version": "1.0.107", "source_reference": "https://research.example/report", "persist_findings": True, "draft_blog": True},
+        {"ecosystem": "npm", "research_type": "package_compromise", "package": "left-pad", "version": "1.3.0", "source_reference": "https://research.example/report", "persist_findings": True},
     )
     assert "--persist-findings" in run
-    assert "--draft-blog" in run
     assert "--artifact-db-path" in run
-    matrix = dashboard_server.build_rust_package_research_args("matrix", {"case_id": "RSC-0123456789AB"})
+    matrix = dashboard_server.build_source_first_research_args("matrix", {"case_id": "RSC-0123456789AB"})
     assert matrix[:4] == ["research", "workflow", "evidence-matrix", "RSC-0123456789AB"]
-    draft = dashboard_server.build_rust_package_research_args("draft", {"case_id": "RSC-0123456789AB"})
+    draft = dashboard_server.build_source_first_research_args("draft", {"case_id": "RSC-0123456789AB"})
     assert draft[:4] == ["research", "case", "draft-blog", "RSC-0123456789AB"]
-    queue = dashboard_server.build_rust_package_research_args("queue", {"artifact_id": "ART-0123456789ABCDEF", "model": "xai/grok-4.6"})
+    queue = dashboard_server.build_source_first_research_args("queue", {"artifact_id": "ART-0123456789ABCDEF", "model": "xai/grok-4.6"})
     assert "--job-db-path" in queue
     assert "xai/grok-4.6" in queue
     with pytest.raises(ValueError):
-        dashboard_server.build_rust_package_research_args("run", {"package": "bad;curl", "version": "1.0.0"})
+        dashboard_server.build_source_first_research_args("run", {"ecosystem": "npm", "package": "bad;curl", "version": "1.0.0"})
     with pytest.raises(ValueError):
-        dashboard_server.build_rust_package_research_args("run", {"package": "crate", "version": "1.0.0", "source_reference": "file:///tmp/private"})
+        dashboard_server.build_source_first_research_args("run", {"ecosystem": "crates", "package": "crate", "version": "1.0.0", "source_reference": "file:///tmp/private"})
 
 
-def test_rust_package_research_dashboard_surface_is_present():
+def test_source_first_research_dashboard_surface_is_present():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
-    for marker in ("rust-package-research-panel", "rust-research-package", "rust-research-preview-btn", "rust-research-run-btn", "rust-research-matrix-btn", "rust-research-queue-btn", "rust-research-draft-btn", "rust-research-open-case-btn", "rust-research-copy-btn", "rust-research-create-case", "rust-research-output"):
+    for marker in ("source-first-research-panel", "source-research-ecosystem", "source-research-subject", "source-research-preview-btn", "source-research-run-btn", "source-research-matrix-btn", "source-research-queue-btn", "source-research-draft-btn", "source-research-open-case-btn", "source-research-copy-btn", "source-research-create-case", "source-research-output"):
         assert marker in html
-    assert "rust-research-compare-btn" not in html
-    assert "rust-research-draft\"" not in html
-    assert "runRustPackageResearchAction" in app
-    assert "/api/secopsai/rust-package-research" in server
-    assert "build_rust_package_research_args" in server
+    assert "runSourceFirstResearchAction" in app
+    assert "/api/secopsai/source-first-research" in server
+    assert "build_source_first_research_args" in server
+    assert "EXACT CRATES.IO INTAKE" not in html
+    assert "Run Rust package research" not in html
     assert 'id="automation-research-section"' in html
     assert 'data-automation-view="research"' in html
     assert 'id="enterprise-open-research-pipeline-btn"' in html
-    assert html.count('id="rust-package-research-panel"') == 1
+    assert html.count('id="source-first-research-panel"') == 1
 
 
 def test_model_routing_ui_persists_the_new_selection_before_refresh():

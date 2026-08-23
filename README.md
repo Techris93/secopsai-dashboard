@@ -92,10 +92,12 @@ flowchart LR
 ```
 
 Artifact Fleet performs metadata indexing, static and YARA checks, minimized
-model triage, and analyst escalation. **Run Rust Package Research** verifies an
-exact crates.io checksum, quarantines the archive, inspects it without running
-Cargo or package code, and creates a durable Research Case. Publications then
-keeps editorial approval separate from deployment.
+model triage, and analyst escalation. **Source-First Artifact Research** is the
+single adapter-driven workflow for npm, PyPI, crates.io, Packagist, Go, Maven,
+NuGet, RubyGems, Open VSX, GitHub sources, Hugging Face metadata, containers,
+and approved archives. It verifies exact metadata and checksums where
+available, quarantines artifacts, never runs package code, and creates durable
+Research Cases. Publications keeps editorial approval separate from deployment.
 
 ## Repository Layout
 

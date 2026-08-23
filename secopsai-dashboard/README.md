@@ -19,7 +19,7 @@ publication, and deployment behind explicit safety boundaries.
 | Work | Manage tasks, approvals, investigations, execution runs, and recovery |
 | Research | Classify leads, operate watchlists, build durable cases, review evidence, and control sandbox/disclosure gates |
 | Publications | Fetch sources, review drafts and media, approve content, stage posts, preserve the archive, and deploy separately |
-| Automation | Select models, configure explicit fallbacks, operate the Artifact Fleet, run exact Rust package research, and review jobs |
+| Automation | Select models, configure explicit fallbacks, operate the Artifact Fleet, run universal Source-First Artifact Research, and review jobs |
 | System | Inspect connector health, credentials, audit context, and hosted/local capability boundaries |
 
 The deployable UI uses one primary navigation model. Supply Chain Triage,
@@ -104,16 +104,18 @@ availability failures.
 5. Review the analyst queue and evidence-linked Research Case.
 6. Create a review-only draft after publication readiness passes.
 
-**Run Rust Package Research** fetches exact crates.io metadata, verifies the
-registry checksum, quarantines the archive, performs no-execution analysis,
-optionally compares a verified reference crate, and creates a durable case.
-Cargo and package code never run.
+**Source-First Artifact Research** fetches exact metadata for the selected
+ecosystem, verifies checksums where available, quarantines approved artifacts,
+performs no-execution analysis, optionally compares a verified reference, and
+creates a durable case. Crates.io/Rust is one adapter; npm, PyPI, Packagist,
+Go, Maven, NuGet, RubyGems, Open VSX, GitHub, Hugging Face, containers, and
+approved archives use the same pipeline.
 
 The full operational design is documented in:
 
 - [Artifact Fleet Operations](https://docs.secopsai.dev/artifact-fleet-operations/)
 - [Research and Verification](https://docs.secopsai.dev/research-and-verification/)
-- [Rust Package Research Automation](https://docs.secopsai.dev/rust-package-research-automation/)
+- [Universal Source-First Research](https://docs.secopsai.dev/universal-source-first-research/)
 - [Intelligence Integrations](https://docs.secopsai.dev/intelligence-integrations/)
 
 ## Publication Contract

@@ -742,7 +742,7 @@ function requireArtifactFleetAdmin(request, env) {
     return jsonResponse(
       {
         ok: false,
-        error: "Protected Enterprise, Artifact Fleet, and Rust Package Research actions require a configured local helper or Core intelligence token.",
+        error: "Protected Enterprise, Artifact Fleet, and Source-First Artifact Research actions require a configured local helper or Core intelligence token.",
         code: "not_configured",
         hint: "Use local helper mode and the Automation action token for typed Enterprise workflows, artifact indexing, scanning, triage, and benchmarking.",
       },
@@ -1361,7 +1361,7 @@ async function proxySecopsaiHelper(request, env) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
   const intelligenceToken = request.headers.get("x-secopsai-intelligence-token") || "";
-  if (intelligenceToken && ["/api/secopsai/enterprise-action", "/api/secopsai/artifact-fleet", "/api/secopsai/rust-package-research"].includes(incomingUrl.pathname)) {
+  if (intelligenceToken && ["/api/secopsai/enterprise-action", "/api/secopsai/artifact-fleet", "/api/secopsai/rust-package-research", "/api/secopsai/source-first-research"].includes(incomingUrl.pathname)) {
     headers.set("X-SecOpsAI-Intelligence-Token", intelligenceToken);
   }
 
@@ -1559,6 +1559,10 @@ async function routeRequest(request, env) {
         if (artifactAuthResponse) return artifactAuthResponse;
       }
       if (request.method === "POST" && url.pathname === "/api/secopsai/rust-package-research") {
+        const artifactAuthResponse = requireArtifactFleetAdmin(request, env);
+        if (artifactAuthResponse) return artifactAuthResponse;
+      }
+      if (request.method === "POST" && url.pathname === "/api/secopsai/source-first-research") {
         const artifactAuthResponse = requireArtifactFleetAdmin(request, env);
         if (artifactAuthResponse) return artifactAuthResponse;
       }
