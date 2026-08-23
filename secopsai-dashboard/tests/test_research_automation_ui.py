@@ -294,8 +294,11 @@ def test_research_pipeline_exposes_stalled_model_state_without_polling_full_disc
     assert "function researchPipelineOperationalState(pipeline)" in source
     assert "Model analysis needs attention" in source
     assert "research-pipeline-open-automation-btn" in source
+    assert "research-pipeline-refresh-btn" in source
     assert "step.intelligence_job || null" in source
     assert "if (!caseId) {\n      state.researchPipelinePollTimer = null;" in source
+    assert "operational.state !== 'stalled'" in source
+    assert "clearTimeout(state.researchPipelinePollTimer)" in source
     research_refresh = source[source.index("} else if (page === 'research-cases')") : source.index("} else if (page === 'coverage')")]
     assert "loadResearchDiscovery" not in research_refresh
     assert "lastResearchSurfaceRefreshAt >= 30000" in research_refresh

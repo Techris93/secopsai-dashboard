@@ -899,7 +899,7 @@ function stopDashboardRuntime() {
     state.surfaceRefreshTimer = null;
   }
   if (state.researchPipelinePollTimer) {
-    clearInterval(state.researchPipelinePollTimer);
+    clearTimeout(state.researchPipelinePollTimer);
     state.researchPipelinePollTimer = null;
   }
   state.actionAutoRefresh.forEach(entry => {
@@ -9218,6 +9218,14 @@ function bindResearchCaseDetailActions(researchCase) {
     }, event.currentTarget);
   });
   el('research-pipeline-open-automation-btn')?.addEventListener('click', () => setPage('automation'));
+  el('research-pipeline-refresh-btn')?.addEventListener('click', event => runRefreshAction(
+    event.currentTarget,
+    async () => {
+      await loadResearchCaseDetail(researchCase.case_id, { render: false });
+      renderResearchCases();
+    },
+    { successMessage: 'Research pipeline status refreshed', errorMessage: 'Research pipeline refresh failed' },
+  ));
   document.querySelectorAll('#research-case-detail .research-pipeline-review-btn').forEach(button => button.addEventListener('click', async event => {
     const decision = button.dataset.decision;
     const itemId = button.dataset.itemId;
@@ -9649,7 +9657,7 @@ function renderInvestigationPipeline(researchCase, ecosystems) {
       ${pipeline ? renderStatusPill(pipeline.status) : renderStatusPill('not_started', 'Not started')}
     </div>
     <div class="research-pipeline-summary"><strong>${escapeHtml(statusCopy)}</strong>${pipeline ? `<span><code>${escapeHtml(pipeline.pipeline_id)}</code> · revision ${escapeHtml(String(pipeline.revision || 1))}</span>` : ''}</div>
-    ${['stalled', 'blocked'].includes(operational.state) ? `<div class="research-pipeline-operational tone-${escapeHtml(operational.tone)}"><div><strong>${operational.state === 'blocked' ? 'Model analysis is blocked' : 'Model analysis needs attention'}</strong><span>${escapeHtml(operational.message)}</span></div><button class="secondary-btn" id="research-pipeline-open-automation-btn" type="button">Open Automation</button></div>` : ''}
+    ${['stalled', 'blocked'].includes(operational.state) ? `<div class="research-pipeline-operational tone-${escapeHtml(operational.tone)}"><div><strong>${operational.state === 'blocked' ? 'Model analysis is blocked' : 'Model analysis needs attention'}</strong><span>${escapeHtml(operational.message)}</span></div><div class="research-pipeline-operational-actions">${operational.state === 'stalled' ? '<button class="secondary-btn" id="research-pipeline-refresh-btn" type="button">Refresh status</button>' : ''}<button class="secondary-btn" id="research-pipeline-open-automation-btn" type="button">Open Automation</button></div></div>` : ''}
     <div class="research-form-grid research-pipeline-targets">
       <label><span>Investigated package</span><input value="${escapeHtml(`${packageSubject.ecosystem || 'unknown'}:${packageSubject.name || 'No package subject'}`)}" readonly /></label>
       <label><span>Reference ecosystem</span><select id="research-pipeline-reference-ecosystem">${ecosystems.map(value => researchOption(value, reference.ecosystem || packageSubject.ecosystem || 'npm')).join('')}</select></label>
@@ -10056,14 +10064,17 @@ function renderResearchResolutions() {
 
 function syncResearchPipelinePolling() {
   const pipeline = (state.researchCases.selected?.pipelines || [])[0];
-  const shouldPoll = pipeline && ['running', 'awaiting_ai'].includes(pipeline.status);
+  const operational = researchPipelineOperationalState(pipeline);
+  const shouldPoll = pipeline
+    && ['running', 'awaiting_ai'].includes(pipeline.status)
+    && operational.state !== 'stalled';
   if (!shouldPoll) {
     if (state.researchPipelinePollTimer) clearTimeout(state.researchPipelinePollTimer);
     state.researchPipelinePollTimer = null;
     return;
   }
   if (state.researchPipelinePollTimer) return;
-  const delay = researchPipelineOperationalState(pipeline).pollMs || 30000;
+  const delay = operational.pollMs || 30000;
   state.researchPipelinePollTimer = setTimeout(async () => {
     const caseId = state.researchCases.selectedId;
     if (!caseId) {

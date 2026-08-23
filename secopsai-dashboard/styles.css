@@ -9872,3 +9872,17 @@ body.professional-ui .sidebar #global-status {
   opacity: 1 !important;
   text-shadow: none !important;
 }
+
+body.professional-ui .research-pipeline-operational-actions {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px !important;
+}
+
+@media (max-width: 720px) {
+  body.professional-ui .research-pipeline-operational-actions {
+    display: grid !important;
+    width: 100%;
+  }
+}
