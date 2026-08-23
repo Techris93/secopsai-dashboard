@@ -92,6 +92,16 @@ def test_specialist_policy_never_automates_repository_edits():
     assert args[args.index("--actor") + 1] == "mission-control"
 
 
+def test_specialist_policy_form_preserves_and_verifies_operator_selection():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "policyDirty: false" in app
+    assert "policySaving: false" in app
+    assert "!state.specialists.policyDirty && !state.specialists.policySaving" in app
+    assert "state.specialists.policyDirty = true" in app
+    assert "The saved specialist policy did not match your selection" in app
+    assert "Specialist automatic routing policy saved and verified" in app
+
+
 def test_specialist_response_redaction_removes_local_paths_and_raw_patches():
     payload = {
         "run_id": "SOR-0123456789ABCDEF",

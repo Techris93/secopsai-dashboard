@@ -158,7 +158,9 @@ const state = {
     data: null,
     loading: false,
     error: null,
-    selectedRunId: null
+    selectedRunId: null,
+    policyDirty: false,
+    policySaving: false
   },
   edgeWorkspace: {
     view: 'inventory',
@@ -3426,8 +3428,11 @@ function renderSpecialistOverview() {
   policyStrip.innerHTML = `<strong>Automation policy: ${escapeHtml(humanizeSnake(policy.mode || 'recommend'))}</strong><span>Automatic ceiling: ${escapeHtml(humanizeSnake(policy.maximum_automatic_tier || 'recommend'))}</span><span>Independent review: ${policy.independent_review === false ? 'off' : 'required'}</span><span>Worktrees, PR-ready delivery, merge, deploy, publish, disclosure, cloud mutation, secrets, and destructive actions are never automatic.</span>`;
   const policyMode = el('specialist-policy-mode');
   const policyTier = el('specialist-policy-tier');
-  if (policyMode && document.activeElement !== policyMode) policyMode.value = policy.mode || 'recommend';
-  if (policyTier && document.activeElement !== policyTier) policyTier.value = policy.maximum_automatic_tier || 'recommend';
+  // Background status refreshes must not replace a policy the operator is editing.
+  if (!state.specialists.policyDirty && !state.specialists.policySaving) {
+    if (policyMode) policyMode.value = policy.mode || 'recommend';
+    if (policyTier) policyTier.value = policy.maximum_automatic_tier || 'recommend';
+  }
   if (policyTier) policyTier.disabled = (policyMode?.value || policy.mode) !== 'guarded';
   const catalogVersion = String(catalog.version || 'unknown');
   const upstreamCommit = String(catalog.upstream?.commit || '').slice(0, 12);
@@ -3514,13 +3519,30 @@ async function specialistApiAction(action, payload = {}, button = null, { write 
 async function saveSpecialistPolicy(button = null) {
   const mode = el('specialist-policy-mode')?.value || 'recommend';
   const maximumTier = mode === 'guarded' ? (el('specialist-policy-tier')?.value || 'recommend') : 'recommend';
-  const result = await specialistApiAction('policy', {
-    mode,
-    maximum_automatic_tier: maximumTier
-  }, button);
-  if (!result) return;
-  showToast('Specialist automatic routing policy saved.', 'success');
-  await loadSpecialists();
+  state.specialists.policySaving = true;
+  try {
+    const result = await specialistApiAction('policy', {
+      mode,
+      maximum_automatic_tier: maximumTier
+    }, button);
+    if (!result) return;
+    if (result.mode !== mode || result.maximum_automatic_tier !== maximumTier) {
+      throw new Error('The saved specialist policy did not match your selection. Your edits were preserved; retry after refreshing the helper.');
+    }
+    state.specialists.policyDirty = false;
+    await loadSpecialists();
+    const persisted = specialistStatusResult()?.policy || {};
+    if (persisted.mode !== mode || persisted.maximum_automatic_tier !== maximumTier) {
+      state.specialists.policyDirty = true;
+      throw new Error('The specialist policy could not be verified after save. Your selected values remain in the form.');
+    }
+    showToast('Specialist automatic routing policy saved and verified.', 'success');
+  } catch (error) {
+    state.specialists.policyDirty = true;
+    showToast(error?.message || String(error), 'error');
+  } finally {
+    state.specialists.policySaving = false;
+  }
 }
 
 async function autoRouteNextWorkItem(button = null) {
@@ -10494,10 +10516,11 @@ function renderArtifactFleet() {
   const artifacts = result.artifacts || {};
   const queue = result.queue || {};
   const triage = result.triage || {};
+  const awaitingCollection = Number(queue.scan_awaiting_collection || 0);
   const summary = el('artifact-fleet-summary');
   if (summary) summary.innerHTML = [
     ['Artifacts indexed', String(Object.values(artifacts).reduce((sum, value) => sum + Number(value || 0), 0)), 'Metadata stage', 'neutral'],
-    ['Scan queue', String(queue.scan_pending || 0), 'Awaiting safe static analysis', Number(queue.scan_pending || 0) ? 'warning' : 'neutral'],
+    ['Scan ready', String(queue.scan_pending || 0), `${awaitingCollection} metadata record${awaitingCollection === 1 ? '' : 's'} awaiting approved collection`, Number(queue.scan_pending || 0) ? 'warning' : 'neutral'],
     ['Model triage', String(triage.awaiting_model || 0), 'Minimized context only', Number(triage.awaiting_model || 0) ? 'warning' : 'neutral'],
     ['Analyst review', String(triage.analyst_review || 0), 'Suspicious or inconclusive', Number(triage.analyst_review || 0) ? 'danger' : 'neutral']
   ].map(([label, value, scope, tone]) => enterpriseReadinessItem(label, value, scope, tone)).join('');
@@ -11278,7 +11301,11 @@ function bindEvents() {
   el('work-board-view-btn')?.addEventListener('click', () => { workView = 'board'; renderTasks(); });
   el('specialist-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadSpecialists(), { successMessage: 'Specialist Orchestrator refreshed' }));
   el('specialist-policy-mode')?.addEventListener('change', event => {
+    state.specialists.policyDirty = true;
     if (el('specialist-policy-tier')) el('specialist-policy-tier').disabled = event.currentTarget.value !== 'guarded';
+  });
+  el('specialist-policy-tier')?.addEventListener('change', () => {
+    state.specialists.policyDirty = true;
   });
   el('specialist-policy-save-btn')?.addEventListener('click', event => saveSpecialistPolicy(event.currentTarget));
   el('specialist-route-next-btn')?.addEventListener('click', event => autoRouteNextWorkItem(event.currentTarget));

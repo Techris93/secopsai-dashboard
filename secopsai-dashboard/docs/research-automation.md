@@ -13,6 +13,31 @@ OpenCodex/Codex and are not stored by Mission Control.
 
 The pipeline never executes package code, guesses a legitimate comparison package, submits a sandbox artifact, sends disclosure, changes customer controls, approves publication, or publishes an article. Agent review may record a guarded case verdict; the actor, model, evidence, confidence, rationale, and pipeline revision remain auditable.
 
+## Safe automatic chain
+
+Use **Work → Specialist Orchestrator** and set **Auto-routing mode** to
+**Guarded automation** and **Automatic ceiling** to **Read-only analysis**.
+The form keeps an explicit unsaved state so background refreshes cannot replace
+your selection. **Save policy** reports success only after Core returns and a
+fresh status read confirms those exact values.
+
+With the daily workflow enabled, SecOpsAI automatically runs health preflight,
+registry collection and retries, candidate promotion, a bounded static-only
+Artifact Fleet batch, alert review, evidence investigations, guarded Research
+Case specialist routing, independent review synchronization, detection
+learning, retention, and operational alert delivery. An eligible case must be
+in `validation` or `ready_to_publish` with a structured subject and active
+evidence; initial `investigating` cases remain in the existing bounded model
+pipeline, and duplicate specialist runs are suppressed. Each run captures the selected OpenCodex model and explicit
+fallback policy; disabled fallback remains disabled.
+
+Completed specialist and reviewer summaries are attached once as analyst-note
+evidence, then the evidence matrix and publication safety check are refreshed.
+SecOpsAI may create a review-only draft only after a human has already approved
+the publication review. It never accepts the specialist result, approves
+publication, submits a sandbox sample, sends disclosure, publishes an approved
+post, or deploys the blog automatically.
+
 ## Review Complete Model Analysis
 
 Open **Automation → Jobs**, then select **Open full analysis** for a completed job. Mission Control shows the complete normalized result instead of reducing it to a short summary:
