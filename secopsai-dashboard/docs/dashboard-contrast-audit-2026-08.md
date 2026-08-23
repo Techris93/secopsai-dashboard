@@ -30,12 +30,17 @@ high-specificity surfaces that previously escaped the light theme:
 - Legacy overview cockpit cards, metric captions, work-table links, severity
   labels, native select options, and automation evidence markers are covered
   by explicit resting-state rules so they do not become readable only on hover.
+- Findings badges, inline action menus, and the Work scope note also use the
+  bright surface tokens; these were dynamic residuals found by the final
+  computed-style sweep.
 - The navigation rail and Enterprise setup banner remain intentionally dark,
   with explicit light text tokens and measured contrast.
-- Focus indicators are visible at rest, disabled controls remain legible, and
-  required content no longer depends on hover.
+- Focus indicators are visible at rest, disabled controls remain legible with
+  a 0.9 opacity cap (rather than the old low-contrast fade), and required
+  content no longer depends on hover.
 
-The stylesheet URL is cache-busted with `20260823-bright-contrast`.
+The stylesheet URL is cache-busted with `20260823-bright-contrast-v2` after the
+final dynamic-surface corrections.
 
 ## Evidence and verification
 

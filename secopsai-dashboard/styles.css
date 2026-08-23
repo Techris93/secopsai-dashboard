@@ -9520,7 +9520,7 @@ body.professional-ui .main :is(button, a, input, select, textarea, summary):focu
 }
 body.professional-ui .main :is(button, input, select, textarea)[disabled],
 body.professional-ui .main :is(button, input, select, textarea)[aria-disabled="true"] {
-  opacity: 0.78 !important;
+  opacity: 0.9 !important;
   background: #edf2ef !important;
   border-color: #cbd8d2 !important;
   color: #40534b !important;
@@ -9796,4 +9796,50 @@ body.professional-ui .main :is(select, option) {
 body.professional-ui .main option {
   background: #fff !important;
   color: var(--contrast-text) !important;
+}
+body.professional-ui .main .badge {
+  background: #f4f8f6 !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text-soft) !important;
+}
+body.professional-ui .main .badge.priority-normal,
+body.professional-ui .main .badge.domain-exec,
+body.professional-ui .main .badge.domain-platform,
+body.professional-ui .main .badge.domain-security {
+  background: #eaf3f8 !important;
+  border-color: #9fc1d3 !important;
+  color: var(--contrast-blue) !important;
+}
+body.professional-ui .main .badge.priority-low {
+  background: var(--contrast-green-soft) !important;
+  border-color: #9dccbd !important;
+  color: var(--contrast-green-strong) !important;
+}
+body.professional-ui .main .badge.priority-high,
+body.professional-ui .main .badge.external {
+  background: #fff5dc !important;
+  border-color: #d6b56c !important;
+  color: var(--contrast-amber) !important;
+}
+body.professional-ui .main .badge.priority-urgent,
+body.professional-ui .main .badge.priority-critical,
+body.professional-ui .main .badge.review {
+  background: #faecec !important;
+  border-color: #d49b9b !important;
+  color: var(--contrast-red) !important;
+}
+body.professional-ui .main .inline-action-menu summary {
+  background: #fff !important;
+  border-color: var(--contrast-border-strong) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .main .inline-action-menu > div {
+  background: #fff !important;
+  border-color: var(--contrast-border-strong) !important;
+  box-shadow: 0 12px 26px rgba(24, 56, 45, 0.12) !important;
+}
+body.professional-ui .main #work-scope-note {
+  background: var(--contrast-surface-muted) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text-soft) !important;
 }

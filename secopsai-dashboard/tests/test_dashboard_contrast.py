@@ -36,6 +36,10 @@ def test_bright_contrast_layer_defines_readable_tokens_and_controls():
     assert "body.professional-ui .main :is(.severity-urgent, .severity-critical)" in css
     assert "body.professional-ui .main option" in css
     assert "body.professional-ui .main .research-evidence-row > span:first-child" in css
+    assert "opacity: 0.9 !important" in css
+    assert "body.professional-ui .main .badge" in css
+    assert "body.professional-ui .main .inline-action-menu > div" in css
+    assert "body.professional-ui .main #work-scope-note" in css
     assert "body.professional-ui #page-triage-ops :is(" in css
     assert ".triage-alert-card" in css
     assert "body.professional-ui #page-operator-guide .guide-pill" in css
@@ -60,5 +64,5 @@ def test_bright_theme_does_not_use_hover_as_the_only_readability_fix():
 
 def test_stylesheet_cache_key_points_to_contrast_revision():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    assert 'styles.css?v=20260823-bright-contrast' in html
+    assert 'styles.css?v=20260823-bright-contrast-v2' in html
     assert 'styles.css?v=20260803-subsection-navigation' not in html
