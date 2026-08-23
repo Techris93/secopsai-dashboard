@@ -67,9 +67,13 @@ handler instead of relying on a user to clear browser cache.
 
 - `npm run check` passed (`node --check` for application and worker files).
 - `npm test` passed (Blog Ops worker and professional console contracts).
-- Full Python dashboard suite passed: `110 passed, 13 subtests passed`.
+- Full Python dashboard suite passed: `111 passed, 13 subtests passed`.
 - Focused action, Research, enterprise, security, and coverage contracts
   passed: `56 passed`.
+- Cache-key regression contract passed with the focused action tests (`16
+  passed` for the final action/intelligence subset).
+- Triage Ops unit suite passed: `44 tests`.
+- Core SecOpsAI suite passed: `619 passed, 4 subtests passed`.
 - `python3 -m py_compile dashboard_server.py` passed.
 - `git diff --check` passed.
 - Static button audit found no unreferenced fixed-ID controls after allowing
@@ -86,6 +90,10 @@ click could not be completed without the operator signing in again. The source
 trace, cache-bust contract, deterministic tests, and local test suite provide
 the reproducible evidence; after the next sign-in, verify one queue row with
 `Open case` and one invalid/missing case response in the refreshed dashboard.
+
+The GitHub Pages deployment workflow ran successfully for the pushed commits,
+but reported `Cloudflare deployment skipped: production secrets are not
+configured.` No Cloudflare credentials were changed or added locally.
 
 ## Safety preserved
 
