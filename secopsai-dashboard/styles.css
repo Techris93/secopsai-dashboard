@@ -9305,3 +9305,495 @@ body.professional-ui {
   .professional-ui .research-pipeline-operational { display: grid; }
   .professional-ui .research-pipeline-operational button { width: 100%; }
 }
+
+/* Bright contrast correction.
+   Older OKComputer and command-surface layers remain in this bundle for
+   component compatibility, but their dark tokens must not leak into the
+   bright operator workspace. Keep this layer last so high-specificity legacy
+   selectors cannot make required content readable only on hover. */
+body.professional-ui.okcomputer-skin {
+  --contrast-bg: #f3f7f5;
+  --contrast-surface: #ffffff;
+  --contrast-surface-muted: #f5f8f6;
+  --contrast-surface-selected: #e5f5ef;
+  --contrast-text: #17211e;
+  --contrast-text-strong: #10201b;
+  --contrast-text-soft: #40534b;
+  --contrast-text-muted: #53645d;
+  --contrast-text-subtle: #62716b;
+  --contrast-green: #087963;
+  --contrast-green-strong: #086b58;
+  --contrast-green-soft: #e5f5ef;
+  --contrast-blue: #0f4c81;
+  --contrast-amber: #8a5a00;
+  --contrast-red: #9e1b1b;
+  --contrast-border: #cbd8d2;
+  --contrast-border-strong: #9fb2aa;
+  --contrast-focus: #0b8068;
+
+  /* Re-map legacy variables so dynamic renderers inherit readable values. */
+  --void-black: var(--contrast-bg);
+  --surface: var(--contrast-surface);
+  --surface-elevated: var(--contrast-surface-muted);
+  --surface-soft: #edf4f0;
+  --border-color: var(--contrast-border);
+  --border-active: var(--contrast-border-strong);
+  --teal-primary: var(--contrast-green);
+  --teal-muted: var(--contrast-green-soft);
+  --text-primary: var(--contrast-text);
+  --text-secondary: var(--contrast-text-soft);
+  --text-tertiary: var(--contrast-text-muted);
+  --text-inverse: #ffffff;
+  --signal-canvas: var(--contrast-bg);
+  --signal-panel: var(--contrast-surface);
+  --signal-panel-2: var(--contrast-surface-muted);
+  --signal-panel-3: #edf4f0;
+  --signal-panel-4: #e4eee9;
+  --signal-line: var(--contrast-border);
+  --signal-line-soft: #dce7e1;
+  --signal-line-bright: #75b9a5;
+  --signal-text: var(--contrast-text);
+  --signal-text-strong: var(--contrast-text-strong);
+  --signal-muted: var(--contrast-text-soft);
+  --signal-muted-2: var(--contrast-text-muted);
+  --signal-cyan: var(--contrast-blue);
+  --signal-cyan-soft: #eaf3f8;
+  --signal-amber: var(--contrast-amber);
+  --signal-amber-soft: #fff5dc;
+  --signal-red: var(--contrast-red);
+  --signal-red-soft: #faecec;
+  --signal-green: var(--contrast-green);
+  --signal-green-soft: var(--contrast-green-soft);
+
+  background: var(--contrast-bg) !important;
+  color: var(--contrast-text) !important;
+}
+
+body.professional-ui.okcomputer-skin::before {
+  display: none;
+}
+
+body.professional-ui .main,
+body.professional-ui .page,
+body.professional-ui .page.active {
+  background: var(--contrast-bg) !important;
+  color: var(--contrast-text) !important;
+}
+
+body.professional-ui .top-strip,
+body.professional-ui .topbar-primary,
+body.professional-ui .topbar-secondary {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+}
+
+/* The navigation rail remains intentionally dark; its text is separately
+   specified so it does not inherit content-plane tokens. */
+body.professional-ui .sidebar {
+  background: linear-gradient(180deg, #10251f 0%, #0c1b17 100%) !important;
+  border-right-color: #29453c !important;
+  color: #edf7f2 !important;
+}
+
+body.professional-ui .sidebar .brand h1,
+body.professional-ui .sidebar .nav-btn .title,
+body.professional-ui .sidebar .nav-btn.active .title { color: #f5fbf8 !important; }
+body.professional-ui .sidebar .brand p,
+body.professional-ui .sidebar .brand-overline,
+body.professional-ui .sidebar .nav-group-label,
+body.professional-ui .sidebar .sidebar-subnav-heading,
+body.professional-ui .sidebar .sidebar-footer { color: #b6cec5 !important; }
+body.professional-ui .sidebar .nav-btn,
+body.professional-ui .sidebar .sidebar-subnav-btn { color: #dbeae4 !important; }
+body.professional-ui .sidebar .nav-btn .desc { color: #b6cec5 !important; }
+body.professional-ui .sidebar .nav-btn:hover,
+body.professional-ui .sidebar .sidebar-subnav-btn:hover,
+body.professional-ui .sidebar .sidebar-subnav-btn:focus-visible { color: #ffffff !important; }
+body.professional-ui .sidebar .nav-btn.active,
+body.professional-ui .sidebar .sidebar-subnav-btn.active,
+body.professional-ui .sidebar .sidebar-subnav-btn[aria-current="location"] {
+  background: #1d4b3e !important;
+  border-color: #37c5a1 !important;
+  color: #ffffff !important;
+}
+
+body.professional-ui .main :is(h1, h2, h3, h4, h5, h6, strong) {
+  color: var(--contrast-text) !important;
+}
+
+body.professional-ui .main :is(p, li, dt, dd, label, small, summary, .small,
+  .meta, .muted-inline, .card-subtle, .module-head p, .metric-label,
+  .kv-key, .empty, .empty-state, .hint, .section-subtitle) {
+  color: var(--contrast-text-soft) !important;
+}
+
+body.professional-ui .main :is(.card, .panel, .metric-card, .column,
+  .intelligence-console, .intelligence-module, .triage-ops-auth-card,
+  .research-stage-panel, .research-watchlist-panel, .research-discovery-panel,
+  .blog-draft-card, .blog-draft-item, .campaign-panel, .campaign-result-panel,
+  .finding-detail-card, .research-case-detail-panel, .research-case-list-panel,
+  .research-create-panel) {
+  background: var(--contrast-surface) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+  box-shadow: 0 8px 24px rgba(24, 56, 45, 0.055) !important;
+}
+
+body.professional-ui .main :is(input, select, textarea) {
+  background: var(--contrast-surface) !important;
+  border-color: var(--contrast-border-strong) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .main :is(input, select, textarea)::placeholder {
+  color: var(--contrast-text-muted) !important;
+  opacity: 1 !important;
+}
+
+body.professional-ui .main :is(table, .table-wrap) {
+  background: var(--contrast-surface) !important;
+  border-color: var(--contrast-border) !important;
+}
+body.professional-ui .main :is(thead, thead th) {
+  background: var(--contrast-surface-muted) !important;
+  color: var(--contrast-text-soft) !important;
+  border-bottom-color: var(--contrast-border-strong) !important;
+}
+body.professional-ui .main :is(td, tbody tr) {
+  background: var(--contrast-surface) !important;
+  color: var(--contrast-text) !important;
+  border-bottom-color: var(--contrast-border) !important;
+}
+body.professional-ui .main :is(tbody tr:hover, .selected-row, .finding-row:hover,
+  .finding-row.selected-row) { background: var(--contrast-surface-selected) !important; }
+
+body.professional-ui .main .eyebrow,
+body.professional-ui .main .section-kicker { color: var(--contrast-green-strong) !important; }
+body.professional-ui .main .status-pill {
+  background: #f4f8f6 !important;
+  border-color: #becdc6 !important;
+  color: #35463f !important;
+}
+body.professional-ui .main .status-pill.status-critical,
+body.professional-ui .main .status-pill.status-failed,
+body.professional-ui .main .status-pill.status-blocked {
+  background: #faecec !important;
+  border-color: #d49b9b !important;
+  color: #7a1010 !important;
+}
+body.professional-ui .main .status-pill.status-open,
+body.professional-ui .main .status-pill.status-high,
+body.professional-ui .main .status-pill.status-review,
+body.professional-ui .main .status-pill.status-needs-review,
+body.professional-ui .main .status-pill.status-needs_review {
+  background: #fff5dc !important;
+  border-color: #d6b56c !important;
+  color: #6b4700 !important;
+}
+body.professional-ui .main .status-pill.status-completed,
+body.professional-ui .main .status-pill.status-closed,
+body.professional-ui .main .status-pill.status-done {
+  background: var(--contrast-green-soft) !important;
+  border-color: #9dccbd !important;
+  color: var(--contrast-green-strong) !important;
+}
+
+body.professional-ui .main :is(.primary-btn, button.primary-btn) {
+  background: var(--contrast-green) !important;
+  border-color: var(--contrast-green) !important;
+  color: #ffffff !important;
+}
+body.professional-ui .main :is(.secondary-btn, .mini-btn, button.secondary-btn, button.mini-btn) {
+  background: var(--contrast-surface) !important;
+  border-color: var(--contrast-border-strong) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .main :is(.danger-btn, button.danger-btn) {
+  background: #faecec !important;
+  border-color: #d49b9b !important;
+  color: var(--contrast-red) !important;
+}
+body.professional-ui .main :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--contrast-focus) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 3px rgba(11, 128, 104, 0.18) !important;
+}
+body.professional-ui .main :is(button, input, select, textarea)[disabled],
+body.professional-ui .main :is(button, input, select, textarea)[aria-disabled="true"] {
+  opacity: 0.78 !important;
+  background: #edf2ef !important;
+  border-color: #cbd8d2 !important;
+  color: #40534b !important;
+  cursor: not-allowed !important;
+}
+
+body.professional-ui .top-strip .top-strip-live,
+body.professional-ui .top-strip #top-strip-time { color: var(--contrast-text-soft) !important; }
+body.professional-ui .top-strip .workspace-switcher {
+  background: #fff !important;
+  border-color: var(--contrast-border-strong) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .top-strip .workspace-switcher:hover,
+body.professional-ui .top-strip .workspace-switcher:focus-visible {
+  background: var(--contrast-green-soft) !important;
+  border-color: var(--contrast-focus) !important;
+  color: var(--contrast-green-strong) !important;
+}
+body.professional-ui .page-toolbar,
+body.professional-ui .view-switcher {
+  background: var(--contrast-surface) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .page-toolbar label,
+body.professional-ui .page-toolbar .sr-only { color: var(--contrast-text-soft) !important; }
+body.professional-ui .view-switch-btn { color: var(--contrast-text-soft) !important; }
+body.professional-ui .view-switch-btn.active,
+body.professional-ui .view-switch-btn:hover { background: var(--contrast-green-soft) !important; color: var(--contrast-green-strong) !important; }
+body.professional-ui .auth-panel #auth-title { color: var(--contrast-text) !important; }
+
+/* High-specificity task-board rules previously forced a dark palette. */
+body.professional-ui #page-tasks .column {
+  background: var(--contrast-surface-muted) !important;
+  border-color: var(--contrast-border) !important;
+  box-shadow: none !important;
+}
+body.professional-ui #page-tasks .column-head {
+  background: #eaf5ee !important;
+  border-color: var(--contrast-border) !important;
+}
+body.professional-ui #page-tasks .column-head h3,
+body.professional-ui #page-tasks .column-subtitle,
+body.professional-ui #page-tasks .column-count { color: var(--contrast-text) !important; }
+body.professional-ui #page-tasks .task-card {
+  background: var(--contrast-surface) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+  box-shadow: 0 8px 22px rgba(24, 56, 45, 0.06) !important;
+}
+body.professional-ui #page-tasks .task-card .title,
+body.professional-ui #page-tasks .task-card-desc,
+body.professional-ui #page-tasks .task-card .small,
+body.professional-ui #page-tasks .task-card .meta,
+body.professional-ui #page-tasks .task-card .muted-inline { color: var(--contrast-text) !important; }
+body.professional-ui #page-tasks .task-card-desc,
+body.professional-ui #page-tasks .task-card .small,
+body.professional-ui #page-tasks .task-card .meta,
+body.professional-ui #page-tasks .task-card .muted-inline { color: var(--contrast-text-soft) !important; }
+body.professional-ui #page-tasks .task-card-status,
+body.professional-ui #page-tasks .task-card-live {
+  background: #f4f8f6 !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text-soft) !important;
+}
+body.professional-ui #page-tasks .task-card-live.queued,
+body.professional-ui #page-tasks .task-card-live.picked_up,
+body.professional-ui #page-tasks .task-card-live.running {
+  background: #eaf3f8 !important; border-color: #9fc1d3 !important; color: #0f4c81 !important;
+}
+body.professional-ui #page-tasks .task-card-live.needs_review,
+body.professional-ui #page-tasks .task-card-live.completed_with_gaps {
+  background: #fff5dc !important; border-color: #d6b56c !important; color: #6b4700 !important;
+}
+body.professional-ui #page-tasks .task-card-live.failed,
+body.professional-ui #page-tasks .task-card-live.cancelled {
+  background: #faecec !important; border-color: #d49b9b !important; color: #7a1010 !important;
+}
+body.professional-ui #page-tasks .task-card-live.completed {
+  background: var(--contrast-green-soft) !important; border-color: #9dccbd !important; color: var(--contrast-green-strong) !important;
+}
+body.professional-ui #page-tasks .badge {
+  background: #f4f8f6 !important; border-color: var(--contrast-border) !important; color: var(--contrast-text-soft) !important;
+}
+body.professional-ui #page-tasks .badge.domain-exec,
+body.professional-ui #page-tasks .badge.domain-platform,
+body.professional-ui #page-tasks .badge.domain-security,
+body.professional-ui #page-tasks .badge.priority-normal { background: #eaf3f8 !important; border-color: #9fc1d3 !important; color: #0f4c81 !important; }
+body.professional-ui #page-tasks .badge.priority-urgent,
+body.professional-ui #page-tasks .badge.review { background: #faecec !important; border-color: #d49b9b !important; color: #7a1010 !important; }
+body.professional-ui #page-tasks .badge.priority-high,
+body.professional-ui #page-tasks .badge.external { background: #fff5dc !important; border-color: #d6b56c !important; color: #6b4700 !important; }
+body.professional-ui #page-tasks .badge.priority-low { background: var(--contrast-green-soft) !important; border-color: #9dccbd !important; color: var(--contrast-green-strong) !important; }
+body.professional-ui #page-tasks .task-card-actions { background: #f5f8f6 !important; border-top-color: var(--contrast-border) !important; }
+body.professional-ui #page-tasks .task-card-actions .mini-btn { background: #fff !important; color: var(--contrast-text) !important; border-color: var(--contrast-border-strong) !important; }
+body.professional-ui #page-tasks .task-card-actions .mini-btn:hover { background: var(--contrast-text) !important; color: #fff !important; }
+body.professional-ui #page-tasks .task-list .empty { color: var(--contrast-text-soft) !important; }
+
+/* Triage, research, blog, and findings dynamic panels. */
+body.professional-ui #page-triage-ops {
+  --triage-panel: var(--contrast-surface);
+  --triage-panel-2: var(--contrast-surface);
+  --triage-panel-3: var(--contrast-surface-muted);
+  --triage-line: var(--contrast-border);
+  --triage-line-strong: var(--contrast-green);
+  --triage-text: var(--contrast-text);
+  --triage-muted: var(--contrast-text-soft);
+  --triage-subtle: var(--contrast-text-muted);
+}
+body.professional-ui #page-triage-ops :is(.page-header, .card, .campaign-research-card,
+  .campaign-list-field, .campaign-json-box, .campaign-discovery-box,
+  .campaign-result-section, .campaign-package-row, .campaign-candidate-card,
+  .research-recommendation, .research-recommendation-summary > div,
+  .triage-output, .evidence-score-card, .evidence-row, .score-breakdown-row,
+  .triage-alert-card, .triage-review-section, .campaign-panel, .campaign-result-panel) {
+  background: var(--contrast-surface) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui #page-triage-ops :is(h3, h4, h5, strong, label, .metric, .kv-val,
+  .campaign-table th, .campaign-table td, .evidence-score-card strong,
+  .evidence-row strong, .score-breakdown-row strong) { color: var(--contrast-text) !important; }
+body.professional-ui #page-triage-ops :is(.small, .metric-label, .triage-rationale,
+  .research-recommendation-safety, .research-recommendation-list, .kv-key,
+  .campaign-result-section p, .evidence-score-card span, .score-breakdown-row p,
+  .campaign-candidate-card .small, .triage-alert-meta) { color: var(--contrast-text-soft) !important; }
+body.professional-ui #page-triage-ops :is(input, select, textarea) { background: #fff !important; color: var(--contrast-text) !important; border-color: var(--contrast-border-strong) !important; }
+body.professional-ui #page-triage-ops :is(input, select, textarea)::placeholder { color: var(--contrast-text-muted) !important; }
+body.professional-ui #page-triage-ops :is(.status-pill, .triage-rec-pill) { background: #f4f8f6 !important; color: var(--contrast-text-soft) !important; border-color: var(--contrast-border) !important; }
+body.professional-ui #page-triage-ops .triage-rec-pill.true-positive,
+body.professional-ui #page-triage-ops .status-pill.status-critical,
+body.professional-ui #page-triage-ops .status-pill.status-failed,
+body.professional-ui #page-triage-ops .status-pill.status-blocked { background: #faecec !important; color: #7a1010 !important; border-color: #d49b9b !important; }
+body.professional-ui #page-triage-ops .triage-rec-pill.needs-review,
+body.professional-ui #page-triage-ops .triage-rec-pill.needs_review,
+body.professional-ui #page-triage-ops .status-pill.status-open,
+body.professional-ui #page-triage-ops .status-pill.status-high { background: #fff5dc !important; color: #6b4700 !important; border-color: #d6b56c !important; }
+body.professional-ui #page-triage-ops .triage-rec-pill.false-positive,
+body.professional-ui #page-triage-ops .triage-rec-pill.expected-behavior,
+body.professional-ui #page-triage-ops .status-pill.status-closed,
+body.professional-ui #page-triage-ops .status-pill.status-done { background: var(--contrast-green-soft) !important; color: var(--contrast-green-strong) !important; border-color: #9dccbd !important; }
+body.professional-ui #page-triage-ops .triage-rec-pill.not-applicable,
+body.professional-ui #page-triage-ops .triage-rec-pill.not_applicable { background: #f1f3f2 !important; color: var(--contrast-text-soft) !important; border-color: var(--contrast-border) !important; }
+body.professional-ui #page-triage-ops .triage-actionability-no_local_impact,
+body.professional-ui #page-triage-ops .triage-actionability-review_only { opacity: 1 !important; }
+body.professional-ui #page-triage-ops .triage-actionability-callout { background: #f5f8f6 !important; color: var(--contrast-text-soft) !important; border-color: var(--contrast-border) !important; }
+
+body.professional-ui #page-operator-guide :is(.guide-toc a, .guide-step, .guide-mini-card) {
+  background: #fff !important; border-color: var(--contrast-border) !important; color: var(--contrast-text) !important;
+}
+body.professional-ui #page-operator-guide :is(.guide-toc a, .guide-step, .guide-mini-card):hover,
+body.professional-ui #page-operator-guide :is(.guide-toc a, .guide-step, .guide-mini-card):focus-visible { background: var(--contrast-green-soft) !important; color: var(--contrast-text) !important; }
+body.professional-ui #page-operator-guide .guide-pill,
+body.professional-ui #page-operator-guide .guide-step > span { background: var(--contrast-green-soft) !important; border-color: #9dccbd !important; color: var(--contrast-green-strong) !important; }
+body.professional-ui #page-operator-guide .guide-mini-card :is(strong, span),
+body.professional-ui #page-operator-guide .guide-step :is(p, strong),
+body.professional-ui #page-operator-guide .guide-toc a { color: var(--contrast-text-soft) !important; }
+body.professional-ui #page-operator-guide .guide-mini-card strong,
+body.professional-ui #page-operator-guide .guide-step strong { color: var(--contrast-text) !important; }
+body.professional-ui #page-operator-guide .guide-callout { background: #eaf3f8 !important; border-color: #9fc1d3 !important; color: #27424c !important; }
+body.professional-ui #page-operator-guide .guide-callout.guide-good { background: var(--contrast-green-soft) !important; border-color: #9dccbd !important; color: #244b34 !important; }
+body.professional-ui #page-operator-guide .guide-callout.guide-warning { background: #fff5dc !important; border-color: #d6b56c !important; color: #59400c !important; }
+body.professional-ui #page-operator-guide .guide-callout.guide-danger { background: #faecec !important; border-color: #d49b9b !important; color: #721e29 !important; }
+
+/* Drawers, dialogs, command palette, and toast content use the same readable
+   paper surface. The overlay itself remains dark to preserve modal hierarchy. */
+body.professional-ui :is(.command-palette-card, .help-drawer, .intelligence-result-modal-card,
+  .intelligence-result-section, .confirm-dialog-card, .modal-card, .blog-edit-modal-card,
+  .research-retract-modal-card) {
+  background: #fff !important; border-color: var(--contrast-border-strong) !important; color: var(--contrast-text) !important;
+}
+body.professional-ui :is(.command-palette-head, .help-drawer-head, .intelligence-result-head,
+  .intelligence-result-actions) { background: #fff !important; border-color: var(--contrast-border) !important; }
+body.professional-ui :is(.command-palette-head h2, .help-drawer-head h2,
+  .intelligence-result-head h3, .intelligence-result-section h4,
+  .confirm-dialog-message) { color: var(--contrast-text) !important; }
+body.professional-ui :is(.command-item, .command-item strong, .help-drawer-body,
+  .intelligence-result-section p, .intelligence-result-list, .confirm-dialog-context,
+  .intelligence-result-meta span, .intelligence-result-empty) { color: var(--contrast-text-soft) !important; }
+body.professional-ui .command-item:hover,
+body.professional-ui .command-item.selected { background: var(--contrast-green-soft) !important; border-color: #9dccbd !important; }
+body.professional-ui :is(.command-item small, .command-empty, .command-palette-foot,
+  .help-drawer-body, .help-drawer-links a) { color: var(--contrast-text-muted) !important; }
+body.professional-ui .help-drawer-links a { border-color: var(--contrast-border) !important; color: var(--contrast-green-strong) !important; background: #fff !important; }
+body.professional-ui :is(.intelligence-result-draft, .intelligence-result-json) { background: var(--contrast-surface-muted) !important; border-color: var(--contrast-border) !important; color: var(--contrast-text) !important; }
+body.professional-ui .toast { background: #fff !important; border-color: var(--contrast-border) !important; color: var(--contrast-text) !important; }
+
+/* Authentication is part of the same bright product surface. */
+body.professional-ui .auth-gate { background: var(--contrast-bg) !important; }
+body.professional-ui .auth-panel { background: #fff !important; border-color: var(--contrast-border-strong) !important; color: var(--contrast-text) !important; box-shadow: 0 18px 42px rgba(24, 56, 45, .08) !important; }
+body.professional-ui .auth-panel :is(h1, p, label, .auth-boundary, .auth-message) { color: var(--contrast-text-soft) !important; }
+body.professional-ui .auth-panel h1 { color: var(--contrast-text) !important; }
+body.professional-ui .auth-panel input { background: #fff !important; color: var(--contrast-text) !important; border-color: var(--contrast-border-strong) !important; }
+
+/* Keep the intentionally dark Enterprise setup banner readable. */
+body.professional-ui #page-enterprise .enterprise-setup,
+body.professional-ui #page-enterprise .enterprise-setup h3 { background: #17211e !important; color: #f9fafb !important; }
+body.professional-ui #page-enterprise .enterprise-setup-copy p { color: #d4e0db !important; }
+body.professional-ui #page-enterprise .enterprise-setup .primary-btn { background: #f7fafc !important; color: #17211e !important; border-color: #f7fafc !important; }
+body.professional-ui #page-enterprise .enterprise-setup .secondary-btn { background: transparent !important; color: #f2f6f4 !important; border-color: #8ca39a !important; }
+
+body.professional-ui .research-rule-preview,
+body.professional-ui .main :is(pre, code, .mono) {
+  background: var(--contrast-surface-muted) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .error,
+body.professional-ui .form-error,
+body.professional-ui .last-action-failed { color: var(--contrast-red) !important; }
+body.professional-ui .good,
+body.professional-ui .success,
+body.professional-ui .ok,
+body.professional-ui .approved { color: var(--contrast-green-strong) !important; }
+body.professional-ui .main a { color: var(--contrast-blue) !important; }
+body.professional-ui .main a:hover { color: var(--contrast-green-strong) !important; }
+
+/* Residual legacy selectors: these components historically used the dark
+   command-surface palette and have higher specificity than the shared rules
+   above. Keep their hierarchy, but give every resting state readable text. */
+body.professional-ui .main .metric-scope {
+  color: var(--contrast-text-muted) !important;
+}
+body.professional-ui .main :is(.operations-cockpit, .cockpit-panel, .cockpit-summary) {
+  background: var(--contrast-surface) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .main :is(.cockpit-item, .cockpit-clear) {
+  background: var(--contrast-surface-muted) !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .main .cockpit-item:hover,
+body.professional-ui .main .cockpit-item:focus-visible,
+body.professional-ui .main .cockpit-clear:hover,
+body.professional-ui .main .cockpit-clear:focus-visible {
+  background: var(--contrast-green-soft) !important;
+  border-color: var(--contrast-focus) !important;
+}
+body.professional-ui .main .cockpit-item :is(strong, .cockpit-facts strong),
+body.professional-ui .main .cockpit-summary h3 {
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .main .cockpit-item :is(small, span),
+body.professional-ui .main .cockpit-clear span,
+body.professional-ui .main .cockpit-facts small {
+  color: var(--contrast-text-soft) !important;
+}
+body.professional-ui .main .table-link {
+  color: var(--contrast-blue) !important;
+}
+body.professional-ui .main .table-link:hover,
+body.professional-ui .main .table-link:focus-visible {
+  color: var(--contrast-green-strong) !important;
+}
+body.professional-ui .main :is(.severity-urgent, .severity-critical) {
+  color: var(--contrast-red) !important;
+}
+body.professional-ui .main :is(.severity-high, .severity-medium) {
+  color: var(--contrast-amber) !important;
+}
+body.professional-ui .main :is(.severity-normal, .severity-low) {
+  color: var(--contrast-blue) !important;
+}
+body.professional-ui .main .research-evidence-row > span:first-child {
+  color: var(--contrast-text-soft) !important;
+}
+body.professional-ui .main :is(select, option) {
+  color-scheme: light;
+}
+body.professional-ui .main option {
+  background: #fff !important;
+  color: var(--contrast-text) !important;
+}
