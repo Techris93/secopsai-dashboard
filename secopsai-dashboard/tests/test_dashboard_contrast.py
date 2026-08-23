@@ -40,6 +40,10 @@ def test_bright_contrast_layer_defines_readable_tokens_and_controls():
     assert "body.professional-ui .main .badge" in css
     assert "body.professional-ui .main .inline-action-menu > div" in css
     assert "body.professional-ui .main #work-scope-note" in css
+    assert "body.professional-ui .sidebar .sidebar-footer" in css
+    assert "body.professional-ui .sidebar #global-status" in css
+    assert "background: #173229 !important" in css
+    assert "color: #f4f8f6 !important" in css
     assert "body.professional-ui #page-triage-ops :is(" in css
     assert ".triage-alert-card" in css
     assert "body.professional-ui #page-operator-guide .guide-pill" in css
@@ -48,6 +52,11 @@ def test_bright_contrast_layer_defines_readable_tokens_and_controls():
 def test_bright_theme_text_and_green_tokens_meet_wcag_aa_on_white():
     for token in ("17211e", "40534b", "53645d", "62716b", "087963", "086b58", "0f4c81", "8a5a00", "9e1b1b"):
         assert _contrast_ratio(token, "ffffff") >= 4.5, token
+
+
+def test_operator_status_panel_keeps_rail_text_readable():
+    assert _contrast_ratio("f4f8f6", "173229") >= 4.5
+    assert _contrast_ratio("9fbbb2", "173229") >= 4.5
 
 
 def test_bright_theme_does_not_use_hover_as_the_only_readability_fix():
@@ -64,5 +73,5 @@ def test_bright_theme_does_not_use_hover_as_the_only_readability_fix():
 
 def test_stylesheet_cache_key_points_to_contrast_revision():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    assert 'styles.css?v=20260823-bright-contrast-v2' in html
+    assert 'styles.css?v=20260823-bright-contrast-v3' in html
     assert 'styles.css?v=20260803-subsection-navigation' not in html

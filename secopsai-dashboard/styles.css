@@ -9843,3 +9843,32 @@ body.professional-ui .main #work-scope-note {
   border-color: var(--contrast-border) !important;
   color: var(--contrast-text-soft) !important;
 }
+
+/* Keep the operator readout on the dark navigation rail. The legacy
+   #global-status rule otherwise paints a dark surface with the bright-theme
+   body text token, which becomes low-contrast after the content plane turns
+   white. */
+body.professional-ui .sidebar .sidebar-footer {
+  margin: 16px 6px 0 !important;
+  padding: 12px 10px !important;
+  border: 1px solid #376454 !important;
+  border-radius: 10px !important;
+  background: #173229 !important;
+  color: #d7e5df !important;
+}
+body.professional-ui .sidebar .sidebar-footer-label {
+  margin-bottom: 8px !important;
+  color: #9fbbb2 !important;
+}
+body.professional-ui .sidebar #global-status {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #f4f8f6 !important;
+  font-family: var(--asd-mono) !important;
+  font-size: 0.68rem !important;
+  line-height: 1.45 !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}

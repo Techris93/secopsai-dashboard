@@ -39,8 +39,11 @@ high-specificity surfaces that previously escaped the light theme:
   a 0.9 opacity cap (rather than the old low-contrast fade), and required
   content no longer depends on hover.
 
-The stylesheet URL is cache-busted with `20260823-bright-contrast-v2` after the
-final dynamic-surface corrections.
+The stylesheet URL is cache-busted with `20260823-bright-contrast-v3` after the
+final dynamic-surface corrections. The sidebar Operator status footer is
+intentionally a dark-green panel with a white live readout; this prevents the
+legacy dark `#global-status` surface from receiving dark body text on the
+bright theme.
 
 ## Evidence and verification
 
@@ -50,6 +53,8 @@ Before/after local captures were taken at:
 - `/tmp/secopsai-dashboard-contrast-after.png`
 - `/tmp/secopsai-dashboard-contrast-workspace-final-v3.png` (final workspace
   capture after the dynamic-surface corrections)
+- `/tmp/secopsai-dashboard-operator-status-card.png` (operator status footer
+  capture after the sidebar readability correction)
 
 The browser computed-style audit was rerun after the fix across the Overview,
 Findings, Assets, Work, Research, Publications, Automation, System,
