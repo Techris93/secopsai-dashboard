@@ -55,6 +55,14 @@ primary section as collapsed during both initial DOM boot and authenticated
 session entry. Normal operator navigation still opens the chosen section and
 the existing toggle closes/reopens it deliberately.
 
+### Stale frontend bundle
+
+The first live Chrome probe also showed that the browser was still loading the
+previous `app.js?v=20260803-subsection-navigation` bundle, which contained the
+old `navigateTo` handler. The HTML cache key is now advanced to
+`app.js?v=20260823-action-audit` so a normal refresh fetches the repaired
+handler instead of relying on a user to clear browser cache.
+
 ## Verification evidence
 
 - `npm run check` passed (`node --check` for application and worker files).
@@ -67,12 +75,17 @@ the existing toggle closes/reopens it deliberately.
 - Static button audit found no unreferenced fixed-ID controls after allowing
   the documented Artifact Fleet delegated-action IDs.
 
-The available in-app browser session was signed out and the Chrome connector
-was unavailable, so an authenticated live click on an existing case could not
-be performed in this run. The source-level trace, deterministic contracts, and
-local test suite provide the reproducible evidence; after deployment, an
-operator should verify one queue row with `Open case` and one invalid/missing
-case response in the signed-in dashboard.
+Chrome was available for a live read-only verification. The authenticated
+Overview snapshot showed the primary navigation with no subsection expanded,
+and the Work → Automation → Investigations panel exposed 20 visible case rows.
+The first click attempt was intentionally made before refreshing the cached
+bundle and reproduced the old `ReferenceError: navigateTo is not defined` from
+`app.js?v=20260803-subsection-navigation`. After the cache-key fix, the local
+session expired and required re-authentication, so a post-fix authenticated
+click could not be completed without the operator signing in again. The source
+trace, cache-bust contract, deterministic tests, and local test suite provide
+the reproducible evidence; after the next sign-in, verify one queue row with
+`Open case` and one invalid/missing case response in the refreshed dashboard.
 
 ## Safety preserved
 
