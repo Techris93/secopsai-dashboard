@@ -4226,6 +4226,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/secopsai/content-packs':
+            try:
+                result, parsed_result = run_cli_json(['research', 'content-pack', 'list'], timeout=60)
+                return json_response(self, 200 if result['ok'] else 500, parsed_result or {'ok': False, 'content_packs': []})
+            except Exception as exc:
+                return json_response(self, 500, {'ok': False, 'error': str(exc)})
+
         if parsed.path == '/api/blog' or parsed.path == '/api/blog/status':
             try:
                 result, payload = _blog_review_drafts_payload()
@@ -4745,6 +4752,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         'cli': compact_cli_result(result),
                     },
                 )
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/content-packs/generate':
+            case_id = _clean_string(payload.get('case_id') or '', 80)
+            if not case_id:
+                return json_response(self, 400, {'ok': False, 'error': 'Case ID or Finding ID is required'})
+            try:
+                result, parsed_result = run_cli_json(['research', 'content-pack', 'generate', case_id, *secopsai_db_args()], timeout=90)
+                return json_response(self, 200 if result['ok'] else 400, {
+                    'ok': result['ok'],
+                    'pack': parsed_result,
+                    'cli': compact_cli_result(result)
+                })
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
 

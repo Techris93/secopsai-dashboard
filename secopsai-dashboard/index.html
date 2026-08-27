@@ -780,6 +780,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           </div>
           <div class="research-page-actions" data-research-section="cases">
             <button class="secondary-btn" id="research-cases-new-btn" type="button">New case</button>
+            <button class="secondary-btn" id="research-content-packs-nav-btn" type="button">📦 Social Packs</button>
             <button class="secondary-btn" id="research-cases-refresh-btn" type="button">Refresh cases</button>
           </div>
         </div>
@@ -798,6 +799,19 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         </form>
 
         <div class="grid cols-3" id="research-cases-stats" data-research-section="cases" style="margin-top:18px;"></div>
+
+        <details class="card research-create-panel" id="research-content-packs-panel">
+          <summary>📦 Social & Community Content Packs (X / Twitter, Reddit r/netsec, LinkedIn, AST Diffs)</summary>
+          <div style="padding: 14px 0;">
+            <p class="small">Pre-formatted, reviewable content bundles generated automatically from research cases for 1-click publishing.</p>
+            <div class="research-form-actions" style="margin-top: 10px; margin-bottom: 16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <input id="research-content-pack-case-id" placeholder="Enter Case ID (e.g. RSC-8008479A8645)" style="max-width: 320px;" />
+              <button class="primary-btn" id="research-generate-content-pack-btn" type="button">Generate Content Pack</button>
+              <button class="secondary-btn" id="research-refresh-content-packs-btn" type="button">Refresh Packs</button>
+            </div>
+            <div id="research-content-packs-list"></div>
+          </div>
+        </details>
 
         <details class="card research-create-panel" id="research-case-create-panel" data-research-section="cases">
           <summary>Create research case</summary>

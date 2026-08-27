@@ -9179,6 +9179,141 @@ function closeResearchRetractModal() {
   el('research-retract-modal')?.classList.add('hidden');
 }
 
+async function loadContentPacks() {
+  const host = el('research-content-packs-list');
+  if (!host) return;
+  host.innerHTML = '<div class="empty-state">Loading social content packs…</div>';
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/content-packs');
+    const data = await response.json().catch(() => ({}));
+    const packs = data.content_packs || [];
+    renderContentPacks(packs);
+  } catch (err) {
+    host.innerHTML = `<div class="error">Failed to load content packs: ${escapeHtml(err?.message || String(err))}</div>`;
+  }
+}
+
+function renderContentPacks(packs) {
+  const host = el('research-content-packs-list');
+  if (!host) return;
+  if (!packs || !packs.length) {
+    host.innerHTML = '<div class="empty-state">No content packs generated yet. Enter a Case ID above or click "📦 Generate Social Pack" on any active research case.</div>';
+    return;
+  }
+  host.innerHTML = packs.map(pack => `
+    <div class="card" style="margin-bottom:12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+        <div>
+          <strong style="color:var(--text-strong, #fff); font-size:14px;">${escapeHtml(pack.pack_id)}</strong>
+          <span class="small" style="margin-left:8px; color:var(--text-muted, #aaa);">${escapeHtml(pack.package)}@${escapeHtml(pack.version || '')} (${escapeHtml(pack.ecosystem || 'npm')})</span>
+          ${renderSeverityPill(pack.severity || 'high')}
+        </div>
+        <span class="small" style="color:var(--text-muted, #888);">${escapeHtml(fmtDate(pack.created_at))}</span>
+      </div>
+      <div class="research-form-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="mini-btn secondary-btn cpk-fetch-btn" data-type="twitter_thread" data-pack-id="${escapeHtml(pack.pack_id)}" data-case-id="${escapeHtml(pack.case_id)}" type="button">🧵 Copy X / Twitter Thread</button>
+        <button class="mini-btn secondary-btn cpk-fetch-btn" data-type="reddit_post" data-pack-id="${escapeHtml(pack.pack_id)}" data-case-id="${escapeHtml(pack.case_id)}" type="button">🛡️ Copy Reddit Post (r/netsec)</button>
+        <button class="mini-btn secondary-btn cpk-fetch-btn" data-type="linkedin_post" data-pack-id="${escapeHtml(pack.pack_id)}" data-case-id="${escapeHtml(pack.case_id)}" type="button">💼 Copy LinkedIn Post</button>
+        <span class="small" style="align-self:center; margin-left:auto; color:var(--text-muted, #888);">Assets: ${(pack.files?.assets || []).length} files packaged</span>
+      </div>
+      <div class="cpk-preview-box" id="cpk-preview-${escapeHtml(pack.pack_id)}" style="display:none; margin-top:12px; border-top: 1px solid rgba(255,255,255,0.08); padding-top:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span class="small" style="color:var(--accent-color, #4ade80); font-weight:600;" id="cpk-preview-label-${escapeHtml(pack.pack_id)}">Copied Content</span>
+          <button class="mini-btn cpk-copy-again-btn" data-pack-id="${escapeHtml(pack.pack_id)}" type="button">📋 Copy Text Again</button>
+        </div>
+        <textarea readonly style="width:100%; height:180px; font-family:monospace; font-size:12px; line-height:1.4; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:8px; color:var(--text-color, #eee);" id="cpk-preview-text-${escapeHtml(pack.pack_id)}"></textarea>
+      </div>
+    </div>
+  `).join('');
+
+  host.querySelectorAll('.cpk-fetch-btn').forEach(button => {
+    button.addEventListener('click', async event => {
+      const type = button.dataset.type;
+      const caseId = button.dataset.caseId;
+      const packId = button.dataset.packId;
+      const labelMap = {
+        twitter_thread: 'X / Twitter Thread',
+        reddit_post: 'Reddit (r/netsec) Post',
+        linkedin_post: 'LinkedIn Post'
+      };
+      const label = labelMap[type] || type;
+      setButtonBusy(button, true, 'Copying…');
+      try {
+        let pack = packs.find(p => p.pack_id === packId);
+        let textContent = pack?.content?.[type];
+        if (!textContent) {
+          const res = await dashboardApiFetch('/api/secopsai/content-packs/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ case_id: caseId })
+          });
+          const resData = await res.json().catch(() => ({}));
+          if (!res.ok || resData.ok === false) throw new Error(resData.error || 'Failed to fetch content');
+          pack = resData.pack;
+          textContent = pack?.content?.[type] || '';
+        }
+        if (textContent) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(textContent);
+          }
+          const previewBox = el(`cpk-preview-${packId}`);
+          const previewText = el(`cpk-preview-text-${packId}`);
+          const previewLabel = el(`cpk-preview-label-${packId}`);
+          if (previewBox && previewText) {
+            previewBox.style.display = 'block';
+            previewText.value = textContent;
+            if (previewLabel) previewLabel.textContent = `✅ ${label} Copied to Clipboard!`;
+            previewText.focus();
+            previewText.select();
+          }
+          setStatus(`<span class="dot"></span> ✅ ${label} copied to clipboard! (Ready to paste directly into ${type.startsWith('twitter') ? 'X/Twitter' : type.startsWith('reddit') ? 'Reddit' : 'LinkedIn'})`);
+        } else {
+          setStatus(`Content pack ready: ${packId}`);
+        }
+      } catch (e) {
+        setStatus(`Content copy error: ${e?.message || e}`, true);
+      } finally {
+        setButtonBusy(button, false);
+      }
+    });
+  });
+
+  host.querySelectorAll('.cpk-copy-again-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const packId = btn.dataset.packId;
+      const previewText = el(`cpk-preview-text-${packId}`);
+      if (previewText && previewText.value) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(previewText.value);
+        }
+        setStatus('<span class="dot"></span> Copied text to clipboard again!');
+      }
+    });
+  });
+}
+
+async function generateContentPackForCase(caseId, btn) {
+  if (!caseId) { setStatus('Enter or select a Case ID first.', true); return; }
+  setButtonBusy(btn, true, 'Generating Pack…');
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/content-packs/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ case_id: caseId })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) throw new Error(data.error || 'Content pack generation failed');
+    setStatus(`<span class="dot"></span> Social & Community Content Pack generated for ${escapeHtml(caseId)}!`);
+    const panel = el('research-content-packs-panel');
+    if (panel) panel.open = true;
+    await loadContentPacks();
+  } catch (err) {
+    setStatus(`Content pack generation failed: ${err?.message || err}`, true);
+  } finally {
+    setButtonBusy(btn, false);
+  }
+}
+
 function bindResearchCaseDetailActions(researchCase) {
   el('research-artifact-import-btn')?.addEventListener('click', async event => {
     const file = el('research-artifact-file')?.files?.[0];
@@ -9371,6 +9506,9 @@ function bindResearchCaseDetailActions(researchCase) {
       confirmLabel: 'Create draft'
     }))) return;
     runResearchCaseAction('draft-blog', { case_id: researchCase.case_id }, event.currentTarget);
+  });
+  el('research-case-gen-pack-btn')?.addEventListener('click', async event => {
+    await generateContentPackForCase(researchCase.case_id, event.currentTarget);
   });
   el('research-intake-preview-btn')?.addEventListener('click', event => runResearchCaseAction('intake-preview', {
     case_id: researchCase.case_id,
@@ -9925,7 +10063,7 @@ function renderResearchCaseDetail(researchCase) {
         <label><span>Confidence</span><input id="research-detail-confidence" type="number" min="0" max="100" value="${escapeHtml(String(researchCase.confidence || 0))}" /></label>
         <label class="research-span-2"><span>Owner</span><input id="research-detail-owner" value="${escapeHtml(researchCase.owner || '')}" maxlength="160" /></label>
         <label class="research-span-2"><span>Executive summary</span><textarea id="research-detail-summary" rows="5" maxlength="8000">${escapeHtml(researchCase.summary || '')}</textarea></label>
-      </div><div class="research-form-actions"><button class="primary-btn" id="research-save-case-btn" type="button">Save workflow</button><button class="secondary-btn" id="research-export-btn" type="button">Download case report</button><button class="secondary-btn" id="research-draft-blog-btn" type="button" ${readiness.ready ? '' : 'disabled'} title="${readiness.ready ? 'Creates a review-only Blog Ops draft.' : 'Resolve publication blockers first.'}">Create review draft</button></div>`)}
+      </div><div class="research-form-actions"><button class="primary-btn" id="research-save-case-btn" type="button">Save workflow</button><button class="secondary-btn" id="research-export-btn" type="button">Download case report</button><button class="secondary-btn" id="research-draft-blog-btn" type="button" ${readiness.ready ? '' : 'disabled'} title="${readiness.ready ? 'Creates a review-only Blog Ops draft.' : 'Resolve publication blockers first.'}">Create review draft</button><button class="secondary-btn" id="research-case-gen-pack-btn" data-case-id="${escapeHtml(researchCase.case_id)}" type="button">📦 Generate Social Pack</button></div>`)}
     ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','Lifecycle state'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td><div class="small">Case: ${escapeHtml(statusLabel(item.status))} · Registry: ${escapeHtml(statusLabel(item.registry_state || 'unknown'))} · Artifact: ${escapeHtml(statusLabel(item.artifact_state || 'missing'))} · Validation: ${escapeHtml(statusLabel(item.validation_state || 'unverified'))}</div><details class="research-inline-state"><summary>Update lifecycle state</summary><div class="research-form-grid"><select id="research-subject-registry-${escapeHtml(item.subject_id)}">${['available','unlisted','removed','unavailable','unknown'].map(value => researchOption(value, item.registry_state || 'unknown')).join('')}</select><select id="research-subject-artifact-${escapeHtml(item.subject_id)}">${['collected','missing','externally_supplied'].map(value => researchOption(value, item.artifact_state || 'missing')).join('')}</select><select id="research-subject-validation-${escapeHtml(item.subject_id)}">${['unverified','static_confirmed','sandbox_confirmed'].map(value => researchOption(value, item.validation_state || 'unverified')).join('')}</select><input id="research-subject-reason-${escapeHtml(item.subject_id)}" placeholder="Evidence or reason" /><button class="mini-btn research-subject-state-btn" data-subject-id="${escapeHtml(item.subject_id)}" type="button">Save state</button></div></details> ${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
     ${researchDetailSection('Evidence', researchTable(['Evidence','Type','Provenance','Collected','State'], evidence.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td><strong>${escapeHtml(item.title)}</strong><div class="small">${escapeHtml(item.locator || item.sha256 || 'No locator')}</div></td><td>${escapeHtml(statusLabel(item.evidence_type))}</td><td>${escapeHtml(item.provenance || '—')}</td><td>${escapeHtml(fmtDate(item.collected_at))}</td><td>${researchRetractControl('evidence', item)}</td></tr>`), 'No evidence recorded.'))}
     ${researchDetailSection('Indicators', researchTable(['Type','Value','Confidence','Evidence','State'], iocs.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(item.ioc_type)}</td><td><code>${escapeHtml(item.value)}</code></td><td>${escapeHtml(String(item.confidence))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('ioc', item)}</td></tr>`), 'No indicators recorded; explicitly state when none were found.'))}
@@ -11793,6 +11931,25 @@ function bindEvents() {
     await runRefreshAction(event.currentTarget, () => loadResearchCases(), {
       successMessage: 'Research cases refreshed'
     });
+  });
+  el('research-content-packs-nav-btn')?.addEventListener('click', () => {
+    const panel = el('research-content-packs-panel');
+    if (panel) {
+      panel.open = !panel.open;
+      if (panel.open) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        loadContentPacks();
+      }
+    }
+  });
+  el('research-refresh-content-packs-btn')?.addEventListener('click', async event => {
+    await runRefreshAction(event.currentTarget, () => loadContentPacks(), {
+      successMessage: 'Social content packs refreshed'
+    });
+  });
+  el('research-generate-content-pack-btn')?.addEventListener('click', async event => {
+    const caseId = el('research-content-pack-case-id')?.value?.trim() || (state.researchCases.selected ? state.researchCases.selected.case_id : '');
+    await generateContentPackForCase(caseId, event.currentTarget);
   });
   el('research-watchlist-refresh-btn')?.addEventListener('click', async event => {
     await runRefreshAction(event.currentTarget, () => loadResearchWatchlist(), {
