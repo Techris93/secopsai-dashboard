@@ -4842,6 +4842,42 @@ function intelligenceModels() {
   return Array.isArray(state.intelligence.data?.models?.models) ? state.intelligence.data.models.models : [];
 }
 
+function intelligencePipelineGroups(jobs) {
+  const groups = new Map();
+  jobs.forEach(job => {
+    const target = String(job?.target_id || 'Workspace');
+    const explicitPipeline = String(job?.pipeline_id || job?.input?.pipeline_id || job?.config?.pipeline_id || '').trim();
+    // Research cases are durable pipeline targets. Workspace actions remain
+    // individual rows so unrelated runs are never merged together.
+    const key = explicitPipeline || (target.startsWith('RSC-') ? `case:${target}` : `job:${job?.job_id || target}`);
+    if (!groups.has(key)) groups.set(key, { key, target, pipelineId: explicitPipeline, jobs: [] });
+    groups.get(key).jobs.push(job);
+  });
+  return [...groups.values()].map(group => {
+    group.jobs.sort((left, right) => String(left.updated_at || left.queued_at || '').localeCompare(String(right.updated_at || right.queued_at || '')));
+    const failed = group.jobs.find(item => String(item.status || '').toLowerCase() === 'failed');
+    const active = group.jobs.find(item => ['running', 'awaiting_provider', 'queued'].includes(String(item.status || '').toLowerCase()));
+    const completed = group.jobs.filter(item => ['succeeded', 'completed'].includes(String(item.status || '').toLowerCase())).length;
+    group.status = failed ? 'failed' : active ? String(active.status || 'running') : completed === group.jobs.length ? 'completed' : 'pending';
+    group.current = failed || active || group.jobs[group.jobs.length - 1] || {};
+    group.completed = completed;
+    group.total = group.jobs.length;
+    return group;
+  });
+}
+
+function intelligenceStageLabel(action) {
+  const labels = {
+    analyze_research_case: 'Analyze case',
+    generate_analyst_brief: 'Analyst brief',
+    review_publication_safety: 'Publication safety',
+    triage_finding: 'Finding triage',
+    explain_finding: 'Explain finding',
+    recommend_remediation: 'Remediation',
+  };
+  return labels[String(action || '').toLowerCase()] || humanizeSnake(action || 'Analysis');
+}
+
 function intelligenceSelectedModel() {
   const models = intelligenceModels();
   const ids = models.map(item => String(item?.id || ''));
@@ -4911,6 +4947,16 @@ function intelligenceResultView(job) {
     automationRecommendation: String(data.automation_recommendation || '').trim(),
     counterarguments: intelligenceResultList(data.counterarguments),
     tuningProposals: Array.isArray(data.rule_tuning_proposals) ? data.rule_tuning_proposals : [],
+    assessment: String(data.assessment || data.assessment_label || data.maliciousness_verdict || (finalVerdictAction ? data.verdict_recommendation || data.finding_verdict : '') || 'unconfirmed_static_lead').trim(),
+    assessmentConfidence: Number(data.detection_confidence ?? data.assessment_confidence ?? data.verdict_confidence ?? data.finding_confidence ?? 0),
+    investigationPriority: String(data.investigation_priority || data.priority || 'normal').trim(),
+    potentialImpact: String(data.potential_impact || data.impact_severity || job?.severity || 'medium').trim(),
+    localExposure: String(data.local_exposure || data.exposure_assessment || 'unknown').trim(),
+    evidenceQuality: String(data.evidence_quality || data.evidence_quality_label || 'insufficient').trim(),
+    publicationReadiness: String(data.publication_readiness || data.publication_status || 'blocked').trim(),
+    uniqueObservations: Number(data.unique_observations ?? data.observation_summary?.unique_observations ?? 0),
+    repeatObservations: Number(data.repeat_observations ?? data.observation_summary?.repeat_observations ?? 0),
+    independentSources: Number(data.independent_sources ?? data.observation_summary?.independent_sources ?? 0),
     provider: String(envelope.provider || job?.provider || '').trim(),
     generatedAt: String(envelope.generated_at || job?.completed_at || job?.updated_at || '').trim(),
     readOnly: envelope.read_only !== false,
@@ -4979,6 +5025,14 @@ function renderIntelligenceResultModal() {
     ? `<div class="intelligence-verdict"><span>Agent verdict</span><strong>${escapeHtml(humanizeSnake(view.verdict))}</strong><b>${escapeHtml(String(view.verdictConfidence))}% confidence</b></div>`
     : (view.verdictScopeMessage ? `<div class="intelligence-advisory-note">${escapeHtml(view.verdictScopeMessage)}</div>` : '');
   const meta = `<div class="intelligence-result-meta"><span>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</span><span>${escapeHtml(fmtDate(view.generatedAt))}</span><span>${view.readOnly ? 'Read-only analysis' : 'Recorded result'}</span></div>`;
+  const decisionAssessment = view.verdict || view.assessment || 'unconfirmed_static_lead';
+  const decisionFacts = view.confirmedFacts.slice(0, 3);
+  const decisionContradictions = view.contradictions.slice(0, 2);
+  const decisionCard = `<section class="intelligence-decision-card" aria-label="Decision card">
+    <div class="intelligence-decision-card-head"><div><span class="eyebrow">Assessment</span><strong>${escapeHtml(humanizeSnake(decisionAssessment))}</strong><p>${escapeHtml(view.summary || 'Evidence is available for analyst review; no automatic maliciousness verdict was established.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(view.publicationReadiness))}</span></div>
+    <div class="intelligence-decision-metrics"><div><span>Detection confidence</span><b>${escapeHtml(String(view.assessmentConfidence))}%</b></div><div><span>Investigation priority</span><b>${escapeHtml(humanizeSnake(view.investigationPriority))}</b></div><div><span>Potential impact</span><b>${escapeHtml(humanizeSnake(view.potentialImpact))}</b></div><div><span>Local exposure</span><b>${escapeHtml(humanizeSnake(view.localExposure))}</b></div><div><span>Evidence quality</span><b>${escapeHtml(humanizeSnake(view.evidenceQuality))}</b></div><div><span>Observations</span><b>${escapeHtml(String(view.uniqueObservations))} unique · ${escapeHtml(String(view.repeatObservations))} repeated</b></div></div>
+    <div class="intelligence-decision-columns"><div><h4>Confirmed facts</h4>${renderIntelligenceResultList(decisionFacts, 'No confirmed facts returned.')}</div><div><h4>Contradictions</h4>${renderIntelligenceResultList(decisionContradictions, 'None identified.')}</div><div><h4>Next action</h4><p>${escapeHtml(view.recommendedActions[0] || 'Review the evidence and record a human decision.')}</p></div></div>
+  </section>`;
   const sections = [
     renderIntelligenceResultSection('Executive summary', view.summary ? `<p>${escapeHtml(view.summary)}</p>` : '<p class="small">No executive summary was returned.</p>', { wide: true }),
     renderIntelligenceResultSection('Verdict rationale', view.verdictRationale ? `<p>${escapeHtml(view.verdictRationale)}</p>${renderIntelligenceResultList(view.verdictEvidenceRefs, 'No verdict evidence references returned.')}` : '<p class="small">This action did not assess a verdict.</p>', { tone: view.verdict ? 'decision' : '' }),
@@ -5000,7 +5054,7 @@ function renderIntelligenceResultModal() {
     renderIntelligenceResultSection('Job audit history', renderIntelligenceResultList(view.events.map(event => `${fmtDate(event.created_at)} — ${humanizeSnake(event.event_type || '')}: ${event.message || ''}`), 'No job events returned.'), { wide: true }),
     renderIntelligenceResultSection('Normalized result', `<details><summary>View normalized JSON</summary><pre class="intelligence-result-json">${escapeHtml(JSON.stringify(view.normalized, null, 2))}</pre></details>`, { wide: true })
   ].filter(Boolean).join('');
-  body.innerHTML = `${meta}${verdict}<div class="intelligence-result-grid">${sections}</div>`;
+  body.innerHTML = `${meta}${verdict}${decisionCard}<details class="intelligence-full-analysis"><summary>Open full analysis</summary><div class="intelligence-result-grid">${sections}</div></details>`;
 }
 
 async function loadIntelligenceJobDetail(jobId) {
@@ -5236,7 +5290,8 @@ function renderIntelligence() {
   // Keep the operator surface responsive when the bridge or investigation
   // worker has accumulated a large history. The API remains the full source;
   // this panel only renders the most recent actionable slice.
-  const jobs = intelligenceJobs().slice(0, 25);
+  const jobs = intelligenceJobs().slice(0, 50);
+  const pipelineGroups = intelligencePipelineGroups(jobs);
   const bridge = data?.bridge || {};
   const service = data?.service || {};
   const mcp = data?.chatgpt_app || {};
@@ -5497,17 +5552,23 @@ function renderIntelligence() {
     } else if (!jobs.length) {
       table.innerHTML = '<div class="empty-state compact">No analysis jobs yet. Queue an approved action above.</div>';
     } else {
-      table.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody>${jobs.map(job => {
-        const resultView = intelligenceResultView(job);
-        const hasResult = Boolean(job.result_available || resultView.summary || resultView.confirmedFacts.length || resultView.publicationRisks.length || job.error_message);
-        const cancel = ['queued', 'awaiting_provider'].includes(String(job.status || ''))
-          ? `<button class="mini-btn" data-intelligence-cancel="${escapeHtml(job.job_id)}" type="button">Cancel</button>`
-          : '';
-        const requeue = String(job.status || '') === 'failed'
-          ? `<button class="mini-btn" data-intelligence-requeue="${escapeHtml(job.job_id)}" type="button">Requeue</button>`
-          : '';
-        const providerLabel = job.provider ? `<div class="small mono">${escapeHtml(String(job.provider))}</div>` : '';
-        return `<tr><td><strong>${escapeHtml(humanizeSnake(job.action || 'unknown'))}</strong><div class="small mono">${escapeHtml(job.job_id || '')}</div>${providerLabel}</td><td>${escapeHtml(job.target_id || 'Workspace')}</td><td>${escapeHtml(humanizeSnake(job.status || 'unknown'))}</td><td>${escapeHtml(fmtDate(job.updated_at || job.queued_at))}</td><td>${hasResult ? `<button class="secondary-btn mini-btn" data-intelligence-review="${escapeHtml(job.job_id)}" type="button">Open full analysis</button>${resultView.verdict ? `<div class="small">${escapeHtml(humanizeSnake(resultView.verdict))} · ${escapeHtml(String(resultView.verdictConfidence))}% confidence</div>` : ''}` : '<span class="small">Pending</span>'}</td><td>${cancel}${requeue}</td></tr>`;
+      table.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Pipeline</th><th>Target</th><th>Stage progress</th><th>Model</th><th>Queue age / updated</th><th>Next action</th></tr></thead><tbody>${pipelineGroups.map(group => {
+        const current = group.current || {};
+        const currentResult = intelligenceResultView(current);
+        const stageSummary = group.jobs.map(job => {
+          const status = String(job.status || 'pending').toLowerCase();
+          const marker = ['succeeded', 'completed'].includes(status) ? '✓' : ['running', 'awaiting_provider'].includes(status) ? '•' : status === 'failed' ? '!' : '○';
+          return `<span class="intelligence-stage stage-${escapeHtml(status)}" title="${escapeHtml(humanizeSnake(status))}">${marker} ${escapeHtml(intelligenceStageLabel(job.action))}</span>`;
+        }).join('');
+        const childRows = group.jobs.map(job => {
+          const resultView = intelligenceResultView(job);
+          const hasResult = Boolean(job.result_available || resultView.summary || resultView.confirmedFacts.length || resultView.publicationRisks.length || job.error_message);
+          const cancel = ['queued', 'awaiting_provider'].includes(String(job.status || '')) ? `<button class="mini-btn" data-intelligence-cancel="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : '';
+          const requeue = String(job.status || '') === 'failed' ? `<button class="mini-btn" data-intelligence-requeue="${escapeHtml(job.job_id)}" type="button">Requeue</button>` : '';
+          return `<div class="intelligence-child-job"><span><strong>${escapeHtml(intelligenceStageLabel(job.action))}</strong> · <code>${escapeHtml(job.job_id || '')}</code> · ${escapeHtml(humanizeSnake(job.status || 'unknown'))}</span><span>${hasResult ? `<button class="secondary-btn mini-btn" data-intelligence-review="${escapeHtml(job.job_id)}" type="button">Open full analysis</button>` : '<span class="small">Pending</span>'}${cancel}${requeue}</span></div>`;
+        }).join('');
+        const next = group.status === 'failed' ? 'Requeue failed stage' : group.status === 'completed' ? 'Review completed pipeline' : 'Monitor active stage';
+        return `<tr><td><strong>Case pipeline</strong>${group.pipelineId ? `<div class="small mono">${escapeHtml(group.pipelineId)}</div>` : ''}<details class="intelligence-child-jobs"><summary>${group.total} stage${group.total === 1 ? '' : 's'} · ${group.completed} complete</summary>${childRows}</details></td><td><code>${escapeHtml(group.target)}</code></td><td><span class="status-pill">${escapeHtml(humanizeSnake(group.status))}</span><div class="intelligence-stage-list">${stageSummary}</div></td><td>${escapeHtml(current.provider || 'Not recorded')}<div class="small">${currentResult.assessment ? escapeHtml(humanizeSnake(currentResult.assessment)) : 'Advisory run'}</div></td><td>${escapeHtml(fmtDate(current.updated_at || current.queued_at))}<div class="small">${escapeHtml(next)}</div></td><td>${currentResult.summary ? `<button class="secondary-btn mini-btn" data-intelligence-review="${escapeHtml(current.job_id)}" type="button">Open latest</button>` : escapeHtml(next)}</td></tr>`;
       }).join('')}</tbody></table></div>`;
     }
   }
@@ -9315,6 +9376,14 @@ async function generateContentPackForCase(caseId, btn) {
 }
 
 function bindResearchCaseDetailActions(researchCase) {
+  el('research-reconcile-btn')?.addEventListener('click', async event => {
+    if (!(await requestConfirmation('Reclassify legacy URL candidates for this case?', {
+      title: 'Reconcile evidence provenance',
+      context: 'Source, documentation, and shared-service URLs will be marked as rejected references with reasons. Existing rows and the audit trail are preserved.',
+      confirmLabel: 'Reconcile indicators'
+    }))) return;
+    runResearchCaseAction('reconcile', { case_id: researchCase.case_id, actor: 'dashboard-operator' }, event.currentTarget);
+  });
   el('research-artifact-import-btn')?.addEventListener('click', async event => {
     const file = el('research-artifact-file')?.files?.[0];
     const token = state.researchCases.adminToken || state.triageOps.adminToken;
@@ -10034,6 +10103,8 @@ function renderResearchCaseDetail(researchCase) {
   const subjects = researchCase.subjects || [];
   const evidence = researchCase.evidence || [];
   const iocs = researchCase.iocs || [];
+  const iocCandidates = researchCase.ioc_candidates || [];
+  const legacyIocCandidates = iocCandidates.filter(item => ['pending', 'needs_review'].includes(String(item.status || '').toLowerCase()) && !String(item.classification_reason || '').trim());
   const rules = researchCase.rules || [];
   const ruleProposals = researchCase.rule_proposals || [];
   const findings = researchCase.findings || [];
@@ -10041,11 +10112,30 @@ function renderResearchCaseDetail(researchCase) {
   const pipeline = (researchCase.pipelines || [])[0] || null;
   const latestReview = (researchCase.publication_reviews || [])[0] || null;
   const nextAction = researchNextActionForCase(researchCase, pipeline, latestReview);
+  const calibration = researchCase.assessment_calibration || {};
+  const assessment = String(researchCase.assessment || 'unconfirmed_static_lead');
+  const evidenceQuality = String(researchCase.evidence_quality || calibration.evidence_quality || 'insufficient');
+  const localExposure = String(researchCase.local_exposure || calibration.local_exposure || 'unknown');
+  const uniqueObservations = Number(researchCase.unique_observations ?? calibration.unique_observations ?? 0);
+  const repeatObservations = Number(researchCase.repeat_observations ?? calibration.repeat_observations ?? 0);
+  const decisionFacts = [
+    subjects.length ? `${subjects.length} structured subject${subjects.length === 1 ? '' : 's'} recorded.` : 'No structured subject recorded.',
+    evidence.length ? `${evidence.length} evidence record${evidence.length === 1 ? '' : 's'} with provenance.` : 'No evidence records attached.',
+    artifacts.length ? 'Artifact catalog state is linked to this case.' : 'No artifact catalog record is linked.',
+  ];
+  const decisionContradictions = [];
+  if ((researchCase.state_reconciliation?.changed || []).length) decisionContradictions.push('A subject state was reconciled from the artifact catalog; review the audit event.');
+  if (!evidence.some(item => item.evidence_type === 'sandbox_analysis')) decisionContradictions.push('Runtime behavior is unobserved; static evidence must not be described as execution.');
   host.innerHTML = `
     <div class="research-detail-head">
       <div><div class="detail-eyebrow"><code>${escapeHtml(researchCase.case_id)}</code></div><h3>${escapeHtml(researchCase.title)}</h3><p class="small">Updated ${escapeHtml(fmtDate(researchCase.updated_at))} · ${escapeHtml(statusLabel(researchCase.case_type))}</p></div>
-      <div class="research-detail-badges">${renderSeverityPill(researchCase.severity)}${renderStatusPill(researchCase.status)}</div>
+      <div class="research-detail-badges">${renderSeverityPill(researchCase.potential_impact || researchCase.severity)}${renderStatusPill(researchCase.status)}</div>
     </div>
+    <section class="research-decision-card" aria-label="Case assessment">
+      <div class="research-decision-head"><div><span class="detail-eyebrow">CURRENT ASSESSMENT</span><h4>${escapeHtml(humanizeSnake(assessment))}</h4><p>${escapeHtml(researchCase.summary || 'The case is an evidence-led investigation; no automatic maliciousness verdict is implied.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(researchCase.publication_readiness || 'blocked'))}</span></div>
+      <div class="research-decision-metrics"><div><span>Detection confidence</span><b>${escapeHtml(String(researchCase.detection_confidence ?? calibration.detection_confidence ?? researchCase.confidence ?? 0))}%</b></div><div><span>Investigation priority</span><b>${escapeHtml(humanizeSnake(researchCase.investigation_priority || calibration.investigation_priority || 'normal'))}</b></div><div><span>Potential impact</span><b>${escapeHtml(humanizeSnake(researchCase.potential_impact || researchCase.severity || 'medium'))}</b></div><div><span>Local exposure</span><b>${escapeHtml(humanizeSnake(localExposure))}</b></div><div><span>Evidence quality</span><b>${escapeHtml(humanizeSnake(evidenceQuality))}</b></div><div><span>Observations</span><b>${escapeHtml(String(uniqueObservations))} unique · ${escapeHtml(String(repeatObservations))} repeated</b></div></div>
+      <div class="research-decision-columns"><div><h5>Confirmed facts</h5>${renderBulletList(decisionFacts, 'No confirmed facts recorded.')}</div><div><h5>Contradictions and limits</h5>${renderBulletList(decisionContradictions, 'No contradictions recorded.')}</div><div><h5>Recommended next action</h5><p>${escapeHtml(nextAction.reason)}</p>${legacyIocCandidates.length ? '<button class="secondary-btn mini-btn" id="research-reconcile-btn" type="button">Reconcile legacy indicators</button><div class="small">Classifies older URL candidates as source references or attacker indicators without deleting history.</div>' : ''}</div></div>
+    </section>
     <div class="research-readiness ${readiness.ready ? 'ready' : 'blocked'}">
       <strong>${readiness.ready ? 'Publication ready' : `${(readiness.blockers || []).length} publication blocker(s)`}</strong>
       ${renderBulletList(readiness.ready ? (readiness.warnings || []) : (readiness.blockers || []), readiness.ready ? 'No readiness warnings.' : 'Run the readiness workflow before publication.')}
@@ -10150,7 +10240,7 @@ function renderResearchCases() {
   if (list) list.innerHTML = state.researchCases.loading && !cases.length
     ? '<div class="empty-state">Loading research cases…</div>'
     : filtered.length
-      ? `<div class="research-case-list">${filtered.map(item => `<button class="research-case-row ${item.case_id === state.researchCases.selectedId ? 'selected' : ''}" type="button" data-research-case-id="${escapeHtml(item.case_id)}"><span class="research-case-row-head"><strong>${escapeHtml(item.title)}</strong>${renderSeverityPill(item.severity)}</span><span class="small"><code>${escapeHtml(item.case_id)}</code> · ${escapeHtml(statusLabel(item.status))} · confidence ${escapeHtml(String(item.confidence || 0))}</span><span class="small">${escapeHtml(String(item.evidence_count || 0))} evidence · ${escapeHtml(String(item.ioc_count || 0))} IOCs · ${escapeHtml(fmtDate(item.updated_at))}</span></button>`).join('')}</div>`
+      ? `<div class="research-case-list">${filtered.map(item => `<button class="research-case-row ${item.case_id === state.researchCases.selectedId ? 'selected' : ''}" type="button" data-research-case-id="${escapeHtml(item.case_id)}"><span class="research-case-row-head"><strong>${escapeHtml(item.title)}</strong>${renderSeverityPill(item.potential_impact || item.severity)}</span><span class="small"><code>${escapeHtml(item.case_id)}</code> · ${escapeHtml(statusLabel(item.status))} · confidence ${escapeHtml(String(item.confidence || 0))}</span><span class="small">${escapeHtml(String(item.evidence_count || 0))} evidence · ${escapeHtml(String(item.ioc_count || 0))} IOCs · ${escapeHtml(fmtDate(item.updated_at))}</span></button>`).join('')}</div>`
       : `<div class="empty-state">${escapeHtml(state.researchCases.error || 'No research cases match this view.')}</div>`;
   list?.querySelectorAll('[data-research-case-id]').forEach(button => button.addEventListener('click', async () => {
     state.researchCases.selectedId = button.dataset.researchCaseId;

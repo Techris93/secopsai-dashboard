@@ -31,6 +31,7 @@ def test_research_actions_are_typed_and_not_shell_commands():
         "resolution-configure",
         "resolution-run",
         "resolution-review",
+        "reconcile",
     ):
         assert f"runResearchCaseAction('{action}'" in source
     assert "Run Safe Package Intake" in source
@@ -74,6 +75,12 @@ def test_helper_research_actions_map_to_allowlisted_cli_args():
         "intake-preview", {"ecosystem": "pypi", "package": "example"}
     )
     assert preview == ["research", "intake", "preview", "--ecosystem", "pypi", "--package", "example"]
+
+    reconcile = dashboard_server.build_research_case_args(
+        "reconcile", {"case_id": "RSC-AAAAAAAAAAAA", "actor": "dashboard-operator"}
+    )
+    assert reconcile[:4] == ["research", "case", "reconcile", "RSC-AAAAAAAAAAAA"]
+    assert "--actor" in reconcile
 
 
 def test_helper_rejects_untrusted_case_arguments():

@@ -120,6 +120,7 @@ RESEARCH_CASE_ACTIONS = {
     'resolution-configure',
     'resolution-run',
     'resolution-review',
+    'reconcile',
 }
 RESEARCH_DISCOVERY_ACTIONS = {
     'capabilities',
@@ -2041,6 +2042,7 @@ def build_research_case_args(action, payload):
         'sandbox-request': [('--artifact-sha256', 'artifact_sha256', 64), ('--justification', 'justification', 12000), ('--provider', 'provider', 80), ('--actor', 'actor', 160)],
         'sandbox-status': [('--status', 'status', 40), ('--result-json', 'result_json', 50000), ('--actor', 'actor', 160)],
         'disclosure-status': [('--status', 'status', 40), ('--actor', 'actor', 160)],
+        'reconcile': [('--actor', 'actor', 160)],
     }
     for flag, key, limit in fields[action]:
         value = _clean_string(payload.get(key), limit)

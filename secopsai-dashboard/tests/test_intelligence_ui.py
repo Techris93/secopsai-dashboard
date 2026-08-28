@@ -264,6 +264,9 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         assert f'id="{element}"' in html
     assert "runIntelligenceAction('enqueue'" in app
     assert "Open full analysis" in app
+    assert "intelligence-decision-card" in app
+    assert "intelligencePipelineGroups" in app
+    assert "research-decision-card" in app
     assert "data-intelligence-review" in app
     assert "function intelligenceResultView" in app
     assert "function renderIntelligenceResultModal" in app
