@@ -267,6 +267,11 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "intelligence-decision-card" in app
     assert "intelligencePipelineGroups" in app
     assert "research-decision-card" in app
+    assert "const artifacts = researchCase.artifacts || [];" in app
+    assert "publication_readiness_state" in app
+    assert "const rawReadiness = researchCase.publication_readiness;" in app
+    assert "id=\"research-detail-impact\"" in app
+    assert "potential_impact: el('research-detail-impact')?.value" in app
     assert "data-intelligence-review" in app
     assert "function intelligenceResultView" in app
     assert "function renderIntelligenceResultModal" in app

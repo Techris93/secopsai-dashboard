@@ -9493,6 +9493,7 @@ function bindResearchCaseDetailActions(researchCase) {
     disclosure_status: el('research-detail-disclosure')?.value,
     confidence: el('research-detail-confidence')?.value,
     severity: el('research-detail-severity')?.value,
+    potential_impact: el('research-detail-impact')?.value,
     owner: el('research-detail-owner')?.value,
     summary: el('research-detail-summary')?.value,
     actor: 'dashboard-operator'
@@ -10099,8 +10100,26 @@ function renderResearchCaseDetail(researchCase) {
     host.innerHTML = `<div class="empty-state">${escapeHtml(state.researchCases.error || 'Select or create a research case.')}</div>`;
     return;
   }
-  const readiness = researchCase.publication_readiness || { ready: false, blockers: [], warnings: [] };
+  const rawReadiness = researchCase.publication_readiness;
+  const readiness = rawReadiness && typeof rawReadiness === 'object'
+    ? {
+      ready: Boolean(rawReadiness.ready),
+      blockers: Array.isArray(rawReadiness.blockers) ? rawReadiness.blockers : [],
+      warnings: Array.isArray(rawReadiness.warnings) ? rawReadiness.warnings : [],
+      checked_at: rawReadiness.checked_at || null,
+    }
+    : {
+      ready: String(rawReadiness || researchCase.publication_readiness_state || '').toLowerCase() === 'ready',
+      blockers: [],
+      warnings: [],
+      checked_at: null,
+    };
+  const readinessState = String(
+    researchCase.publication_readiness_state
+      || (readiness.ready ? 'ready' : 'blocked'),
+  );
   const subjects = researchCase.subjects || [];
+  const artifacts = researchCase.artifacts || [];
   const evidence = researchCase.evidence || [];
   const iocs = researchCase.iocs || [];
   const iocCandidates = researchCase.ioc_candidates || [];
@@ -10132,7 +10151,7 @@ function renderResearchCaseDetail(researchCase) {
       <div class="research-detail-badges">${renderSeverityPill(researchCase.potential_impact || researchCase.severity)}${renderStatusPill(researchCase.status)}</div>
     </div>
     <section class="research-decision-card" aria-label="Case assessment">
-      <div class="research-decision-head"><div><span class="detail-eyebrow">CURRENT ASSESSMENT</span><h4>${escapeHtml(humanizeSnake(assessment))}</h4><p>${escapeHtml(researchCase.summary || 'The case is an evidence-led investigation; no automatic maliciousness verdict is implied.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(researchCase.publication_readiness || 'blocked'))}</span></div>
+      <div class="research-decision-head"><div><span class="detail-eyebrow">CURRENT ASSESSMENT</span><h4>${escapeHtml(humanizeSnake(assessment))}</h4><p>${escapeHtml(researchCase.summary || 'The case is an evidence-led investigation; no automatic maliciousness verdict is implied.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(readinessState))}</span></div>
       <div class="research-decision-metrics"><div><span>Detection confidence</span><b>${escapeHtml(String(researchCase.detection_confidence ?? calibration.detection_confidence ?? researchCase.confidence ?? 0))}%</b></div><div><span>Investigation priority</span><b>${escapeHtml(humanizeSnake(researchCase.investigation_priority || calibration.investigation_priority || 'normal'))}</b></div><div><span>Potential impact</span><b>${escapeHtml(humanizeSnake(researchCase.potential_impact || researchCase.severity || 'medium'))}</b></div><div><span>Local exposure</span><b>${escapeHtml(humanizeSnake(localExposure))}</b></div><div><span>Evidence quality</span><b>${escapeHtml(humanizeSnake(evidenceQuality))}</b></div><div><span>Observations</span><b>${escapeHtml(String(uniqueObservations))} unique · ${escapeHtml(String(repeatObservations))} repeated</b></div></div>
       <div class="research-decision-columns"><div><h5>Confirmed facts</h5>${renderBulletList(decisionFacts, 'No confirmed facts recorded.')}</div><div><h5>Contradictions and limits</h5>${renderBulletList(decisionContradictions, 'No contradictions recorded.')}</div><div><h5>Recommended next action</h5><p>${escapeHtml(nextAction.reason)}</p>${legacyIocCandidates.length ? '<button class="secondary-btn mini-btn" id="research-reconcile-btn" type="button">Reconcile legacy indicators</button><div class="small">Classifies older URL candidates as source references or attacker indicators without deleting history.</div>' : ''}</div></div>
     </section>
@@ -10150,6 +10169,7 @@ function renderResearchCaseDetail(researchCase) {
         <label><span>Status</span><select id="research-detail-status">${['draft','investigating','validation','disclosure_pending','ready_to_publish','published','closed'].map(value => researchOption(value, researchCase.status)).join('')}</select></label>
         <label><span>Disclosure</span><select id="research-detail-disclosure">${['not_started','not_required','preparing','reported','coordinating','disclosed','closed'].map(value => researchOption(value, researchCase.disclosure_status)).join('')}</select></label>
         <label><span>Severity</span><select id="research-detail-severity">${['critical','high','medium','low','info'].map(value => researchOption(value, researchCase.severity)).join('')}</select></label>
+        <label><span>Potential impact</span><select id="research-detail-impact">${['critical','high','medium','low','info'].map(value => researchOption(value, researchCase.potential_impact || researchCase.severity || 'medium')).join('')}</select></label>
         <label><span>Confidence</span><input id="research-detail-confidence" type="number" min="0" max="100" value="${escapeHtml(String(researchCase.confidence || 0))}" /></label>
         <label class="research-span-2"><span>Owner</span><input id="research-detail-owner" value="${escapeHtml(researchCase.owner || '')}" maxlength="160" /></label>
         <label class="research-span-2"><span>Executive summary</span><textarea id="research-detail-summary" rows="5" maxlength="8000">${escapeHtml(researchCase.summary || '')}</textarea></label>
@@ -12180,6 +12200,7 @@ function bindEvents() {
       summary: el('research-create-summary')?.value,
       case_type: el('research-create-type')?.value,
       severity: el('research-create-severity')?.value,
+      potential_impact: el('research-create-impact')?.value,
       confidence: el('research-create-confidence')?.value,
       owner: el('research-create-owner')?.value
     }, event.currentTarget);

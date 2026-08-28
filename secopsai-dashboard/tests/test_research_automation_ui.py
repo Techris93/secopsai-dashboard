@@ -82,6 +82,22 @@ def test_helper_research_actions_map_to_allowlisted_cli_args():
     assert reconcile[:4] == ["research", "case", "reconcile", "RSC-AAAAAAAAAAAA"]
     assert "--actor" in reconcile
 
+    create = dashboard_server.build_research_case_args(
+        "create",
+        {
+            "title": "Critical package review",
+            "severity": "critical",
+            "potential_impact": "high",
+        },
+    )
+    assert create[0:4] == ["research", "case", "create", "--title"]
+    assert ["--potential-impact", "high"] == create[create.index("--potential-impact"):create.index("--potential-impact") + 2]
+    update = dashboard_server.build_research_case_args(
+        "update",
+        {"case_id": "RSC-AAAAAAAAAAAA", "potential_impact": "low"},
+    )
+    assert ["--potential-impact", "low"] == update[update.index("--potential-impact"):update.index("--potential-impact") + 2]
+
 
 def test_helper_rejects_untrusted_case_arguments():
     try:

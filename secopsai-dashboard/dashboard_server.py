@@ -1721,6 +1721,7 @@ def build_research_case_args(action, payload):
             ('--summary', 'summary', 8000),
             ('--type', 'case_type', 80),
             ('--severity', 'severity', 20),
+            ('--potential-impact', 'potential_impact', 20),
             ('--confidence', 'confidence', 20),
             ('--owner', 'owner', 160),
         ]:
@@ -1977,6 +1978,7 @@ def build_research_case_args(action, payload):
             ('--summary', 'summary', 8000),
             ('--type', 'case_type', 80),
             ('--severity', 'severity', 20),
+            ('--potential-impact', 'potential_impact', 20),
             ('--confidence', 'confidence', 20),
             ('--status', 'status', 40),
             ('--owner', 'owner', 160),
