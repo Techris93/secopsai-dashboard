@@ -902,7 +902,8 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         </section>
 
         <section class="card research-stage-panel" id="research-sandbox-section" data-research-section="sandbox" aria-labelledby="research-sandbox-title">
-          <div class="page-header compact-header"><div><h3 id="research-sandbox-title" style="margin:0;">Sandbox jobs</h3><p class="small" style="margin:6px 0 0;">Review dynamic-analysis requests, approvals, provider state, and imported results.</p></div></div>
+          <div class="page-header compact-header"><div><h3 id="research-sandbox-title" style="margin:0;">Sandbox jobs</h3><p class="small" style="margin:6px 0 0;">Review automatic dynamic-analysis recommendations, approvals, provider state, and imported results.</p></div><button class="secondary-btn" id="research-sandbox-provider-verify-btn" type="button">Verify Tria.ge API</button></div>
+          <div id="research-sandbox-provider-status" class="research-sandbox-provider-status" role="status" aria-live="polite"></div>
           <div id="research-sandbox-queue"></div>
         </section>
 

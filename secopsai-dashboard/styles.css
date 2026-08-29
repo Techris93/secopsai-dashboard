@@ -6491,6 +6491,56 @@ label span,
   background: rgba(3, 5, 8, 0.32);
 }
 
+.research-sandbox-provider-status {
+  margin: 12px 0 14px;
+}
+
+.research-sandbox-provider-card,
+.research-sandbox-recommendation {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--signal-line-soft, rgba(74, 78, 85, 0.45));
+  border-radius: 8px;
+  background: rgba(3, 5, 8, 0.22);
+}
+
+.research-sandbox-provider-card p,
+.research-sandbox-recommendation p {
+  margin: 0;
+}
+
+.research-sandbox-recommendation {
+  margin: 14px 0 4px;
+  border-left: 3px solid var(--signal-amber, #d6b56c);
+}
+
+.research-sandbox-recommendation-head,
+.research-sandbox-recommendation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.research-sandbox-recommendation-head {
+  justify-content: space-between;
+}
+
+.research-sandbox-recommendation h5 {
+  margin: 3px 0 0;
+  font-size: 0.95rem;
+}
+
+.research-sandbox-recommendation ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.research-sandbox-blockers {
+  color: var(--signal-amber, #d6b56c);
+}
+
 .research-automation-status .feed-item {
   display: flex;
   flex-wrap: wrap;
@@ -9901,6 +9951,19 @@ body.professional-ui .main #work-scope-note {
   background: var(--contrast-surface-muted) !important;
   border-color: var(--contrast-border) !important;
   color: var(--contrast-text-soft) !important;
+}
+
+body.professional-ui .main :is(.research-sandbox-provider-card, .research-sandbox-recommendation) {
+  background: #f5f9f7 !important;
+  border-color: var(--contrast-border) !important;
+  color: var(--contrast-text) !important;
+}
+body.professional-ui .main :is(.research-sandbox-provider-card, .research-sandbox-recommendation) .small,
+body.professional-ui .main :is(.research-sandbox-provider-card, .research-sandbox-recommendation) li {
+  color: var(--contrast-text-soft) !important;
+}
+body.professional-ui .main .research-sandbox-blockers {
+  color: var(--contrast-amber) !important;
 }
 
 /* Keep the operator readout on the dark navigation rail. The legacy

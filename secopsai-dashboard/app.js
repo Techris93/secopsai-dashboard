@@ -225,6 +225,13 @@ const state = {
       error: null,
       lastAction: null
     },
+    sandboxRecommendations: {
+      recommendations: [],
+      summary: null,
+      provider: null,
+      loading: false,
+      error: null
+    },
     adminToken: sessionStorage.getItem('secopsai_triage_ops_admin_token') || sessionStorage.getItem('secopsai_blog_ops_admin_token') || ''
   },
   localTriage: null,
@@ -8554,6 +8561,83 @@ function researchCasesEndpoint(suffix = '') {
   return `${cfg.researchCasesEndpoint || '/api/secopsai/research-cases'}${suffix}`;
 }
 
+function sandboxRecommendationsEndpoint() {
+  return '/api/secopsai/research-sandbox-recommendations?limit=50';
+}
+
+async function loadResearchSandboxRecommendations({ render = true } = {}) {
+  const queue = state.researchCases.sandboxRecommendations;
+  queue.loading = true;
+  queue.error = null;
+  if (render) renderResearchCases();
+  try {
+    const response = await dashboardApiFetch(sandboxRecommendationsEndpoint(), { cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Sandbox recommendation HTTP ${response.status}`);
+    queue.recommendations = Array.isArray(payload.recommendations) ? payload.recommendations : [];
+    queue.summary = payload.summary && typeof payload.summary === 'object' ? payload.summary : {};
+  } catch (error) {
+    queue.error = error?.message || String(error);
+    queue.recommendations = [];
+    queue.summary = null;
+  } finally {
+    queue.loading = false;
+    if (render) renderResearchCases();
+  }
+  return queue;
+}
+
+async function verifyResearchSandboxProvider(button = null) {
+  if (button) setButtonBusy(button, true, 'Checking…');
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/sandbox-provider-status?verify=1', { cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || `Sandbox provider HTTP ${response.status}`);
+    const provider = payload.provider && typeof payload.provider === 'object' ? payload.provider : {};
+    state.researchCases.sandboxRecommendations.provider = provider;
+    state.integrationStatus = {
+      ...(state.integrationStatus || {}),
+      sandbox: { ...(state.integrationStatus?.sandbox || {}), ...provider }
+    };
+    renderResearchCases();
+    const health = String(provider.health || (provider.verified ? 'ready' : 'not_checked')).replaceAll('_', ' ');
+    setStatus(`<span class="dot"></span> Tria.ge API check: ${escapeHtml(health)}`);
+    return provider;
+  } catch (error) {
+    state.researchCases.sandboxRecommendations.provider = {
+      ...(state.researchCases.sandboxRecommendations.provider || {}),
+      health: 'unavailable',
+      verified: false,
+      verification_error: error?.message || String(error)
+    };
+    renderResearchCases();
+    setStatus(`Tria.ge API check failed: ${error?.message || error}`, true);
+    return null;
+  } finally {
+    if (button) setButtonBusy(button, false);
+  }
+}
+
+function renderResearchSandboxProviderStatus() {
+  const host = el('research-sandbox-provider-status');
+  if (!host) return;
+  const provider = state.researchCases.sandboxRecommendations.provider || state.integrationStatus?.sandbox || null;
+  if (!provider) {
+    host.innerHTML = '<div class="small">Tria.ge has not been checked. Verify the read-only API configuration before approving a submission.</div>';
+    return;
+  }
+  const health = String(provider.health || (provider.verified ? 'ready' : provider.configured ? 'not_checked' : 'not_configured')).toLowerCase();
+  const label = health === 'ready' ? 'Ready' : health === 'not_configured' ? 'Not configured' : health === 'unauthorized' ? 'Authentication failed' : health === 'unavailable' ? 'Unavailable' : health === 'invalid_configuration' ? 'Invalid configuration' : 'Not checked';
+  const detail = provider.verified
+    ? `Read-only API verified${provider.resource_count === null || provider.resource_count === undefined ? '' : ` · ${escapeHtml(String(provider.resource_count))} resources reported`}.`
+    : health === 'not_configured'
+      ? 'Set TRIAGE_API_TOKEN in the local helper to enable server-side submission; manual handoff remains available.'
+      : provider.verification_error
+        ? `Verification did not complete: ${escapeHtml(String(provider.verification_error).replaceAll('_', ' '))}.`
+        : 'Configuration is present but has not been verified in this session.';
+  host.innerHTML = `<div class="research-sandbox-provider-card"><div>${renderStatusPill(health)} <strong>Tria.ge</strong></div><p class="small">${detail}</p><p class="small">Public submissions are visible to the public. Approval and upload remain separate actions.</p></div>`;
+}
+
 const RESEARCH_CASE_ID_PATTERN = /^RSC-[A-F0-9]{12}$/i;
 
 function researchOption(value, current, label = null) {
@@ -8615,6 +8699,9 @@ async function loadResearchCases({ render = true, preserveSelection = true } = {
     state.researchCases.selectedId = retained ? state.researchCases.selectedId : (state.researchCases.cases[0]?.case_id || null);
     if (state.researchCases.selectedId) await loadResearchCaseDetail(state.researchCases.selectedId, { render: false });
     else state.researchCases.selected = null;
+    // The sandbox queue is a separate read-only policy view. Keep its failure
+    // isolated so a provider outage never hides the research case queue.
+    await loadResearchSandboxRecommendations({ render: false });
   } catch (error) {
     state.researchCases.error = error?.message || String(error);
     state.researchCases.cases = [];
@@ -8896,6 +8983,43 @@ function renderResearchCampaigns() {
   host.innerHTML = campaigns.length ? researchTable(['Campaign', 'Confidence', 'Attribution', 'Status', 'Updated'], campaigns.map(item => `<tr><td><strong>${escapeHtml(item.title || item.campaign_id)}</strong><div class="small"><code>${escapeHtml(item.campaign_id)}</code></div></td><td>${escapeHtml(String(item.confidence ?? '—'))}%</td><td>${escapeHtml(item.attribution || 'Not attributed')}</td><td>${renderStatusPill(item.status || 'candidate')}</td><td>${escapeHtml(fmtDate(item.updated_at))}</td></tr>`), '') : '<div class="empty-state compact">No campaign clusters exist yet. Correlation creates candidate relationships; it does not establish attribution.</div>';
 }
 
+function renderResearchSandboxQueue(cases) {
+  const host = el('research-sandbox-queue');
+  renderResearchSandboxProviderStatus();
+  if (!host) return;
+  const queue = state.researchCases.sandboxRecommendations || {};
+  if (queue.loading && !queue.recommendations?.length) {
+    host.innerHTML = '<div class="empty-state compact">Evaluating cases for dynamic-analysis need…</div>';
+    return;
+  }
+  if (queue.error && !queue.recommendations?.length) {
+    host.innerHTML = `<div class="empty-state compact">Sandbox recommendations unavailable: ${escapeHtml(queue.error)}. The case workflow remains available.</div>`;
+    return;
+  }
+  const recommendations = Array.isArray(queue.recommendations) ? queue.recommendations : [];
+  if (recommendations.length) {
+    host.innerHTML = researchTable(
+      ['Case', 'Assessment', 'Recommendation', 'Exact artifact', 'Next action'],
+      recommendations.map(item => {
+        const recommendation = item.recommendation || {};
+        const status = recommendation.status || 'unknown';
+        const artifact = recommendation.artifact_sha256
+          ? `${String(recommendation.artifact_sha256).slice(0, 16)}…`
+          : 'Not attached';
+        const reasons = Array.isArray(recommendation.reasons) ? recommendation.reasons.slice(0, 2).join(' ') : '';
+        return `<tr><td><button class="mini-btn research-sandbox-open-case-btn" data-case-id="${escapeHtml(item.case_id)}" type="button">Open case</button><div><strong>${escapeHtml(item.title || item.case_id)}</strong></div><div class="small"><code>${escapeHtml(item.case_id)}</code> · ${escapeHtml(fmtDate(item.updated_at))}</div></td><td>${renderSeverityPill(item.severity || 'medium')}<div class="small">${escapeHtml(humanizeSnake(item.assessment || 'unconfirmed'))}</div></td><td>${renderStatusPill(status)}<div class="small">${escapeHtml(reasons || recommendation.next_action || 'Review the policy result.')}</div></td><td><code>${escapeHtml(artifact)}</code></td><td><span class="small">${escapeHtml(recommendation.next_action || 'Review the case.')}</span></td></tr>`;
+      }),
+      'No cases currently need dynamic analysis.'
+    );
+  } else {
+    const existing = (cases || []).filter(item => Number(item.sandbox_count || 0) > 0 || ['sandbox_pending', 'sandbox_review'].includes(String(item.status || '').toLowerCase()));
+    host.innerHTML = existing.length
+      ? researchTable(['Case', 'Sandbox jobs', 'State', 'Updated'], existing.map(item => `<tr><td><button class="mini-btn research-sandbox-open-case-btn" data-case-id="${escapeHtml(item.case_id)}" type="button">Open case</button><div><strong>${escapeHtml(item.title || item.case_id)}</strong></div><div class="small"><code>${escapeHtml(item.case_id)}</code></div></td><td>${escapeHtml(String(item.sandbox_count || 0))}</td><td>${escapeHtml(statusLabel(item.status || 'review'))}</td><td>${escapeHtml(fmtDate(item.updated_at))}</td></tr>`), 'No sandbox jobs are waiting for approval or review.')
+      : '<div class="empty-state compact">No cases currently meet the dynamic-analysis recommendation policy. Static evidence remains the default; a recommendation appears only when runtime evidence could materially change the decision.</div>';
+  }
+  host.querySelectorAll('.research-sandbox-open-case-btn').forEach(button => button.addEventListener('click', () => openResearchCase(button.dataset.caseId)));
+}
+
 function renderResearchStageQueues(candidates = []) {
   const inbox = el('research-inbox-candidates');
   if (inbox) {
@@ -8922,9 +9046,7 @@ function renderResearchStageQueues(candidates = []) {
   const disclosure = el('research-disclosure-queue');
   const disclosureCases = cases.filter(item => ['disclosure_pending', 'coordinating'].includes(String(item.status || '').toLowerCase()) || ['reported', 'coordinating'].includes(String(item.disclosure_status || '').toLowerCase()));
   if (disclosure) disclosure.innerHTML = disclosureCases.length ? researchTable(['Case', 'State', 'Owner', 'Updated'], disclosureCases.map(item => `<tr><td><strong>${escapeHtml(item.title || item.case_id)}</strong><div class="small"><code>${escapeHtml(item.case_id)}</code></div></td><td>${escapeHtml(statusLabel(item.disclosure_status || item.status || 'pending'))}</td><td>${escapeHtml(item.owner || 'Unassigned')}</td><td>${escapeHtml(fmtDate(item.updated_at))}</td></tr>`), '') : '<div class="empty-state compact">No cases currently require disclosure coordination.</div>';
-  const sandbox = el('research-sandbox-queue');
-  const sandboxCases = cases.filter(item => Number(item.sandbox_count || 0) > 0 || ['sandbox_pending', 'sandbox_review'].includes(String(item.status || '').toLowerCase()));
-  if (sandbox) sandbox.innerHTML = sandboxCases.length ? researchTable(['Case', 'Sandbox jobs', 'State', 'Updated'], sandboxCases.map(item => `<tr><td><strong>${escapeHtml(item.title || item.case_id)}</strong><div class="small"><code>${escapeHtml(item.case_id)}</code></div></td><td>${escapeHtml(String(item.sandbox_count || 0))}</td><td>${escapeHtml(statusLabel(item.status || 'review'))}</td><td>${escapeHtml(fmtDate(item.updated_at))}</td></tr>`), '') : '<div class="empty-state compact">No sandbox jobs are waiting for approval or review.</div>';
+  renderResearchSandboxQueue(cases);
 }
 
 function formatCoverageLag(lagSeconds) {
@@ -9664,10 +9786,17 @@ function bindResearchCaseDetailActions(researchCase) {
     case_id: researchCase.case_id,
     artifact_sha256: el('research-sandbox-sha256')?.value,
     justification: el('research-sandbox-justification')?.value,
-    behaviors: ['network behavior', 'filesystem behavior', 'process behavior'],
+    behaviors: Array.isArray(researchCase.sandbox_recommendation?.requested_behaviors) && researchCase.sandbox_recommendation.requested_behaviors.length
+      ? researchCase.sandbox_recommendation.requested_behaviors
+      : ['network behavior', 'filesystem behavior', 'process behavior'],
     provider: state.integrationStatus?.sandbox?.configured ? 'tria.ge' : 'manual-result-import',
     actor: 'dashboard-operator'
   }, event.currentTarget));
+  el('research-sandbox-open-request-btn')?.addEventListener('click', () => {
+    const drawer = el('research-sandbox-request-drawer');
+    if (drawer) drawer.open = true;
+    el('research-sandbox-sha256')?.focus();
+  });
   document.querySelectorAll('#research-case-detail .research-intake-attach-btn').forEach(button => button.addEventListener('click', event => runResearchCaseAction('intake-attach', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget)));
   document.querySelectorAll('#research-case-detail .research-job-retry-btn').forEach(button => button.addEventListener('click', event => runResearchCaseAction('job-retry', { case_id: researchCase.case_id, job_id: button.dataset.jobId, actor: 'dashboard-operator' }, event.currentTarget)));
   document.querySelectorAll('#research-case-detail .research-job-cancel-btn').forEach(button => button.addEventListener('click', async event => {
@@ -9714,6 +9843,14 @@ function bindResearchCaseDetailActions(researchCase) {
       case_id: researchCase.case_id,
       request_id: button.dataset.requestId
     }, event.currentTarget);
+  }));
+  document.querySelectorAll('#research-case-detail .research-sandbox-reconcile-btn').forEach(button => button.addEventListener('click', async event => {
+    if (!(await requestConfirmation('Repair the link for this completed sandbox result?', {
+      title: 'Repair sandbox evidence link',
+      context: 'SecOpsAI will inspect only the stored, sanitized terminal result and idempotently create the linked sandbox_analysis evidence record when its report URL, submission ID, and artifact hash are valid. It will not contact Tria.ge or execute the artifact.',
+      confirmLabel: 'Repair link'
+    }))) return;
+    runResearchCaseAction('sandbox-reconcile', { case_id: researchCase.case_id, actor: 'dashboard-operator' }, event.currentTarget);
   }));
   document.querySelectorAll('#research-case-detail .research-sandbox-download-btn').forEach(button => button.addEventListener('click', event => {
     downloadApprovedSandboxArtifact(button.dataset.requestId, event.currentTarget);
@@ -10031,6 +10168,7 @@ function renderResearchAutomationPanel(researchCase) {
     warning: 'Tria.ge public submissions are visible to the public and must not contain confidential data.'
   };
   const sandboxApiConfigured = Boolean(sandboxProvider.configured);
+  const sandboxApiVerified = Boolean(sandboxProvider.verified && String(sandboxProvider.health || '').toLowerCase() === 'ready');
   const subjects = researchCase.subjects || [];
   const packageSubject = prefill.packageSubject || {};
   const artifact = (researchCase.evidence || []).find(item => item.evidence_type === 'package_artifact' && item.status === 'active');
@@ -10038,11 +10176,28 @@ function renderResearchAutomationPanel(researchCase) {
   const reviews = researchCase.publication_reviews || [];
   const disclosures = researchCase.disclosures || [];
   const sandboxes = researchCase.sandbox_requests || [];
+  const caseEvidence = researchCase.evidence || [];
   const ecosystems = ['npm', 'pypi', 'nuget', 'maven', 'rubygems', 'packagist', 'go', 'open-vsx'];
   const artifacts = researchCase.artifacts || [];
+  const sandboxRecommendation = researchCase.sandbox_recommendation || {};
+  const recommendedArtifact = artifacts.find(item => String(item.sha256 || '').toLowerCase() === String(sandboxRecommendation.artifact_sha256 || '').toLowerCase());
   const latestVerdict = prefill.latestVerdict || {};
   const evidencePrefill = (prefill.activeEvidenceIds || []).join(', ');
   const recipientOptions = (prefill.recipientCandidates || []).map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+  const recommendationReasons = Array.isArray(sandboxRecommendation.reasons) ? sandboxRecommendation.reasons : [];
+  const recommendationBlockers = Array.isArray(sandboxRecommendation.blockers) ? sandboxRecommendation.blockers : [];
+  const recommendationSummary = sandboxRecommendation.status === 'recommended'
+    ? 'Dynamic analysis is recommended for this exact artifact. Request approval before any external submission.'
+    : sandboxRecommendation.status === 'blocked'
+      ? 'Dynamic analysis could help, but the exact hash-verified artifact is not attached yet.'
+      : sandboxRecommendation.status === 'already_requested'
+        ? 'A request already exists; do not create a duplicate submission.'
+        : sandboxRecommendation.status === 'completed'
+          ? 'Sandbox evidence is already attached. Review it before changing the case verdict.'
+          : sandboxRecommendation.status === 'completed_unlinked'
+            ? 'A sandbox result is marked complete, but it is not linked to case evidence yet. Record a valid sanitized report instead of creating a duplicate request.'
+          : 'Static evidence does not currently justify dynamic analysis.';
+  const recommendationMarkup = `<section class="research-sandbox-recommendation" aria-label="Dynamic analysis recommendation"><div class="research-sandbox-recommendation-head"><div><span class="detail-eyebrow">DYNAMIC ANALYSIS POLICY</span><h5>${escapeHtml(recommendationSummary)}</h5></div>${renderStatusPill(sandboxRecommendation.status || 'not_checked')}</div>${recommendationReasons.length ? `<ul>${recommendationReasons.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}<div class="research-sandbox-recommendation-meta"><span>Priority: <strong>${escapeHtml(sandboxRecommendation.priority || 'normal')}</strong></span><span>Score: <strong>${escapeHtml(String(sandboxRecommendation.score ?? 0))}</strong></span><span>Artifact: <code>${escapeHtml(sandboxRecommendation.artifact_sha256 ? String(sandboxRecommendation.artifact_sha256).slice(0, 16) + '…' : 'not attached')}</code></span></div>${recommendationBlockers.length ? `<div class="small research-sandbox-blockers"><strong>Blockers:</strong> ${escapeHtml(recommendationBlockers.join(' '))}</div>` : ''}<p class="small"><strong>Next:</strong> ${escapeHtml(sandboxRecommendation.next_action || 'Review the case evidence.')}</p>${sandboxRecommendation.status === 'recommended' && sandboxRecommendation.artifact_sha256 ? '<button class="secondary-btn mini-btn" id="research-sandbox-open-request-btn" type="button">Open approval request</button>' : ''}</section>`;
   return researchDetailSection('Research automation', `
     ${renderInvestigationPipeline(researchCase, ecosystems)}
     <p class="small">Safe intake fetches official metadata and artifacts into quarantine, hashes them, and performs bounded static inspection. It never installs or executes the package.</p>
@@ -10070,7 +10225,8 @@ function renderResearchAutomationPanel(researchCase) {
     <div class="research-form-actions"><button class="secondary-btn" id="research-verdict-btn" type="button">Record Human Verdict</button><button class="secondary-btn" id="research-publication-approve-btn" type="button" ${reviews[0]?.status === 'needs_approval' ? '' : 'disabled'}>Approve Publication Review</button></div>
     <details class="research-action-drawer" open><summary>Prepare responsible disclosure</summary><p class="small">Recipient, subject, and body are prefilled from case subjects, registry contacts, and artifact hashes. Review before preparing the draft. Sending remains a separate approval gate.</p><div class="research-form-grid"><label><span>Recipient</span><input id="research-disclosure-recipient" list="research-disclosure-recipient-options" value="${escapeHtml(prefill.recipient || '')}" placeholder="maintainer or registry contact" /><datalist id="research-disclosure-recipient-options">${recipientOptions}</datalist></label><label><span>Subject</span><input id="research-disclosure-subject" value="${escapeHtml(prefill.subject || '')}" /></label><label class="research-span-2"><span>Body</span><textarea id="research-disclosure-body" rows="8" placeholder="Leave empty for the safe template.">${escapeHtml(prefill.body || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-disclosure-suggest-btn" type="button">Refresh Suggested Draft</button><button class="primary-btn" id="research-disclosure-btn" type="button">Prepare Disclosure</button></div></details>
     <details class="research-action-drawer"><summary>Acquire an unavailable artifact</summary><p class="small">Use this when an official registry no longer serves the exact version. The request is an auditable draft and does not send email automatically or change the case verdict.</p><div class="research-form-grid"><label><span>Research partner or contact</span><input id="research-partner-recipient" value="${escapeHtml(prefill.recipient || '')}" placeholder="security@partner.example" /></label><label class="research-span-2"><span>Reason and requested provenance</span><textarea id="research-partner-reason" rows="5" placeholder="Request the exact package, original source, and chain of custody.">${escapeHtml(prefill.partnerReason || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-partner-request-btn" type="button">Request Artifact From Research Partner</button></div>${(researchCase.partner_requests || []).slice(0, 3).map(item => `<div class="feed-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · ${escapeHtml(item.recipient)}</div>`).join('')}</details>
-    <details class="research-action-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">Create an approval record for one exact artifact hash. ${sandboxApiConfigured ? 'Tria.ge API access is configured on the local helper. After approval, SecOpsAI can submit the exact hash-verified artifact through the server-side token and poll the sanitized result.' : 'Tria.ge API access is not configured, so an approved request prepares a hash-verified browser download for manual public upload.'} SecOpsAI never executes the sample locally. ${escapeHtml(sandboxProvider.warning || '')}</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(artifact?.sha256 || prefill.artifactHash || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="3">${escapeHtml(prefill.sandboxJustification || '')}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button">Request Sandbox Approval</button></div></details>
+    ${recommendationMarkup}
+    <details class="research-action-drawer" id="research-sandbox-request-drawer"><summary>Request dynamic sandbox analysis</summary><p class="small">Create an approval record for one exact artifact hash. ${sandboxApiConfigured ? `Tria.ge API access is configured on the local helper${sandboxApiVerified ? ' and the read-only API check passed' : '; verify the read-only API before submitting'}. After approval, SecOpsAI can submit the exact hash-verified artifact through the server-side token and poll the sanitized result.` : 'Tria.ge API access is not configured, so an approved request prepares a hash-verified browser download for manual public upload.'} SecOpsAI never executes the sample locally. ${escapeHtml(sandboxProvider.warning || '')}</p><div class="research-form-grid"><label class="research-span-2"><span>Artifact SHA-256</span><input id="research-sandbox-sha256" value="${escapeHtml(sandboxRecommendation.artifact_sha256 || recommendedArtifact?.sha256 || artifact?.sha256 || prefill.artifactHash || '')}" /></label><label class="research-span-2"><span>Justification</span><textarea id="research-sandbox-justification" rows="3">${escapeHtml(prefill.sandboxJustification || recommendationReasons.join(' '))}</textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-sandbox-btn" type="button" ${sandboxRecommendation.status === 'blocked' || !sandboxRecommendation.artifact_sha256 && !recommendedArtifact?.sha256 && !artifact?.sha256 && !prefill.artifactHash ? 'disabled' : ''}>Request Sandbox Approval</button></div></details>
     <div class="research-automation-status">
       <strong>Jobs and approvals</strong>
       ${jobs.length ? jobs.map(job => `<div class="feed-item"><code>${escapeHtml(job.job_id)}</code> · ${escapeHtml(statusLabel(job.status))} · ${escapeHtml(statusLabel(job.action))}${job.status === 'awaiting_review' ? ` <button class="mini-btn research-intake-attach-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Attach Verified Evidence</button>` : ''}${['failed','expired','canceled'].includes(job.status) ? ` <button class="mini-btn research-job-retry-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Retry</button>` : ''}${['queued','running','awaiting_review'].includes(job.status) ? ` <button class="mini-btn research-job-cancel-btn" data-job-id="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : ''}</div>`).join('') : '<div class="small">No automated research jobs yet.</div>'}
@@ -10082,8 +10238,21 @@ function renderResearchAutomationPanel(researchCase) {
         const canSubmit = sandboxApiConfigured && item.status === 'approved' && artifactAvailable;
         const canPoll = sandboxApiConfigured && item.status === 'submitted';
         const canPrepare = !sandboxApiConfigured && item.status === 'approved' && artifactAvailable;
-        const canRecord = !sandboxApiConfigured && ['approved', 'submitted'].includes(item.status);
-        return `<div class="feed-item sandbox-workflow-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))} · provider ${escapeHtml(sandboxApiConfigured ? 'tria.ge api' : item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-action="sandbox-approve" data-sandbox-status="approved" type="button">Approve public submission</button>` : ''}${canSubmit ? ` <button class="mini-btn research-sandbox-submit-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Submit to Tria.ge</button>` : ''}${canPoll ? ` <button class="mini-btn research-sandbox-poll-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Refresh Tria.ge result</button>` : ''}${canPrepare ? ` <button class="mini-btn research-sandbox-download-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Download exact sample</button>` : ''}${canRecord ? `<details class="research-inline-state"><summary>Record manual Tria.ge result</summary><div class="research-form-grid"><label class="research-span-2"><span>Public report URL</span><input id="research-sandbox-result-url-${escapeHtml(item.request_id)}" placeholder="https://tria.ge/analysis-id" /></label><label><span>Result state</span><select id="research-sandbox-result-status-${escapeHtml(item.request_id)}"><option value="completed">Completed</option><option value="failed">Failed</option></select></label><label><span>Tria.ge score</span><input id="research-sandbox-result-score-${escapeHtml(item.request_id)}" type="number" min="0" max="10" step="0.1" /></label><label class="research-span-2"><span>Reviewed behavior summary</span><textarea id="research-sandbox-result-summary-${escapeHtml(item.request_id)}" rows="4" placeholder="Record observed runtime behavior, important limitations, and whether indicators were independently validated."></textarea></label><button class="mini-btn research-sandbox-result-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Attach sanitized result</button></div></details>` : ''}</div>`;
+        const linkedEvidence = caseEvidence.find(candidate => {
+          if (candidate.evidence_type !== 'sandbox_analysis' || candidate.status === 'retracted') return false;
+          const metadata = candidate.metadata && typeof candidate.metadata === 'object' ? candidate.metadata : {};
+          const requestIds = Array.isArray(metadata.sandbox_request_ids) ? metadata.sandbox_request_ids : [];
+          return metadata.sandbox_request_id === item.request_id || requestIds.includes(item.request_id);
+        });
+        const canRecord = (!sandboxApiConfigured && ['approved', 'submitted'].includes(item.status))
+          || (item.status === 'completed' && !linkedEvidence);
+        const completionNote = item.status === 'completed'
+          ? (linkedEvidence ? ` · sandbox evidence linked ${escapeHtml(linkedEvidence.evidence_id)}` : ' · result recorded; evidence link needs a valid report')
+          : '';
+        const repairLink = item.status === 'completed' && !linkedEvidence
+          ? ` <button class="mini-btn research-sandbox-reconcile-btn" data-case-id="${escapeHtml(researchCase.case_id)}" type="button">Repair evidence link</button>`
+          : '';
+        return `<div class="feed-item sandbox-workflow-item"><code>${escapeHtml(item.request_id)}</code> · ${escapeHtml(statusLabel(item.status))}${completionNote} · provider ${escapeHtml(sandboxApiConfigured ? 'tria.ge api' : item.provider)}${item.status === 'pending_approval' ? ` <button class="mini-btn research-sandbox-status-btn" data-request-id="${escapeHtml(item.request_id)}" data-sandbox-action="sandbox-approve" data-sandbox-status="approved" type="button">Approve public submission</button>` : ''}${canSubmit ? ` <button class="mini-btn research-sandbox-submit-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Submit to Tria.ge</button>` : ''}${canPoll ? ` <button class="mini-btn research-sandbox-poll-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Refresh Tria.ge result</button>` : ''}${canPrepare ? ` <button class="mini-btn research-sandbox-download-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Download exact sample</button>` : ''}${repairLink}${canRecord ? `<details class="research-inline-state"><summary>Record manual Tria.ge result</summary><p class="small">A completed result is linked automatically when the report URL, submission ID, and summary are valid. Re-record only if the previous result could not be linked.</p><div class="research-form-grid"><label class="research-span-2"><span>Public report URL</span><input id="research-sandbox-result-url-${escapeHtml(item.request_id)}" placeholder="https://tria.ge/analysis-id" /></label><label><span>Result state</span><select id="research-sandbox-result-status-${escapeHtml(item.request_id)}"><option value="completed">Completed</option><option value="failed">Failed</option></select></label><label><span>Tria.ge score</span><input id="research-sandbox-result-score-${escapeHtml(item.request_id)}" type="number" min="0" max="10" step="0.1" /></label><label class="research-span-2"><span>Reviewed behavior summary</span><textarea id="research-sandbox-result-summary-${escapeHtml(item.request_id)}" rows="4" placeholder="Record observed runtime behavior, important limitations, and whether indicators were independently validated."></textarea></label><button class="mini-btn research-sandbox-result-btn" data-request-id="${escapeHtml(item.request_id)}" type="button">Attach sanitized result</button></div></details>` : ''}</div>`;
       }).join('') : ''}
     </div>
   `);
@@ -12041,6 +12210,9 @@ function bindEvents() {
     await runRefreshAction(event.currentTarget, () => loadResearchCases(), {
       successMessage: 'Research cases refreshed'
     });
+  });
+  el('research-sandbox-provider-verify-btn')?.addEventListener('click', event => {
+    verifyResearchSandboxProvider(event.currentTarget);
   });
   el('research-content-packs-nav-btn')?.addEventListener('click', () => {
     const panel = el('research-content-packs-panel');

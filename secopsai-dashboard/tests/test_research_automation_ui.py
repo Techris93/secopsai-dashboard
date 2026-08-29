@@ -376,6 +376,26 @@ def test_triage_sandbox_api_ui_uses_server_side_token_and_keeps_manual_fallback(
     assert "public sandbox submission acknowledgment is required" in server
 
 
+def test_dynamic_sandbox_recommendations_and_provider_verification_are_visible():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert "sandboxRecommendations" in app
+    assert "research-sandbox-recommendations" in app
+    assert "research-sandbox-provider-verify-btn" in app
+    assert "sandbox-provider-status?verify=1" in app
+    assert "research-sandbox-open-request-btn" in app
+    assert "DYNAMIC ANALYSIS POLICY" in app
+    assert "completed_unlinked" in app
+    assert "sandbox evidence linked" in app
+    assert "Repair evidence link" in app
+    assert "/api/secopsai/research-sandbox-recommendations" in server
+    assert "/api/secopsai/sandbox-provider-status" in server
+    assert "'research', 'sandbox', 'recommendations'" in server
+    assert "--verify" in server
+    assert "Verify Tria.ge API" in html
+
+
 def test_manual_sandbox_handoff_is_approval_gated_and_hash_identified():
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
@@ -383,6 +403,7 @@ def test_manual_sandbox_handoff_is_approval_gated_and_hash_identified():
     assert "Download exact sample" in app
     assert "Record manual Tria.ge result" in app
     assert "Attach sanitized result" in app
+    assert "A completed result is linked automatically" in app
     assert "public_submission_acknowledged: true" in app
     assert "/api/secopsai/research-artifacts/manual-sandbox-download" in app
     assert "/api/secopsai/research-artifacts/manual-sandbox-download" in server
@@ -390,6 +411,22 @@ def test_manual_sandbox_handoff_is_approval_gated_and_hash_identified():
     assert "X-SecOpsAI-Artifact-SHA256" in server
     assert "require_triage_ops_admin(self)" in server
     assert "shutil.rmtree(export_dir, ignore_errors=True)" in server
+
+
+def test_sandbox_reconcile_action_uses_bounded_core_repair_command():
+    args = dashboard_server.build_research_case_args(
+        "sandbox-reconcile",
+        {"case_id": "RSC-AAAAAAAAAAAA", "actor": "dashboard-operator"},
+    )
+    assert args[:6] == [
+        "research",
+        "sandbox",
+        "materialize-evidence",
+        "--case-id",
+        "RSC-AAAAAAAAAAAA",
+        "--actor",
+    ]
+    assert args[-1] == "dashboard-operator"
 
 
 def test_research_case_recommendation_is_conservative_and_explains_create_route():

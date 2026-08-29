@@ -113,6 +113,7 @@ RESEARCH_CASE_ACTIONS = {
     'sandbox-approve',
     'sandbox-submit',
     'sandbox-poll',
+    'sandbox-reconcile',
     'pipeline-start',
     'pipeline-resume',
     'pipeline-review',
@@ -1798,6 +1799,14 @@ def build_research_case_args(action, payload):
         if not request_id:
             raise ValueError('request_id is required')
         return ['research', 'sandbox', 'poll', request_id]
+
+    if action == 'sandbox-reconcile':
+        case_id = _clean_string(payload.get('case_id'), 20).upper()
+        if not RESEARCH_CASE_ID_RE.fullmatch(case_id):
+            raise ValueError('Invalid case_id')
+        args = ['research', 'sandbox', 'materialize-evidence', '--case-id', case_id]
+        add(args, '--actor', 'actor', 160)
+        return args
 
     if action == 'jobs':
         args = ['research', 'jobs', 'list']
@@ -4004,6 +4013,36 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return json_response(self, 200 if result['ok'] else 503, {'ok': result['ok'], 'artifacts': (parsed_result or {}).get('artifacts', []), 'cli': compact_cli_result(result)})
             except Exception as exc:
                 return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'local_helper_unavailable'})
+        if parsed.path == '/api/secopsai/sandbox-provider-status':
+            try:
+                qs = urllib.parse.parse_qs(parsed.query or '')
+                verify = str((qs.get('verify') or ['0'])[0]).lower() in {'1', 'true', 'yes', 'on'}
+                args = ['research', 'sandbox', 'status']
+                if verify:
+                    args.append('--verify')
+                result, parsed_result = run_cli_json(args, timeout=30)
+                provider = parsed_result if isinstance(parsed_result, dict) else {}
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 503,
+                    {'ok': bool(result.get('ok')), 'provider': provider, 'cli': compact_cli_result(result)},
+                )
+            except Exception as exc:
+                return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'sandbox_provider_unavailable'})
+        if parsed.path == '/api/secopsai/research-sandbox-recommendations':
+            try:
+                qs = urllib.parse.parse_qs(parsed.query or '')
+                limit = max(1, min(int((qs.get('limit') or ['50'])[0]), 500))
+                args = ['research', 'sandbox', 'recommendations', '--limit', str(limit), *secopsai_db_args()]
+                result, parsed_result = run_cli_json(args, timeout=90)
+                payload = parsed_result if isinstance(parsed_result, dict) else {}
+                return json_response(
+                    self,
+                    200 if result.get('ok') else 503,
+                    {'ok': bool(result.get('ok')), **payload, 'cli': compact_cli_result(result)},
+                )
+            except Exception as exc:
+                return json_response(self, 503, {'ok': False, 'error': str(exc), 'code': 'sandbox_recommendations_unavailable'})
         if parsed.path == '/api/integration-status':
             payload = {
                 'ok': True,
@@ -4036,6 +4075,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'configured': bool(os.environ.get('TRIAGE_API_TOKEN', '').strip()),
                     'mode': 'public' if os.environ.get('TRIAGE_API_TOKEN', '').strip() else 'manual-result-import',
                     'public_submission': True,
+                    'verified': False,
+                    'health': 'not_checked' if os.environ.get('TRIAGE_API_TOKEN', '').strip() else 'not_configured',
                     'warning': 'Tria.ge public submissions are visible to the public and must not contain confidential data.',
                 },
             }
