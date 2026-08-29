@@ -253,6 +253,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "investigation-autopilot-runs",
         "investigation-run-due",
         "detection-learning-summary",
+        "detection-learning-current",
+        "detection-learning-adjudication",
         "detection-learning-proposals",
         "detection-learning-deployments",
         "detection-learning-run",
@@ -283,6 +285,16 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "Agent finding and alert review" in html
     assert "High-priority investigations" in html
     assert "Detection Learning" in html
+    assert "Adjudication</strong> means an operator still needs to decide a finding using evidence" in html
+    assert "Rejected by guardrails</strong> means a proposed ranker failed a safety threshold" in html
+    assert "Subjects needing evidence" in app
+    assert "No production detector changed" in app
+    assert "False-positive rate" in app
+    assert "Evaluation history" in app
+    assert "Stale evaluation" in app
+    assert "Stop and retain audit" in app
+    assert "learningSummary.awaiting_adjudication" in app
+    assert "data-learning-review-finding" in app
     assert "learning-deploy" in app
     assert "daily-configure" in app
     assert "daily-run" in app

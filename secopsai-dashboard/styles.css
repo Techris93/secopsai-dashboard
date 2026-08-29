@@ -9043,6 +9043,34 @@ body.professional-ui {
 .professional-ui .intelligence-stage.stage-failed { border-color: #c95663; color: #8b1f2c; }
 .professional-ui .intelligence-child-jobs > summary { color: #17634f; }
 .professional-ui .intelligence-child-job { border-color: #d7e1dc; color: #40524b; }
+.professional-ui .detection-learning-decision { margin-bottom: 18px; }
+.professional-ui .detection-learning-decision .learning-decision-metrics { margin-top: 16px; }
+.professional-ui .detection-learning-decision .intelligence-decision-columns ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #35463f;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.professional-ui .detection-learning-decision .intelligence-decision-columns li + li { margin-top: 5px; }
+.professional-ui #detection-learning-adjudication { margin-top: 18px; }
+.professional-ui .learning-queue-note { margin-top: 8px; color: #52645c; }
+.professional-ui .detection-learning-history {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #cbd8d2;
+  border-radius: 7px;
+  background: #f6f9f7;
+}
+.professional-ui .detection-learning-history > summary {
+  color: #17392f;
+  cursor: pointer;
+  font-weight: 700;
+}
+.professional-ui .detection-learning-history[open] > summary { margin-bottom: 12px; }
+@media (max-width: 900px) {
+  .professional-ui .detection-learning-decision .intelligence-decision-columns { grid-template-columns: 1fr; }
+}
 
 /* Automation workspace from the approved concept. */
 .professional-ui #page-automation { max-width: 1540px; margin: 0 auto; }

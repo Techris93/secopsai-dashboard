@@ -182,3 +182,33 @@ This ledger records the product redesign in verified, reversible checkpoints.
   metrics, can identify automation already in progress, can reach the right
   workspace in one action, and is never told that a model score or queue count is
   a final security verdict.
+
+## Checkpoint 13: Detection Learning decision clarity
+
+- Status: complete
+- Goal: make learning adjudication and rejected evaluations understandable as
+  operator decisions rather than an unexplained wall of blocked proposal IDs.
+- Corrected semantics: historical unknown feedback remains immutable, but the
+  actionable queue counts distinct subjects that have not since received a
+  trusted, evidence-backed outcome. Previously unknown subjects that were later
+  resolved no longer inflate **Subjects needing evidence**.
+- Current decision: the newest evaluation is presented first with exact,
+  unrounded precision, recall, false-positive rate, true negatives, class
+  balance, configured thresholds, failed guardrails, and a recommended next
+  action. A rejected proposal states explicitly that no production detector
+  changed.
+- History: repeated recent outcomes are grouped behind **Evaluation history**;
+  the Core audit records remain immutable. Core reuses an existing evaluation
+  when the dataset, algorithm, feature version, and policy are unchanged, which
+  prevents new duplicate proposals on later scheduled cycles.
+- Staged evaluation: a running shadow or canary with zero reviewed observations
+  for more than seven days is marked **Stale evaluation**, excluded from the
+  active-evaluation count, and given a protected **Stop and retain audit** action.
+  A traffic percentage without observations is never presented as proof of
+  effectiveness.
+- Adjudication: the newest unresolved subjects show their evidence count,
+  active scoring features, last observation, and a direct **Review finding**
+  action when a finding ID exists. Models cannot turn these records into labels.
+- Safety: a failed precision or false-negative gate cannot be bypassed from the
+  interface. Operators are told to improve evidence and model quality rather
+  than lower safeguards to force promotion.

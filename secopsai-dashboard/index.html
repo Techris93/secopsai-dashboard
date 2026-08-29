@@ -539,11 +539,13 @@
 
           <section class="intelligence-module detection-learning" id="automation-learning-section" data-automation-view="learning" aria-labelledby="detection-learning-title">
             <div class="module-head">
-              <div><h4 id="detection-learning-title">Detection Learning</h4><p>Retains every alert outcome as feedback. Verified true and false outcomes become training examples; unknown, true-negative, and false-negative feedback remains available for active learning and replay.</p></div>
+              <div><h4 id="detection-learning-title">Detection Learning</h4><p>Uses evidence-backed analyst outcomes to evaluate safer ranking changes. Rejected evaluations never alter production detections.</p></div>
               <button class="primary-btn" id="detection-learning-run" type="button">Run learning cycle</button>
             </div>
             <div id="detection-learning-summary" class="metrics-grid compact-metrics"></div>
-            <div class="intelligence-boundary-note">Every alert is recorded, but model-only recommendations never become labels. Holdout data is never used for training. True-negative and false-negative records require an explicit baseline or evidence reference. Any false-negative regression blocks promotion and rolls back a canary automatically.</div>
+            <div class="intelligence-boundary-note"><strong>Adjudication</strong> means an operator still needs to decide a finding using evidence. <strong>Rejected by guardrails</strong> means a proposed ranker failed a safety threshold; it is not a blocked alert or job. Model-only recommendations never become labels, holdout data is never used for training, and any false-negative regression blocks promotion.</div>
+            <div id="detection-learning-current"></div>
+            <div id="detection-learning-adjudication"></div>
             <div id="detection-learning-proposals"></div>
             <div id="detection-learning-deployments"></div>
           </section>

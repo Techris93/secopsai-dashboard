@@ -160,4 +160,86 @@ assert.match(readyHtml, /Publication ready/);
 assert.match(readyHtml, /Artifact catalog state is linked/);
 assert.doesNotMatch(readyHtml, /ReferenceError|\[object Object\]/i);
 
-console.log('research case runtime rendering checks passed');
+runtime.context.learningFixture = {
+  learning: {
+    settings: {
+      minimum_precision: 0.9,
+      maximum_false_negative_regression: 0,
+    },
+    summary: {
+      feedback_total: 10846,
+      examples: 2353,
+      experiments: 100,
+      proposals: 100,
+      blocked: 99,
+      shadow: 0,
+      canary: 1,
+      awaiting_adjudication: 4143,
+      unknown_subjects: 6249,
+      resolved_unknown_subjects: 2106,
+      feedback_by_outcome: { unknown: 8490 },
+      example_by_label: { true_positive: 2098, false_positive: 255 },
+    },
+    proposals: [{
+      proposal_id: 'DLP-RUNTIME',
+      proposal_type: 'risk_ranker',
+      status: 'blocked',
+      dataset_id: 'DLS-RUNTIME',
+      guardrails: {
+        enough_examples: true,
+        both_labels: true,
+        holdout_evaluable: true,
+        precision_pass: false,
+        false_negative_regression_pass: true,
+      },
+      parameters: { policy_fingerprint: 'fixture-policy' },
+      replay_metrics: {
+        evaluation_status: 'evaluated',
+        holdout: {
+          count: 479,
+          tp: 429,
+          fp: 50,
+          tn: 0,
+          fn: 0,
+          precision: 0.8956158663883089,
+          recall: 1,
+          false_positive_rate: 1,
+        },
+      },
+    }],
+    adjudication_queue: [{
+      subject_key: 'SCM-RUNTIME',
+      finding_id: 'SCM-RUNTIME',
+      evidence_ref_count: 2,
+      active_features: ['severity', 'strong_signals'],
+      created_at: '2026-08-29T00:00:00Z',
+    }],
+    deployments: [{
+      deployment_id: 'DLD-RUNTIME',
+      proposal_id: 'DLP-OLDER',
+      stage: 'canary',
+      traffic_percent: 10,
+      status: 'running',
+      started_at: '2026-08-01T00:00:00Z',
+      updated_at: '2026-08-01T00:00:00Z',
+      observations: { tp: 0, fp: 0, tn: 0, fn: 0 },
+    }],
+  },
+};
+vm.runInContext('state.intelligence.data = learningFixture; renderIntelligence();', runtime.context);
+const learningCurrentHtml = runtime.elements.get('detection-learning-current').innerHTML;
+const adjudicationHtml = runtime.elements.get('detection-learning-adjudication').innerHTML;
+const learningHistoryHtml = runtime.elements.get('detection-learning-proposals').innerHTML;
+const learningDeploymentsHtml = runtime.elements.get('detection-learning-deployments').innerHTML;
+assert.match(learningCurrentHtml, /Rejected by safety guardrails/);
+assert.match(learningCurrentHtml, /No production detector changed/);
+assert.match(learningCurrentHtml, /89\.56%/);
+assert.match(learningCurrentHtml, /100% false-positive rate and zero true negatives/);
+assert.match(adjudicationHtml, /4143 distinct subjects still need an evidence-backed decision/);
+assert.match(adjudicationHtml, /SCM-RUNTIME/);
+assert.match(learningHistoryHtml, /Evaluation history/);
+assert.match(learningDeploymentsHtml, /Stale evaluation/);
+assert.match(learningDeploymentsHtml, /Stop and retain audit/);
+assert.doesNotMatch(learningCurrentHtml + adjudicationHtml + learningHistoryHtml + learningDeploymentsHtml, /ReferenceError|\[object Object\]/i);
+
+console.log('research case and detection learning runtime rendering checks passed');

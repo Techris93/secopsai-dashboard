@@ -5822,8 +5822,10 @@ function renderIntelligence() {
   const dailyLatest = dailyRuns[0] || null;
   const learning = data?.learning || {};
   const learningSummary = learning.summary || {};
+  const learningSettings = learning.settings || {};
   const learningProposals = Array.isArray(learning.proposals) ? learning.proposals : [];
   const learningDeployments = Array.isArray(learning.deployments) ? learning.deployments : [];
+  const learningAdjudicationQueue = Array.isArray(learning.adjudication_queue) ? learning.adjudication_queue : [];
   const recordedCounts = data?.jobs?.counts && typeof data.jobs.counts === 'object' ? data.jobs.counts : {};
   const counts = Object.keys(recordedCounts).length ? recordedCounts : jobs.reduce((result, job) => {
     const status = String(job?.status || 'unknown');
@@ -6027,17 +6029,105 @@ function renderIntelligence() {
       }).join('')}</tbody></table></div>`;
   }
   const learningSummaryEl = el('detection-learning-summary');
+  const awaitingAdjudication = Number.isFinite(Number(learningSummary.awaiting_adjudication))
+    ? Number(learningSummary.awaiting_adjudication)
+    : null;
+  const learningDeploymentIsStale = deployment => {
+    const observations = deployment?.observations || {};
+    const observed = ['tp', 'fp', 'tn', 'fn'].reduce((total, key) => total + Number(observations[key] || 0), 0);
+    const updatedAt = Date.parse(String(deployment?.updated_at || deployment?.started_at || ''));
+    return deployment?.status === 'running' && observed === 0 && Number.isFinite(updatedAt) && Date.now() - updatedAt > 7 * 24 * 60 * 60 * 1000;
+  };
+  const activeLearningEvaluations = new Set(learningDeployments.filter(item => item.status === 'running' && !learningDeploymentIsStale(item)).map(item => item.proposal_id).filter(Boolean)).size;
+  const staleLearningEvaluations = new Set(learningDeployments.filter(learningDeploymentIsStale).map(item => item.proposal_id).filter(Boolean)).size;
   if (learningSummaryEl) learningSummaryEl.innerHTML = `
-    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.feedback_total || 0))}</div><div class="metric-label">Alert feedback</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.feedback_total || 0))}</div><div class="metric-label">Feedback records</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.examples || 0))}</div><div class="metric-label">Trusted examples</div></div>
-    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.experiments || 0))}</div><div class="metric-label">Experiments</div></div>
-    <div class="metric-card"><div class="metric">${escapeHtml(String((learningSummary.shadow || 0) + (learningSummary.canary || 0)))}</div><div class="metric-label">Under evaluation</div></div>
-    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.rolled_back || 0))}</div><div class="metric-label">Rolled back</div></div>
-    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.feedback_by_outcome?.unknown || 0))}</div><div class="metric-label">Awaiting adjudication</div></div>`;
+    <div class="metric-card"><div class="metric">${escapeHtml(awaitingAdjudication === null ? '—' : String(awaitingAdjudication))}</div><div class="metric-label">Subjects needing evidence</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.experiments || 0))}</div><div class="metric-label">Recorded evaluations</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(activeLearningEvaluations))}</div><div class="metric-label">Active evaluations</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(staleLearningEvaluations))}</div><div class="metric-label">Stale evaluations</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(learningSummary.blocked || 0))}</div><div class="metric-label">Rejected evaluations</div></div>`;
+
+  const formatLearningRate = value => {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return 'Not measured';
+    return `${(Number(value) * 100).toFixed(2).replace(/\.00$/, '')}%`;
+  };
+  const learningProposalReasons = proposal => {
+    const guardrails = proposal?.guardrails || {};
+    const holdout = proposal?.replay_metrics?.holdout || {};
+    const reasons = [];
+    if (guardrails.enough_examples === false) reasons.push('The minimum trusted-example requirement was not met.');
+    if (guardrails.both_labels === false) reasons.push('Both risky and benign evidence-backed labels are required.');
+    if (guardrails.holdout_evaluable === false) reasons.push('The holdout set cannot measure both precision and recall yet.');
+    if (guardrails.precision_pass === false) reasons.push(`Precision ${formatLearningRate(holdout.precision)} is below the ${formatLearningRate(learningSettings.minimum_precision)} safety gate.`);
+    if (guardrails.false_negative_regression_pass === false) reasons.push(`False negatives ${Number(holdout.fn || 0)} exceed the allowed maximum of ${Number(learningSettings.maximum_false_negative_regression || 0)}.`);
+    if (Number(holdout.false_positive_rate) === 1 && Number(holdout.tn || 0) === 0 && Number(holdout.fp || 0) > 0) reasons.push('The ranker marked every benign holdout example as risky: 100% false-positive rate and zero true negatives.');
+    if (!reasons.length && proposal?.status === 'blocked') reasons.push('This evaluation did not pass every configured safety guardrail.');
+    return reasons;
+  };
+
+  const currentLearningEl = el('detection-learning-current');
+  const currentLearningProposal = learningProposals[0] || null;
+  if (currentLearningEl) {
+    if (!currentLearningProposal) {
+      currentLearningEl.innerHTML = '<div class="empty-state compact">No learning evaluation exists yet. A cycle needs evidence-backed risky and benign examples before it can produce a candidate.</div>';
+    } else {
+      const currentHoldout = currentLearningProposal.replay_metrics?.holdout || {};
+      const currentReasons = learningProposalReasons(currentLearningProposal);
+      const blocked = currentLearningProposal.status === 'blocked';
+      const nextStage = currentLearningProposal.status === 'shadow_ready' ? 'shadow' : (currentLearningProposal.status === 'shadow' ? 'canary' : (currentLearningProposal.status === 'canary' ? 'active' : ''));
+      const riskyExamples = Number(learningSummary.example_by_label?.true_positive || 0);
+      const benignExamples = Number(learningSummary.example_by_label?.false_positive || 0);
+      const nextAction = blocked
+        ? (Number(currentHoldout.false_positive_rate) === 1 && Number(currentHoldout.tn || 0) === 0
+          ? 'Review unresolved findings and add trustworthy benign outcomes. Improve the ranker or feature set, then rerun evaluation. Do not lower the safety threshold to force promotion.'
+          : 'Resolve the listed evidence or quality gap, then rerun the learning cycle. Do not promote this proposal manually.')
+        : (nextStage ? `Review the holdout evidence, then explicitly promote this candidate to ${nextStage} if the result remains acceptable.` : 'Continue monitoring reviewed observations and retain the audit trail.');
+      currentLearningEl.innerHTML = `<section class="intelligence-decision-card detection-learning-decision" aria-label="Current learning assessment">
+        <div class="intelligence-decision-card-head"><div><span class="eyebrow">Current assessment</span><strong>${escapeHtml(blocked ? 'Rejected by safety guardrails' : humanizeSnake(currentLearningProposal.status || 'unknown'))}</strong><p>${escapeHtml(blocked ? 'No production detector changed. This candidate remains inert because its measured quality is not safe enough.' : 'This candidate is evidence-backed and remains subject to explicit replay, shadow, canary, and activation controls.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(currentLearningProposal.status || 'unknown'))}</span></div>
+        <div class="metrics-grid compact-metrics learning-decision-metrics">
+          <div class="metric-card"><div class="metric">${escapeHtml(formatLearningRate(currentHoldout.precision))}</div><div class="metric-label">Detection precision</div></div>
+          <div class="metric-card"><div class="metric">${escapeHtml(formatLearningRate(currentHoldout.recall))}</div><div class="metric-label">Detection recall</div></div>
+          <div class="metric-card"><div class="metric">${escapeHtml(formatLearningRate(currentHoldout.false_positive_rate))}</div><div class="metric-label">False-positive rate</div></div>
+          <div class="metric-card"><div class="metric">${escapeHtml(String(currentHoldout.tn ?? '—'))}</div><div class="metric-label">True negatives</div></div>
+        </div>
+        <div class="intelligence-decision-columns"><div><h4>Confirmed facts</h4><ul><li>Holdout: TP ${escapeHtml(String(currentHoldout.tp || 0))}, FP ${escapeHtml(String(currentHoldout.fp || 0))}, TN ${escapeHtml(String(currentHoldout.tn || 0))}, FN ${escapeHtml(String(currentHoldout.fn || 0))}.</li><li>Training balance: ${escapeHtml(String(riskyExamples))} risky and ${escapeHtml(String(benignExamples))} benign trusted examples.</li><li>Required precision: ${escapeHtml(formatLearningRate(learningSettings.minimum_precision))}; allowed false-negative regression: ${escapeHtml(String(learningSettings.maximum_false_negative_regression ?? 0))}.</li></ul></div><div><h4>Why this decision</h4>${currentReasons.length ? `<ul>${currentReasons.map(reason => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>` : '<p>Every configured offline gate passed.</p>'}</div><div><h4>Next action</h4><p>${escapeHtml(nextAction)}</p>${nextStage ? `<button class="primary-btn mini-btn" data-learning-deploy="${escapeHtml(currentLearningProposal.proposal_id)}" data-learning-stage="${escapeHtml(nextStage)}" type="button">Promote to ${escapeHtml(nextStage)}</button>` : ''}</div></div>
+      </section>`;
+    }
+  }
+
+  const learningAdjudicationEl = el('detection-learning-adjudication');
+  if (learningAdjudicationEl) {
+    const historicalUnknown = Number(learningSummary.feedback_by_outcome?.unknown || 0);
+    const resolvedUnknown = Number(learningSummary.resolved_unknown_subjects || 0);
+    const queueIntro = awaitingAdjudication === null
+      ? 'The helper has not provided a subject-level adjudication count yet.'
+      : `${awaitingAdjudication} distinct subject${awaitingAdjudication === 1 ? '' : 's'} still need an evidence-backed decision. ${historicalUnknown} immutable unknown feedback record${historicalUnknown === 1 ? '' : 's'} remain in the audit log; ${resolvedUnknown} previously unknown subject${resolvedUnknown === 1 ? '' : 's'} have since been resolved.`;
+    learningAdjudicationEl.innerHTML = `<div class="module-head compact-header"><div><h4>Evidence decisions needed</h4><p>${escapeHtml(queueIntro)}</p></div></div>${!learningAdjudicationQueue.length
+      ? '<div class="empty-state compact">No unresolved subject details were returned. Refresh after updating the local helper if the summary still shows pending subjects.</div>'
+      : `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Available evidence</th><th>Signals</th><th>Last observed</th><th>Action</th></tr></thead><tbody>${learningAdjudicationQueue.map(item => `<tr><td><strong>${escapeHtml(item.subject_key || item.finding_id || 'Unknown')}</strong>${item.finding_id ? `<div class="small mono">${escapeHtml(item.finding_id)}</div>` : ''}</td><td>${escapeHtml(String(item.evidence_ref_count || 0))} reference${Number(item.evidence_ref_count || 0) === 1 ? '' : 's'}</td><td>${escapeHtml((item.active_features || []).map(humanizeSnake).join(' · ') || 'No scoring features recorded')}</td><td>${escapeHtml(fmtDate(item.created_at))}</td><td>${item.finding_id ? `<button class="mini-btn" data-learning-review-finding="${escapeHtml(item.finding_id)}" type="button">Review finding</button>` : '<span class="small">Open the matching case or finding and record an evidence-backed outcome.</span>'}</td></tr>`).join('')}</tbody></table></div><div class="small learning-queue-note">Showing the newest ${escapeHtml(String(learningAdjudicationQueue.length))} unresolved subjects. Historical feedback remains preserved for audit.</div>`}`;
+  }
+
+  const learningProposalGroups = [];
+  const learningProposalGroupMap = new Map();
+  learningProposals.forEach(proposal => {
+    const holdout = proposal.replay_metrics?.holdout || {};
+    const policy = proposal.parameters?.policy || {};
+    const key = proposal.parameters?.policy_fingerprint || [proposal.status, proposal.dataset_id, holdout.tp, holdout.fp, holdout.tn, holdout.fn, holdout.precision, holdout.recall, policy.minimum_precision, policy.maximum_false_negative_regression].join('|');
+    const existing = learningProposalGroupMap.get(key);
+    if (existing) existing.count += 1;
+    else {
+      const group = { proposal, count: 1 };
+      learningProposalGroupMap.set(key, group);
+      learningProposalGroups.push(group);
+    }
+  });
   const learningProposalsEl = el('detection-learning-proposals');
   if (learningProposalsEl) learningProposalsEl.innerHTML = !learningProposals.length
-    ? '<div class="empty-state compact">No learning proposals yet. A cycle remains blocked until both verified true-positive and false-positive labels meet the minimum dataset policy.</div>'
-    : `<div class="table-wrap"><table><thead><tr><th>Proposal</th><th>Stage</th><th>Holdout</th><th>False negatives</th><th>Action</th></tr></thead><tbody>${learningProposals.map(p => {
+    ? ''
+    : `<details class="detection-learning-history"><summary>Evaluation history (${escapeHtml(String(learningSummary.proposals || learningProposals.length))} recorded; ${escapeHtml(String(learningProposalGroups.length))} distinct recent result${learningProposalGroups.length === 1 ? '' : 's'})</summary><div class="table-wrap"><table><thead><tr><th>Evaluation</th><th>Decision</th><th>Holdout quality</th><th>Why / action</th></tr></thead><tbody>${learningProposalGroups.slice(0, 12).map(group => {
+        const p = group.proposal;
         const holdout = p.replay_metrics?.holdout || {};
         const evaluationStatus = String(p.replay_metrics?.evaluation_status || p.parameters?.evaluation_status || '').toLowerCase();
         const insufficient = evaluationStatus === 'insufficient_data'
@@ -6046,13 +6136,21 @@ function renderIntelligence() {
         const next = p.status === 'shadow_ready' ? 'shadow' : (p.status === 'shadow' ? 'canary' : (p.status === 'canary' ? 'active' : ''));
         const holdoutCell = insufficient
           ? 'Insufficient data<div class="small">Precision and recall are undefined until the holdout contains both required observations.</div>'
-          : `${escapeHtml(String(Math.round(Number(holdout.precision || 0)*100)))}% precision<div class="small">${escapeHtml(String(Math.round(Number(holdout.recall || 0)*100)))}% recall</div>`;
-        const falseNegativeCell = insufficient ? '—' : escapeHtml(String(holdout.fn || 0));
-        return `<tr><td><strong>${escapeHtml(humanizeSnake(p.proposal_type || 'risk_ranker'))}</strong><div class="small mono">${escapeHtml(p.proposal_id || '')}</div></td><td><span class="status-pill">${escapeHtml(humanizeSnake(p.status || 'unknown'))}</span></td><td>${holdoutCell}</td><td>${falseNegativeCell}</td><td>${next ? `<button class="mini-btn" data-learning-deploy="${escapeHtml(p.proposal_id)}" data-learning-stage="${next}" type="button">Promote to ${escapeHtml(next)}</button>` : ''}${['shadow','canary','active'].includes(p.status) ? `<button class="mini-btn" data-learning-rollback="${escapeHtml(p.proposal_id)}" type="button">Rollback</button>` : ''}</td></tr>`;
-      }).join('')}</tbody></table></div>`;
+          : `${escapeHtml(formatLearningRate(holdout.precision))} precision<div class="small">${escapeHtml(formatLearningRate(holdout.recall))} recall · ${escapeHtml(formatLearningRate(holdout.false_positive_rate))} false-positive rate · ${escapeHtml(String(holdout.fn || 0))} FN</div>`;
+        const reasons = learningProposalReasons(p);
+        const action = next
+          ? `<button class="mini-btn" data-learning-deploy="${escapeHtml(p.proposal_id)}" data-learning-stage="${escapeHtml(next)}" type="button">Promote to ${escapeHtml(next)}</button>`
+          : (['shadow','canary','active'].includes(p.status)
+            ? `<button class="mini-btn" data-learning-rollback="${escapeHtml(p.proposal_id)}" type="button">Rollback</button>`
+            : '<span class="small">No activation action. Improve evidence or model quality.</span>');
+        return `<tr><td><strong>${escapeHtml(humanizeSnake(p.proposal_type || 'risk_ranker'))}</strong><div class="small mono">${escapeHtml(p.proposal_id || '')}</div>${group.count > 1 ? `<div class="small">Same result repeated ${escapeHtml(String(group.count))} cycles</div>` : ''}</td><td><span class="status-pill">${escapeHtml(p.status === 'blocked' ? 'Rejected by guardrails' : humanizeSnake(p.status || 'unknown'))}</span></td><td>${holdoutCell}</td><td>${reasons.length ? `<div class="small">${reasons.map(escapeHtml).join('<br>')}</div>` : ''}${action}</td></tr>`;
+      }).join('')}</tbody></table></div></details>`;
   const learningDeploymentsEl = el('detection-learning-deployments');
   if (learningDeploymentsEl) learningDeploymentsEl.innerHTML = learningDeployments.length
-    ? `<h5>Deployment observations</h5><div class="table-wrap"><table><thead><tr><th>Stage</th><th>Traffic</th><th>Observed</th><th>Status</th></tr></thead><tbody>${learningDeployments.slice(0,10).map(d => `<tr><td>${escapeHtml(humanizeSnake(d.stage || ''))}<div class="small mono">${escapeHtml(d.deployment_id || '')}</div></td><td>${escapeHtml(String(d.traffic_percent || 0))}%</td><td>TP ${escapeHtml(String(d.observations?.tp || 0))} · FP ${escapeHtml(String(d.observations?.fp || 0))} · TN ${escapeHtml(String(d.observations?.tn || 0))} · FN ${escapeHtml(String(d.observations?.fn || 0))}</td><td>${escapeHtml(humanizeSnake(d.status || ''))}</td></tr>`).join('')}</tbody></table></div>` : '';
+    ? `<h5>Staged evaluation observations</h5><p class="small">Shadow and canary records are validation stages, not proof that a ranker is effective. A stale row has received no reviewed observations for more than seven days.</p><div class="table-wrap"><table><thead><tr><th>Stage</th><th>Traffic</th><th>Observed</th><th>Status</th><th>Action</th></tr></thead><tbody>${learningDeployments.slice(0,10).map(d => {
+        const stale = learningDeploymentIsStale(d);
+        return `<tr><td>${escapeHtml(humanizeSnake(d.stage || ''))}<div class="small mono">${escapeHtml(d.deployment_id || '')}</div></td><td>${escapeHtml(String(d.traffic_percent || 0))}%</td><td>TP ${escapeHtml(String(d.observations?.tp || 0))} · FP ${escapeHtml(String(d.observations?.fp || 0))} · TN ${escapeHtml(String(d.observations?.tn || 0))} · FN ${escapeHtml(String(d.observations?.fn || 0))}</td><td><span class="status-pill">${escapeHtml(stale ? 'Stale evaluation' : humanizeSnake(d.status || ''))}</span>${stale ? `<div class="small">No reviewed observations since ${escapeHtml(fmtDate(d.updated_at || d.started_at))}.</div>` : ''}</td><td>${d.status === 'running' ? `<button class="mini-btn" data-learning-rollback="${escapeHtml(d.proposal_id)}" type="button">Stop and retain audit</button>` : ''}</td></tr>`;
+      }).join('')}</tbody></table></div>` : '';
 
   const table = el('intelligence-jobs-table');
   if (table) {
@@ -12579,10 +12677,19 @@ function bindEvents() {
   el('daily-automation-run')?.addEventListener('click', async event => {
     await runIntelligenceAction('daily-run', {}, event.currentTarget);
   });
-  el('detection-learning-proposals')?.addEventListener('click', async event => {
+  const handleLearningProposalClick = async event => {
     const deploy = event.target.closest('[data-learning-deploy]'); const rollback = event.target.closest('[data-learning-rollback]');
     if (deploy) await runIntelligenceAction('learning-deploy', { proposal_id: deploy.dataset.learningDeploy, stage: deploy.dataset.learningStage }, deploy);
     if (rollback && await requestConfirmation('Rollback this learned detection policy?', { title: 'Rollback learned policy', context: 'SecOpsAI will stop active shadow or canary evaluation and preserve the experiment and observations for audit.', confirmLabel: 'Rollback policy' })) await runIntelligenceAction('learning-rollback', { proposal_id: rollback.dataset.learningRollback }, rollback);
+  };
+  el('detection-learning-current')?.addEventListener('click', handleLearningProposalClick);
+  el('detection-learning-proposals')?.addEventListener('click', handleLearningProposalClick);
+  el('detection-learning-deployments')?.addEventListener('click', handleLearningProposalClick);
+  el('detection-learning-adjudication')?.addEventListener('click', event => {
+    const review = event.target.closest('[data-learning-review-finding]');
+    if (!review) return;
+    selectFinding(review.dataset.learningReviewFinding);
+    setPage('findings');
   });
   document.querySelectorAll('[data-intelligence-service]').forEach(button => button.addEventListener('click', async event => {
     const serviceAction = event.currentTarget.dataset.intelligenceService;
