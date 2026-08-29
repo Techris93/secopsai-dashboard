@@ -411,6 +411,209 @@ const PAGE_CONTEXT = {
   "blog-ops": "Publications · newsroom and delivery",
   "operator-guide": "Help · operator guidance"
 };
+
+const OPERATOR_GUIDANCE = Object.freeze({
+  findings: {
+    title: 'Review the highest-priority finding that still needs a decision.',
+    detail: 'Separate detection priority, confidence, maliciousness, and local exposure before choosing an action.',
+    automation: 'collect evidence, correlate work, and start guarded investigations',
+    approval: 'decide maliciousness, business impact, closure, and escalation',
+    action: 'Open decision queue',
+    target: 'finding-queue-section'
+  },
+  'findings/supply-chain': {
+    title: 'Start with evidence, then decide package risk and local impact separately.',
+    detail: 'A suspicious package can be absent locally; no local usage does not make the package benign.',
+    automation: 'check advisories, local usage, artifacts, and evidence bundles',
+    approval: 'choose disposition, mitigation, escalation, and research handoff',
+    action: 'Open supply-chain review',
+    target: 'triage-review-section'
+  },
+  work: {
+    title: 'Resolve blocked ownership before creating more work.',
+    detail: 'Open the oldest blocked or review item, confirm the next owner, then route a specialist only when a bounded brief exists.',
+    automation: 'recommend a reviewed specialist and create a guarded execution contract',
+    approval: 'accept ownership, scope, write access, and independent review',
+    action: 'Open work queue',
+    target: 'work-table'
+  },
+  'research/inbox': {
+    title: 'Promote only candidates with a real package, artifact, advisory, or source-backed subject.',
+    detail: 'Candidate scores prioritize review; they are not maliciousness verdicts.',
+    automation: 'rank leads, validate identifiers, and explain promotion eligibility',
+    approval: 'decide whether the lead deserves a durable case',
+    action: 'Review candidates',
+    target: 'research-inbox-candidates'
+  },
+  'research/cases': {
+    title: 'Resolve the selected case’s first evidence blocker.',
+    detail: 'Move in order: evidence, matrix, specialist review, human verdict, publication safety.',
+    automation: 'collect metadata, compare artifacts, build evidence, and queue bounded review',
+    approval: 'record the verdict, disclosure decision, and publication readiness',
+    action: 'Open case workflow',
+    target: 'research-case-workspace-section'
+  },
+  'research/campaigns': {
+    title: 'Confirm relationships without turning shared infrastructure into attribution.',
+    detail: 'Packages, publishers, timelines, and infrastructure need independent supporting evidence.',
+    automation: 'correlate deterministic relationships and surface contradictions',
+    approval: 'decide campaign scope and attribution confidence',
+    action: 'Review campaigns',
+    target: 'research-campaigns-list'
+  },
+  'research/watchlists': {
+    title: 'Run due monitors, then review each lead before promotion.',
+    detail: 'A scoped watchlist is coverage for that subject, not proof the wider ecosystem is clean.',
+    automation: 'monitor approved sources and rank explainable leads',
+    approval: 'create cases, change watchlists, and accept campaign links',
+    action: 'Review monitors',
+    target: 'research-discovery-section'
+  },
+  'research/coverage': {
+    title: 'Repair gaps and dead letters before trusting a quiet feed.',
+    detail: 'A degraded or paused collector means surveillance is incomplete, not clean.',
+    automation: 'track cursors, lag, coverage windows, and failed events',
+    approval: 'pause sources, retry failures, and accept known coverage gaps',
+    action: 'Inspect collectors',
+    target: 'coverage-collectors-section'
+  },
+  'research/disclosure': {
+    title: 'Review deadlines and prepare evidence-linked communication.',
+    detail: 'Drafting and sending remain separate so unsupported claims cannot leave the workspace.',
+    automation: 'prepare source-backed disclosure drafts and track deadlines',
+    approval: 'choose recipient, wording, timing, and final send',
+    action: 'Review disclosure queue',
+    target: 'research-disclosure-queue'
+  },
+  'research/sandbox': {
+    title: 'Submit only an exact, hash-verified artifact when static evidence justifies it.',
+    detail: 'Public sandbox submissions may expose the sample; verify provider state and confidentiality first.',
+    automation: 'recommend sandboxing, submit approved hashes, poll, and link sanitized results',
+    approval: 'authorize public upload and accept the runtime interpretation',
+    action: 'Review sandbox jobs',
+    target: 'research-sandbox-queue'
+  },
+  'research/resolved': {
+    title: 'Audit agent-resolved cases before accepting closure at scale.',
+    detail: 'Only evidence-complete, reversible benign outcomes qualify for automatic resolution.',
+    automation: 'apply guarded benign decisions and preserve a reversible audit record',
+    approval: 'accept, reopen, or change the resolution policy',
+    action: 'Review resolutions',
+    target: 'research-resolved-section'
+  },
+  publications: {
+    title: 'Choose the editorial queue that matches the evidence source.',
+    detail: 'Original research, advisories, and external news have different review obligations.',
+    automation: 'prepare drafts, validate structure, rebuild feeds, and retain workflow history',
+    approval: 'approve claims, publish staged content, and deploy separately',
+    action: 'Choose a queue',
+    target: 'blog-queues-section'
+  },
+  'publications/published': {
+    title: 'Confirm the last publish and deployment completed successfully.',
+    detail: 'Publishing writes the archive; deployment makes it public and only then marks drafts Deployed.',
+    automation: 'retain the post archive, rebuild feeds, and record deployment runs',
+    approval: 'approve content and start the Cloudflare deployment',
+    action: 'Review workflow runs',
+    target: 'blog-published-section'
+  },
+  'automation/models': {
+    title: 'Restore a healthy selected model before processing more queued work.',
+    detail: 'The persisted primary and fallback policy are the effective route; provider recommendations are informational.',
+    automation: 'probe the selected route and process durable bounded jobs',
+    approval: 'choose the primary model, fallback scope, and service controls',
+    action: 'Review model health',
+    target: 'automation-bridge-section'
+  },
+  'automation/review': {
+    title: 'Review new alerts under the saved guarded policy.',
+    detail: 'Model proposals remain advisory until deterministic evidence supports a reversible action.',
+    automation: 'triage normalized alerts and propose bounded tuning',
+    approval: 'apply dispositions and promote validated tuning',
+    action: 'Open alert review',
+    target: 'automation-alert-review-section'
+  },
+  'automation/investigations': {
+    title: 'Recover failed investigations before starting duplicate cycles.',
+    detail: 'Check active and failed runs, then run only work that is due.',
+    automation: 'collect evidence, run static checks, queue model review, and retry safe stages',
+    approval: 'authorize protected actions and accept final decisions',
+    action: 'Review investigations',
+    target: 'automation-investigations-section'
+  },
+  'automation/research': {
+    title: 'Preview exact metadata before collecting or analyzing an artifact.',
+    detail: 'The universal pipeline never installs, activates, or executes package code.',
+    automation: 'quarantine, hash, scan, compare, and build a reviewable case',
+    approval: 'persist findings, accept model review, and create a publication draft',
+    action: 'Open safe research',
+    target: 'automation-research-section'
+  },
+  'automation/learning': {
+    title: 'Promote learning only when replay proves it will not increase false negatives.',
+    detail: 'Insufficient data and shadow results must remain visibly non-production.',
+    automation: 'retain feedback, replay proposals, and measure holdout performance',
+    approval: 'promote, canary, activate, or roll back a rule change',
+    action: 'Review learning',
+    target: 'automation-learning-section'
+  },
+  'automation/jobs': {
+    title: 'Recover the oldest blocked pipeline before adding new model jobs.',
+    detail: 'Jobs are grouped by case so the current stage, model, age, and recovery action stay together.',
+    automation: 'persist, retry, and group bounded analysis stages',
+    approval: 'cancel, requeue, or accept the resulting analysis',
+    action: 'Review job pipelines',
+    target: 'automation-jobs-section'
+  },
+  'system/health': {
+    title: 'Resolve degraded dependencies before relying on their data.',
+    detail: 'Blank or stale status is unknown coverage, not a healthy result.',
+    automation: 'poll Core, Edge, helper, database, event stream, and queue health',
+    approval: 'restart services or change runtime configuration',
+    action: 'Review health',
+    target: 'integration-summary'
+  },
+  'system/integrations': {
+    title: 'Confirm the helper APIs and event stream are ready.',
+    detail: 'Capability, configuration, and recent activity are separate states.',
+    automation: 'report route readiness and recent source-of-truth evidence',
+    approval: 'connect, rotate, or reconfigure integrations',
+    action: 'Review integrations',
+    target: 'integration-config'
+  },
+  'system/credentials': {
+    title: 'Resolve missing credential readiness without exposing secret values.',
+    detail: 'This page reports status only; credentials belong in the owning server or session-scoped action field.',
+    automation: 'report whether each protected workflow is ready',
+    approval: 'enter, rotate, or revoke credentials',
+    action: 'Review readiness',
+    target: 'system-credentials'
+  },
+  'system/audit': {
+    title: 'Review pending actions and incomplete sessions before applying anything.',
+    detail: 'Every mutation must have evidence, an owner, and an auditable recovery path.',
+    automation: 'record actions, sessions, approvals, and orchestrator history',
+    approval: 'apply queued actions and resolve investigation approvals',
+    action: 'Review audit queue',
+    target: 'system-action-queue-section'
+  },
+  enterprise: {
+    title: 'Connect one approved read-only source before expanding governance workflows.',
+    detail: 'Implemented, configured, and actively sending evidence are deliberately separate states.',
+    automation: 'normalize telemetry, prioritize exposures, and preserve control evidence',
+    approval: 'connect sources, authorize DAST, and create governance records',
+    action: 'Review setup steps',
+    target: 'enterprise-next-actions'
+  },
+  assets: {
+    title: 'Inspect the newest asset change or degraded sensor first.',
+    detail: 'Inventory observations provide context; they do not independently prove compromise.',
+    automation: 'collect inventory, service, sensor, schedule, and change evidence',
+    approval: 'accept asset ownership and remediation work',
+    action: 'Review inventory',
+    target: 'edge-inventory-section'
+  }
+});
 const CONTEXT_NAV = Object.freeze({
   "mission-control": [],
   "findings": [
@@ -1846,6 +2049,56 @@ function helpCopyForPage(pageId) {
   return copies[pageId] || copies['mission-control'];
 }
 
+function operatorGuidanceFor(pageId, activeRoute) {
+  const route = String(activeRoute || '').replace(/^#\/?/, '').replace(/\/+$/, '').toLowerCase();
+  const pageFallbacks = {
+    tasks: 'work',
+    edge: 'assets',
+    'triage-ops': 'findings/supply-chain',
+    'coverage': 'research/coverage',
+    'blog-ops': 'publications',
+    automation: 'automation/models',
+    integrations: 'system/health'
+  };
+  return OPERATOR_GUIDANCE[route]
+    || OPERATOR_GUIDANCE[pageFallbacks[pageId]]
+    || (route.startsWith('publications/') ? OPERATOR_GUIDANCE.publications : null)
+    || null;
+}
+
+function renderOperatorGuidance(pageId, activeRoute) {
+  document.querySelectorAll('.operator-decision-guide').forEach(node => node.remove());
+  if (['mission-control', 'operator-guide'].includes(pageId)) return;
+  const guidance = operatorGuidanceFor(pageId, activeRoute);
+  const page = el(`page-${pageId}`);
+  const header = page?.querySelector(':scope > .page-header');
+  if (!guidance || !header) return;
+  const guide = document.createElement('section');
+  guide.className = 'operator-decision-guide';
+  guide.setAttribute('aria-label', 'Recommended next step');
+  guide.innerHTML = `
+    <div class="operator-guide-main">
+      <span class="eyebrow">Recommended next step</span>
+      <h3>${escapeHtml(guidance.title)}</h3>
+      <p>${escapeHtml(guidance.detail)}</p>
+    </div>
+    <div class="operator-guide-boundary">
+      <span><strong>SecOpsAI handles</strong>${escapeHtml(guidance.automation)}</span>
+      <span><strong>You decide</strong>${escapeHtml(guidance.approval)}</span>
+    </div>
+    <button class="primary-btn operator-guide-action" type="button">${escapeHtml(guidance.action)}</button>`;
+  guide.querySelector('.operator-guide-action')?.addEventListener('click', () => {
+    const target = guidance.target ? el(guidance.target) : null;
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      target.focus?.({ preventScroll: true });
+    } else {
+      scrollPrimaryPageToTop();
+    }
+  });
+  header.insertAdjacentElement('afterend', guide);
+}
+
 function openHelpDrawer(pageId = currentPageFromLocation()) {
   const drawer = el('help-drawer');
   const title = el('help-drawer-title');
@@ -1981,6 +2234,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTa
     }
   }
   renderSidebarSubnav(normalizedPageId, activeRoute);
+  renderOperatorGuidance(normalizedPageId, activeRoute);
   if (!skipHistory && window.history?.pushState) {
     const nextHash = `#${routeOverride || routeForPage(normalizedPageId)}`;
     if (window.location.hash !== nextHash) window.history.pushState({ page: normalizedPageId }, '', nextHash);
@@ -3160,6 +3414,195 @@ function renderMissionControl() {
   const researchQueue = Array.isArray(state.researchCases.cases) ? state.researchCases.cases : [];
   const researchReady = researchQueue.filter(item => ['ready_to_publish', 'disclosure_pending', 'validation'].includes(String(item.status || '').toLowerCase())).length;
 
+  const intelligenceData = state.intelligence.data || {};
+  const intelligenceCounts = intelligenceData.jobs?.counts || {};
+  const modelQueued = Number(intelligenceCounts.queued || 0) + Number(intelligenceCounts.awaiting_provider || 0);
+  const modelRunning = Number(intelligenceCounts.running || 0);
+  const modelFailed = Number(intelligenceCounts.failed || 0);
+  const bridge = intelligenceData.bridge || {};
+  const selectedModel = String(bridge.selected_model || 'No model selected');
+  const selectedProvider = bridge.providers?.[bridge.selected_model] || {};
+  const selectedModelReady = selectedProvider.status === 'ready'
+    || bridge.selected_model_probe_status === 'ready'
+    || bridge.selected_model_last_probe_ready === true;
+  const modelStatusKnown = Boolean(state.intelligence.data) && !state.intelligence.error;
+  const modelBlocked = modelStatusKnown && modelQueued > 0 && modelRunning === 0 && !selectedModelReady;
+  const collectorRows = Array.isArray(state.coverage.collectors) ? state.coverage.collectors : [];
+  const degradedCollectors = collectorRows.filter(item => coverageCollectorHealth(item) !== 'Healthy');
+  const healthyCollectors = collectorRows.length - degradedCollectors.length;
+  const validationBlockers = researchQueue.filter(item => ['validation', 'awaiting_input', 'blocked'].includes(String(item.status || '').toLowerCase())).length;
+  const publicationReady = researchQueue.filter(item => String(item.status || '').toLowerCase() === 'ready_to_publish').length;
+  const discoveryCandidates = Array.isArray(state.researchCases.discovery?.candidates) ? state.researchCases.discovery.candidates.length : 0;
+  const dailySettings = intelligenceData.daily_automation?.settings || {};
+  const dailySummary = intelligenceData.daily_automation?.summary || {};
+  const alertAutomation = intelligenceData.autopilot?.settings || {};
+  const investigationAutomation = intelligenceData.investigations?.settings || {};
+  const specialistPolicy = specialistStatusResult()?.policy || {};
+  const safeAutomationGaps = [
+    !dailySettings.enabled ? 'daily workflow is disabled' : '',
+    !['guarded'].includes(String(alertAutomation.mode || '').toLowerCase()) ? 'alert review is not guarded automatic' : '',
+    !['guarded'].includes(String(investigationAutomation.mode || '').toLowerCase()) || investigationAutomation.auto_start_pipeline === false ? 'investigation intake is not guarded automatic' : '',
+    String(specialistPolicy.mode || '').toLowerCase() !== 'guarded' || String(specialistPolicy.maximum_automatic_tier || '').toLowerCase() !== 'read_only' ? 'specialist read-only routing is not enabled' : ''
+  ].filter(Boolean);
+
+  const decisions = [];
+  if (modelBlocked) decisions.push({
+    tone: 'critical',
+    label: 'Automation blocked',
+    title: `${modelQueued} model job${modelQueued === 1 ? '' : 's'} cannot start`,
+    summary: `The selected model ${selectedModel} is not ready and no model job is running. SecOpsAI will preserve the queue instead of silently changing models.`,
+    why: 'Evidence collection can continue, but analyst briefs and publication reviews will not advance.',
+    evidence: [`Selected model: ${selectedModel}`, `${modelQueued} queued · ${modelRunning} running`, `Fallback: ${bridge.fallback_mode === 'disabled' ? 'disabled' : humanizeSnake(bridge.fallback_mode || 'not recorded')}`],
+    action: 'Fix model routing',
+    route: 'automation/models'
+  });
+  if (modelStatusKnown && safeAutomationGaps.length) decisions.push({
+    tone: 'medium',
+    label: 'Safe automation available',
+    title: `${safeAutomationGaps.length} repeatable workflow${safeAutomationGaps.length === 1 ? '' : 's'} still need configuration`,
+    summary: 'These workflows can collect, correlate, triage, and route read-only work without crossing a protected decision boundary.',
+    why: 'One scheduled policy is safer and easier to audit than repeatedly clicking overlapping manual controls.',
+    evidence: safeAutomationGaps.slice(0, 3),
+    action: 'Review safe automation',
+    route: 'automation/investigations'
+  });
+  if (degradedCollectors.length) decisions.push({
+    tone: 'high',
+    label: 'Coverage incomplete',
+    title: `${degradedCollectors.length} collector${degradedCollectors.length === 1 ? '' : 's'} need attention`,
+    summary: 'A quiet source cannot be treated as clean while its cursor, coverage window, or dead-letter queue is degraded.',
+    why: 'Repairing source coverage protects every later finding and research decision from missing evidence.',
+    evidence: degradedCollectors.slice(0, 3).map(item => item.source || item.ecosystem || item.name || 'Collector needs review'),
+    action: 'Review source coverage',
+    route: 'research/coverage'
+  });
+  if (pendingApprovals) decisions.push({
+    tone: 'high',
+    label: 'Human approval required',
+    title: `${pendingApprovals} protected action${pendingApprovals === 1 ? '' : 's'} waiting`,
+    summary: 'SecOpsAI has stopped at an approval boundary and will not apply the action on your behalf.',
+    why: 'Review the evidence, scope, and recovery path before approving or rejecting the request.',
+    evidence: [`${openSessions} open investigation session${openSessions === 1 ? '' : 's'}`, `${pendingActions.length} pending native action${pendingActions.length === 1 ? '' : 's'}`],
+    action: 'Review approvals',
+    route: 'system/audit'
+  });
+  if (blocked) decisions.push({
+    tone: 'high',
+    label: 'Ownership blocked',
+    title: `${blocked} work item${blocked === 1 ? '' : 's'} need an owner decision`,
+    summary: 'Resolve the oldest blocker before adding more work or specialist runs.',
+    why: 'Clear ownership and one explicit next step prevent duplicate investigations and stale remediation.',
+    evidence: [`${inReview} in review`, `${activeRuns} active operational run${activeRuns === 1 ? '' : 's'}`],
+    action: 'Open blocked work',
+    route: 'work'
+  });
+  if (validationBlockers) decisions.push({
+    tone: 'medium',
+    label: 'Evidence decision',
+    title: `${validationBlockers} research case${validationBlockers === 1 ? '' : 's'} need validation`,
+    summary: 'Resolve the first missing or contradictory evidence item before asking a model or preparing publication.',
+    why: 'Models can review evidence, but they cannot turn missing evidence into proof.',
+    evidence: [`${researchQueue.length} total cases`, `${publicationReady} publication ready`],
+    action: 'Review research blockers',
+    route: 'research/cases'
+  });
+  if (openFindingsForCockpit.length) decisions.push({
+    tone: 'medium',
+    label: 'Analyst decision',
+    title: `${openFindingsForCockpit.length} finding${openFindingsForCockpit.length === 1 ? '' : 's'} need triage`,
+    summary: 'Review priority, confidence, maliciousness, and local exposure as separate facts before choosing a disposition.',
+    why: 'A high-priority static signal is a reason to investigate, not proof that the artifact is malicious or locally present.',
+    evidence: openFindingsForCockpit.slice(0, 2).map(item => `${findingSeverity(item)} · ${findingTitle(item)}`),
+    action: 'Open decision queue',
+    route: 'findings'
+  });
+  if (modelQueued && modelRunning > 0) decisions.push({
+    tone: 'info',
+    label: 'Automation active',
+    title: `${modelQueued} model job${modelQueued === 1 ? '' : 's'} queued; ${modelRunning} running`,
+    summary: `The selected model ${selectedModel} is actively processing durable jobs. Avoid creating duplicate runs.`,
+    why: 'Monitor age and failures; intervene only if throughput stops or a specific pipeline fails.',
+    evidence: [`${modelFailed} historical failure${modelFailed === 1 ? '' : 's'}`, `Selected model: ${selectedModel}`],
+    action: 'Monitor model jobs',
+    route: 'automation/jobs'
+  });
+  if (!decisions.length) decisions.push({
+    tone: 'success',
+    label: 'Workspace clear',
+    title: 'No urgent operator decision is waiting',
+    summary: 'Continue the scheduled workflow and review new evidence as it arrives.',
+    why: 'SecOpsAI is preserving approval boundaries while automation handles repeatable collection and analysis.',
+    evidence: [`${activeRuns} active run${activeRuns === 1 ? '' : 's'}`, `${discoveryCandidates} discovery candidate${discoveryCandidates === 1 ? '' : 's'}`],
+    action: 'Review automation schedule',
+    route: 'automation/investigations'
+  });
+
+  const openDecisionRoute = route => setPage(pageIdForRoute(route), { routeOverride: route });
+  const primaryDecision = decisions[0];
+  const primaryDecisionHost = el('mission-primary-decision');
+  if (primaryDecisionHost) {
+    primaryDecisionHost.innerHTML = `
+      <article class="mission-primary-card tone-${escapeHtml(primaryDecision.tone)}">
+        <div class="mission-decision-heading"><span class="eyebrow">Do this first · ${escapeHtml(primaryDecision.label)}</span><span class="mission-decision-rank">1</span></div>
+        <h3>${escapeHtml(primaryDecision.title)}</h3>
+        <p class="mission-decision-summary">${escapeHtml(primaryDecision.summary)}</p>
+        <div class="mission-decision-reason"><strong>Why this is first</strong><span>${escapeHtml(primaryDecision.why)}</span></div>
+        <div class="mission-decision-evidence"><strong>Current evidence</strong>${primaryDecision.evidence.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
+        <div class="mission-decision-actions"><button class="primary-btn" type="button" data-decision-route="${escapeHtml(primaryDecision.route)}">${escapeHtml(primaryDecision.action)}</button><span>SecOpsAI will keep protected decisions approval-gated.</span></div>
+      </article>`;
+    primaryDecisionHost.querySelector('[data-decision-route]')?.addEventListener('click', event => openDecisionRoute(event.currentTarget.dataset.decisionRoute));
+  }
+
+  const nextDecisionHost = el('mission-next-decisions');
+  if (nextDecisionHost) {
+    const next = decisions.slice(1, 4);
+    nextDecisionHost.innerHTML = `
+      <section class="mission-next-card">
+        <div class="mission-section-heading"><div><span class="eyebrow">After that</span><h3>Next decisions</h3></div><span>${Math.max(0, decisions.length - 1)} remaining</span></div>
+        <div class="mission-next-list">${next.length ? next.map((item, index) => `
+          <button class="mission-decision-row tone-${escapeHtml(item.tone)}" type="button" data-decision-route="${escapeHtml(item.route)}">
+            <span class="mission-decision-rank">${index + 2}</span><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.summary)}</small></span><span aria-hidden="true">›</span>
+          </button>`).join('') : '<div class="mission-clear-state"><strong>You are caught up.</strong><span>No second decision is waiting.</span></div>'}</div>
+      </section>`;
+    nextDecisionHost.querySelectorAll('[data-decision-route]').forEach(button => button.addEventListener('click', () => openDecisionRoute(button.dataset.decisionRoute)));
+  }
+
+  const automationFlowHost = el('mission-automation-flow');
+  if (automationFlowHost) {
+    const modelFlowStatus = modelBlocked ? 'Blocked' : modelRunning > 0 ? 'Running' : modelQueued > 0 ? 'Queued' : 'Ready';
+    const nextDailyRun = dailySettings.next_run_at || dailySummary.next_run_at;
+    automationFlowHost.innerHTML = `
+      <section class="mission-flow-card">
+        <div class="mission-section-heading"><div><span class="eyebrow">Automatic workflow</span><h3>What SecOpsAI is doing now</h3></div><span>Human approval remains explicit</span></div>
+        <div class="mission-flow">
+          <div class="mission-flow-step ${degradedCollectors.length ? 'needs-attention' : 'active'}"><span>1</span><strong>Discovery</strong><small>${collectorRows.length ? `${healthyCollectors}/${collectorRows.length} collectors healthy` : 'Waiting for coverage data'}</small></div>
+          <div class="mission-flow-step active"><span>2</span><strong>Evidence</strong><small>${discoveryCandidates} candidate${discoveryCandidates === 1 ? '' : 's'} · static collection only</small></div>
+          <div class="mission-flow-step ${modelBlocked ? 'needs-attention' : modelRunning ? 'active' : ''}"><span>3</span><strong>Model review</strong><small>${modelFlowStatus} · ${modelQueued} queued</small></div>
+          <div class="mission-flow-step approval"><span>4</span><strong>Decision & publish</strong><small>${publicationReady} ready · operator approval required</small></div>
+        </div>
+        <div class="mission-automation-policy">
+          <div><span>Daily workflow</span><strong>${dailySettings.enabled ? `Enabled${nextDailyRun ? ` · next ${fmtDate(nextDailyRun)}` : ''}` : 'Disabled'}</strong></div>
+          <div><span>Alert review</span><strong>${escapeHtml(humanizeSnake(alertAutomation.mode || 'not configured'))}</strong></div>
+          <div><span>Investigations</span><strong>${escapeHtml(humanizeSnake(investigationAutomation.mode || 'not configured'))}${investigationAutomation.auto_start_pipeline ? ' · auto-start' : ''}</strong></div>
+          <div><span>Specialist routing</span><strong>${escapeHtml(humanizeSnake(specialistPolicy.mode || 'not configured'))}${specialistPolicy.maximum_automatic_tier ? ` · ${escapeHtml(humanizeSnake(specialistPolicy.maximum_automatic_tier))}` : ''}</strong></div>
+          <p><strong>${safeAutomationGaps.length ? 'Automation can be improved.' : 'Maximum safe routine automation is enabled.'}</strong> ${safeAutomationGaps.length ? escapeHtml(safeAutomationGaps.join('; ')) : 'Verdicts, containment, sandbox submission, disclosure, publication, deployment, and destructive changes still require a person.'}</p>
+        </div>
+      </section>`;
+  }
+
+  const healthStripHost = el('mission-health-strip');
+  if (healthStripHost) {
+    const generatedAt = intelligenceData.generated_at || triageLatest?.generated_at || new Date().toISOString();
+    healthStripHost.innerHTML = `
+      <section class="mission-health-card" aria-label="Workspace health summary">
+        <div><span>Findings</span><strong>${openFindingsForCockpit.length} need review</strong></div>
+        <div><span>Native triage</span><strong>${triageSummary ? `${triageSummary.open_findings ?? 0} open · ${triageSummary.pending_actions ?? pendingActions.length} pending` : 'Unavailable'}</strong></div>
+        <div><span>Model queue</span><strong>${modelRunning} running · ${modelQueued} queued</strong></div>
+        <div><span>Source coverage</span><strong>${collectorRows.length ? `${healthyCollectors}/${collectorRows.length} healthy` : 'Not loaded'}</strong></div>
+        <div class="mission-health-updated"><span>Updated</span><strong>${escapeHtml(fmtDate(generatedAt))}</strong></div>
+      </section>`;
+  }
+
   const cockpitItems = [];
   if (blocked) cockpitItems.push({ tone: 'critical', title: `${blocked} blocked work item${blocked === 1 ? '' : 's'}`, detail: 'Review the blocker and assign the next owner.', page: 'tasks' });
   if (pendingApprovals) cockpitItems.push({ tone: 'high', title: `${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`, detail: 'Review the requested action before it can run.', page: 'integrations' });
@@ -3849,18 +4292,11 @@ function renderFindings() {
   }).length;
   if (summary) {
     summary.innerHTML = `
-      <div class="card"><div class="metric">${total}</div><div class="metric-label">Findings loaded</div><div class="metric-scope">Current filters</div></div>
-      <div class="card"><div class="metric">${coreFindingCount}</div><div class="metric-label">Core canonical</div><div class="metric-scope">Current filters · Core source</div></div>
-      <div class="card"><div class="metric">${dashboardFindingCount}</div><div class="metric-label">Dashboard operational</div><div class="metric-scope">Current filters · dashboard source</div></div>
-      <div class="card"><div class="metric">${openCount}</div><div class="metric-label">Open / triageable</div><div class="metric-scope">Current filters</div></div>
-      <div class="card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical / urgent</div><div class="metric-scope">Current filters</div></div>
-      <div class="card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div><div class="metric-scope">Current filters · guard output</div></div>
-      <div class="card"><div class="metric">${linkedCount}</div><div class="metric-label">With task correlation</div><div class="metric-scope">Current filters</div></div>
-      <div class="card"><div class="metric">${actionableCount}</div><div class="metric-label">Needs action or follow-up</div><div class="metric-scope">Current filters</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Native SecOpsAI open findings</div><div class="metric-scope">Local Core triage artifact</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Native pending actions</div><div class="metric-scope">Local Core action queue</div></div>
-      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open investigation sessions</div><div class="metric-scope">Local Core session store</div></div>
-      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending session approvals</div><div class="metric-scope">Local Core session store</div></div>
+      <div class="card finding-summary-card priority"><div class="metric">${openCount}</div><div class="metric-label">Need a decision</div><div class="metric-scope">${actionableCount} need action or follow-up</div></div>
+      <div class="card finding-summary-card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical or urgent</div><div class="metric-scope">Priority is not a maliciousness verdict</div></div>
+      <div class="card finding-summary-card"><div class="metric">${linkedCount}</div><div class="metric-label">Have accountable work</div><div class="metric-scope">Task or remediation linked</div></div>
+      <div class="card finding-summary-card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div><div class="metric-scope">Slopsquatting and dependency guard</div></div>
+      <div class="finding-summary-context"><strong>${total} shown</strong><span>${coreFindingCount} canonical Core · ${dashboardFindingCount} operational</span><span>${triageSummary ? `${triageSummary.open_findings ?? 0} native open · ${triageSummary.pending_actions ?? pendingActions.length} pending` : 'Native triage unavailable'}</span><span>${openSessions} sessions · ${pendingApprovals} approvals</span></div>
     `;
   }
 
@@ -3972,6 +4408,30 @@ function renderFindings() {
     const findingSessions = sessionsForFinding(selected);
     const latestSession = findingSessions[0] || null;
     const sessionApprovals = pendingApprovalsForSession(latestSession);
+    const disposition = String(effectiveFindingDisposition(selected) || 'unreviewed').toLowerCase();
+    const explicitAssessment = findingValue(selected, 'maliciousness_verdict') || findingValue(selected, 'assessment') || findingValue(selected, 'assessment_label');
+    const assessment = String(explicitAssessment || (!['unreviewed', 'needs_review', 'pending', 'unknown', ''].includes(disposition) ? disposition : 'unconfirmed_static_lead'));
+    const rawConfidence = findingConfidence(selected);
+    const numericConfidence = Number(rawConfidence);
+    const confidenceLabel = rawConfidence === null || rawConfidence === undefined || rawConfidence === ''
+      ? 'Not recorded'
+      : (Number.isFinite(numericConfidence) ? `${numericConfidence <= 1 ? Math.round(numericConfidence * 100) : Math.round(numericConfidence)}%` : String(rawConfidence));
+    const rawLocalExposure = findingValue(selected, 'local_exposure') || findingValue(selected, 'environment_impact') || findingValue(selected, 'local_usage') || 'unknown';
+    const localExposure = typeof rawLocalExposure === 'object' ? (rawLocalExposure.status || rawLocalExposure.verdict || 'unknown') : rawLocalExposure;
+    const confirmedFacts = [
+      `Detected by ${displayFindingSource(selected)}.`,
+      `Recorded ${fmtDate(findingDetectedAt(selected))}.`,
+      findingFingerprint(selected) ? `Indicator: ${findingFingerprint(selected)}.` : ''
+    ].filter(Boolean);
+    const evidenceGaps = [
+      assessment === 'unconfirmed_static_lead' ? 'Maliciousness has not been confirmed.' : '',
+      String(localExposure).toLowerCase() === 'unknown' ? 'Local exposure has not been established.' : '',
+      confidenceLabel === 'Not recorded' ? 'Detection confidence is not recorded.' : '',
+      !latestSession ? 'No guarded investigation session has started.' : ''
+    ].filter(Boolean);
+    const recommendedAction = latestSession
+      ? 'Review the active investigation and resolve its first missing evidence item.'
+      : 'Start a guarded investigation before closing, escalating, or creating research.';
     intel.innerHTML = `
       <div class="finding-detail-header">
         <div>
@@ -3988,6 +4448,26 @@ function renderFindings() {
           ${renderStatusPill(String(effectiveFindingStatus(selected)).toLowerCase(), humanizeSnake(effectiveFindingStatus(selected)))}
         </div>
       </div>
+      <section class="finding-decision-summary" aria-label="Finding decision summary">
+        <div class="finding-decision-head">
+          <div><span class="eyebrow">Current assessment</span><h4>${escapeHtml(humanizeSnake(assessment))}</h4><p>${escapeHtml(findingBody(selected) || 'A finding was recorded, but no additional narrative is available.')}</p></div>
+          <span class="decision-card-badge">${escapeHtml(humanizeSnake(effectiveFindingStatus(selected)))}</span>
+        </div>
+        <div class="finding-assessment-grid">
+          <div><span>Investigation priority</span><strong>${escapeHtml(humanizeSnake(findingSeverity(selected)))}</strong></div>
+          <div><span>Detection confidence</span><strong>${escapeHtml(confidenceLabel)}</strong></div>
+          <div><span>Maliciousness</span><strong>${escapeHtml(humanizeSnake(assessment))}</strong></div>
+          <div><span>Local exposure</span><strong>${escapeHtml(humanizeSnake(String(localExposure)))}</strong></div>
+        </div>
+        <div class="finding-decision-columns">
+          <div><h5>Confirmed facts</h5><ul>${confirmedFacts.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>
+          <div><h5>Evidence gaps</h5>${evidenceGaps.length ? `<ul>${evidenceGaps.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p>No immediate evidence gap is recorded. Verify the full evidence before deciding.</p>'}</div>
+        </div>
+        <div class="finding-recommended-action"><span><strong>Recommended next action</strong>${escapeHtml(recommendedAction)}</span><div><button class="primary-btn" id="finding-decision-investigate-btn" type="button">${latestSession ? 'Open investigation' : 'Start investigation'}</button><button class="secondary-btn" id="finding-decision-research-btn" type="button">Run source-backed research</button><button class="secondary-btn" id="finding-decision-task-btn" type="button">Create task</button></div></div>
+      </section>
+      <details class="finding-full-evidence">
+        <summary>Open supporting evidence and protected actions</summary>
+        <div class="finding-full-evidence-body">
       <div class="finding-detail-grid">
         <div class="card finding-detail-card">
           <h4>Finding overview</h4>
@@ -4088,7 +4568,31 @@ function renderFindings() {
           <div class="task-card-actions" style="margin-top:10px;"><button class="mini-btn" id="selected-finding-run-investigate-btn">Start investigation</button>${!latestSession ? `<button class="mini-btn" id="selected-finding-run-research-btn">Run source-backed research</button>` : ''}${nativeInsight?.pendingAction ? `<button class="mini-btn" id="selected-finding-run-apply-btn">Apply approved action</button>` : ''}<button class="mini-btn" id="selected-finding-task-btn">Create investigation task</button>${related[0]?.item ? `<button class="mini-btn" id="selected-finding-prompt-btn">Open lead brief</button>` : ''}</div>
         </div>
       </div>
+        </div>
+      </details>
     `;
+    el('finding-decision-task-btn')?.addEventListener('click', () => openFindingTaskModal(selected));
+    el('finding-decision-investigate-btn')?.addEventListener('click', async () => {
+      if (latestSession?.session_id) {
+        await selectNativeSession(latestSession.session_id, { focusFinding: false });
+        setPage('integrations', { routeOverride: 'system/audit' });
+        return;
+      }
+      try {
+        await runNativeInvestigate(selected);
+      } catch (err) {
+        console.error('native investigate failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    });
+    el('finding-decision-research-btn')?.addEventListener('click', async () => {
+      try {
+        await runNativeResearchFinding(selected);
+      } catch (err) {
+        console.error('native research failed', err);
+        setStatus(err.message || String(err), true);
+      }
+    });
     el('selected-finding-task-btn')?.addEventListener('click', () => openFindingTaskModal(selected));
     el('selected-finding-prompt-btn')?.addEventListener('click', () => {
       const top = related[0]?.item;
@@ -5595,6 +6099,7 @@ async function loadIntelligence({ render = true } = {}) {
   } finally {
     state.intelligence.loading = false;
     if (render) renderIntelligence();
+    if (currentPageFromLocation() === 'mission-control') renderMissionControl();
   }
   return state.intelligence.data;
 }
@@ -11524,7 +12029,10 @@ async function refreshActiveSurface({ force = false } = {}) {
   state.surfaceRefreshInFlight = true;
   try {
     const page = currentPageFromLocation();
-    if (['mission-control', 'findings'].includes(page)) {
+    if (page === 'mission-control') {
+      await Promise.all([refreshOperationalWorkspace(), loadIntelligence({ render: false })]);
+      renderMissionControl();
+    } else if (page === 'findings') {
       await refreshOperationalWorkspace();
     } else if (page === 'tasks') {
       await Promise.all([refreshOperationalWorkspace(), loadSpecialists({ render: false })]);

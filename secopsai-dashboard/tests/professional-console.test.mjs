@@ -11,6 +11,20 @@ const styles = read('styles.css');
 const readmeTour = read('tests/fixtures/readme-product-tour.html');
 const repositoryReadme = fs.readFileSync(path.resolve(root, '..', 'README.md'), 'utf8');
 
+const allIds = [...index.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+assert.equal(new Set(allIds).size, allIds.length, 'every dashboard element id must be unique');
+assert.equal((index.match(/id="task-filter-reviewer"/g) || []).length, 1, 'Work must expose one reviewer filter');
+
+for (const match of index.matchAll(/<button\b([^>]*)>/gi)) {
+  const attrs = match[1];
+  const id = attrs.match(/\bid="([^"]+)"/)?.[1];
+  if (!id) continue;
+  const directlyReferenced = app.includes(`'${id}'`) || app.includes(`"${id}"`);
+  const dataAttributes = [...attrs.matchAll(/\b(data-[a-z0-9-]+)=/gi)].map(item => item[1].toLowerCase());
+  const delegated = dataAttributes.some(attribute => app.includes(`[${attribute}]`));
+  assert.ok(directlyReferenced || delegated, `static button ${id} is not wired directly or through a data-action handler`);
+}
+
 assert.match(index, /professional-ui/);
 for (const [page, route] of [
   ['mission-control', 'overview'],
@@ -40,6 +54,21 @@ for (const route of ['research/inbox', 'research/cases', 'research/campaigns', '
 for (const marker of ['research-view-summary', 'publication-view-summary', 'automation-view-summary', 'system-view-summary', 'asset-view-summary', 'mission-research-queues', 'research-inbox-candidates', 'research-disclosure-queue', 'research-sandbox-queue', 'data-research-section="watchlists"', 'data-research-section="campaigns"', 'data-research-section="cases"', 'data-blog-section="news"', 'data-edge-section="sensors"', 'research-stage-stepper', 'mobile-card-table', 'metric-scope']) {
   assert.ok((index + styles + app).includes(marker), `missing redesign contract: ${marker}`);
 }
+for (const marker of ['mission-primary-decision', 'mission-next-decisions', 'mission-automation-flow', 'mission-health-strip', 'mission-secondary-details']) {
+  assert.ok(index.includes(marker), `missing decision-first Overview surface: ${marker}`);
+}
+for (const marker of ['OPERATOR_GUIDANCE', 'renderOperatorGuidance', 'Do this first', 'Maximum safe routine automation is enabled', 'finding-decision-summary', 'finding-assessment-grid', 'Unconfirmed Static Lead']) {
+  assert.ok((app + styles).includes(marker) || (marker === 'Unconfirmed Static Lead' && app.includes('unconfirmed_static_lead')), `missing decision workflow marker: ${marker}`);
+}
+const guidanceStart = app.indexOf('const OPERATOR_GUIDANCE');
+const guidanceEnd = app.indexOf('const CONTEXT_NAV');
+const guidanceBlock = app.slice(guidanceStart, guidanceEnd);
+const renderedSurfaces = `${index}\n${app.slice(guidanceEnd)}`;
+for (const match of guidanceBlock.matchAll(/target: '([^']+)'/g)) {
+  assert.ok(renderedSurfaces.includes(`id="${match[1]}"`), `recommended action target ${match[1]} has no rendered destination`);
+}
+assert.match(app, /page === 'mission-control'[\s\S]*refreshOperationalWorkspace\(\), loadIntelligence\(\{ render: false \}\)/);
+assert.match(app, /Verdicts, containment, sandbox submission, disclosure, publication, deployment, and destructive changes still require a person/);
 assert.match(index, /id="page-automation"[\s\S]*id="intelligence-title"/);
 assert.match(index, /id="page-integrations"[\s\S]*id="system-view-summary"/);
 assert.doesNotMatch(index, /data-system-section="automation"/);
@@ -153,7 +182,8 @@ assert.equal((index.match(/id="intelligence-admin-token"/g) || []).length, 1);
 assert.ok(index.indexOf('id="intelligence-admin-token"') < index.indexOf('id="intelligence-service-actions"'));
 assert.ok(index.indexOf('id="intelligence-service-actions"') < index.indexOf('id="intelligence-request-title"'));
 
-assert.match(index, /styles\.css\?v=20260823-bright-contrast-v3/);
+assert.match(index, /styles\.css\?v=20260830-decision-first-v1/);
+assert.match(index, /app\.js\?v=20260830-decision-first-v1/);
 assert.doesNotMatch(index, /styles\.css\?v=20260803-subsection-navigation/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function humanizeMachineText/);

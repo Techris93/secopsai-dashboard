@@ -73,5 +73,13 @@ def test_bright_theme_does_not_use_hover_as_the_only_readability_fix():
 
 def test_stylesheet_cache_key_points_to_contrast_revision():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    assert 'styles.css?v=20260823-bright-contrast-v3' in html
+    assert 'styles.css?v=20260830-decision-first-v1' in html
     assert 'styles.css?v=20260803-subsection-navigation' not in html
+
+
+def test_operator_identity_uses_readable_bright_header_color():
+    css = (ROOT / "styles.css").read_text(encoding="utf-8")
+    assert "body.professional-ui .top-strip .operator-identity" in css
+    assert "color: #33413b !important;" in css
+    assert "body.professional-ui .topbar .operator-identity" not in css
+    assert _contrast_ratio("33413b", "ffffff") >= 4.5

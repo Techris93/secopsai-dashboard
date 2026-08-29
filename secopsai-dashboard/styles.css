@@ -10008,3 +10008,495 @@ body.professional-ui .research-pipeline-operational-actions {
     width: 100%;
   }
 }
+
+/* Decision-first Mission Control
+   The product keeps its established white and forest-green visual language,
+   but now gives one operator decision clear precedence over raw telemetry. */
+body.professional-ui #page-mission-control {
+  color: #17211e;
+}
+
+body.professional-ui .top-strip .operator-identity {
+  color: #33413b !important;
+  opacity: 1 !important;
+  font-weight: 700;
+}
+
+body.professional-ui .mission-today-header {
+  margin-bottom: 18px;
+}
+
+body.professional-ui .mission-today-header h2 {
+  font-size: clamp(2rem, 3.2vw, 3rem);
+  letter-spacing: -0.045em;
+}
+
+body.professional-ui .mission-decision-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+body.professional-ui .mission-primary-card,
+body.professional-ui .mission-next-card,
+body.professional-ui .mission-flow-card,
+body.professional-ui .mission-health-card,
+body.professional-ui .operator-decision-guide,
+body.professional-ui .finding-decision-summary {
+  border: 1px solid #d6e0db !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  color: #17211e !important;
+}
+
+body.professional-ui .mission-primary-card {
+  min-height: 330px;
+  padding: clamp(22px, 3vw, 34px);
+  border-left: 5px solid #087963 !important;
+  box-shadow: 0 16px 38px rgba(20, 61, 47, 0.08);
+}
+
+body.professional-ui .mission-primary-card.tone-critical { border-left-color: #c92a2a !important; }
+body.professional-ui .mission-primary-card.tone-high { border-left-color: #a85b00 !important; }
+body.professional-ui .mission-primary-card.tone-success { border-left-color: #087963 !important; }
+
+body.professional-ui .mission-decision-heading,
+body.professional-ui .mission-section-heading,
+body.professional-ui .mission-decision-actions,
+body.professional-ui .finding-decision-head,
+body.professional-ui .finding-recommended-action {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+body.professional-ui .mission-decision-rank {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 50%;
+  background: #e8f4ef;
+  color: #075f4f;
+  font: 800 0.82rem/1 var(--asd-mono);
+}
+
+body.professional-ui .mission-primary-card h3 {
+  max-width: 740px;
+  margin: 18px 0 10px;
+  color: #17211e !important;
+  font-size: clamp(1.55rem, 2.2vw, 2.15rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+body.professional-ui .mission-decision-summary {
+  max-width: 760px;
+  margin: 0;
+  color: #53645d !important;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+body.professional-ui .mission-decision-reason,
+body.professional-ui .mission-decision-evidence {
+  display: grid;
+  gap: 4px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e9e5;
+}
+
+body.professional-ui .mission-decision-reason span,
+body.professional-ui .mission-decision-evidence span,
+body.professional-ui .mission-decision-actions > span {
+  color: #53645d !important;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+body.professional-ui .mission-decision-evidence {
+  grid-template-columns: minmax(130px, auto) repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+body.professional-ui .mission-decision-evidence span {
+  padding: 8px 10px;
+  border: 1px solid #e1e9e5;
+  border-radius: 7px;
+  background: #f6f9f7;
+}
+
+body.professional-ui .mission-decision-actions {
+  align-items: center;
+  margin-top: 22px;
+}
+
+body.professional-ui .mission-next-card {
+  height: 100%;
+  padding: 22px;
+}
+
+body.professional-ui .mission-section-heading h3 {
+  margin: 4px 0 0;
+  color: #17211e !important;
+  font-size: 1.15rem;
+}
+
+body.professional-ui .mission-section-heading > span {
+  color: #66766f !important;
+  font-size: 0.78rem;
+}
+
+body.professional-ui .mission-next-list {
+  display: grid;
+  gap: 0;
+  margin-top: 14px;
+}
+
+body.professional-ui .mission-decision-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 0;
+  border: 0;
+  border-top: 1px solid #e2e9e5;
+  border-radius: 0;
+  background: transparent;
+  color: #17211e;
+  text-align: left;
+  cursor: pointer;
+}
+
+body.professional-ui .mission-decision-row:hover,
+body.professional-ui .mission-decision-row:focus-visible {
+  background: #f6faf8;
+}
+
+body.professional-ui .mission-decision-row strong,
+body.professional-ui .mission-decision-row small {
+  display: block;
+}
+
+body.professional-ui .mission-decision-row small {
+  margin-top: 4px;
+  color: #66766f !important;
+  line-height: 1.45;
+}
+
+body.professional-ui .mission-clear-state {
+  display: grid;
+  gap: 4px;
+  padding: 26px 0;
+  border-top: 1px solid #e2e9e5;
+}
+
+body.professional-ui .mission-clear-state span { color: #66766f !important; }
+
+body.professional-ui .mission-flow-card {
+  margin-top: 16px;
+  padding: 20px 22px;
+}
+
+body.professional-ui .mission-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 18px;
+  border: 1px solid #dce6e1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+body.professional-ui .mission-flow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 16px;
+  border-right: 1px solid #dce6e1;
+  background: #fbfcfb;
+}
+
+body.professional-ui .mission-flow-step:last-child { border-right: 0; }
+body.professional-ui .mission-flow-step > span { grid-row: 1 / span 2; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid #a9bbb3; border-radius: 50%; color: #53645d; font: 800 0.72rem/1 var(--asd-mono); }
+body.professional-ui .mission-flow-step strong { color: #17211e !important; }
+body.professional-ui .mission-flow-step small { color: #66766f !important; line-height: 1.35; }
+body.professional-ui .mission-flow-step.active { background: #eff8f4; }
+body.professional-ui .mission-flow-step.active > span { border-color: #087963; background: #087963; color: #fff; }
+body.professional-ui .mission-flow-step.needs-attention { background: #fff7ed; }
+body.professional-ui .mission-flow-step.needs-attention > span { border-color: #a85b00; color: #8a4a00; }
+body.professional-ui .mission-flow-step.approval { background: #f5f7f6; }
+
+body.professional-ui .mission-automation-policy {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+body.professional-ui .mission-automation-policy > div {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid #e0e8e4;
+  border-radius: 7px;
+  background: #f8faf9;
+}
+
+body.professional-ui .mission-automation-policy span { color: #687870 !important; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+body.professional-ui .mission-automation-policy strong { color: #26332e !important; font-size: 0.8rem; }
+body.professional-ui .mission-automation-policy > p { grid-column: 1 / -1; margin: 2px 0 0; color: #5b6b64 !important; font-size: 0.82rem; line-height: 1.5; }
+
+body.professional-ui .mission-health-card {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  margin-top: 12px;
+  padding: 14px 18px;
+}
+
+body.professional-ui .mission-health-card > div {
+  display: grid;
+  gap: 3px;
+  padding: 0 16px;
+  border-right: 1px solid #e1e8e4;
+}
+
+body.professional-ui .mission-health-card > div:first-child { padding-left: 0; }
+body.professional-ui .mission-health-card > div:last-child { border-right: 0; padding-right: 0; }
+body.professional-ui .mission-health-card span { color: #6b7a74 !important; font-size: 0.73rem; text-transform: uppercase; letter-spacing: 0.06em; }
+body.professional-ui .mission-health-card strong { color: #26332e !important; font-size: 0.82rem; }
+body.professional-ui .mission-health-updated { text-align: right; }
+
+body.professional-ui .mission-secondary-details {
+  margin-top: 14px;
+  padding: 0;
+  border: 1px solid #d6e0db;
+  border-radius: 9px;
+  background: #fff;
+}
+
+body.professional-ui .mission-secondary-details > summary {
+  padding: 15px 18px;
+  color: #405049;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+body.professional-ui .mission-secondary-details[open] { padding: 0 18px 18px; }
+body.professional-ui .mission-secondary-details[open] > summary { margin: 0 -18px 14px; border-bottom: 1px solid #e1e8e4; }
+
+body.professional-ui .operator-decision-guide {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr) auto;
+  gap: 22px;
+  align-items: center;
+  margin: -2px 0 18px;
+  padding: 18px 20px;
+  border-left: 4px solid #087963 !important;
+}
+
+body.professional-ui .operator-guide-main h3 {
+  margin: 3px 0 4px;
+  color: #17211e !important;
+  font-size: 1.05rem;
+}
+
+body.professional-ui .operator-guide-main p {
+  margin: 0;
+  color: #5b6b64 !important;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+body.professional-ui .operator-guide-boundary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+body.professional-ui .operator-guide-boundary span {
+  display: grid;
+  gap: 3px;
+  color: #607068 !important;
+  font-size: 0.77rem;
+  line-height: 1.4;
+}
+
+body.professional-ui .operator-guide-boundary strong { color: #26332e !important; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+body.professional-ui #finding-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+body.professional-ui .finding-summary-card {
+  min-height: 120px;
+  padding: 16px !important;
+}
+
+body.professional-ui .finding-summary-card.priority { border-top: 3px solid #087963 !important; }
+body.professional-ui .finding-summary-context {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 10px 2px 0;
+  color: #607068;
+  font-size: 0.78rem;
+}
+body.professional-ui .finding-summary-context strong { color: #17211e; }
+
+body.professional-ui .finding-decision-summary {
+  padding: 20px;
+  border-left: 4px solid #087963 !important;
+}
+
+body.professional-ui .finding-decision-head h4 {
+  margin: 4px 0 6px;
+  color: #17211e !important;
+  font-size: 1.35rem;
+}
+
+body.professional-ui .finding-decision-head p {
+  max-width: 760px;
+  margin: 0;
+  color: #586961 !important;
+  line-height: 1.5;
+}
+
+body.professional-ui .finding-assessment-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 18px;
+  border: 1px solid #dde6e2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+body.professional-ui .finding-assessment-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border-right: 1px solid #dde6e2;
+  background: #f8faf9;
+}
+body.professional-ui .finding-assessment-grid > div:last-child { border-right: 0; }
+body.professional-ui .finding-assessment-grid span { color: #697970 !important; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+body.professional-ui .finding-assessment-grid strong { color: #17211e !important; }
+
+body.professional-ui .finding-decision-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+body.professional-ui .finding-decision-columns > div {
+  padding: 14px 16px;
+  border: 1px solid #e0e8e4;
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+body.professional-ui .finding-decision-columns h5 { margin: 0 0 8px; color: #2b3933 !important; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+body.professional-ui .finding-decision-columns ul { margin: 0; padding-left: 18px; color: #53645d; }
+body.professional-ui .finding-decision-columns li + li { margin-top: 5px; }
+body.professional-ui .finding-decision-columns p { margin: 0; color: #53645d !important; }
+
+body.professional-ui .finding-recommended-action {
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e0e8e4;
+}
+
+body.professional-ui .finding-recommended-action > span { display: grid; gap: 4px; color: #53645d !important; }
+body.professional-ui .finding-recommended-action > span strong { color: #17211e !important; }
+body.professional-ui .finding-recommended-action > div { display: flex; flex-wrap: wrap; gap: 8px; }
+
+body.professional-ui .finding-full-evidence {
+  margin-top: 14px;
+  border: 1px solid #d7e1dc;
+  border-radius: 9px;
+  background: #fff;
+}
+body.professional-ui .finding-full-evidence > summary { padding: 14px 16px; color: #35443d; font-weight: 750; cursor: pointer; }
+body.professional-ui .finding-full-evidence[open] > summary { border-bottom: 1px solid #e0e8e4; }
+body.professional-ui .finding-full-evidence-body { padding: 14px; }
+body.professional-ui .finding-full-evidence .card { background: #fff !important; color: #17211e !important; }
+
+@media (min-width: 1180px) {
+  body.professional-ui.finding-review-open #finding-queue-section {
+    display: grid;
+    grid-template-columns: minmax(420px, 0.9fr) minmax(620px, 1.35fr);
+    gap: 16px;
+    align-items: start;
+  }
+  body.professional-ui.finding-review-open .finding-review-drawer {
+    position: sticky;
+    z-index: 1;
+    top: 82px;
+    right: auto;
+    width: auto;
+    height: calc(100dvh - 104px);
+    padding: 18px;
+    border: 1px solid #d6e0db;
+    border-radius: 10px;
+    background: #f7f9f8;
+    box-shadow: none;
+    transform: none;
+  }
+  body.professional-ui.finding-review-open .finding-review-drawer-head {
+    top: -18px;
+    margin: -18px -18px 16px;
+    padding: 15px 18px;
+    background: #f7f9f8;
+  }
+}
+
+@media (max-width: 1020px) {
+  body.professional-ui .mission-decision-layout,
+  body.professional-ui .operator-decision-guide {
+    grid-template-columns: 1fr;
+  }
+  body.professional-ui .mission-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.professional-ui .mission-automation-policy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.professional-ui .mission-flow-step:nth-child(2) { border-right: 0; }
+  body.professional-ui .mission-flow-step:nth-child(-n+2) { border-bottom: 1px solid #dce6e1; }
+  body.professional-ui .mission-health-card { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 0; }
+  body.professional-ui .mission-health-card > div:nth-child(2) { border-right: 0; }
+  body.professional-ui .mission-health-updated { text-align: left; }
+  body.professional-ui .finding-assessment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.professional-ui .finding-assessment-grid > div:nth-child(2) { border-right: 0; }
+  body.professional-ui .finding-assessment-grid > div:nth-child(-n+2) { border-bottom: 1px solid #dde6e2; }
+}
+
+@media (max-width: 680px) {
+  body.professional-ui .mission-primary-card { min-height: 0; padding: 20px; }
+  body.professional-ui .mission-decision-evidence { grid-template-columns: 1fr; }
+  body.professional-ui .mission-decision-actions,
+  body.professional-ui .mission-section-heading,
+  body.professional-ui .finding-decision-head,
+  body.professional-ui .finding-recommended-action { flex-direction: column; align-items: stretch; }
+  body.professional-ui .mission-flow { grid-template-columns: 1fr; }
+  body.professional-ui .mission-automation-policy { grid-template-columns: 1fr; }
+  body.professional-ui .mission-flow-step { border-right: 0; border-bottom: 1px solid #dce6e1; }
+  body.professional-ui .mission-flow-step:last-child { border-bottom: 0; }
+  body.professional-ui .mission-health-card,
+  body.professional-ui #finding-summary,
+  body.professional-ui .finding-assessment-grid,
+  body.professional-ui .finding-decision-columns,
+  body.professional-ui .operator-guide-boundary { grid-template-columns: 1fr !important; }
+  body.professional-ui .mission-health-card > div,
+  body.professional-ui .mission-health-card > div:first-child,
+  body.professional-ui .mission-health-card > div:last-child { padding: 9px 0; border-right: 0; border-bottom: 1px solid #e1e8e4; }
+  body.professional-ui .mission-health-card > div:last-child { border-bottom: 0; }
+  body.professional-ui .finding-assessment-grid > div { border-right: 0; border-bottom: 1px solid #dde6e2; }
+  body.professional-ui .finding-assessment-grid > div:last-child { border-bottom: 0; }
+  body.professional-ui .finding-recommended-action > div { display: grid; }
+}

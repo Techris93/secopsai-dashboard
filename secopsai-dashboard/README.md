@@ -13,7 +13,7 @@ publication, and deployment behind explicit safety boundaries.
 
 | Workspace | Purpose |
 | --- | --- |
-| Overview | See priorities, review queues, recent changes, and service health |
+| Today | See the single highest-priority decision, ordered follow-ups, active safe automation, and service health |
 | Findings | Triage evidence-backed detections with impact, confidence, ownership, and safe next actions |
 | Assets | Review the SecOpsAI Edge inventory, changes, sensors, schedules, scans, and Wi-Fi context |
 | Work | Manage tasks, approvals, investigations, execution runs, and recovery |
@@ -25,6 +25,24 @@ publication, and deployment behind explicit safety boundaries.
 The deployable UI uses one primary navigation model. Supply Chain Triage,
 Native Triage, Campaign Research, Blog Ops, and SecOpsAI Edge remain available
 under the operator job they support.
+
+## Decision-First Operation
+
+Mission Control starts with **Today**, not a wall of totals. It orders work by
+operational consequence: model blockage, missing safe-automation configuration,
+degraded collection, approvals, blocked ownership, validation blockers, open
+findings, then active backlog. Queue size is context, not a verdict.
+
+Every operational workspace presents a **Recommended next step** and separates
+what SecOpsAI can safely automate from what the operator must decide. The
+canonical automation path is the scheduled daily workflow plus guarded alert
+review, guarded evidence investigation, and read-only specialist routing.
+SecOpsAI does not silently change a selected model, enable fallback, raise
+concurrency, publish, disclose, submit artifacts, contain systems, or perform a
+destructive action.
+
+The complete design and automation boundaries are recorded in
+[Mission Control Redesign Checkpoints](docs/mission-control-redesign-checkpoints.md).
 
 ## Local Start
 

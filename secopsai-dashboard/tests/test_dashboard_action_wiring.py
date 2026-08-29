@@ -72,5 +72,5 @@ def test_initial_route_collapses_sidebar_subnavigation_until_operator_opens_it()
 def test_action_fix_bumps_the_frontend_bundle_cache_key():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
 
-    assert 'app.js?v=20260823-source-first-research' in html
+    assert 'app.js?v=20260830-decision-first-v1' in html
     assert 'app.js?v=20260803-subsection-navigation' not in html

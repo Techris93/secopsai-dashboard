@@ -129,3 +129,56 @@ This ledger records the product redesign in verified, reversible checkpoints.
   columns cannot contradict each other; pending API access does not block a
   fully audited manual sandbox workflow; raw sandbox results and quarantine paths
   never enter browser state, cloud storage, or AI context.
+
+## Checkpoint 12: Decision-first operations and automation visibility
+
+- Status: complete
+- Goal: let an operator answer three questions immediately after sign-in: what
+  needs me now, what SecOpsAI is already doing, and what remains intentionally
+  approval-gated.
+- Audit scope: every primary destination and secondary route was reviewed in a
+  signed-in Chrome session: Today, Findings, Assets, Work, all Research and
+  Publications views, Models, Alert review, Investigations, Research pipeline,
+  Learning, Jobs, Health, Integrations, Credentials, Audit log, and all
+  Enterprise views.
+- Implemented: Overview is now **Today** and leads with one evidence-backed
+  decision, three ordered follow-up decisions, a concise automation pipeline,
+  and a health strip. Workload totals, run history, and research queues remain
+  available under **More operational detail**, but no longer compete with the
+  operator's next action.
+- Implemented: every workspace now receives a compact **Recommended next step**
+  card that distinguishes the action SecOpsAI can perform from the decision a
+  person must make. Findings present priority, detection confidence,
+  maliciousness, and local exposure as separate fields, then collapse the full
+  technical record beneath the decision card.
+- Redundancy removed: the duplicate Work reviewer filter was removed, repeated
+  first-view finding metrics were reduced to four decision-oriented counts, and
+  existing safe automation was surfaced instead of adding a competing
+  autopilot.
+- Automation policy: the existing six-hour daily workflow, guarded alert review,
+  guarded evidence investigations, and guarded read-only specialist routing are
+  treated as the canonical safe automation path. Maximum safe routine automation
+  is visible on Today. Verdicts, containment, sandbox submission, disclosure,
+  publication, deployment, destructive changes, model fallback, and spending or
+  concurrency increases remain explicit operator decisions.
+- Prioritization: Today reports model blockage first, followed by missing safe
+  automation configuration, degraded collection, pending approvals, blocked
+  work, validation blockers, open findings, and active backlog. A queued workload
+  is not labeled blocked while a worker is running; model blockage requires a
+  non-empty queue, zero running work, and a selected model that is not ready.
+- Operational limitation: a large queue is a throughput and backpressure signal,
+  not permission to silently change the selected model, enable fallback, raise
+  concurrency, or increase model spend. Today points the operator to model
+  routing or Jobs while preserving the persisted routing policy.
+- Safety: no automatic verdict, containment, external submission, disclosure,
+  publication, deployment, or destructive mutation was introduced. Browser
+  controls continue to use typed allowlisted helper operations.
+- Verification: static contracts assert unique DOM IDs, one reviewer filter,
+  action wiring, decision-first surfaces, route guidance, model refresh before a
+  routing decision, explicit safety-boundary copy, and cache-key updates. Signed-
+  in Chrome verification covers Today, model-routing navigation, representative
+  workspaces, and desktop/mobile visual behavior.
+- Acceptance: a new operator sees one prioritized decision rather than a wall of
+  metrics, can identify automation already in progress, can reach the right
+  workspace in one action, and is never told that a model score or queue count is
+  a final security verdict.
