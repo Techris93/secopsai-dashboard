@@ -281,6 +281,21 @@ def test_investigation_queue_metrics_separate_running_from_backlog():
     assert "remain parked" in app
 
 
+def test_analysis_jobs_use_responsive_deduplicated_pipeline_cards():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+    assert "isDurableIntelligenceTarget" in app
+    assert "RSCF-" in app
+    assert "target:${target}:${action}" in app
+    assert 'class="intelligence-pipeline-list"' in app
+    assert 'class="intelligence-pipeline-card"' in app
+    assert "Open latest analysis" in app
+    assert "Queue age / updated" not in app
+    assert ".intelligence-pipeline-card-grid" in styles
+    assert ".intelligence-pipeline-identity code" in styles
+    assert "overflow-wrap: anywhere" in styles
+
+
 def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")

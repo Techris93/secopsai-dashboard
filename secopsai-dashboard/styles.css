@@ -10680,3 +10680,161 @@ body.professional-ui .research-adjudication-panel p { color: #4f3c1e; }
   body.professional-ui .research-reliability-grid { grid-template-columns: 1fr; }
   body.professional-ui .research-reliability-wide { grid-column: auto; }
 }
+
+/* Analysis jobs are decision cards rather than a six-column table. Long
+   pipeline IDs, providers, and assessments must wrap without colliding. */
+body.professional-ui .intelligence-pipeline-list {
+  display: grid;
+  gap: 12px;
+}
+
+body.professional-ui .intelligence-pipeline-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #cbd8d2;
+  border-left: 4px solid #0b8068;
+  border-radius: 10px;
+  background: #fff;
+  color: #17211e;
+  box-shadow: 0 1px 0 rgba(23, 33, 30, 0.04);
+}
+
+body.professional-ui .intelligence-pipeline-card-head,
+body.professional-ui .intelligence-pipeline-card-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+body.professional-ui .intelligence-pipeline-card-head {
+  border-bottom: 1px solid #e0e8e4;
+  background: #f7faf8;
+}
+
+body.professional-ui .intelligence-pipeline-identity,
+body.professional-ui .intelligence-pipeline-field,
+body.professional-ui .intelligence-pipeline-next,
+body.professional-ui .intelligence-child-job > span {
+  min-width: 0;
+}
+
+body.professional-ui .intelligence-pipeline-identity {
+  display: grid;
+  gap: 4px;
+}
+
+body.professional-ui .intelligence-pipeline-label {
+  display: block;
+  color: #687770;
+  font-size: 0.69rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+body.professional-ui .intelligence-pipeline-identity code,
+body.professional-ui .intelligence-pipeline-field code,
+body.professional-ui .intelligence-child-job code {
+  display: inline;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+body.professional-ui .intelligence-pipeline-identity > code {
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+body.professional-ui .intelligence-pipeline-card-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(145px, 0.75fr));
+  gap: 0;
+}
+
+body.professional-ui .intelligence-pipeline-field {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 14px 16px;
+  border-right: 1px solid #e0e8e4;
+}
+
+body.professional-ui .intelligence-pipeline-field:last-child { border-right: 0; }
+body.professional-ui .intelligence-pipeline-field strong,
+body.professional-ui .intelligence-pipeline-field time {
+  color: #253a33;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+body.professional-ui .intelligence-pipeline-card-footer {
+  align-items: center;
+  border-top: 1px solid #e0e8e4;
+  background: #fbfcfb;
+}
+
+body.professional-ui .intelligence-pipeline-card-footer .intelligence-child-jobs {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+body.professional-ui .intelligence-pipeline-card-footer .intelligence-child-jobs > summary {
+  color: #17634f;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+body.professional-ui .intelligence-pipeline-next {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  text-align: right;
+}
+
+body.professional-ui .intelligence-pipeline-next-copy {
+  display: block;
+  margin-top: 3px;
+  color: #253a33;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+body.professional-ui .intelligence-child-job {
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  body.professional-ui .intelligence-pipeline-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  body.professional-ui .intelligence-pipeline-field:nth-child(2) { border-right: 0; }
+  body.professional-ui .intelligence-pipeline-field:nth-child(-n + 2) { border-bottom: 1px solid #e0e8e4; }
+}
+
+@media (max-width: 680px) {
+  body.professional-ui .intelligence-pipeline-card-head,
+  body.professional-ui .intelligence-pipeline-card-footer,
+  body.professional-ui .intelligence-pipeline-next,
+  body.professional-ui .intelligence-child-job {
+    display: grid;
+    justify-content: stretch;
+    text-align: left;
+  }
+  body.professional-ui .intelligence-pipeline-card-grid { grid-template-columns: 1fr; }
+  body.professional-ui .intelligence-pipeline-field,
+  body.professional-ui .intelligence-pipeline-field:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid #e0e8e4;
+  }
+  body.professional-ui .intelligence-pipeline-field:last-child { border-bottom: 0; }
+  body.professional-ui .intelligence-pipeline-next button { width: 100%; }
+  body.professional-ui .intelligence-child-job > span:last-child { justify-content: flex-start; }
+}

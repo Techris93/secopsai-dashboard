@@ -22,9 +22,15 @@
         shell.classList.remove('auth-pending');
         shell.removeAttribute('aria-hidden');
         doc.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
-        doc.getElementById('page-integrations').classList.add('active');
-        doc.querySelectorAll('.nav-btn').forEach(button => button.classList.toggle('active', button.dataset.page === 'integrations'));
-        doc.getElementById('top-strip-context').textContent = 'System · health and integrations';
+        doc.getElementById('page-automation').classList.add('active');
+        doc.querySelectorAll('.nav-btn').forEach(button => button.classList.toggle('active', button.dataset.page === 'automation'));
+        doc.getElementById('top-strip-context').textContent = 'Automation · jobs and analysis';
+        doc.querySelectorAll('[data-automation-tab]').forEach(button => {
+          button.classList.toggle('active', button.dataset.automationTab === 'jobs');
+        });
+        doc.querySelectorAll('#page-automation [data-automation-view]').forEach(section => {
+          section.hidden = section.dataset.automationView !== 'jobs';
+        });
         doc.getElementById('integration-summary').innerHTML = [
           ['12','Open findings'],['1','Pending approval'],['0','Failed jobs'],['Ready','Core API']
         ].map(([value,label]) => `<div class="metric-card"><div class="metric">${value}</div><div class="metric-label">${label}</div></div>`).join('');
@@ -46,7 +52,41 @@
         ].map(([value,label]) => `<div class="metric-card"><div class="metric">${value}</div><div class="metric-label">${label}</div></div>`).join('');
         doc.getElementById('intelligence-autopilot-runs').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Decision</th><th>Model assessment</th><th>Guardrail</th><th>Updated</th><th>Action</th></tr></thead><tbody><tr><td><strong>SCM-77A9</strong><div class="small mono">ATR-1234567890ABCDEF</div></td><td><span class="agent-triage-action">Auto closed: false positive</span></td><td>False positive<div class="small">99% confidence</div></td><td class="agent-triage-reasons"><span class="small">Passed applicable gates</span></td><td>28 Jul, 04:42</td><td><button class="mini-btn">Rollback</button></td></tr><tr><td><strong>EDGE-19F2</strong><div class="small mono">ATR-FEDCBA0987654321</div></td><td><span class="agent-triage-action">Auto started review</span></td><td>Needs more evidence<div class="small">78% confidence</div></td><td class="agent-triage-reasons">Deterministic analysis does not independently support closure</td><td>28 Jul, 04:40</td><td></td></tr></tbody></table></div>';
         doc.getElementById('intelligence-autopilot-proposals').innerHTML = '<div class="module-head compact-header"><div><h4>Detection tuning</h4><p>Model proposals stay in shadow mode until deterministic historical replay proves the exact threshold change.</p></div></div><div class="table-wrap"><table><thead><tr><th>Target</th><th>Change</th><th>Shadow result</th><th>Evidence set</th><th>Action</th></tr></thead><tbody><tr><td><strong>npm</strong><div class="small mono">DTP-1234567890ABCDEF</div></td><td>Threshold<div class="small">Raise the boundary to the replay-proven score.</div></td><td>Shadow passed<div class="small">Activation permitted by replay</div></td><td>42 labeled<div class="small">19 safe · 23 risky</div></td><td></td></tr></tbody></table></div>';
-        doc.getElementById('intelligence-jobs-table').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Status</th><th>Updated</th><th>Result</th><th>Action</th></tr></thead><tbody><tr><td><strong>Analyze Research Case</strong><div class="small mono">AIJ-3356D244D94345D6</div><div class="small mono">opencodex:google-antigravity</div></td><td>RSC-42C6208F1F22</td><td>Succeeded</td><td>25 Jul, 02:28</td><td><button id="preview-open-full-analysis" class="secondary-btn mini-btn" type="button">Open full analysis</button><div class="small">Likely · 85% confidence</div></td><td></td></tr><tr><td><strong>Prioritize findings</strong><div class="small mono">AIJ-8C3E901DA4B7F122</div></td><td>Workspace</td><td>Queued</td><td>22 Jul, 14:01</td><td><span class="small">Pending</span></td><td><button class="mini-btn">Cancel</button></td></tr></tbody></table></div>';
+        doc.getElementById('intelligence-jobs-table').innerHTML = `
+          <div class="intelligence-pipeline-list" role="list">
+            <article class="intelligence-pipeline-card" role="listitem">
+              <header class="intelligence-pipeline-card-head">
+                <div class="intelligence-pipeline-identity"><span class="intelligence-pipeline-label">Research case pipeline</span><code>RSC-42C6208F1F22</code><span class="small">Target <code>RSC-42C6208F1F22</code></span></div>
+                <span class="status-pill success">Succeeded</span>
+              </header>
+              <div class="intelligence-pipeline-card-grid">
+                <div class="intelligence-pipeline-field intelligence-pipeline-stages"><span class="intelligence-pipeline-label">Stage progress</span><strong>3 of 3 complete</strong><div class="intelligence-stage-list"><span class="intelligence-stage stage-succeeded">✓ Evidence review</span><span class="intelligence-stage stage-succeeded">✓ Analyst brief</span></div></div>
+                <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Provider</span><code>opencodex:google-antigravity/claude-opus-4-6-thinking</code></div>
+                <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Assessment</span><strong>Likely · 85% confidence</strong></div>
+                <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Updated</span><time>25 Aug 2026, 02:28</time></div>
+              </div>
+              <footer class="intelligence-pipeline-card-footer">
+                <details class="intelligence-child-jobs"><summary>3 stages · 4 attempts retained</summary></details>
+                <div class="intelligence-pipeline-next"><span><span class="intelligence-pipeline-label">Next action</span><strong class="intelligence-pipeline-next-copy">Review completed pipeline</strong></span><button id="preview-open-full-analysis" class="secondary-btn mini-btn" type="button">Open latest analysis</button></div>
+              </footer>
+            </article>
+            <article class="intelligence-pipeline-card" role="listitem">
+              <header class="intelligence-pipeline-card-head">
+                <div class="intelligence-pipeline-identity"><span class="intelligence-pipeline-label">Finding pipeline</span><code>RSCF-6A3223A19D7EF8E8</code><span class="small">Target <code>RSCF-6A3223A19D7EF8E8</code></span></div>
+                <span class="status-pill warning">Running</span>
+              </header>
+              <div class="intelligence-pipeline-card-grid">
+                <div class="intelligence-pipeline-field intelligence-pipeline-stages"><span class="intelligence-pipeline-label">Stage progress</span><strong>1 of 3 complete</strong><div class="intelligence-stage-list"><span class="intelligence-stage stage-running">• Evidence review</span><span class="intelligence-stage stage-pending">○ Independent review</span></div></div>
+                <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Provider</span><code>opencodex:xai/xai-grok-4.6</code></div>
+                <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Assessment</span><strong>Awaiting final assessment</strong></div>
+                <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Updated</span><time>31 Aug 2026, 16:47</time></div>
+              </div>
+              <footer class="intelligence-pipeline-card-footer">
+                <details class="intelligence-child-jobs"><summary>3 stages · 7 attempts retained</summary></details>
+                <div class="intelligence-pipeline-next"><span><span class="intelligence-pipeline-label">Next action</span><strong class="intelligence-pipeline-next-copy">Monitor active stage</strong></span></div>
+              </footer>
+            </article>
+          </div>`;
         const modal = doc.getElementById('intelligence-result-modal');
         const openResult = () => {
           doc.getElementById('intelligence-result-title').textContent = 'Analyze Research Case';
@@ -78,7 +118,7 @@
         doc.getElementById('preview-open-full-analysis').addEventListener('click', openResult);
         doc.getElementById('intelligence-result-close').addEventListener('click', closeResult);
         doc.getElementById('intelligence-result-done').addEventListener('click', closeResult);
-        doc.querySelectorAll('#page-integrations > .card').forEach(card => card.hidden = true);
+        doc.querySelectorAll('#page-automation [data-automation-view]:not([data-automation-view="jobs"])').forEach(section => section.hidden = true);
       }, { once: true });
       frame.srcdoc = withoutScripts;
     });

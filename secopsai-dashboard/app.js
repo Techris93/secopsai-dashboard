@@ -5353,12 +5353,16 @@ function intelligenceModels() {
   return Array.isArray(state.intelligence.data?.models?.models) ? state.intelligence.data.models.models : [];
 }
 
+function isDurableIntelligenceTarget(target) {
+  return /^(?:RSC|RSCF)-/.test(String(target || '').trim());
+}
+
 function latestIntelligenceJobs(jobs) {
   const latestCasePipelines = new Map();
   (Array.isArray(jobs) ? jobs : []).forEach(job => {
     const target = String(job?.target_id || '').trim();
     const pipeline = String(job?.pipeline_id || job?.input?.pipeline_id || job?.config?.pipeline_id || '').trim();
-    if (!target.startsWith('RSC-') || !pipeline) return;
+    if (!isDurableIntelligenceTarget(target) || !pipeline) return;
     const current = latestCasePipelines.get(target);
     const timestamp = String(job.updated_at || job.queued_at || '');
     if (!current || timestamp > current.timestamp) latestCasePipelines.set(target, { pipeline, timestamp });
@@ -5369,11 +5373,11 @@ function latestIntelligenceJobs(jobs) {
     const pipeline = String(job?.pipeline_id || job?.input?.pipeline_id || job?.config?.pipeline_id || '').trim();
     // Keep every stage from the newest case pipeline. Older retries remain in
     // the API/audit trail but must not be mixed into the current stage row.
-    if (target.startsWith('RSC-') && pipeline && latestCasePipelines.get(target)?.pipeline !== pipeline) return;
+    if (isDurableIntelligenceTarget(target) && pipeline && latestCasePipelines.get(target)?.pipeline !== pipeline) return;
     const action = String(job?.action || 'analysis').trim();
     const key = pipeline
       ? `pipeline:${pipeline}:${action}`
-      : (target.startsWith('RSC-') ? `case:${target}:${action}` : `job:${job?.job_id || target}`);
+      : (isDurableIntelligenceTarget(target) ? `target:${target}:${action}` : `job:${job?.job_id || target}`);
     const current = latest.get(key);
     if (!current) {
       latest.set(key, { ...job, history_count: 1 });
@@ -5394,7 +5398,7 @@ function intelligencePipelineGroups(jobs) {
     const explicitPipeline = String(job?.pipeline_id || job?.input?.pipeline_id || job?.config?.pipeline_id || '').trim();
     // Research cases are durable pipeline targets. Workspace actions remain
     // individual rows so unrelated runs are never merged together.
-    const key = explicitPipeline || (target.startsWith('RSC-') ? `case:${target}` : `job:${job?.job_id || target}`);
+    const key = explicitPipeline || (isDurableIntelligenceTarget(target) ? `target:${target}` : `job:${job?.job_id || target}`);
     if (!groups.has(key)) groups.set(key, { key, target, pipelineId: explicitPipeline, jobs: [] });
     groups.get(key).jobs.push(job);
   });
@@ -5414,6 +5418,14 @@ function intelligencePipelineGroups(jobs) {
     group.total = group.jobs.length;
     return group;
   });
+}
+
+function intelligencePipelineLabel(group) {
+  const target = String(group?.target || '');
+  if (target.startsWith('RSCF-')) return 'Finding pipeline';
+  if (target.startsWith('RSC-')) return 'Research case pipeline';
+  if (target.startsWith('SOR-')) return 'Specialist pipeline';
+  return group?.pipelineId ? 'Analysis pipeline' : 'Analysis job';
 }
 
 function intelligenceStageLabel(action) {
@@ -6230,7 +6242,7 @@ function renderIntelligence() {
     } else if (!jobs.length) {
       table.innerHTML = '<div class="empty-state compact">No analysis jobs yet. Queue an approved action above.</div>';
     } else {
-      table.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Pipeline</th><th>Target</th><th>Stage progress</th><th>Model</th><th>Queue age / updated</th><th>Next action</th></tr></thead><tbody>${pipelineGroups.map(group => {
+      table.innerHTML = `<div class="intelligence-pipeline-list" role="list" aria-label="Analysis job pipelines">${pipelineGroups.map(group => {
         const current = group.current || {};
         const currentResult = intelligenceResultView(current);
         const stageSummary = group.jobs.map(job => {
@@ -6246,8 +6258,26 @@ function renderIntelligence() {
           return `<div class="intelligence-child-job"><span><strong>${escapeHtml(intelligenceStageLabel(job.action))}</strong> · <code>${escapeHtml(job.job_id || '')}</code> · ${escapeHtml(humanizeSnake(job.status || 'unknown'))}</span><span>${hasResult ? `<button class="secondary-btn mini-btn" data-intelligence-review="${escapeHtml(job.job_id)}" type="button">Open full analysis</button>` : '<span class="small">Pending</span>'}${cancel}${requeue}</span></div>`;
         }).join('');
         const next = group.status === 'failed' ? 'Requeue failed stage' : group.status === 'completed' ? 'Review completed pipeline' : 'Monitor active stage';
-        return `<tr><td><strong>Case pipeline</strong>${group.pipelineId ? `<div class="small mono">${escapeHtml(group.pipelineId)}</div>` : ''}<details class="intelligence-child-jobs"><summary>${group.total} stage${group.total === 1 ? '' : 's'} · ${group.completed} complete</summary>${childRows}</details></td><td><code>${escapeHtml(group.target)}</code></td><td><span class="status-pill">${escapeHtml(humanizeSnake(group.status))}</span><div class="intelligence-stage-list">${stageSummary}</div></td><td>${escapeHtml(current.provider || 'Not recorded')}<div class="small">${currentResult.assessment ? escapeHtml(humanizeSnake(currentResult.assessment)) : 'Advisory run'}</div></td><td>${escapeHtml(fmtDate(current.updated_at || current.queued_at))}<div class="small">${escapeHtml(next)}</div></td><td>${currentResult.summary ? `<button class="secondary-btn mini-btn" data-intelligence-review="${escapeHtml(current.job_id)}" type="button">Open latest</button>` : escapeHtml(next)}</td></tr>`;
-      }).join('')}</tbody></table></div>`;
+        const retainedAttempts = group.jobs.reduce((total, job) => total + Math.max(1, Number(job.history_count || 1)), 0);
+        const historyNote = retainedAttempts > group.total ? ` · ${retainedAttempts} attempts retained` : '';
+        const pipelineReference = group.pipelineId || group.target;
+        return `<article class="intelligence-pipeline-card" role="listitem">
+          <header class="intelligence-pipeline-card-head">
+            <div class="intelligence-pipeline-identity"><span class="intelligence-pipeline-label">${escapeHtml(intelligencePipelineLabel(group))}</span><code>${escapeHtml(pipelineReference)}</code><span class="small">Target <code>${escapeHtml(group.target)}</code></span></div>
+            ${renderStatusPill(group.status || 'pending')}
+          </header>
+          <div class="intelligence-pipeline-card-grid">
+            <div class="intelligence-pipeline-field intelligence-pipeline-stages"><span class="intelligence-pipeline-label">Stage progress</span><strong>${escapeHtml(String(group.completed))} of ${escapeHtml(String(group.total))} complete</strong><div class="intelligence-stage-list">${stageSummary}</div></div>
+            <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Provider</span><code>${escapeHtml(current.provider || 'Not recorded')}</code></div>
+            <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Assessment</span><strong>${currentResult.assessment ? escapeHtml(humanizeSnake(currentResult.assessment)) : 'Advisory run'}</strong></div>
+            <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Updated</span><time>${escapeHtml(fmtDate(current.updated_at || current.queued_at))}</time></div>
+          </div>
+          <footer class="intelligence-pipeline-card-footer">
+            <details class="intelligence-child-jobs"><summary>${group.total} stage${group.total === 1 ? '' : 's'}${escapeHtml(historyNote)}</summary>${childRows}</details>
+            <div class="intelligence-pipeline-next"><span><span class="intelligence-pipeline-label">Next action</span><strong class="intelligence-pipeline-next-copy">${escapeHtml(next)}</strong></span>${currentResult.summary ? `<button class="secondary-btn mini-btn" data-intelligence-review="${escapeHtml(current.job_id)}" type="button">Open latest analysis</button>` : ''}</div>
+          </footer>
+        </article>`;
+      }).join('')}</div>`;
     }
   }
   syncIntelligenceTarget();
