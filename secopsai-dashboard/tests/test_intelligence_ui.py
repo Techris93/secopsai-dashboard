@@ -296,6 +296,23 @@ def test_analysis_jobs_use_responsive_deduplicated_pipeline_cards():
     assert "overflow-wrap: anywhere" in styles
 
 
+def test_analysis_decision_card_wraps_long_evidence_without_column_overlap():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+    preview = (ROOT / "tests" / "fixtures" / "intelligence-ui-preview.html").read_text(encoding="utf-8")
+    assert 'class="intelligence-decision-facts"' in app
+    assert 'class="intelligence-decision-contradictions"' in app
+    assert 'class="intelligence-decision-next"' in app
+    assert ".intelligence-decision-columns :is(p, ol, ul, li)" in styles
+    assert "overflow-wrap: anywhere" in styles
+    assert ".intelligence-decision-next" in styles
+    assert "grid-column: 1 / -1" in styles
+    base_rule = styles.index(".professional-ui .intelligence-decision-columns { display: grid")
+    responsive_rule = styles.rindex("@media (max-width: 900px)")
+    assert responsive_rule > base_rule
+    assert "b211e054fe1720db0d6e460df6b071a48ec2b596c0593022ca66753824a0ffba" in preview
+
+
 def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
