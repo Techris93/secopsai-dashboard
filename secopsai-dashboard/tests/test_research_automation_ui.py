@@ -285,6 +285,9 @@ def test_research_discovery_commands_are_allowlisted_and_cross_ecosystem():
     assert "--db-path" not in dashboard_server.build_research_discovery_command("capabilities")
     assert "--db-path" not in dashboard_server.build_research_discovery_command("watchlist-list")
     assert "--db-path" in dashboard_server.build_research_discovery_command("candidate-list")
+    assert dashboard_server.build_research_discovery_args("candidate-list")[-1] == "25"
+    assert dashboard_server.build_research_discovery_args("alert-list")[-1] == "15"
+    assert dashboard_server.build_research_discovery_args("campaign-list")[-1] == "25"
     args = dashboard_server.build_research_discovery_args(
         "watchlist-add",
         {"ecosystem": "nuget", "watch_type": "brand", "identifier": "Braintree", "threshold": 78},

@@ -595,6 +595,13 @@ class TriageOpsEvidenceTests(unittest.TestCase):
     def test_research_reliability_actions_are_typed_and_allowlisted(self):
         case_id = 'RSC-ABCDEF123456'
         self.assertEqual(
+            server.build_research_case_args(
+                'reliability-auto',
+                {'case_id': case_id, 'actor': 'operator', 'max_steps': 12},
+            ),
+            ['research', 'reliability', 'auto', case_id, '--actor', 'operator', '--max-steps', '12'],
+        )
+        self.assertEqual(
             server.build_research_case_args('reliability-hypotheses', {'case_id': case_id, 'actor': 'operator'}),
             ['research', 'reliability', 'generate-hypotheses', case_id, '--actor', 'operator'],
         )

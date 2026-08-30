@@ -10923,9 +10923,17 @@ function renderExecutionGroundedResearch(researchCase) {
   );
   const adjudicationRunId = String(specialistRun?.run_id || '');
   const adjudicationStatus = String(review.adjudication_status || 'not_required');
+  const latestAutomation = (reliability.automation_runs || [])[0] || null;
+  const hasAutomationInputs = (researchCase.subjects || []).some(item => item.status !== 'retracted')
+    && (researchCase.evidence || []).some(item => item.status !== 'retracted');
   return `<section class="research-reliability-workspace" aria-labelledby="research-reliability-title">
     <div class="research-reliability-head"><div><span class="detail-eyebrow">EXECUTION-GROUNDED RESEARCH</span><h4 id="research-reliability-title">Evidence reliability workspace</h4><p>Each conclusion must trace to a safe run bundle and canonical evidence. Models review evidence; they do not create facts.</p></div>${renderStatusPill(reliabilityReady ? 'ready' : 'blocked')}</div>
     <div class="research-reliability-next"><strong>Next: ${escapeHtml(next.label || humanizeSnake(next.action || 'review'))}</strong><span>${escapeHtml(next.reason || 'Complete the next recorded reliability gate.')}</span></div>
+    <div class="research-reliability-actions research-reliability-automation-actions" aria-label="Guarded research automation">
+      ${reliabilityActionButton({ id: 'research-reliability-auto-btn', label: 'Run Safe Automation', enabled: hasAutomationInputs, primary: true, reason: hasAutomationInputs ? 'Advances every deterministic gate, queues one guarded read-only specialist review when ready, and stops at evidence or human approval boundaries.' : 'Add at least one structured subject and one evidence record first.' })}
+      ${latestAutomation ? `<div class="research-reliability-automation-status"><strong>Last automation: ${escapeHtml(humanizeSnake(latestAutomation.stopped_at || latestAutomation.status || 'completed'))}</strong><span>${escapeHtml(latestAutomation.reason || 'The guarded run completed its available steps.')}</span><small>${escapeHtml(String((latestAutomation.automated_steps || []).length))} safe step(s) · next ${escapeHtml(humanizeSnake(latestAutomation.next_action || 'operator review'))}</small></div>` : '<div class="research-reliability-automation-status"><strong>No guarded run recorded yet</strong><span>Run Safe Automation records every completed step and the exact decision boundary where it stops.</span></div>'}
+    </div>
+    <details class="research-reliability-manual"><summary>Manual stage controls and recovery</summary>
     <div class="research-reliability-actions" aria-label="Research reliability actions">
       ${reliabilityActionButton({ id: 'research-reliability-hypotheses-btn', label: 'Generate Hypotheses', enabled: true, reason: 'Creates six bounded malicious, benign, false-positive, unrelated, provenance, and insufficient-evidence alternatives.' })}
       ${reliabilityActionButton({ id: 'research-reliability-rank-btn', label: 'Rank Hypotheses', enabled: hypotheses.length > 1, reason: hypotheses.length > 1 ? 'Uses deterministic pairwise evidence value, uncertainty, safety, impact, and cost.' : 'Generate competing hypotheses first.' })}
@@ -10946,6 +10954,7 @@ function renderExecutionGroundedResearch(researchCase) {
       ${reliabilityActionButton({ id: 'research-reliability-publish-btn', label: 'Publish Approved', enabled: true, reason: 'Opens Publications. Approval and staging remain a separate protected action.' })}
       ${reliabilityActionButton({ id: 'research-reliability-deploy-btn', label: 'Deploy', enabled: true, reason: 'Opens Publications. Cloudflare deployment remains separate and protected.' })}
     </div>
+    </details>
     <div class="research-reliability-grid">
       <article><h5>Hypotheses</h5>${hypotheses.length ? researchTable(['Type','Statement','Rank','State'], hypothesisRows, '') : '<div class="empty-state compact">No hypotheses yet.</div>'}</article>
       <article><h5>Evidence plan</h5>${plan ? `<p><strong>Revision ${escapeHtml(String(plan.revision))}</strong> · ${escapeHtml(plan.status || 'planned')}</p><p class="small">${escapeHtml((plan.intended_methods || []).join(', ') || 'No intended methods recorded.')}</p><p class="small">Executed: ${escapeHtml((plan.executed_methods || []).join(', ') || 'none yet')}</p>` : '<div class="empty-state compact">No versioned plan yet.</div>'}</article>
@@ -11034,6 +11043,7 @@ function bindReliabilityCaseActions(researchCase) {
   const plans = reliability.plans || [];
   const actor = 'dashboard-research-reliability';
   const actions = [
+    ['research-reliability-auto-btn', 'reliability-auto', { case_id: researchCase.case_id, actor, max_steps: 12 }],
     ['research-reliability-hypotheses-btn', 'reliability-hypotheses', { case_id: researchCase.case_id, actor }],
     ['research-reliability-rank-btn', 'reliability-rank', { case_id: researchCase.case_id, actor, candidate_budget: 6, comparison_budget: 15, model_call_budget: 0 }],
     ['research-reliability-plan-btn', 'reliability-plan', { case_id: researchCase.case_id, actor, revise: plans.length > 0, reason: plans.length ? 'Evidence, availability, or executed methods changed; preserve a new plan revision.' : 'Initial execution-grounded evidence plan.' }],

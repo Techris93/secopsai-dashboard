@@ -10563,6 +10563,39 @@ body.professional-ui .research-reliability-actions {
   gap: 10px;
   margin: 16px 0 20px;
 }
+body.professional-ui .research-reliability-automation-actions {
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+body.professional-ui .research-reliability-automation-status {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #bdd5c9;
+  border-radius: 8px;
+  background: #edf7f1;
+  color: #163b2f;
+}
+body.professional-ui .research-reliability-automation-status span,
+body.professional-ui .research-reliability-automation-status small {
+  color: #365f51;
+}
+body.professional-ui .research-reliability-manual {
+  margin: 0 0 20px;
+  border: 1px solid #cbdad3;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+body.professional-ui .research-reliability-manual > summary {
+  padding: 11px 13px;
+  color: #1f4639;
+  cursor: pointer;
+  font-weight: 750;
+}
+body.professional-ui .research-reliability-manual .research-reliability-actions {
+  margin: 0;
+  padding: 0 12px 12px;
+}
 body.professional-ui .research-reliability-action {
   display: grid;
   align-content: start;

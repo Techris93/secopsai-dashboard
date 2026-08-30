@@ -123,6 +123,7 @@ RESEARCH_CASE_ACTIONS = {
     'resolution-run',
     'resolution-review',
     'reconcile',
+    'reliability-auto',
     'reliability-hypotheses',
     'reliability-rank',
     'reliability-plan',
@@ -1949,6 +1950,7 @@ def build_research_case_args(action, payload):
         if viewport not in {'', 'desktop', 'mobile'}:
             raise ValueError('visual_viewport must be desktop or mobile')
     reliability_commands = {
+        'reliability-auto': 'auto',
         'reliability-hypotheses': 'generate-hypotheses',
         'reliability-rank': 'rank-hypotheses',
         'reliability-plan': 'plan',
@@ -1968,7 +1970,13 @@ def build_research_case_args(action, payload):
         command = reliability_commands[action]
         args = ['research', 'reliability', command, case_id]
         add(args, '--actor', 'actor', 160)
-        if action == 'reliability-rank':
+        if action == 'reliability-auto':
+            args.extend([
+                '--max-steps', str(validate_bounded_int(payload.get('max_steps'), default=12, lower=1, upper=25)),
+            ])
+            if payload.get('no_model_review'):
+                args.append('--no-model-review')
+        elif action == 'reliability-rank':
             args.extend([
                 '--candidate-budget', str(validate_bounded_int(payload.get('candidate_budget'), default=6, lower=2, upper=24)),
                 '--comparison-budget', str(validate_bounded_int(payload.get('comparison_budget'), default=15, lower=1, upper=200)),
@@ -2270,7 +2278,7 @@ def build_research_discovery_args(action, payload=None):
     if action == 'monitor-run-due':
         return ['research', 'monitor', 'run-due', '--limit', str(max(1, min(int(payload.get('limit', 25)), 100)))]
     if action == 'candidate-list':
-        args = ['research', 'candidate', 'list', '--limit', str(max(1, min(int(payload.get('limit', 100)), 500)))]
+        args = ['research', 'candidate', 'list', '--limit', str(max(1, min(int(payload.get('limit', 25)), 500)))]
         for flag, key in [('--status', 'status'), ('--ecosystem', 'ecosystem')]:
             value = _clean_string(payload.get(key), 40)
             if value:
@@ -2307,7 +2315,7 @@ def build_research_discovery_args(action, payload=None):
     if action == 'campaign-correlate':
         return ['research', 'campaign', 'correlate']
     if action == 'campaign-list':
-        return ['research', 'campaign', 'list', '--limit', str(max(1, min(int(payload.get('limit', 100)), 500)))]
+        return ['research', 'campaign', 'list', '--limit', str(max(1, min(int(payload.get('limit', 25)), 500)))]
     if action == 'compare-packages':
         args = ['research', 'compare-packages']
         for prefix in ('left', 'right'):
@@ -2321,7 +2329,7 @@ def build_research_discovery_args(action, payload=None):
                 args.extend([f'--{prefix}-version', version])
         return args
     if action == 'alert-list':
-        return ['research', 'alert', 'list', '--limit', str(max(1, min(int(payload.get('limit', 100)), 500)))]
+        return ['research', 'alert', 'list', '--limit', str(max(1, min(int(payload.get('limit', 15)), 500)))]
     if action == 'alert-deliver':
         alert_id = _clean_string(payload.get('alert_id'), 64).upper()
         if not alert_id.startswith('RAL-'):
@@ -4873,7 +4881,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 args = build_research_case_args(action, payload)
                 timeout = 180 if action in {
                     'export', 'draft-blog', 'reliability-full',
-                    'reliability-specialist', 'reliability-blind-review',
+                    'reliability-auto', 'reliability-specialist', 'reliability-blind-review',
                 } else 90
                 result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=timeout)
                 artifact = None

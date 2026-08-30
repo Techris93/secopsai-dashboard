@@ -218,6 +218,17 @@ def test_research_case_reliability_ui_exposes_adjudication_and_visual_metadata()
     assert "--visual-viewport" in server
 
 
+def test_research_case_reliability_ui_prefers_one_guarded_automation_action():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    assert "research-reliability-auto-btn" in app
+    assert "Run Safe Automation" in app
+    assert "Last automation:" in app
+    assert "No guarded run recorded yet" in app
+    assert "Manual stage controls and recovery" in app
+    assert "'reliability-auto'" in server
+
+
 def test_operator_guide_documents_execution_grounded_research_flow():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     for marker in (

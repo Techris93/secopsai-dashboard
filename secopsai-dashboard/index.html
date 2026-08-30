@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/dist/umd/supabase.js" integrity="sha384-yifgV8iFWyp5cgu+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP/NlXVJT3vO" crossorigin="anonymous"></script>
   <script src="./url-safety.js?v=20260803-credential-url-hardening"></script>
-  <link rel="stylesheet" href="./styles.css?v=20260830-reliability-v1" />
+  <link rel="stylesheet" href="./styles.css?v=20260830-reliability-v3" />
 </head>
 <body class="okcomputer-skin professional-ui">
   <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
@@ -1349,8 +1349,8 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <div class="guide-mini-card"><strong>Prove the presentation</strong><span>Run completeness, originality, and desktop/mobile visual checks. Screenshots require viewport, alt text, and license or attribution metadata.</span></div>
               </div>
               <div class="guide-steps">
-                <div class="guide-step"><span>1</span><p>In a Research Case, follow the <strong>Next</strong> card: generate and rank competing hypotheses before selecting a method.</p></div>
-                <div class="guide-step"><span>2</span><p>Create or revise the evidence plan, then run <strong>Scaffold Research</strong>, <strong>Verify Transition</strong>, and <strong>Full Safe Research</strong>. Failed or fixture-only runs cannot unlock drafting.</p></div>
+                <div class="guide-step"><span>1</span><p>In a Research Case, read the <strong>Next</strong> card and click <strong>Run Safe Automation</strong>. The bounded coordinator advances deterministic gates and can queue one guarded read-only specialist review; it stops when evidence or a human decision is required.</p></div>
+                <div class="guide-step"><span>2</span><p>Open <strong>Manual stage controls and recovery</strong> only when you need to inspect or rerun a checkpoint: evidence plan, <strong>Scaffold Research</strong>, <strong>Verify Transition</strong>, or <strong>Full Safe Research</strong>. Failed or fixture-only runs cannot unlock drafting.</p></div>
                 <div class="guide-step"><span>3</span><p>Build the claim ledger and verify it. Resolve unsupported claims by removing or qualifying them; never add a fact just to make a gate green.</p></div>
                 <div class="guide-step"><span>4</span><p>Run <strong>Specialist</strong> and <strong>Blind Review</strong>. If the workspace says <strong>Human adjudication required</strong>, inspect both evidence-linked outputs and record a bounded decision or request more evidence.</p></div>
                 <div class="guide-step"><span>5</span><p>Run completeness, originality, and visual QA, then <strong>Publication Safety</strong>. A successful reliability gate still leads only to a review-only draft; <strong>Approve</strong>, <strong>Publish</strong>, and <strong>Deploy</strong> stay separate.</p></div>
@@ -1648,7 +1648,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260722-asd-console-theme"></script>
-  <script src="./app.js?v=20260830-reliability-v1"></script>
+  <script src="./app.js?v=20260830-reliability-v3"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">
