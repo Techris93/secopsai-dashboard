@@ -1150,6 +1150,18 @@ def build_intelligence_args(action, payload):
                 raise ValueError('Invalid investigation autopilot run ID')
             args.extend(['--run-id', run_id])
         return [*args, *secopsai_db_args()]
+    if action == 'recover-transient-jobs':
+        limit = validate_bounded_int(payload.get('limit'), default=10, lower=1, upper=100)
+        max_attempts = validate_bounded_int(payload.get('max_attempts'), default=3, lower=1, upper=10)
+        min_age = validate_bounded_int(payload.get('min_age_seconds'), default=300, lower=0, upper=86400)
+        return [
+            'intelligence', 'jobs', 'recover',
+            '--limit', str(limit),
+            '--max-attempts', str(max_attempts),
+            '--min-age-seconds', str(min_age),
+            '--actor', 'mission-control',
+            *secopsai_db_args(),
+        ]
     if action in {'learning-run-cycle', 'learning-deploy', 'learning-rollback', 'learning-observe'}:
         verb = {'learning-run-cycle':'run-cycle','learning-deploy':'deploy','learning-rollback':'rollback','learning-observe':'observe'}[action]
         args = ['intelligence','autopilot','learning',verb]

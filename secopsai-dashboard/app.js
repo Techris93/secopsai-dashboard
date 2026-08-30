@@ -5353,6 +5353,40 @@ function intelligenceModels() {
   return Array.isArray(state.intelligence.data?.models?.models) ? state.intelligence.data.models.models : [];
 }
 
+function latestIntelligenceJobs(jobs) {
+  const latestCasePipelines = new Map();
+  (Array.isArray(jobs) ? jobs : []).forEach(job => {
+    const target = String(job?.target_id || '').trim();
+    const pipeline = String(job?.pipeline_id || job?.input?.pipeline_id || job?.config?.pipeline_id || '').trim();
+    if (!target.startsWith('RSC-') || !pipeline) return;
+    const current = latestCasePipelines.get(target);
+    const timestamp = String(job.updated_at || job.queued_at || '');
+    if (!current || timestamp > current.timestamp) latestCasePipelines.set(target, { pipeline, timestamp });
+  });
+  const latest = new Map();
+  (Array.isArray(jobs) ? jobs : []).forEach(job => {
+    const target = String(job?.target_id || '').trim();
+    const pipeline = String(job?.pipeline_id || job?.input?.pipeline_id || job?.config?.pipeline_id || '').trim();
+    // Keep every stage from the newest case pipeline. Older retries remain in
+    // the API/audit trail but must not be mixed into the current stage row.
+    if (target.startsWith('RSC-') && pipeline && latestCasePipelines.get(target)?.pipeline !== pipeline) return;
+    const action = String(job?.action || 'analysis').trim();
+    const key = pipeline
+      ? `pipeline:${pipeline}:${action}`
+      : (target.startsWith('RSC-') ? `case:${target}:${action}` : `job:${job?.job_id || target}`);
+    const current = latest.get(key);
+    if (!current) {
+      latest.set(key, { ...job, history_count: 1 });
+      return;
+    }
+    current.history_count = Number(current.history_count || 1) + 1;
+    const currentTime = String(current.updated_at || current.queued_at || '');
+    const nextTime = String(job.updated_at || job.queued_at || '');
+    if (nextTime > currentTime) latest.set(key, { ...job, history_count: current.history_count });
+  });
+  return [...latest.values()].sort((left, right) => String(right.updated_at || right.queued_at || '').localeCompare(String(left.updated_at || left.queued_at || '')));
+}
+
 function intelligencePipelineGroups(jobs) {
   const groups = new Map();
   jobs.forEach(job => {
@@ -5366,11 +5400,16 @@ function intelligencePipelineGroups(jobs) {
   });
   return [...groups.values()].map(group => {
     group.jobs.sort((left, right) => String(left.updated_at || left.queued_at || '').localeCompare(String(right.updated_at || right.queued_at || '')));
-    const failed = group.jobs.find(item => String(item.status || '').toLowerCase() === 'failed');
-    const active = group.jobs.find(item => ['running', 'awaiting_provider', 'queued'].includes(String(item.status || '').toLowerCase()));
     const completed = group.jobs.filter(item => ['succeeded', 'completed'].includes(String(item.status || '').toLowerCase())).length;
-    group.status = failed ? 'failed' : active ? String(active.status || 'running') : completed === group.jobs.length ? 'completed' : 'pending';
-    group.current = failed || active || group.jobs[group.jobs.length - 1] || {};
+    const newest = group.jobs[group.jobs.length - 1] || {};
+    const newestStatus = String(newest.status || '').toLowerCase();
+    // A historical failed attempt must not mask a newer queued/running job.
+    // The newest actionable row is the current state; failures remain visible
+    // through the per-job audit view.
+    group.status = ['succeeded', 'completed'].includes(newestStatus)
+      ? 'completed'
+      : (newest.status || (completed === group.jobs.length ? 'completed' : 'pending'));
+    group.current = newest || {};
     group.completed = completed;
     group.total = group.jobs.length;
     return group;
@@ -5801,7 +5840,7 @@ function renderIntelligence() {
   // Keep the operator surface responsive when the bridge or investigation
   // worker has accumulated a large history. The API remains the full source;
   // this panel only renders the most recent actionable slice.
-  const jobs = intelligenceJobs().slice(0, 50);
+  const jobs = latestIntelligenceJobs(intelligenceJobs()).slice(0, 50);
   const pipelineGroups = intelligencePipelineGroups(jobs);
   const bridge = data?.bridge || {};
   const service = data?.service || {};
@@ -5814,7 +5853,7 @@ function renderIntelligence() {
   const tuningProposals = Array.isArray(autopilot.tuning_proposals) ? autopilot.tuning_proposals : [];
   const investigations = data?.investigations || {};
   const investigationSummary = investigations.summary || {};
-  const investigationRuns = Array.isArray(investigations.runs) ? investigations.runs.slice(0, 25) : [];
+  const investigationRuns = Array.isArray(investigations.runs) ? investigations.runs.slice(0, 100) : [];
   const dailyAutomation = data?.daily_automation || {};
   const dailySettings = dailyAutomation.settings || {};
   const dailySummary = dailyAutomation.summary || {};
@@ -5827,6 +5866,12 @@ function renderIntelligence() {
   const learningDeployments = Array.isArray(learning.deployments) ? learning.deployments : [];
   const learningAdjudicationQueue = Array.isArray(learning.adjudication_queue) ? learning.adjudication_queue : [];
   const recordedCounts = data?.jobs?.counts && typeof data.jobs.counts === 'object' ? data.jobs.counts : {};
+  const persistedModel = String(data?.bridge?.selected_model || '').trim();
+  const parkedProviderJobs = intelligenceJobs().filter(job => {
+    if (String(job?.status || '').toLowerCase() !== 'awaiting_provider' || !persistedModel) return false;
+    const captured = String(job?.input?.selected_model || job?.selected_model || '').trim();
+    return captured && captured !== persistedModel;
+  }).length;
   const counts = Object.keys(recordedCounts).length ? recordedCounts : jobs.reduce((result, job) => {
     const status = String(job?.status || 'unknown');
     result[status] = (result[status] || 0) + 1;
@@ -5840,7 +5885,8 @@ function renderIntelligence() {
     <div class="metric-card"><div class="metric">${counts.queued || 0}</div><div class="metric-label">Queued</div></div>
     <div class="metric-card"><div class="metric">${counts.awaiting_provider || 0}</div><div class="metric-label">Awaiting provider</div></div>
     <div class="metric-card"><div class="metric">${counts.running || 0}</div><div class="metric-label">Running</div></div>
-    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed</div></div>`;
+    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed history</div></div>
+    <div class="small" style="grid-column:1/-1;">Counts include durable attempts. Current pipeline rows below are deduplicated; transport failures can be recovered in a bounded pass, while ${parkedProviderJobs ? `${parkedProviderJobs} provider-wait job(s) captured for another model remain parked` : 'jobs captured for another model remain parked'} rather than being silently rerouted.</div>`;
 
   const bridgePill = el('intelligence-bridge-pill');
   const bridgeDetail = el('intelligence-bridge-detail');
@@ -5947,7 +5993,17 @@ function renderIntelligence() {
     <div class="metric-card"><div class="metric">${escapeHtml(String(autopilotSummary.tuning_proposals || 0))}</div><div class="metric-label">Tuning proposals</div></div>`;
   const autopilotRunsEl = el('intelligence-autopilot-runs');
   if (autopilotRunsEl) {
-    const recent = autopilotRuns.slice(0, 12);
+    const groupedAutopilot = new Map();
+    autopilotRuns.forEach(run => {
+      const key = String(run?.target_id || run?.run_id || 'unknown');
+      const current = groupedAutopilot.get(key);
+      if (!current) groupedAutopilot.set(key, { ...run, repeat_count: 1 });
+      else {
+        current.repeat_count = Number(current.repeat_count || 1) + 1;
+        if (String(run.updated_at || '') > String(current.updated_at || '')) groupedAutopilot.set(key, { ...run, repeat_count: current.repeat_count });
+      }
+    });
+    const recent = [...groupedAutopilot.values()].slice(0, 12);
     autopilotRunsEl.innerHTML = !recent.length
       ? '<div class="empty-state compact">No autonomous triage decisions yet. Enable advisory or guarded mode, then review new findings.</div>'
       : `<div class="table-wrap"><table><thead><tr><th>Finding or alert</th><th>Source</th><th>Decision</th><th>Model assessment</th><th>Guardrail</th><th>Updated</th><th>Action</th></tr></thead><tbody>${recent.map(run => {
@@ -5959,7 +6015,8 @@ function renderIntelligence() {
             : '';
           const source = securitySourceLabel(target.source);
           const context = [target.ecosystem, target.package].filter(Boolean).join(' · ');
-          return `<tr><td><strong>${escapeHtml(target.title || run.target_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.target_id || '')}</div>${context ? `<div class="small">${escapeHtml(context)}</div>` : ''}</td><td>${escapeHtml(source)}</td><td><span class="agent-triage-action">${escapeHtml(humanizeSnake(run.final_action || run.status || 'pending'))}</span></td><td>${escapeHtml(humanizeSnake(decision.model_verdict || 'pending'))}${typeof decision.model_confidence === 'number' ? `<div class="small">${escapeHtml(String(decision.model_confidence))}% confidence</div>` : ''}</td><td class="agent-triage-reasons">${reasons.length ? escapeHtml(humanizeMachineText(reasons.join(' · '))) : '<span class="small">Passed applicable gates</span>'}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${rollback}</td></tr>`;
+          const repeats = Number(run.repeat_count || 1) > 1 ? `<div class="small">${escapeHtml(String(run.repeat_count))} repeated evaluations; showing latest</div>` : '';
+          return `<tr><td><strong>${escapeHtml(target.title || run.target_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.target_id || '')}</div>${context ? `<div class="small">${escapeHtml(context)}</div>` : ''}${repeats}</td><td>${escapeHtml(source)}</td><td><span class="agent-triage-action">${escapeHtml(humanizeSnake(run.final_action || run.status || 'pending'))}</span></td><td>${escapeHtml(humanizeSnake(decision.model_verdict || 'pending'))}${typeof decision.model_confidence === 'number' ? `<div class="small">${escapeHtml(String(decision.model_confidence))}% confidence</div>` : ''}</td><td class="agent-triage-reasons">${reasons.length ? escapeHtml(humanizeMachineText(reasons.join(' · '))) : '<span class="small">Passed applicable gates</span>'}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${rollback}</td></tr>`;
         }).join('')}</tbody></table></div>`;
   }
   const autopilotProposalsEl = el('intelligence-autopilot-proposals');
@@ -5978,15 +6035,17 @@ function renderIntelligence() {
 
   const investigationSummaryEl = el('investigation-autopilot-summary');
   if (investigationSummaryEl) investigationSummaryEl.innerHTML = `
-    <div class="metric-card"><div class="metric">${escapeHtml(String((investigationSummary.queued || 0) + (investigationSummary.collecting || 0) + (investigationSummary.analyzing || 0)))}</div><div class="metric-label">Collecting evidence</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String((investigationSummary.collecting || 0) + (investigationSummary.analyzing || 0) + (investigationSummary.running || 0)))}</div><div class="metric-label">Running investigations</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(investigationSummary.queued || 0))}</div><div class="metric-label">Queued backlog</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String(investigationSummary.awaiting_model || 0))}</div><div class="metric-label">Awaiting model</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String(investigationSummary.escalated || 0))}</div><div class="metric-label">Threats escalated</div></div>
-    <div class="metric-card"><div class="metric">${escapeHtml(String((investigationSummary.evidence_gap || 0) + (investigationSummary.failed || 0)))}</div><div class="metric-label">Needs recovery</div></div>`;
+    <div class="metric-card"><div class="metric">${escapeHtml(String((investigationSummary.evidence_gap || 0) + (investigationSummary.failed || 0)))}</div><div class="metric-label">Needs recovery</div></div>
+    <div class="small" style="grid-column:1/-1;">Counts are one current run per finding. ${escapeHtml(String(investigationSummary.history_total || investigationSummary.total || 0))} historical attempts remain available in the audit trail.</div>`;
   const investigationRunsEl = el('investigation-autopilot-runs');
   if (investigationRunsEl) {
     investigationRunsEl.innerHTML = !investigationRuns.length
       ? '<div class="empty-state compact">No high-priority evidence investigations yet. Eligible high and critical package findings enter this queue automatically.</div>'
-      : `<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Stage</th><th>Evidence state</th><th>Decision</th><th>Updated</th><th>Recovery</th></tr></thead><tbody>${[
+      : `<div class="small" style="margin-bottom:8px;">Showing one current investigation per finding; older attempts remain available in the case audit history.</div><div class="table-wrap"><table><thead><tr><th>Finding</th><th>Stage</th><th>Evidence state</th><th>Decision</th><th>Updated</th><th>Recovery</th></tr></thead><tbody>${[
           ...investigationRuns.filter(run => ['failed', 'evidence_gap', 'canceled'].includes(String(run.status || ''))),
           ...investigationRuns.filter(run => !['failed', 'evidence_gap', 'canceled'].includes(String(run.status || ''))),
         ].slice(0, 100).map(run => {
@@ -5998,7 +6057,8 @@ function renderIntelligence() {
           const cancel = ['queued', 'collecting', 'analyzing', 'awaiting_model', 'awaiting_input'].includes(String(run.status || ''))
             ? `<button class="mini-btn" data-investigation-cancel="${escapeHtml(run.run_id)}" type="button">Cancel</button>` : '';
           const openCase = run.case_id ? `<button class="mini-btn" data-investigation-case="${escapeHtml(run.case_id)}" type="button">Open case</button>` : '';
-          return `<tr><td><strong>${escapeHtml(run.finding_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div></td><td><span class="status-pill">${escapeHtml(humanizeSnake(run.status || 'unknown'))}</span><div class="small">${escapeHtml(humanizeSnake(run.current_stage || 'queued'))}</div></td><td>${run.pipeline_id ? `<span class="mono small">${escapeHtml(run.pipeline_id)}</span>` : '<span class="small">Not started</span>'}${blocker}</td><td>${escapeHtml(humanizeSnake(decision.verdict || 'pending'))}${decision.confidence != null ? `<div class="small">${escapeHtml(String(decision.confidence))}% confidence</div>` : ''}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${openCase}${retry}${cancel}</td></tr>`;
+          const history = Number(run.history_count || 1) > 1 ? `<div class="small">${escapeHtml(String(run.history_count))} attempts retained</div>` : '';
+          return `<tr><td><strong>${escapeHtml(run.finding_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div>${history}</td><td><span class="status-pill">${escapeHtml(humanizeSnake(run.status || 'unknown'))}</span><div class="small">${escapeHtml(humanizeSnake(run.current_stage || 'queued'))}</div></td><td>${run.pipeline_id ? `<span class="mono small">${escapeHtml(run.pipeline_id)}</span>` : '<span class="small">Not started</span>'}${blocker}</td><td>${escapeHtml(humanizeSnake(decision.verdict || 'pending'))}${decision.confidence != null ? `<div class="small">${escapeHtml(String(decision.confidence))}% confidence</div>` : ''}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${openCase}${retry}${cancel}</td></tr>`;
         }).join('')}</tbody></table></div>`;
   }
   const dailyPill = el('daily-automation-pill');
@@ -6021,7 +6081,7 @@ function renderIntelligence() {
   if (dailySummaryEl) dailySummaryEl.innerHTML = `
     <div class="metric-card"><div class="metric">${escapeHtml(String(dailySummary.runs || 0))}</div><div class="metric-label">Recorded cycles</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String(dailySummary.active || 0))}</div><div class="metric-label">Running now</div></div>
-    <div class="metric-card"><div class="metric">${escapeHtml(String(dailySummary.failed_steps || 0))}</div><div class="metric-label">Failed steps</div></div>
+    <div class="metric-card"><div class="metric">${escapeHtml(String(dailySummary.recent_failed_steps ?? dailySummary.failed_steps ?? 0))}</div><div class="metric-label">Latest cycle failures</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(fmtDate(dailySummary.next_run_at) || 'Ready')}</div><div class="metric-label">Next scheduled run</div></div>`;
   const dailyStepsEl = el('daily-automation-steps');
   if (dailyStepsEl) {
@@ -6242,7 +6302,7 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
     const intelligenceJobId = String(
       result?.result?.job_id || result?.result?.job?.job_id || result?.job_id || ''
     ).trim();
-    const backgroundAction = ['enqueue', 'autopilot-run-now', 'investigation-run-due'].includes(action);
+    const backgroundAction = ['enqueue', 'autopilot-run-now', 'investigation-run-due', 'recover-transient-jobs'].includes(action);
     await refreshAfterAction({
       key: `intelligence:${action}:${intelligenceJobId || 'workspace'}`,
       poll: backgroundAction,
@@ -9673,6 +9733,14 @@ function formatCoverageLag(lagSeconds) {
 
 function coverageCollectorHealth(collector) {
   if (!collector.enabled) return 'Paused';
+  const state = String(collector.coverage_state || '').toLowerCase();
+  if (state === 'retention_risk') return 'Retention risk';
+  if (state === 'failed') return 'Last run failed';
+  if (state === 'dead_letters') return 'Dead letters pending';
+  if (state === 'gap') return 'Coverage gap';
+  if (state === 'stale') return 'Stale';
+  if (state === 'not_started') return 'Not started';
+  if (state === 'healthy') return 'Healthy';
   if (collector.retention?.retention_risk) return 'Retention risk';
   if (Number(collector.coverage_gaps) > 0) return 'Coverage gap';
   if (Number(collector.pending_dead_letters) > 0) return 'Dead letters pending';
@@ -9734,14 +9802,15 @@ function renderCoverage() {
   const collectors = coverage.collectors || [];
   const totalEvents = collectors.reduce((sum, item) => sum + (Number(item.events_stored) || 0), 0);
   const deadLetters = collectors.reduce((sum, item) => sum + (Number(item.pending_dead_letters) || 0), 0);
-  const gaps = collectors.reduce((sum, item) => sum + (Number(item.coverage_gaps) || 0), 0);
+  const gaps = collectors.reduce((sum, item) => sum + (Number(item.active_coverage_gaps ?? item.coverage_gaps) || 0), 0);
+  const historicalGaps = collectors.reduce((sum, item) => sum + (Number(item.historical_gaps) || 0), 0);
   const paused = collectors.filter(item => !item.enabled).length;
   const risks = collectors.filter(item => item.retention?.retention_risk).length;
   statsHost.innerHTML = [
     edgeMetric('Collectors', collectors.length, paused ? `${paused} paused` : 'Defined global feeds'),
     edgeMetric('Events stored', totalEvents, 'Append-only ledger'),
     edgeMetric('Dead letters', deadLetters, deadLetters ? 'Awaiting retry' : 'Queue clear'),
-    edgeMetric('Coverage gaps', gaps, gaps ? 'Replay required' : 'No missing windows'),
+    edgeMetric('Active coverage gaps', gaps, gaps ? 'Replay required' : 'No missing windows'),
     edgeMetric('Retention risk', risks, risks ? 'Cursor near expiry' : 'Inside retention')
   ].join('');
 
@@ -9759,9 +9828,9 @@ function renderCoverage() {
           <span class="status-pill">${escapeHtml(coverageCollectorHealth(collector))}</span>
         </div>
         <div class="small">
-          Lag ${escapeHtml(formatCoverageLag(collector.lag_seconds))} · ${Number(collector.events_stored) || 0} events · ${Number(collector.pending_dead_letters) || 0} dead letters · ${Number(collector.coverage_gaps) || 0} gaps${retention ? ` · cursor age ${escapeHtml(formatCoverageLag(retention.cursor_age_seconds))} of ${escapeHtml(formatCoverageLag(retention.retention_seconds))}` : ''}${snapshot ? ` · snapshot <code>${escapeHtml(snapshot.serial)}</code> (${Number(snapshot.item_count) || 0} items)` : ''}
+          Lag ${escapeHtml(formatCoverageLag(collector.lag_seconds))} · ${Number(collector.events_stored) || 0} events · ${Number(collector.pending_dead_letters) || 0} dead letters · ${Number(collector.active_coverage_gaps ?? collector.coverage_gaps) || 0} active gaps${Number(collector.historical_gaps) ? ` · ${Number(collector.historical_gaps)} historical` : ''}${retention ? ` · cursor age ${escapeHtml(formatCoverageLag(retention.cursor_age_seconds))} of ${escapeHtml(formatCoverageLag(retention.retention_seconds))}` : ''}${snapshot ? ` · snapshot <code>${escapeHtml(snapshot.serial)}</code> (${Number(snapshot.item_count) || 0} items)` : ''}
         </div>
-        <div class="small">Last run: ${escapeHtml(lastRun.status || 'never')}${lastRun.error_message ? ` · ${escapeHtml(lastRun.error_message)}` : ''}</div>
+        <div class="small">Last run: ${escapeHtml(lastRun.status || 'never')}${lastRun.error_message ? ` · ${escapeHtml(lastRun.error_message)}` : ''}${collector.coverage_note ? ` · ${escapeHtml(collector.coverage_note)}` : ''}</div>
         <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
           <button class="mini-btn coverage-run-btn" data-ecosystem="${escapeHtml(collector.ecosystem)}" type="button" ${collector.enabled ? '' : 'disabled'}>Run now</button>
           <button class="mini-btn coverage-toggle-btn" data-ecosystem="${escapeHtml(collector.ecosystem)}" data-enabled="${collector.enabled ? '1' : '0'}" type="button">${collector.enabled ? 'Pause' : 'Resume'}</button>
@@ -9774,7 +9843,7 @@ function renderCoverage() {
     : '<div class="empty-state compact">No feed events recorded yet. Run a collector to start the ledger.</div>';
 
   windowsHost.innerHTML = coverage.windows.length
-    ? `<div class="table-wrap"><table><thead><tr><th>Window start</th><th>Window end</th><th>Pages</th><th>Events</th><th>State</th></tr></thead><tbody>${coverage.windows.map(window => `<tr><td>${escapeHtml(window.window_start || '')}</td><td>${escapeHtml(window.window_end || '')}</td><td>${Number(window.processed_pages) || 0}/${Number(window.expected_pages) || 0}</td><td>${Number(window.events_stored) || 0}</td><td>${escapeHtml(statusLabel(window.state))}${window.gap_reason ? ` · ${escapeHtml(humanizeMachineText(window.gap_reason))}` : ''}</td></tr>`).join('')}</tbody></table></div>`
+    ? `<div class="small" style="margin-bottom:8px;">${historicalGaps ? `${historicalGaps} historical gap(s) remain retained for audit; only active gaps require replay.` : 'Gap history is retained for audit.'}</div><div class="table-wrap"><table><thead><tr><th>Window start</th><th>Window end</th><th>Pages</th><th>Events</th><th>State</th></tr></thead><tbody>${coverage.windows.map(window => `<tr><td>${escapeHtml(window.window_start || '')}</td><td>${escapeHtml(window.window_end || '')}</td><td>${Number(window.processed_pages) || 0}/${Number(window.expected_pages) || 0}</td><td>${Number(window.events_stored) || 0}</td><td>${escapeHtml(window.is_active === false ? `${statusLabel(window.classification || window.state)} (historical)` : statusLabel(window.state))}${window.gap_reason ? ` · ${escapeHtml(humanizeMachineText(window.gap_reason))}` : ''}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty-state compact">No coverage windows recorded yet.</div>';
 }
 
@@ -11297,7 +11366,7 @@ function renderResearchCases() {
   if (list) list.innerHTML = state.researchCases.loading && !cases.length
     ? '<div class="empty-state">Loading research cases…</div>'
     : filtered.length
-      ? `<div class="research-case-list">${filtered.map(item => `<button class="research-case-row ${item.case_id === state.researchCases.selectedId ? 'selected' : ''}" type="button" data-research-case-id="${escapeHtml(item.case_id)}"><span class="research-case-row-head"><strong>${escapeHtml(item.title)}</strong>${renderSeverityPill(item.potential_impact || item.severity)}</span><span class="small"><code>${escapeHtml(item.case_id)}</code> · ${escapeHtml(statusLabel(item.status))} · confidence ${escapeHtml(String(item.confidence || 0))}</span><span class="small">${escapeHtml(String(item.evidence_count || 0))} evidence · ${escapeHtml(String(item.ioc_count || 0))} IOCs · ${escapeHtml(fmtDate(item.updated_at))}</span></button>`).join('')}</div>`
+      ? `<div class="small research-case-list-note">Severity is investigation priority, not a maliciousness verdict. Use assessment, evidence quality, and local exposure to decide what is proven.</div><div class="research-case-list">${filtered.map(item => { const assessment = humanizeSnake(item.assessment || 'unconfirmed_static_lead'); const evidenceQuality = humanizeSnake(item.evidence_quality || 'insufficient'); const localExposure = humanizeSnake(item.local_exposure || 'unknown'); return `<button class="research-case-row ${item.case_id === state.researchCases.selectedId ? 'selected' : ''}" type="button" data-research-case-id="${escapeHtml(item.case_id)}"><span class="research-case-row-head"><strong>${escapeHtml(item.title)}</strong>${renderSeverityPill(item.potential_impact || item.severity)}</span><span class="small"><code>${escapeHtml(item.case_id)}</code> · ${escapeHtml(statusLabel(item.status))} · confidence ${escapeHtml(String(item.confidence || 0))}</span><span class="small">Assessment: ${escapeHtml(assessment)} · evidence: ${escapeHtml(evidenceQuality)} · exposure: ${escapeHtml(localExposure)}</span><span class="small">${escapeHtml(String(item.evidence_count || 0))} evidence · ${escapeHtml(String(item.ioc_count || 0))} IOCs · ${escapeHtml(fmtDate(item.updated_at))}</span></button>`; }).join('')}</div>`
       : `<div class="empty-state">${escapeHtml(state.researchCases.error || 'No research cases match this view.')}</div>`;
   list?.querySelectorAll('[data-research-case-id]').forEach(button => button.addEventListener('click', async () => {
     state.researchCases.selectedId = button.dataset.researchCaseId;
@@ -12983,6 +13052,9 @@ function bindEvents() {
     const requeueButton = event.target.closest('[data-intelligence-requeue]');
     if (!requeueButton) return;
     runIntelligenceAction('requeue', { job_id: requeueButton.dataset.intelligenceRequeue }, requeueButton);
+  });
+  el('intelligence-recover-transient-btn')?.addEventListener('click', event => {
+    runIntelligenceAction('recover-transient-jobs', { limit: 10, max_attempts: 3, min_age_seconds: 300 }, event.currentTarget);
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);

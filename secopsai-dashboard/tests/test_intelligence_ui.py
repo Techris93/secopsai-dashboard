@@ -72,6 +72,9 @@ def test_local_intelligence_actions_are_allowlisted():
     assert dashboard_server.build_intelligence_args("investigation-run-due", {})[:4] == [
         "intelligence", "autopilot", "investigations", "run-due"
     ]
+    recovery = dashboard_server.build_intelligence_args("recover-transient-jobs", {})
+    assert recovery[:4] == ["intelligence", "jobs", "recover", "--limit"]
+    assert "--max-attempts" in recovery and "--min-age-seconds" in recovery
     assert dashboard_server.build_intelligence_args(
         "investigation-retry", {"run_id": "IAR-0123456789ABCDEF"}
     )[:6] == ["intelligence", "autopilot", "investigations", "retry", "--run-id", "IAR-0123456789ABCDEF"]
@@ -267,6 +270,17 @@ def test_model_routing_ui_persists_the_new_selection_before_refresh():
     assert "search.value = state.intelligence.modelSearch" in app
 
 
+def test_investigation_queue_metrics_separate_running_from_backlog():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "Running investigations" in app
+    assert "Queued backlog" in app
+    assert "investigationSummary.queued || 0" in app
+    assert "latestCasePipelines" in app
+    assert "pipeline:${pipeline}:${action}" in app
+    assert "Failed history" in app
+    assert "remain parked" in app
+
+
 def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
@@ -290,6 +304,7 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "investigation-autopilot-summary",
         "investigation-autopilot-runs",
         "investigation-run-due",
+        "intelligence-recover-transient-btn",
         "detection-learning-summary",
         "detection-learning-current",
         "detection-learning-adjudication",
@@ -306,6 +321,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "Open full analysis" in app
     assert "intelligence-decision-card" in app
     assert "intelligencePipelineGroups" in app
+    assert "latestIntelligenceJobs" in app
+    assert "Recover transient failures" in html
     assert "research-decision-card" in app
     assert "const artifacts = researchCase.artifacts || [];" in app
     assert "publication_readiness_state" in app

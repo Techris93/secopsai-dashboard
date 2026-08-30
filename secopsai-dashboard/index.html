@@ -443,7 +443,7 @@
           <section class="intelligence-module investigation-autopilot" id="automation-investigations-section" data-automation-view="investigations" aria-labelledby="investigation-autopilot-title">
             <div class="module-head">
               <div><h4 id="investigation-autopilot-title">High-priority investigations</h4><p>Collects exact package evidence, performs bounded static analysis, compares verified releases, extracts IOC candidates, and requests an evidence-complete model verdict.</p></div>
-              <button class="secondary-btn" id="investigation-run-due" type="button">Run due investigations</button>
+              <button class="secondary-btn" id="investigation-run-due" type="button">Recover and run due investigations</button>
             </div>
             <div id="investigation-autopilot-summary" class="metrics-grid compact-metrics"></div>
             <div class="intelligence-boundary-note">The pipeline may resolve evidence-proven false positives and escalate corroborated threats. It cannot approve sandbox submission, send disclosure, or publish research.</div>
@@ -552,7 +552,8 @@
 
           <section class="intelligence-module" id="automation-jobs-section" data-automation-view="jobs" aria-labelledby="intelligence-jobs-title">
             <div class="module-head">
-              <div><h4 id="intelligence-jobs-title">Analysis jobs</h4><p>Every request and result is durable, bounded, and reviewable.</p></div>
+              <div><h4 id="intelligence-jobs-title">Analysis jobs</h4><p>Every request and result is durable, bounded, and reviewable. Old attempts stay in audit history; recovery only retries transport failures.</p></div>
+              <button class="secondary-btn" id="intelligence-recover-transient-btn" type="button">Recover transient failures</button>
             </div>
             <div id="intelligence-jobs-table"></div>
           </section>
