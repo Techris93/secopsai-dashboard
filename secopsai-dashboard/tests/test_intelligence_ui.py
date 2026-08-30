@@ -203,6 +203,33 @@ def test_source_first_research_dashboard_surface_is_present():
     assert html.count('id="source-first-research-panel"') == 1
 
 
+def test_research_case_reliability_ui_exposes_adjudication_and_visual_metadata():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    assert "research-reliability-adjudicate-btn" in app
+    assert "research-adjudication-rationale" in app
+    assert "Human adjudication required" in app
+    assert "adjudicate_review: 'research-reliability-adjudicate-btn'" in app
+    assert "Resolved by" in app
+    for marker in ("research-evidence-visual-viewport", "research-evidence-alt-text", "research-evidence-license", "research-evidence-source-attribution"):
+        assert marker in app
+    assert "reliability-adjudicate" in server
+    assert "--visual-viewport" in server
+
+
+def test_operator_guide_documents_execution_grounded_research_flow():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    for marker in (
+        'id="guide-reliability"',
+        "Scaffold Research",
+        "Verify Transition",
+        "Human adjudication required",
+        "Publication Safety",
+    ):
+        assert marker in html
+
+
 def test_model_routing_ui_persists_the_new_selection_before_refresh():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
@@ -280,6 +307,9 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "function intelligenceResultMarkdown" in app
     assert "bridge.codex && typeof bridge.codex === 'object'" in app
     assert "Ready · stale probe" in app
+    assert "Busy · lease active" in app
+    assert "bridge.active_job_id" in app
+    assert "bridge.active_model" in app
     assert "autopilot-configure" in app
     assert "data-agent-triage-rollback" in app
     assert "Agent finding and alert review" in html

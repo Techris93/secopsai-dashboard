@@ -5850,11 +5850,14 @@ function renderIntelligence() {
   const selectedProvider = bridge.selected_model ? providerHealth[bridge.selected_model] : null;
   const selectedProviderReady = selectedProvider?.status === 'ready';
   const healthStale = bridge.health_stale === true;
+  const bridgeBusy = bridge.busy === true || String(bridge.status || '') === 'busy';
   const bridgeDisplayStatus = state.intelligence.loading
     ? 'Checking'
-    : (selectedProviderReady
+    : (bridgeBusy
+      ? 'Busy · lease active'
+      : (selectedProviderReady
       ? (healthStale ? 'Ready · stale probe' : 'Ready')
-      : (bridge.live_ready ? 'Degraded' : (healthStale ? 'Stale' : humanizeSnake(bridge.status || (data ? 'unavailable' : 'not_checked')))));
+      : (bridge.live_ready ? 'Degraded' : (healthStale ? 'Stale' : humanizeSnake(bridge.status || (data ? 'unavailable' : 'not_checked'))))));
   if (bridgePill) bridgePill.textContent = bridgeDisplayStatus;
   const providerRows = Object.entries(providerHealth).map(([model, item]) => {
     const status = String(item?.status || 'unknown');
@@ -5871,9 +5874,14 @@ function renderIntelligence() {
   const healthAge = bridge.snapshot_age_seconds === null || bridge.snapshot_age_seconds === undefined
     ? ''
     : ` · ${formatCoverageLag(bridge.snapshot_age_seconds)} old`;
-  const selectedHealthLabel = selectedProviderReady
-    ? (healthStale ? 'last probe passed; refresh pending' : 'live probe passed')
-    : (selectedProvider?.error || 'no successful live probe recorded');
+  const selectedHealthLabel = bridgeBusy
+    ? `busy on ${bridge.active_model || bridge.selected_model || selectedModelLabel}; heartbeat lease is current`
+    : (selectedProviderReady
+      ? (healthStale ? 'last probe passed; refresh pending' : 'live probe passed')
+      : (selectedProvider?.error || 'no successful live probe recorded'));
+  const activeJobDetail = bridgeBusy
+    ? `<div class="kv-row"><div class="kv-key">Active model job</div><div class="kv-val"><strong>${escapeHtml(bridge.active_job_id || 'Processing')}</strong><div class="small">${escapeHtml(humanizeSnake(bridge.active_job_action || 'model analysis'))} · ${escapeHtml(bridge.active_model || bridge.selected_model || selectedModelLabel)}</div></div></div>`
+    : '';
   if (bridgeDetail) bridgeDetail.innerHTML = `
     <div class="kv-row"><div class="kv-key">Queue mode</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.queue_mode || data?.mode || 'unknown'))}</div></div>
     <div class="kv-row"><div class="kv-key">Selected model</div><div class="kv-val">${escapeHtml(selectedModelLabel)}</div></div>
@@ -5882,6 +5890,7 @@ function renderIntelligence() {
     <div class="kv-row"><div class="kv-key">Authentication</div><div class="kv-val">${escapeHtml(humanizeSnake(bridge.authentication_method || (localMode ? 'unknown' : 'local ChatGPT sign-in')))}</div></div>
     <div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">${escapeHtml(humanizeSnake(service.status || 'unknown'))}</div></div>
     <div class="kv-row"><div class="kv-key">Selected model health</div><div class="kv-val">${escapeHtml(selectedHealthLabel)}${healthAge ? `<div class="small">${escapeHtml(healthAge.replace(/^ · /, ''))}</div>` : ''}</div></div>
+    ${activeJobDetail}
     ${providerRows ? `<div class="kv-row"><div class="kv-key">Live providers</div><div class="kv-val"><div class="kv-list">${providerRows}</div></div></div>` : ''}
     <div class="kv-row"><div class="kv-key">ChatGPT credentials</div><div class="kv-val">Codex-owned; never stored by SecOpsAI</div></div>
     ${bridge.message ? `<div class="small" style="margin-top:10px;">${escapeHtml(bridge.message)}</div>` : ''}`;
@@ -10101,6 +10110,7 @@ async function generateContentPackForCase(caseId, btn) {
 }
 
 function bindResearchCaseDetailActions(researchCase) {
+  bindReliabilityCaseActions(researchCase);
   el('research-reconcile-btn')?.addEventListener('click', async event => {
     if (!(await requestConfirmation('Reclassify legacy URL candidates for this case?', {
       title: 'Reconcile evidence provenance',
@@ -10241,6 +10251,10 @@ function bindResearchCaseDetailActions(researchCase) {
     sha256: el('research-evidence-sha256')?.value,
     provenance: el('research-evidence-provenance')?.value,
     notes: el('research-evidence-notes')?.value,
+    visual_viewport: el('research-evidence-visual-viewport')?.value,
+    alt_text: el('research-evidence-alt-text')?.value,
+    image_license: el('research-evidence-license')?.value,
+    source_attribution: el('research-evidence-source-attribution')?.value,
     actor: 'dashboard-operator'
   }, event.currentTarget));
   el('research-add-ioc-btn')?.addEventListener('click', event => runResearchCaseAction('add-ioc', {
@@ -10813,9 +10827,6 @@ function renderResearchAutomationPanel(researchCase) {
     <div class="research-form-actions">
       <button class="secondary-btn" id="research-intake-preview-btn" type="button">Collect Metadata Preview</button>
       <button class="primary-btn" id="research-intake-run-btn" type="button">Run Safe Package Intake</button>
-      <button class="secondary-btn" id="research-matrix-btn" type="button">Generate Evidence Matrix</button>
-      <button class="secondary-btn" id="research-brief-btn" type="button">Generate Analyst Brief</button>
-      <button class="secondary-btn" id="research-publication-check-btn" type="button">Run Publication Safety Check</button>
     </div>
     <details class="research-action-drawer"><summary>Local artifact evidence</summary><p class="small">Artifacts are sent only to the authenticated local helper, hashed, and stored in owner-only quarantine. They are never uploaded to Supabase, Render, Cloudflare, or an AI provider.</p><div class="research-form-grid"><label class="research-span-2"><span>Authorized package file</span><input id="research-artifact-file" type="file" accept=".nupkg,.zip,.vsix,.gem,.whl" /></label><label class="research-span-2"><span>Lawful source and authorization</span><input id="research-artifact-source" value="${escapeHtml(prefill.artifactSource || '')}" placeholder="e.g. Downloaded from nuget.org before removal; authorized research copy" /></label><label><span>Ecosystem</span><select id="research-artifact-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'nuget')).join('')}</select></label><label><span>Package</span><input id="research-artifact-package" value="${escapeHtml(packageSubject.name || '')}" /></label><label><span>Version</span><input id="research-artifact-version" value="${escapeHtml(packageSubject.version || '')}" /></label></div><div class="research-form-actions"><button class="primary-btn" id="research-artifact-import-btn" type="button">Import Authorized Artifact</button><button class="secondary-btn" id="research-artifact-ioc-btn" type="button" ${artifacts.length ? '' : 'disabled'}>Extract IOC Candidates</button></div>${artifacts.length ? `<div class="research-form-grid"><label><span>Compare left artifact</span><select id="research-artifact-left">${artifacts.map(item => `<option value="${escapeHtml(item.artifact_id)}">${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><label><span>Compare right artifact</span><select id="research-artifact-right">${artifacts.map((item, index) => `<option value="${escapeHtml(item.artifact_id)}" ${index === 1 ? 'selected' : ''}>${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><button class="secondary-btn" id="research-artifact-compare-btn" type="button" ${artifacts.length > 1 ? '' : 'disabled'}>Compare local artifacts</button></div><div class="table-wrap"><table><thead><tr><th>Artifact</th><th>Package</th><th>SHA-256</th><th>State</th><th>Actions</th></tr></thead><tbody>${artifacts.map(item => `<tr><td><strong>${escapeHtml(item.artifact_id)}</strong><div class="small">${escapeHtml(item.filename)}</div></td><td>${escapeHtml(item.ecosystem)}:${escapeHtml(item.package_name || '—')}@${escapeHtml(item.version || '—')}</td><td><code>${escapeHtml(item.sha256)}</code></td><td>${escapeHtml(statusLabel(item.state))}</td><td><button class="mini-btn research-artifact-analysis-btn" data-artifact-id="${escapeHtml(item.artifact_id)}" type="button">Inspect safely</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state compact">No local artifacts attached. Import an authorized package file to begin.</div>'}</details>
     <details class="research-action-drawer"><summary>Compare packages</summary><p class="small">Both exact targets are fetched from allowlisted registries, hashed, and inspected statically. Package code is never installed or executed. Left defaults to the trusted reference when known; right defaults to the investigated package.</p><div class="research-form-grid"><label><span>Left ecosystem</span><select id="research-compare-left-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Left package</span><input id="research-compare-left-package" value="${escapeHtml(prefill.referencePackage || packageSubject.name || '')}" placeholder="legitimate package" /></label><label><span>Left version</span><input id="research-compare-left-version" value="${escapeHtml(prefill.referenceVersion || '')}" placeholder="latest if empty" /></label><label><span>Right ecosystem</span><select id="research-compare-right-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Right package</span><input id="research-compare-right-package" value="${escapeHtml(packageSubject.name || '')}" placeholder="candidate package" /></label><label><span>Right version</span><input id="research-compare-right-version" value="${escapeHtml(packageSubject.version || '')}" placeholder="latest if empty" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-compare-packages-btn" type="button">Compare exact packages</button></div></details>
@@ -10859,6 +10870,224 @@ function renderResearchAutomationPanel(researchCase) {
       }).join('') : ''}
     </div>
   `);
+}
+
+function reliabilityActionButton({ id, label, enabled, reason, primary = false }) {
+  const blockedReason = enabled ? '' : String(reason || 'Complete the preceding reliability stage first.');
+  return `<div class="research-reliability-action"><button class="${primary ? 'primary-btn' : 'secondary-btn'}" id="${escapeHtml(id)}" type="button" ${enabled ? '' : 'disabled'} title="${escapeHtml(enabled ? reason || label : blockedReason)}">${escapeHtml(label)}</button><span>${escapeHtml(enabled ? reason || 'Records a versioned, auditable result.' : blockedReason)}</span></div>`;
+}
+
+function latestReliabilityBundle(bundles, stage) {
+  return (bundles || []).find(item => item.stage === stage) || null;
+}
+
+function renderExecutionGroundedResearch(researchCase) {
+  const reliability = researchCase.research_reliability || {};
+  const hypotheses = reliability.hypotheses || [];
+  const selectedHypotheses = hypotheses.filter(item => item.status === 'selected');
+  const plans = reliability.plans || [];
+  const plan = plans[0] || null;
+  const bundles = reliability.run_bundles || [];
+  const scaffold = latestReliabilityBundle(bundles, 'scaffold');
+  const transition = latestReliabilityBundle(bundles, 'transition');
+  const full = latestReliabilityBundle(bundles, 'full');
+  const claims = reliability.effective_claim_ledger || reliability.claim_ledger || [];
+  const unsupported = claims.filter(item => ['unsupported', 'contradicted'].includes(item.support_status));
+  const contradictions = claims.filter(item => (item.contradicting_evidence || []).length || item.support_status === 'contradicted');
+  const review = reliability.specialist_review || { status: 'not_started', publication_blocked: true };
+  const audits = reliability.latest_audits || {};
+  const auditPassed = type => audits[type]?.status === 'passed';
+  const fullReady = full?.status === 'succeeded' && full?.verification?.tamper_evident;
+  const reviewReady = review.status === 'completed'
+    && (!review.material_disagreement
+      || ['resolved_primary', 'resolved_reviewer'].includes(String(review.adjudication_status || '')));
+  const reliabilityReady = fullReady && claims.length > 0 && unsupported.length === 0 && reviewReady
+    && ['completeness', 'originality', 'visual_qa'].every(auditPassed);
+  const runRows = ['scaffold', 'transition', 'full'].map(stage => {
+    const bundle = latestReliabilityBundle(bundles, stage);
+    return `<div class="research-reliability-stage"><span>${escapeHtml(humanizeSnake(stage))}</span>${renderStatusPill(bundle?.status || 'not_started')}<small>${bundle ? `${escapeHtml(String(bundle.completeness_score || 0))}% logged · ${bundle.verification?.tamper_evident ? 'integrity verified' : 'integrity not verified'}` : 'No run bundle yet'}</small></div>`;
+  }).join('');
+  const auditRows = ['completeness', 'originality', 'visual_qa'].map(type => {
+    const audit = audits[type];
+    return `<div class="research-reliability-stage"><span>${escapeHtml(humanizeSnake(type))}</span>${renderStatusPill(audit?.status || 'not_started')}<small>${audit ? `Score ${escapeHtml(String(audit.score || 0))} · ${(audit.hard_blockers || []).length} blocker(s)` : 'Required before publication approval'}</small></div>`;
+  }).join('');
+  const claimRows = claims.slice(0, 12).map(item => `<tr><td>${escapeHtml(compactText(item.text_span || '', 180))}</td><td>${escapeHtml(humanizeSnake(item.claim_type || 'other'))}</td><td>${renderStatusPill(item.support_status || 'unknown')}</td><td>${escapeHtml((item.evidence_ids || []).join(', ') || 'None')}</td></tr>`);
+  const hypothesisRows = hypotheses.slice(0, 6).map(item => `<tr><td>${escapeHtml(humanizeSnake(item.hypothesis_type))}</td><td>${escapeHtml(compactText(item.statement || '', 180))}</td><td>${escapeHtml(String(item.rank || '—'))}</td><td>${renderStatusPill(item.status || 'candidate')}</td></tr>`);
+  const next = reliability.next_action || { label: 'Generate competing hypotheses', reason: 'Research begins with falsifiable alternatives.' };
+  const specialistRun = review.run || null;
+  const primaryComplete = Boolean(specialistRun?.result);
+  const blindQueued = Boolean(specialistRun?.reviewer_job_id);
+  const adjudicationPending = Boolean(
+    review.material_disagreement
+    && !['resolved_primary', 'resolved_reviewer'].includes(String(review.adjudication_status || '')),
+  );
+  const adjudicationRunId = String(specialistRun?.run_id || '');
+  const adjudicationStatus = String(review.adjudication_status || 'not_required');
+  return `<section class="research-reliability-workspace" aria-labelledby="research-reliability-title">
+    <div class="research-reliability-head"><div><span class="detail-eyebrow">EXECUTION-GROUNDED RESEARCH</span><h4 id="research-reliability-title">Evidence reliability workspace</h4><p>Each conclusion must trace to a safe run bundle and canonical evidence. Models review evidence; they do not create facts.</p></div>${renderStatusPill(reliabilityReady ? 'ready' : 'blocked')}</div>
+    <div class="research-reliability-next"><strong>Next: ${escapeHtml(next.label || humanizeSnake(next.action || 'review'))}</strong><span>${escapeHtml(next.reason || 'Complete the next recorded reliability gate.')}</span></div>
+    <div class="research-reliability-actions" aria-label="Research reliability actions">
+      ${reliabilityActionButton({ id: 'research-reliability-hypotheses-btn', label: 'Generate Hypotheses', enabled: true, reason: 'Creates six bounded malicious, benign, false-positive, unrelated, provenance, and insufficient-evidence alternatives.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-rank-btn', label: 'Rank Hypotheses', enabled: hypotheses.length > 1, reason: hypotheses.length > 1 ? 'Uses deterministic pairwise evidence value, uncertainty, safety, impact, and cost.' : 'Generate competing hypotheses first.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-plan-btn', label: plan ? 'Revise Evidence Plan' : 'Create Evidence Plan', enabled: selectedHypotheses.length > 0, reason: selectedHypotheses.length ? 'Versions intended methods, limits, expected outputs, and completion criteria.' : 'Rank and select hypotheses first.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-scaffold-btn', label: 'Run Scaffold Research', enabled: Boolean(plan), reason: plan ? 'Validates adapters, identities, checksums, scope, and limits on the smallest safe sample.' : 'Create an evidence plan first.', primary: !scaffold })}
+      ${reliabilityActionButton({ id: 'research-reliability-transition-btn', label: 'Verify Transition', enabled: scaffold?.status === 'succeeded', reason: scaffold?.status === 'succeeded' ? 'Proves mocks, fixtures, stubs, placeholders, and synthetic outputs cannot enter full research.' : 'A successful scaffold bundle is required.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-full-btn', label: 'Run Full Safe Research', enabled: transition?.status === 'succeeded', reason: transition?.status === 'succeeded' ? 'Processes approved metadata, archives, comparisons, local exposure, and imported sandbox results without local execution.' : 'Transition verification must pass.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-claims-btn', label: 'Build Claim Ledger', enabled: fullReady, reason: fullReady ? 'Extracts every factual statement and checks identifiers, numbers, dates, hashes, IOCs, and runtime claims.' : 'A successful tamper-evident full bundle is required.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-verify-btn', label: 'Verify Claims', enabled: claims.length > 0, reason: claims.length ? 'Rechecks every stored claim against current canonical records.' : 'Build the claim ledger first.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-clip-btn', label: 'Resolve Unsupported Claims', enabled: unsupported.length > 0, reason: unsupported.length ? 'Produces an auditable correction diff; it does not silently invent support.' : 'No unsupported or contradicted claim currently needs correction.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-specialist-btn', label: 'Run Specialist', enabled: fullReady && claims.length > 0 && unsupported.length === 0 && !specialistRun, reason: !fullReady ? 'Complete full safe research first.' : !claims.length ? 'Build the claim ledger first.' : unsupported.length ? 'Resolve unsupported claims first.' : specialistRun ? 'A specialist run already exists.' : 'Routes the reviewed domain specialist on the persisted OpenCodex model.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-blind-btn', label: 'Run Blind Review', enabled: primaryComplete && !blindQueued && !specialistRun?.review, reason: !primaryComplete ? 'The primary specialist must complete first.' : specialistRun?.review ? 'Blind review is already complete.' : blindQueued ? 'Blind review is already queued.' : 'Queues a separate reviewer without the primary verdict, confidence, wording, or recommendation.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-completeness-btn', label: 'Audit Completeness', enabled: claims.length > 0, reason: claims.length ? 'Checks omitted failures, selective reporting, methodology divergence, and fixture leakage.' : 'Build and verify claims first.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-originality-btn', label: 'Check Originality', enabled: claims.length > 0, reason: claims.length ? 'Checks source similarity and attribution without treating reporting domains as attacker IOCs.' : 'Build the claim ledger first.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-visual-btn', label: 'Render Publication Preview', enabled: auditPassed('completeness') && auditPassed('originality'), reason: auditPassed('completeness') && auditPassed('originality') ? 'Renders deterministic desktop/mobile previews and checks overflow, contrast, alt text, and licensing.' : 'Completeness and originality audits must pass first.' })}
+      ${reliabilityActionButton({ id: 'research-publication-check-btn', label: 'Run Publication Safety', enabled: reliabilityReady, reason: reliabilityReady ? 'Runs the final safety gate. Human approval is still required.' : 'Complete all execution-grounded reliability stages first.' })}
+      ${reliabilityActionButton({ id: 'research-draft-blog-btn', label: 'Create Review-Only Draft', enabled: reliabilityReady && researchCase.status === 'ready_to_publish' && (researchCase.publication_reviews || [])[0]?.status === 'approved', reason: 'Creates an editorial draft only; it does not publish or deploy.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-publish-btn', label: 'Publish Approved', enabled: true, reason: 'Opens Publications. Approval and staging remain a separate protected action.' })}
+      ${reliabilityActionButton({ id: 'research-reliability-deploy-btn', label: 'Deploy', enabled: true, reason: 'Opens Publications. Cloudflare deployment remains separate and protected.' })}
+    </div>
+    <div class="research-reliability-grid">
+      <article><h5>Hypotheses</h5>${hypotheses.length ? researchTable(['Type','Statement','Rank','State'], hypothesisRows, '') : '<div class="empty-state compact">No hypotheses yet.</div>'}</article>
+      <article><h5>Evidence plan</h5>${plan ? `<p><strong>Revision ${escapeHtml(String(plan.revision))}</strong> · ${escapeHtml(plan.status || 'planned')}</p><p class="small">${escapeHtml((plan.intended_methods || []).join(', ') || 'No intended methods recorded.')}</p><p class="small">Executed: ${escapeHtml((plan.executed_methods || []).join(', ') || 'none yet')}</p>` : '<div class="empty-state compact">No versioned plan yet.</div>'}</article>
+      <article><h5>Research runs</h5><div class="research-reliability-stages">${runRows}</div></article>
+      <article><h5>Specialist and blind review</h5><div class="research-reliability-stages"><div class="research-reliability-stage"><span>Domain specialist</span>${renderStatusPill(specialistRun?.status || 'not_started')}<small>${escapeHtml(specialistRun?.profile_id || 'Not routed')}</small></div><div class="research-reliability-stage"><span>Independent review</span>${renderStatusPill(review.status || 'not_started')}<small>${review.material_disagreement ? (['resolved_primary', 'resolved_reviewer'].includes(adjudicationStatus) ? `Resolved by ${escapeHtml(adjudicationStatus.replace('resolved_', ''))}.` : `Material disagreement: ${escapeHtml(adjudicationStatus)}.`) : 'Primary verdict and persuasive wording are withheld.'}</small></div></div>${adjudicationPending && adjudicationRunId ? `<div class="research-adjudication-panel"><p class="small"><strong>Human adjudication required.</strong> Review both evidence-linked outputs before resolving this disagreement. The decision is recorded in the audit trail and does not publish automatically.</p><div class="research-form-grid"><label><span>Decision</span><select id="research-adjudication-decision"><option value="accept_primary">Accept primary</option><option value="accept_reviewer">Accept independent reviewer</option><option value="request_more_evidence">Request more evidence</option></select></label><label class="research-span-2"><span>Evidence-backed rationale</span><textarea id="research-adjudication-rationale" rows="3" minlength="20" maxlength="8000" placeholder="Explain which evidence supports this decision (minimum 20 characters)."></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-reliability-adjudicate-btn" type="button" data-run-id="${escapeHtml(adjudicationRunId)}">Record adjudication</button></div></div>` : ''}</article>
+      <article class="research-reliability-wide"><h5>Claim ledger</h5>${claims.length ? researchTable(['Claim','Type','Support','Evidence'], claimRows, '') : '<div class="empty-state compact">No claim ledger yet.</div>'}</article>
+      <article><h5>Contradictions</h5>${contradictions.length ? renderBulletList(contradictions.slice(0, 8).map(item => `${item.text_span}: ${(item.contradicting_evidence || []).join('; ') || 'contradicted by canonical evidence'}`), '') : '<div class="empty-state compact">No recorded contradictions.</div>'}</article>
+      <article><h5>Completeness and publication quality</h5><div class="research-reliability-stages">${auditRows}</div></article>
+    </div>
+    <p class="small research-pipeline-boundary">Sandbox submission, disclosure, publication approval, publishing, deployment, destructive response, and external communication remain human-approved. No package or payload runs locally.</p>
+  </section>`;
+}
+
+function parsedCssRgb(value) {
+  const match = String(value || '').match(/rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)/i);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3]), match[4] === undefined ? 1 : Number(match[4])];
+}
+
+function cssRelativeLuminance(rgb) {
+  const channels = rgb.slice(0, 3).map(value => {
+    const normalized = value / 255;
+    return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function cssContrastRatio(foreground, background) {
+  const lighter = Math.max(cssRelativeLuminance(foreground), cssRelativeLuminance(background));
+  const darker = Math.min(cssRelativeLuminance(foreground), cssRelativeLuminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function publicationPreviewChecks(researchCase) {
+  const preview = document.createElement('article');
+  preview.className = 'research-publication-preview-probe';
+  preview.setAttribute('aria-label', 'Publication visual QA preview');
+  preview.innerHTML = `<h1>${escapeHtml(researchCase.title || 'Untitled research')}</h1><p>${escapeHtml(researchCase.summary || '')}</p><table><thead><tr><th>Evidence</th><th>Type</th></tr></thead><tbody>${(researchCase.evidence || []).slice(0, 20).map(item => `<tr><td>${escapeHtml(item.title || '')}</td><td>${escapeHtml(humanizeSnake(item.evidence_type || 'other'))}</td></tr>`).join('')}</tbody></table><pre><code>${escapeHtml((researchCase.subjects || []).map(item => `${item.ecosystem || ''}:${item.name || ''}@${item.version || ''}`).join('\n'))}</code></pre>`;
+  document.body.appendChild(preview);
+  let overflowCount = 0;
+  let desktopRendered = false;
+  let mobileRendered = false;
+  for (const [width, mode] of [[1120, 'desktop'], [390, 'mobile']]) {
+    preview.style.width = `${width}px`;
+    const bounds = preview.getBoundingClientRect();
+    const overflow = [preview, ...preview.querySelectorAll('*')].filter(node => node.scrollWidth > node.clientWidth + 1).length;
+    overflowCount += overflow;
+    if (mode === 'desktop') desktopRendered = bounds.width >= 1000;
+    if (mode === 'mobile') mobileRendered = bounds.width >= 360 && bounds.width <= 420;
+  }
+  let contrastFailures = 0;
+  if (typeof window.getComputedStyle === 'function') {
+    const nodes = [preview, ...preview.querySelectorAll('h1,p,th,td,pre,code')];
+    for (const node of nodes) {
+      const style = window.getComputedStyle(node);
+      const foreground = parsedCssRgb(style.color);
+      let background = null;
+      for (let current = node; current && !background; current = current.parentElement) {
+        const candidate = parsedCssRgb(window.getComputedStyle(current).backgroundColor);
+        if (candidate && candidate[3] > 0.05) background = candidate;
+      }
+      background ||= [255, 255, 255, 1];
+      if (!foreground || cssContrastRatio(foreground, background) < 4.5) contrastFailures += 1;
+    }
+  } else {
+    contrastFailures = 1;
+  }
+  const imageEvidence = (researchCase.evidence || []).filter(item => item.evidence_type === 'screenshot' && item.status !== 'retracted');
+  const visualScreenshots = imageEvidence.filter(item => ['desktop', 'mobile'].includes(String(item.metadata?.visual_qa_viewport || '').toLowerCase()));
+  const missingAltText = imageEvidence.filter(item => !String(item.metadata?.alt || item.notes || '').trim()).length;
+  const unlicensedImages = imageEvidence.filter(item => !String(item.metadata?.license || item.metadata?.source_attribution || item.provenance || '').trim()).length;
+  preview.remove();
+  return {
+    desktop_rendered: desktopRendered,
+    mobile_rendered: mobileRendered,
+    overflow_count: overflowCount,
+    contrast_failures: contrastFailures,
+    missing_alt_text: missingAltText,
+    unlicensed_images: unlicensedImages,
+    screenshots: visualScreenshots.map(item => `${String(item.metadata.visual_qa_viewport).toLowerCase()}=${item.locator}`).filter(Boolean).slice(0, 4),
+  };
+}
+
+function bindReliabilityCaseActions(researchCase) {
+  const reliability = researchCase.research_reliability || {};
+  const plans = reliability.plans || [];
+  const actor = 'dashboard-research-reliability';
+  const actions = [
+    ['research-reliability-hypotheses-btn', 'reliability-hypotheses', { case_id: researchCase.case_id, actor }],
+    ['research-reliability-rank-btn', 'reliability-rank', { case_id: researchCase.case_id, actor, candidate_budget: 6, comparison_budget: 15, model_call_budget: 0 }],
+    ['research-reliability-plan-btn', 'reliability-plan', { case_id: researchCase.case_id, actor, revise: plans.length > 0, reason: plans.length ? 'Evidence, availability, or executed methods changed; preserve a new plan revision.' : 'Initial execution-grounded evidence plan.' }],
+    ['research-reliability-scaffold-btn', 'reliability-scaffold', { case_id: researchCase.case_id, actor }],
+    ['research-reliability-transition-btn', 'reliability-transition', { case_id: researchCase.case_id, actor }],
+    ['research-reliability-full-btn', 'reliability-full', { case_id: researchCase.case_id, actor }],
+    ['research-reliability-claims-btn', 'reliability-claims', { case_id: researchCase.case_id, actor, source_kind: 'case_summary', source_locator: researchCase.case_id }],
+    ['research-reliability-verify-btn', 'reliability-verify', { case_id: researchCase.case_id, actor }],
+    ['research-reliability-clip-btn', 'reliability-clip', { case_id: researchCase.case_id, actor, text: `${researchCase.title || ''}. ${researchCase.summary || ''}`, source_kind: 'case_summary', source_locator: researchCase.case_id }],
+    ['research-reliability-specialist-btn', 'reliability-specialist', { case_id: researchCase.case_id, actor }],
+    ['research-reliability-blind-btn', 'reliability-blind-review', { case_id: researchCase.case_id, actor }],
+    ['research-reliability-completeness-btn', 'reliability-completeness', { case_id: researchCase.case_id, actor }],
+    ['research-reliability-originality-btn', 'reliability-originality', { case_id: researchCase.case_id, actor, text: `${researchCase.title || ''}. ${researchCase.summary || ''}` }],
+  ];
+  actions.forEach(([id, action, payload]) => el(id)?.addEventListener('click', async event => {
+    const protectedStages = new Set(['reliability-full', 'reliability-specialist', 'reliability-blind-review']);
+    if (protectedStages.has(action) && !(await requestConfirmation(`Run ${statusLabel(action)} for ${researchCase.case_id}?`, {
+      title: statusLabel(action),
+      context: action === 'reliability-full'
+        ? 'This processes approved evidence and imported sandbox results without executing packages or payloads locally.'
+        : 'This queues bounded read-only review on the explicitly persisted OpenCodex model. Publication remains human-approved.',
+      confirmLabel: 'Continue',
+    }))) return;
+    await runResearchCaseAction(action, payload, event.currentTarget);
+  }));
+  el('research-reliability-visual-btn')?.addEventListener('click', async event => {
+    const checks = publicationPreviewChecks(researchCase);
+    await runResearchCaseAction('reliability-visual', { case_id: researchCase.case_id, actor, ...checks }, event.currentTarget);
+  });
+  el('research-reliability-adjudicate-btn')?.addEventListener('click', async event => {
+    const rationale = String(el('research-adjudication-rationale')?.value || '').trim();
+    if (rationale.length < 20) {
+      showToast('Add an evidence-backed rationale of at least 20 characters before recording adjudication.', 'error');
+      return;
+    }
+    if (!(await requestConfirmation('Record the human decision for this material review disagreement?', {
+      title: 'Adjudicate review disagreement',
+      context: 'This changes the publication gate only after you select which evidence-backed review to accept or request more evidence. It does not publish or deploy.',
+      confirmLabel: 'Record decision',
+    }))) return;
+    await runResearchCaseAction('reliability-adjudicate', {
+      case_id: researchCase.case_id,
+      run_id: event.currentTarget.dataset.runId,
+      decision: el('research-adjudication-decision')?.value,
+      rationale,
+      actor,
+    }, event.currentTarget);
+  });
+  for (const id of ['research-reliability-publish-btn', 'research-reliability-deploy-btn']) {
+    el(id)?.addEventListener('click', () => {
+      state.blogOps.view = 'review';
+      setPage('blog-ops', { routeOverride: BLOG_VIEW_ROUTES.review });
+    });
+  }
 }
 
 function renderResearchCaseDetail(researchCase) {
@@ -10935,6 +11164,7 @@ function renderResearchCaseDetail(researchCase) {
       <div><span class="detail-eyebrow">NEXT ACTION</span><h4 id="research-next-action-title">${escapeHtml(nextAction.title)}</h4><p>${escapeHtml(nextAction.reason)}</p></div>
       ${nextAction.buttonId ? `<button class="primary-btn" id="research-next-action-btn" data-target="${escapeHtml(nextAction.buttonId)}" type="button">${escapeHtml(nextAction.label)}</button>` : ''}
     </div>
+    ${renderExecutionGroundedResearch(researchCase)}
     ${renderResearchAutomationPanel(researchCase)}
     ${researchDetailSection('Case workflow', `
       <div class="research-form-grid">
@@ -10945,7 +11175,7 @@ function renderResearchCaseDetail(researchCase) {
         <label><span>Confidence</span><input id="research-detail-confidence" type="number" min="0" max="100" value="${escapeHtml(String(researchCase.confidence || 0))}" /></label>
         <label class="research-span-2"><span>Owner</span><input id="research-detail-owner" value="${escapeHtml(researchCase.owner || '')}" maxlength="160" /></label>
         <label class="research-span-2"><span>Executive summary</span><textarea id="research-detail-summary" rows="5" maxlength="8000">${escapeHtml(researchCase.summary || '')}</textarea></label>
-      </div><div class="research-form-actions"><button class="primary-btn" id="research-save-case-btn" type="button">Save workflow</button><button class="secondary-btn" id="research-export-btn" type="button">Download case report</button><button class="secondary-btn" id="research-draft-blog-btn" type="button" ${readiness.ready ? '' : 'disabled'} title="${readiness.ready ? 'Creates a review-only Blog Ops draft.' : 'Resolve publication blockers first.'}">Create review draft</button><button class="secondary-btn" id="research-case-gen-pack-btn" data-case-id="${escapeHtml(researchCase.case_id)}" type="button">📦 Generate Social Pack</button></div>`)}
+      </div><div class="research-form-actions"><button class="primary-btn" id="research-save-case-btn" type="button">Save workflow</button><button class="secondary-btn" id="research-export-btn" type="button">Download case report</button><button class="secondary-btn" id="research-case-gen-pack-btn" data-case-id="${escapeHtml(researchCase.case_id)}" type="button">Generate Social Pack</button></div>`)}
     ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','Lifecycle state'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td><div class="small">Case: ${escapeHtml(statusLabel(item.status))} · Registry: ${escapeHtml(statusLabel(item.registry_state || 'unknown'))} · Artifact: ${escapeHtml(statusLabel(item.artifact_state || 'missing'))} · Validation: ${escapeHtml(statusLabel(item.validation_state || 'unverified'))}</div><details class="research-inline-state"><summary>Update lifecycle state</summary><div class="research-form-grid"><select id="research-subject-registry-${escapeHtml(item.subject_id)}">${['available','unlisted','removed','unavailable','unknown'].map(value => researchOption(value, item.registry_state || 'unknown')).join('')}</select><select id="research-subject-artifact-${escapeHtml(item.subject_id)}">${['collected','missing','externally_supplied'].map(value => researchOption(value, item.artifact_state || 'missing')).join('')}</select><select id="research-subject-validation-${escapeHtml(item.subject_id)}">${['unverified','static_confirmed','sandbox_confirmed'].map(value => researchOption(value, item.validation_state || 'unverified')).join('')}</select><input id="research-subject-reason-${escapeHtml(item.subject_id)}" placeholder="Evidence or reason" /><button class="mini-btn research-subject-state-btn" data-subject-id="${escapeHtml(item.subject_id)}" type="button">Save state</button></div></details> ${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
     ${researchDetailSection('Evidence', researchTable(['Evidence','Type','Provenance','Collected','State'], evidence.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td><strong>${escapeHtml(item.title)}</strong><div class="small">${escapeHtml(item.locator || item.sha256 || 'No locator')}</div></td><td>${escapeHtml(statusLabel(item.evidence_type))}</td><td>${escapeHtml(item.provenance || '—')}</td><td>${escapeHtml(fmtDate(item.collected_at))}</td><td>${researchRetractControl('evidence', item)}</td></tr>`), 'No evidence recorded.'))}
     ${researchDetailSection('Indicators', researchTable(['Type','Value','Confidence','Evidence','State'], iocs.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(item.ioc_type)}</td><td><code>${escapeHtml(item.value)}</code></td><td>${escapeHtml(String(item.confidence))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('ioc', item)}</td></tr>`), 'No indicators recorded; explicitly state when none were found.'))}
@@ -10959,7 +11189,7 @@ function renderResearchCaseDetail(researchCase) {
     `)}
     ${researchDetailSection('Linked findings', researchTable(['Finding','Relationship','Linked'], findings.map(item => `<tr><td><code>${escapeHtml(item.finding_id)}</code></td><td>${escapeHtml(statusLabel(item.relationship))}</td><td>${escapeHtml(fmtDate(item.created_at))}</td></tr>`), 'No SOC findings linked.'))}
     <details class="research-action-drawer"><summary>Add subject</summary><div class="research-form-grid"><label><span>Type</span><select id="research-subject-type">${['package','extension','repository','publisher','brand','infrastructure','other'].map(value => researchOption(value, 'package')).join('')}</select></label><label><span>Ecosystem</span><input id="research-subject-ecosystem" placeholder="npm, pypi, nuget" /></label><label class="research-span-2"><span>Name</span><input id="research-subject-name" placeholder="Package, brand, repository, or infrastructure" /></label><label><span>Version</span><input id="research-subject-version" /></label><label><span>Publisher</span><input id="research-subject-publisher" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-subject-btn" type="button">Add subject</button></div></details>
-    <details class="research-action-drawer"><summary>Add evidence</summary><div class="research-form-grid"><label><span>Type</span><select id="research-evidence-type">${['source','registry_metadata','package_artifact','static_analysis','sandbox_analysis','screenshot','analyst_note','other'].map(value => researchOption(value, 'source')).join('')}</select></label><label><span>Title</span><input id="research-evidence-title" /></label><label class="research-span-2"><span>Locator</span><input id="research-evidence-locator" placeholder="Public URL or controlled local reference" /></label><label class="research-span-2"><span>SHA-256</span><input id="research-evidence-sha256" maxlength="64" /></label><label><span>Provenance</span><input id="research-evidence-provenance" /></label><label><span>Notes</span><textarea id="research-evidence-notes" rows="3"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-evidence-btn" type="button">Add evidence</button></div></details>
+    <details class="research-action-drawer"><summary>Add evidence</summary><div class="research-form-grid"><label><span>Type</span><select id="research-evidence-type">${['source','registry_metadata','package_artifact','static_analysis','sandbox_analysis','screenshot','analyst_note','other'].map(value => researchOption(value, 'source')).join('')}</select></label><label><span>Title</span><input id="research-evidence-title" /></label><label class="research-span-2"><span>Locator</span><input id="research-evidence-locator" placeholder="Public URL or controlled local reference" /></label><label class="research-span-2"><span>SHA-256</span><input id="research-evidence-sha256" maxlength="64" /></label><label><span>Provenance</span><input id="research-evidence-provenance" /></label><label><span>Visual viewport</span><select id="research-evidence-visual-viewport"><option value="">Not a visual-QA screenshot</option><option value="desktop">Desktop</option><option value="mobile">Mobile</option></select></label><label><span>Alt text</span><input id="research-evidence-alt-text" maxlength="1000" placeholder="Describe the image for accessibility" /></label><label><span>License</span><input id="research-evidence-license" maxlength="500" placeholder="Source-approved, CC BY, or other permission" /></label><label class="research-span-2"><span>Source attribution</span><input id="research-evidence-source-attribution" maxlength="1000" placeholder="Publisher, author, and source URL or permission note" /></label><label class="research-span-2"><span>Notes</span><textarea id="research-evidence-notes" rows="3"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-evidence-btn" type="button">Add evidence</button></div></details>
     <details class="research-action-drawer"><summary>Add IOC</summary><div class="research-form-grid"><label><span>Type</span><select id="research-ioc-type">${['domain','url','ipv4','ipv6','sha256','sha1','md5','email','wallet','file_path','other'].map(value => researchOption(value, 'domain')).join('')}</select></label><label><span>Confidence</span><input id="research-ioc-confidence" type="number" min="0" max="100" value="50" /></label><label class="research-span-2"><span>Value</span><input id="research-ioc-value" /></label><label><span>Source evidence</span><select id="research-ioc-evidence"><option value="">Not linked</option>${evidence.map(item => `<option value="${escapeHtml(item.evidence_id)}">${escapeHtml(item.title)}</option>`).join('')}</select></label><label><span>Tags</span><input id="research-ioc-tags" placeholder="credential-theft, skimmer" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-ioc-btn" type="button">Add IOC</button></div></details>
     <details class="research-action-drawer"><summary>Advanced: add a rule manually</summary><p class="small">Use this only for an independently reviewed rule. Rules are stored as research artifacts and structurally checked. SecOpsAI never executes submitted rule content.</p><div class="research-form-grid"><label><span>Type</span><select id="research-rule-type">${['yara','sigma','semgrep'].map(value => researchOption(value, 'sigma')).join('')}</select></label><label><span>Name</span><input id="research-rule-name" maxlength="240" placeholder="suspicious-package-execution" /></label><label><span>Source evidence</span><select id="research-rule-evidence"><option value="">Not linked</option>${evidence.map(item => `<option value="${escapeHtml(item.evidence_id)}">${escapeHtml(item.title)}</option>`).join('')}</select></label><label class="research-span-2"><span>Purpose</span><input id="research-rule-purpose" maxlength="2000" placeholder="What defensive behavior does this rule detect?" /></label><label class="research-span-2"><span>Rule content</span><textarea id="research-rule-content" rows="12" maxlength="524288" spellcheck="false" placeholder="Paste a YARA, Sigma, or Semgrep rule"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-rule-btn" type="button">Add reviewed rule</button></div></details>
     <details class="research-action-drawer"><summary>Link finding or add note</summary><div class="research-form-grid"><label><span>Finding ID</span><input id="research-link-finding-id" placeholder="SCM-... or EDGE-..." /></label><label><span>Relationship</span><select id="research-link-relationship">${['supports','related','derived_from','impacts'].map(value => researchOption(value, 'supports')).join('')}</select></label><label class="research-span-2"><span>Analyst note</span><textarea id="research-note-text" rows="3"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-link-finding-btn" type="button">Link finding</button><button class="secondary-btn" id="research-add-note-btn" type="button">Add note</button></div></details>
@@ -10975,6 +11205,31 @@ function renderResearchCaseDetail(researchCase) {
 }
 
 function researchNextActionForCase(researchCase, pipeline, review) {
+  const reliabilityNext = researchCase.research_reliability?.next_action;
+  if (reliabilityNext?.action) {
+    const targetByAction = {
+      generate_hypotheses: 'research-reliability-hypotheses-btn',
+      rank_hypotheses: 'research-reliability-rank-btn',
+      create_plan: 'research-reliability-plan-btn',
+      run_scaffold: 'research-reliability-scaffold-btn',
+      verify_transition: 'research-reliability-transition-btn',
+      run_full: 'research-reliability-full-btn',
+      build_claim_ledger: 'research-reliability-claims-btn',
+      verify_claims: 'research-reliability-verify-btn',
+      queue_specialist: 'research-reliability-specialist-btn',
+      adjudicate_review: 'research-reliability-adjudicate-btn',
+      audit_completeness: 'research-reliability-completeness-btn',
+      audit_originality: 'research-reliability-originality-btn',
+      visual_qa: 'research-reliability-visual-btn',
+      publication_review: 'research-publication-check-btn',
+    };
+    return {
+      title: reliabilityNext.label || humanizeSnake(reliabilityNext.action),
+      label: reliabilityNext.label || humanizeSnake(reliabilityNext.action),
+      buttonId: targetByAction[reliabilityNext.action] || 'research-reliability-hypotheses-btn',
+      reason: reliabilityNext.reason || 'Complete the next execution-grounded reliability stage.',
+    };
+  }
   if (!pipeline) return { title: 'Start evidence collection', label: 'Run investigation pipeline', buttonId: 'research-pipeline-start-btn', reason: 'Collect normalized package metadata, compare the reference, and prepare evidence-linked review items.' };
   const operational = researchPipelineOperationalState(pipeline);
   if (['stalled', 'blocked'].includes(operational.state)) return { title: 'Restore model analysis', label: 'Open Automation', buttonId: 'research-pipeline-open-automation-btn', reason: operational.message };

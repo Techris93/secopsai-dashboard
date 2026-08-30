@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/dist/umd/supabase.js" integrity="sha384-yifgV8iFWyp5cgu+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP/NlXVJT3vO" crossorigin="anonymous"></script>
   <script src="./url-safety.js?v=20260803-credential-url-hardening"></script>
-  <link rel="stylesheet" href="./styles.css?v=20260830-decision-first-v1" />
+  <link rel="stylesheet" href="./styles.css?v=20260830-reliability-v1" />
 </head>
 <body class="okcomputer-skin professional-ui">
   <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
@@ -1162,6 +1162,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             <a href="#guide-specialists">Specialist Orchestrator</a>
             <a href="#guide-findings">Findings</a>
             <a href="#guide-research">Research Cases</a>
+            <a href="#guide-reliability">Execution-grounded reliability</a>
             <a href="#guide-ai-dependency-guard">AI Dependency Guard</a>
             <a href="#guide-enterprise">Enterprise Security</a>
             <a href="#guide-artifact-fleet">Artifact Fleet</a>
@@ -1334,6 +1335,27 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <div class="guide-step"><span>9</span><p>After publication, set the case to <strong>Published</strong>, preserve the export manifest, and use the IOCs and detection rules to improve SecOpsAI defensive coverage.</p></div>
               </div>
               <div class="guide-callout guide-danger">A high score, an LLM explanation, or a watchlist hit is a lead, not proof. Human evidence review, disclosure judgment, and editorial approval remain mandatory.</div>
+            </section>
+
+            <section class="card guide-section" id="guide-reliability">
+              <div class="guide-section-head">
+                <span class="guide-pill">Execution-grounded reliability</span>
+                <h3>Turn an investigation into defensible research</h3>
+                <p>The reliability workspace keeps hypotheses, methods, evidence, claims, review, and publication gates connected. It is an independent defensive adaptation of published research methodology, not a model-generated source of truth.</p>
+              </div>
+              <div class="guide-card-grid">
+                <div class="guide-mini-card"><strong>Ground every claim</strong><span>Build and verify the claim ledger; unsupported or contradicted sentences are removed or qualified with a revision diff.</span></div>
+                <div class="guide-mini-card"><strong>Separate reviewers</strong><span>Run the domain specialist and blinded independent reviewer. Material disagreement requires a human decision before publication.</span></div>
+                <div class="guide-mini-card"><strong>Prove the presentation</strong><span>Run completeness, originality, and desktop/mobile visual checks. Screenshots require viewport, alt text, and license or attribution metadata.</span></div>
+              </div>
+              <div class="guide-steps">
+                <div class="guide-step"><span>1</span><p>In a Research Case, follow the <strong>Next</strong> card: generate and rank competing hypotheses before selecting a method.</p></div>
+                <div class="guide-step"><span>2</span><p>Create or revise the evidence plan, then run <strong>Scaffold Research</strong>, <strong>Verify Transition</strong>, and <strong>Full Safe Research</strong>. Failed or fixture-only runs cannot unlock drafting.</p></div>
+                <div class="guide-step"><span>3</span><p>Build the claim ledger and verify it. Resolve unsupported claims by removing or qualifying them; never add a fact just to make a gate green.</p></div>
+                <div class="guide-step"><span>4</span><p>Run <strong>Specialist</strong> and <strong>Blind Review</strong>. If the workspace says <strong>Human adjudication required</strong>, inspect both evidence-linked outputs and record a bounded decision or request more evidence.</p></div>
+                <div class="guide-step"><span>5</span><p>Run completeness, originality, and visual QA, then <strong>Publication Safety</strong>. A successful reliability gate still leads only to a review-only draft; <strong>Approve</strong>, <strong>Publish</strong>, and <strong>Deploy</strong> stay separate.</p></div>
+              </div>
+              <div class="guide-callout guide-warning">Models receive minimized evidence and their selected OpenCodex model is captured with the run. If fallback is disabled, an unavailable model stays queued; it is never silently replaced.</div>
             </section>
 
             <section class="card guide-section" id="guide-ai-dependency-guard">
@@ -1626,7 +1648,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260722-asd-console-theme"></script>
-  <script src="./app.js?v=20260830-decision-first-v1"></script>
+  <script src="./app.js?v=20260830-reliability-v1"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

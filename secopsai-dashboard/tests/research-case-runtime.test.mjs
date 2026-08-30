@@ -148,6 +148,14 @@ const blockedHtml = runtime.elements.get('research-case-detail').innerHTML;
 assert.match(blockedHtml, /Case assessment/);
 assert.match(blockedHtml, /Potential impact/);
 assert.match(blockedHtml, /Independent review is pending/);
+assert.match(blockedHtml, /Evidence reliability workspace/);
+for (const label of [
+  'Generate Hypotheses', 'Rank Hypotheses', 'Run Scaffold Research', 'Verify Transition',
+  'Run Full Safe Research', 'Build Claim Ledger', 'Verify Claims', 'Run Specialist',
+  'Run Blind Review', 'Audit Completeness', 'Check Originality', 'Render Publication Preview',
+  'Create Review-Only Draft', 'Publish Approved', 'Deploy',
+]) assert.match(blockedHtml, new RegExp(label));
+assert.equal((blockedHtml.match(/id="research-draft-blog-btn"/g) || []).length, 1);
 assert.doesNotMatch(blockedHtml, /\[object Object\]/i);
 
 runtime.context.renderResearchCaseDetail(sampleCase({
@@ -159,6 +167,96 @@ const readyHtml = runtime.elements.get('research-case-detail').innerHTML;
 assert.match(readyHtml, /Publication ready/);
 assert.match(readyHtml, /Artifact catalog state is linked/);
 assert.doesNotMatch(readyHtml, /ReferenceError|\[object Object\]/i);
+
+runtime.context.renderResearchCaseDetail(sampleCase({
+  research_reliability: {
+    hypotheses: [{ hypothesis_type: 'malicious_compromise', statement: 'The exact artifact is compromised.', status: 'selected', rank: 1 }],
+    plans: [{ revision: 1, status: 'active', intended_methods: ['registry_metadata'], executed_methods: ['registry_metadata'] }],
+    run_bundles: [
+      { stage: 'full', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+      { stage: 'transition', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+      { stage: 'scaffold', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+    ],
+    effective_claim_ledger: [{ text_span: 'The package is proc-macro1@1.0.107.', claim_type: 'package_version', support_status: 'supported', evidence_ids: ['EVD-RUNTIME'], contradicting_evidence: [] }],
+    claim_ledger: [],
+    specialist_review: { status: 'completed', material_disagreement: false, publication_blocked: false, run: { status: 'needs_review', result: {}, review: {}, profile_id: 'threat-intel' } },
+    latest_audits: {
+      completeness: { status: 'passed', score: 100, hard_blockers: [] },
+      originality: { status: 'passed', score: 100, hard_blockers: [] },
+      visual_qa: { status: 'passed', score: 100, hard_blockers: [] },
+    },
+    next_action: { action: 'publication_review', label: 'Run publication safety', reason: 'Reliability gates passed.' },
+  },
+}));
+const reliabilityReadyHtml = runtime.elements.get('research-case-detail').innerHTML;
+assert.match(reliabilityReadyHtml, /integrity verified/);
+assert.match(reliabilityReadyHtml, /Reliability gates passed/);
+assert.doesNotMatch(reliabilityReadyHtml, /ReferenceError|\[object Object\]/i);
+
+runtime.context.renderResearchCaseDetail(sampleCase({
+  research_reliability: {
+    ...sampleCase().research_reliability,
+    hypotheses: [{ hypothesis_type: 'malicious_compromise', statement: 'The exact artifact is compromised.', status: 'selected', rank: 1 }],
+    plans: [{ revision: 1, status: 'active', intended_methods: ['registry_metadata'], executed_methods: ['registry_metadata'] }],
+    run_bundles: [
+      { stage: 'full', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+      { stage: 'transition', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+      { stage: 'scaffold', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+    ],
+    effective_claim_ledger: [{ text_span: 'The package is proc-macro1@1.0.107.', claim_type: 'package_version', support_status: 'supported', evidence_ids: ['EVD-RUNTIME'], contradicting_evidence: [] }],
+    claim_ledger: [],
+    specialist_review: {
+      status: 'completed',
+      material_disagreement: true,
+      adjudication_status: 'pending_human',
+      publication_blocked: true,
+      run: { run_id: 'SOR-ABCDEF1234567890', status: 'needs_review', result: { output: { verdict_recommendation: 'credible' } }, review: { output: { verdict_recommendation: 'benign' } }, profile_id: 'threat-intel' },
+    },
+    latest_audits: {
+      completeness: { status: 'passed', score: 100, hard_blockers: [] },
+      originality: { status: 'passed', score: 100, hard_blockers: [] },
+      visual_qa: { status: 'passed', score: 100, hard_blockers: [] },
+    },
+    next_action: { action: 'adjudicate_review', label: 'Adjudicate review disagreement', reason: 'A human decision is required.' },
+  },
+}));
+const disagreementHtml = runtime.elements.get('research-case-detail').innerHTML;
+assert.match(disagreementHtml, /Human adjudication required/);
+assert.match(disagreementHtml, /Record adjudication/);
+assert.match(disagreementHtml, /SOR-ABCDEF1234567890/);
+assert.match(disagreementHtml, /Adjudicate review disagreement/);
+
+runtime.context.renderResearchCaseDetail(sampleCase({
+  research_reliability: {
+    ...sampleCase().research_reliability,
+    hypotheses: [{ hypothesis_type: 'malicious_compromise', statement: 'The exact artifact is compromised.', status: 'selected', rank: 1 }],
+    plans: [{ revision: 1, status: 'active', intended_methods: ['registry_metadata'], executed_methods: ['registry_metadata'] }],
+    run_bundles: [
+      { stage: 'full', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+      { stage: 'transition', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+      { stage: 'scaffold', status: 'succeeded', completeness_score: 100, verification: { tamper_evident: true } },
+    ],
+    effective_claim_ledger: [{ text_span: 'The package is proc-macro1@1.0.107.', claim_type: 'package_version', support_status: 'supported', evidence_ids: ['EVD-RUNTIME'], contradicting_evidence: [] }],
+    claim_ledger: [],
+    specialist_review: {
+      status: 'completed',
+      material_disagreement: true,
+      adjudication_status: 'resolved_reviewer',
+      publication_blocked: false,
+      run: { run_id: 'SOR-ABCDEF1234567890', status: 'needs_review', result: { output: { verdict_recommendation: 'credible' } }, review: { output: { verdict_recommendation: 'benign' } }, profile_id: 'threat-intel' },
+    },
+    latest_audits: {
+      completeness: { status: 'passed', score: 100, hard_blockers: [] },
+      originality: { status: 'passed', score: 100, hard_blockers: [] },
+      visual_qa: { status: 'passed', score: 100, hard_blockers: [] },
+    },
+    next_action: { action: 'publication_review', label: 'Run publication safety', reason: 'Reliability gates passed.' },
+  },
+}));
+const resolvedHtml = runtime.elements.get('research-case-detail').innerHTML;
+assert.match(resolvedHtml, /Reliability gates passed/);
+assert.match(resolvedHtml, /Resolved by reviewer/);
+assert.doesNotMatch(resolvedHtml, /Human adjudication required/);
 
 runtime.context.learningFixture = {
   learning: {
@@ -241,5 +339,29 @@ assert.match(learningHistoryHtml, /Evaluation history/);
 assert.match(learningDeploymentsHtml, /Stale evaluation/);
 assert.match(learningDeploymentsHtml, /Stop and retain audit/);
 assert.doesNotMatch(learningCurrentHtml + adjudicationHtml + learningHistoryHtml + learningDeploymentsHtml, /ReferenceError|\[object Object\]/i);
+
+const busyBridgeFixture = {
+  mode: 'local-helper',
+  bridge: {
+    status: 'busy',
+    busy: true,
+    live_ready: true,
+    health_stale: false,
+    selected_model: 'xai/grok-4.6',
+    active_model: 'xai/grok-4.6',
+    active_job_id: 'AIJ-BUSYFIXTURE',
+    active_job_action: 'review_specialist_work',
+    providers: {},
+    codex: { status: 'ready' },
+  },
+  service: { status: 'running' },
+  models: { count: 1, models: [{ id: 'xai/grok-4.6' }] },
+  jobs: { counts: { running: 1 } },
+};
+runtime.context.busyBridgeFixture = busyBridgeFixture;
+vm.runInContext('state.intelligence.data = busyBridgeFixture; renderIntelligence();', runtime.context);
+assert.equal(runtime.elements.get('intelligence-bridge-pill').textContent, 'Busy · lease active');
+assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /AIJ-BUSYFIXTURE/);
+assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /heartbeat lease is current/);
 
 console.log('research case and detection learning runtime rendering checks passed');

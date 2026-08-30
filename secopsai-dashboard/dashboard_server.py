@@ -45,6 +45,7 @@ ACTION_ID_RE = re.compile(r'^ACT-\d+$')
 SESSION_ID_RE = re.compile(r'^SES-[0-9a-f]{12}$')
 APPROVAL_ID_RE = re.compile(r'^APR-[0-9a-f]{12}$')
 RESEARCH_CASE_ID_RE = re.compile(r'^RSC-[A-F0-9]{12}$')
+SPECIALIST_RUN_ID_RE = re.compile(r'^SOR-[A-F0-9]{16}$')
 RESEARCH_PIPELINE_ID_RE = re.compile(r'^RPL-[A-F0-9]{16}$')
 RESEARCH_REVIEW_ITEM_ID_RE = re.compile(r'^RVI-[A-F0-9]{16}$')
 RESEARCH_RULE_PROPOSAL_ID_RE = re.compile(r'^RRP-[A-F0-9]{16}$')
@@ -122,6 +123,21 @@ RESEARCH_CASE_ACTIONS = {
     'resolution-run',
     'resolution-review',
     'reconcile',
+    'reliability-hypotheses',
+    'reliability-rank',
+    'reliability-plan',
+    'reliability-scaffold',
+    'reliability-transition',
+    'reliability-full',
+    'reliability-claims',
+    'reliability-verify',
+    'reliability-clip',
+    'reliability-specialist',
+    'reliability-blind-review',
+    'reliability-adjudicate',
+    'reliability-completeness',
+    'reliability-originality',
+    'reliability-visual',
 }
 RESEARCH_DISCOVERY_ACTIONS = {
     'capabilities',
@@ -1905,9 +1921,89 @@ def build_research_case_args(action, payload):
             raise ValueError('Resolution review must accept or reopen')
         return ['research', 'resolution', 'review', run_id, '--decision', decision, '--actor', 'mission-control']
 
+    if action == 'reliability-adjudicate':
+        case_id = _clean_string(payload.get('case_id'), 32).upper()
+        if not RESEARCH_CASE_ID_RE.match(case_id):
+            raise ValueError('Invalid research case id')
+        run_id = _clean_string(payload.get('run_id'), 40).upper()
+        if not SPECIALIST_RUN_ID_RE.fullmatch(run_id):
+            raise ValueError('Invalid specialist run id')
+        decision = _clean_string(payload.get('decision'), 32).lower()
+        if decision not in {'accept_primary', 'accept_reviewer', 'request_more_evidence'}:
+            raise ValueError('Invalid adjudication decision')
+        rationale = _clean_string(payload.get('rationale'), 8000)
+        if len(rationale) < 20:
+            raise ValueError('An evidence-backed adjudication rationale of at least 20 characters is required')
+        args = [
+            'research', 'reliability', 'adjudicate-review', run_id,
+            '--decision', decision, '--rationale', rationale,
+        ]
+        add(args, '--actor', 'actor', 160)
+        return args
+
     case_id = _clean_string(payload.get('case_id'), 32).upper()
     if not RESEARCH_CASE_ID_RE.match(case_id):
         raise ValueError('Invalid research case id')
+    if action == 'add-evidence':
+        viewport = _clean_string(payload.get('visual_viewport'), 20).lower()
+        if viewport not in {'', 'desktop', 'mobile'}:
+            raise ValueError('visual_viewport must be desktop or mobile')
+    reliability_commands = {
+        'reliability-hypotheses': 'generate-hypotheses',
+        'reliability-rank': 'rank-hypotheses',
+        'reliability-plan': 'plan',
+        'reliability-scaffold': 'run-scaffold',
+        'reliability-transition': 'verify-transition',
+        'reliability-full': 'run-full',
+        'reliability-claims': 'build-claim-ledger',
+        'reliability-verify': 'verify-claims',
+        'reliability-clip': 'clip-claims',
+        'reliability-specialist': 'queue-specialist',
+        'reliability-blind-review': 'queue-blind-review',
+        'reliability-completeness': 'audit-completeness',
+        'reliability-originality': 'audit-originality',
+        'reliability-visual': 'visual-qa',
+    }
+    if action in reliability_commands:
+        command = reliability_commands[action]
+        args = ['research', 'reliability', command, case_id]
+        add(args, '--actor', 'actor', 160)
+        if action == 'reliability-rank':
+            args.extend([
+                '--candidate-budget', str(validate_bounded_int(payload.get('candidate_budget'), default=6, lower=2, upper=24)),
+                '--comparison-budget', str(validate_bounded_int(payload.get('comparison_budget'), default=15, lower=1, upper=200)),
+                '--model-call-budget', str(validate_bounded_int(payload.get('model_call_budget'), default=0, lower=0, upper=50)),
+            ])
+        elif action == 'reliability-plan':
+            add(args, '--reason', 'reason', 2000)
+            if payload.get('revise'):
+                args.append('--revise')
+            for method in (payload.get('executed_methods') if isinstance(payload.get('executed_methods'), list) else [])[:30]:
+                value = _clean_string(method, 160)
+                if value:
+                    args.extend(['--executed-method', value])
+        elif action in {'reliability-claims', 'reliability-clip', 'reliability-originality'}:
+            add(args, '--text', 'text', 100000)
+            if action in {'reliability-claims', 'reliability-clip'}:
+                add(args, '--source-kind', 'source_kind', 80)
+                add(args, '--source-locator', 'source_locator', 500)
+        elif action == 'reliability-visual':
+            if payload.get('desktop_rendered'):
+                args.append('--desktop-rendered')
+            if payload.get('mobile_rendered'):
+                args.append('--mobile-rendered')
+            for flag, key in (
+                ('--overflow-count', 'overflow_count'),
+                ('--contrast-failures', 'contrast_failures'),
+                ('--missing-alt-text', 'missing_alt_text'),
+                ('--unlicensed-images', 'unlicensed_images'),
+            ):
+                args.extend([flag, str(validate_bounded_int(payload.get(key), default=0, lower=0, upper=10000))])
+            for screenshot in (payload.get('screenshots') if isinstance(payload.get('screenshots'), list) else [])[:4]:
+                value = _clean_string(screenshot, 4000)
+                if value:
+                    args.extend(['--screenshot', value])
+        return args
     if action == 'rule-propose':
         args = ['research', 'rule', 'propose', case_id]
         add(args, '--actor', 'actor', 160)
@@ -2011,6 +2107,10 @@ def build_research_case_args(action, payload):
             ('--provenance', 'provenance', 1000),
             ('--notes', 'notes', 12000),
             ('--collected-at', 'collected_at', 64),
+            ('--visual-viewport', 'visual_viewport', 20),
+            ('--alt-text', 'alt_text', 1000),
+            ('--license', 'image_license', 500),
+            ('--source-attribution', 'source_attribution', 1000),
             ('--actor', 'actor', 160),
         ],
         'add-ioc': [
@@ -4771,7 +4871,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             action = parsed.path.rsplit('/', 1)[-1]
             try:
                 args = build_research_case_args(action, payload)
-                timeout = 180 if action in {'export', 'draft-blog'} else 90
+                timeout = 180 if action in {
+                    'export', 'draft-blog', 'reliability-full',
+                    'reliability-specialist', 'reliability-blind-review',
+                } else 90
                 result, parsed_result = run_cli_json([*args, *secopsai_db_args()], timeout=timeout)
                 artifact = None
                 if action == 'export' and result['ok'] and isinstance(parsed_result, dict):

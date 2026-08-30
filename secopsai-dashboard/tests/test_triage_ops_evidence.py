@@ -570,9 +570,94 @@ class TriageOpsEvidenceTests(unittest.TestCase):
         self.assertIn('https://example.test/package; rm -rf /', args)
         self.assertNotIn('sh', args)
 
+        visual = server.build_research_case_args(
+            'add-evidence',
+            {
+                'case_id': 'RSC-ABCDEF123456',
+                'evidence_type': 'screenshot',
+                'title': 'Publication desktop render',
+                'locator': 'https://evidence.example/desktop.png',
+                'visual_viewport': 'desktop',
+                'alt_text': 'Desktop publication preview',
+                'image_license': 'Source-approved',
+                'source_attribution': 'SecOpsAI render from reviewed case evidence',
+            },
+        )
+        self.assertIn('--visual-viewport', visual)
+        self.assertIn('--alt-text', visual)
+        self.assertIn('--license', visual)
+        self.assertIn('--source-attribution', visual)
+
     def test_research_case_command_builder_rejects_invalid_case_id(self):
         with self.assertRaisesRegex(ValueError, 'Invalid research case id'):
             server.build_research_case_args('export', {'case_id': '../../etc/passwd'})
+
+    def test_research_reliability_actions_are_typed_and_allowlisted(self):
+        case_id = 'RSC-ABCDEF123456'
+        self.assertEqual(
+            server.build_research_case_args('reliability-hypotheses', {'case_id': case_id, 'actor': 'operator'}),
+            ['research', 'reliability', 'generate-hypotheses', case_id, '--actor', 'operator'],
+        )
+        ranked = server.build_research_case_args(
+            'reliability-rank',
+            {'case_id': case_id, 'candidate_budget': 99, 'comparison_budget': 15, 'model_call_budget': 0},
+        )
+        self.assertEqual(ranked[:4], ['research', 'reliability', 'rank-hypotheses', case_id])
+        self.assertEqual(ranked[ranked.index('--candidate-budget') + 1], '24')
+        visual = server.build_research_case_args(
+            'reliability-visual',
+            {
+                'case_id': case_id,
+                'desktop_rendered': True,
+                'mobile_rendered': True,
+                'overflow_count': 0,
+                'screenshots': ['https://evidence.example/preview.png'],
+            },
+        )
+        self.assertEqual(visual[:4], ['research', 'reliability', 'visual-qa', case_id])
+        self.assertIn('--desktop-rendered', visual)
+        self.assertIn('--mobile-rendered', visual)
+        self.assertNotIn('sh', visual)
+
+    def test_reliability_adjudication_is_typed_and_requires_evidence_backed_rationale(self):
+        args = server.build_research_case_args(
+            'reliability-adjudicate',
+            {
+                'case_id': 'RSC-ABCDEF123456',
+                'run_id': 'SOR-ABCDEF1234567890',
+                'decision': 'accept_reviewer',
+                'rationale': 'The independent reviewer is supported by the canonical evidence bundle.',
+                'actor': 'dashboard-operator',
+            },
+        )
+        self.assertEqual(
+            args,
+            [
+                'research', 'reliability', 'adjudicate-review', 'SOR-ABCDEF1234567890',
+                '--decision', 'accept_reviewer',
+                '--rationale', 'The independent reviewer is supported by the canonical evidence bundle.',
+                '--actor', 'dashboard-operator',
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, 'rationale'):
+            server.build_research_case_args(
+                'reliability-adjudicate',
+                {
+                    'case_id': 'RSC-ABCDEF123456',
+                    'run_id': 'SOR-ABCDEF1234567890',
+                    'decision': 'accept_reviewer',
+                    'rationale': 'too short',
+                },
+            )
+
+    def test_research_reliability_text_is_one_bounded_argument_not_shell(self):
+        text = 'Evidence says package@1.2.3; $(touch /tmp/not-run) remains unverified.'
+        args = server.build_research_case_args(
+            'reliability-claims',
+            {'case_id': 'RSC-ABCDEF123456', 'text': text, 'source_kind': 'case_summary'},
+        )
+        self.assertEqual(args[args.index('--text') + 1], text)
+        self.assertNotIn('bash', args)
 
     def test_research_case_retraction_requires_reason(self):
         with self.assertRaisesRegex(ValueError, 'reason is required'):
