@@ -386,6 +386,7 @@
                 <button class="secondary-btn" data-intelligence-service="start" type="button">Start</button>
                 <button class="secondary-btn" data-intelligence-service="stop" type="button">Stop</button>
                 <button class="secondary-btn" data-intelligence-service="logs" type="button">View logs</button>
+                <button class="secondary-btn" id="intelligence-requeue-failed-btn" type="button">Re-run failed jobs</button>
                 <button class="primary-btn" id="intelligence-run-once-btn" type="button">Process next job</button>
               </div>
               <pre class="intelligence-log" id="intelligence-service-output" hidden></pre>
@@ -553,7 +554,10 @@
           <section class="intelligence-module" id="automation-jobs-section" data-automation-view="jobs" aria-labelledby="intelligence-jobs-title">
             <div class="module-head">
               <div><h4 id="intelligence-jobs-title">Analysis jobs</h4><p>Every request and result is durable, bounded, and reviewable. Old attempts stay in audit history; recovery only retries transport failures.</p></div>
-              <button class="secondary-btn" id="intelligence-recover-transient-btn" type="button">Recover transient failures</button>
+              <div class="intelligence-actions">
+                <button class="secondary-btn" id="intelligence-requeue-failed-jobs-btn" type="button">Re-run failed jobs</button>
+                <button class="secondary-btn" id="intelligence-recover-transient-btn" type="button">Recover transient failures</button>
+              </div>
             </div>
             <div id="intelligence-jobs-table"></div>
           </section>

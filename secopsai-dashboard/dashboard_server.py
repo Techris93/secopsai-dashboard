@@ -1052,11 +1052,13 @@ def build_intelligence_args(action, payload):
         if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):
             raise ValueError('Invalid intelligence job ID')
         return ['intelligence', 'jobs', 'cancel', job_id, '--actor', 'mission-control', *secopsai_db_args()]
-    if action == 'requeue':
+    if action in {'requeue', 'requeue-failed', 'requeue-failed-jobs'}:
         job_id = str(payload.get('job_id') or '').strip()
-        if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):
-            raise ValueError('Invalid intelligence job ID')
-        return ['intelligence', 'jobs', 'requeue', job_id, '--actor', 'mission-control', *secopsai_db_args()]
+        if job_id and job_id.lower() not in {'all', 'failed', 'all-failed'}:
+            if not INTELLIGENCE_JOB_ID_RE.fullmatch(job_id):
+                raise ValueError('Invalid intelligence job ID')
+            return ['intelligence', 'jobs', 'requeue', job_id, '--actor', 'mission-control', *secopsai_db_args()]
+        return ['intelligence', 'jobs', 'requeue', '--all', '--actor', 'mission-control', *secopsai_db_args()]
     if action == 'select-model':
         model = str(payload.get('model') or '').strip()
         if not INTELLIGENCE_MODEL_RE.fullmatch(model):

@@ -75,6 +75,10 @@ def test_local_intelligence_actions_are_allowlisted():
     recovery = dashboard_server.build_intelligence_args("recover-transient-jobs", {})
     assert recovery[:4] == ["intelligence", "jobs", "recover", "--limit"]
     assert "--max-attempts" in recovery and "--min-age-seconds" in recovery
+    requeue_all = dashboard_server.build_intelligence_args("requeue-failed-jobs", {})
+    assert requeue_all[:4] == ["intelligence", "jobs", "requeue", "--all"]
+    requeue_single = dashboard_server.build_intelligence_args("requeue", {"job_id": "AIJ-1234567890ABCDEF"})
+    assert requeue_single[:4] == ["intelligence", "jobs", "requeue", "AIJ-1234567890ABCDEF"]
     assert dashboard_server.build_intelligence_args(
         "investigation-retry", {"run_id": "IAR-0123456789ABCDEF"}
     )[:6] == ["intelligence", "autopilot", "investigations", "retry", "--run-id", "IAR-0123456789ABCDEF"]
@@ -337,6 +341,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "investigation-autopilot-runs",
         "investigation-run-due",
         "intelligence-recover-transient-btn",
+        "intelligence-requeue-failed-btn",
+        "intelligence-requeue-failed-jobs-btn",
         "detection-learning-summary",
         "detection-learning-current",
         "detection-learning-adjudication",
@@ -355,6 +361,8 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "intelligencePipelineGroups" in app
     assert "latestIntelligenceJobs" in app
     assert "Recover transient failures" in html
+    assert "Re-run failed jobs" in html
+    assert "requeue-failed-jobs" in app
     assert "research-decision-card" in app
     assert "const artifacts = researchCase.artifacts || [];" in app
     assert "publication_readiness_state" in app

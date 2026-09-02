@@ -5897,7 +5897,7 @@ function renderIntelligence() {
     <div class="metric-card"><div class="metric">${counts.queued || 0}</div><div class="metric-label">Queued</div></div>
     <div class="metric-card"><div class="metric">${counts.awaiting_provider || 0}</div><div class="metric-label">Awaiting provider</div></div>
     <div class="metric-card"><div class="metric">${counts.running || 0}</div><div class="metric-label">Running</div></div>
-    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed history</div></div>
+    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed history</div>${counts.failed ? '<button class="mini-btn" id="intelligence-requeue-failed-metric-btn" type="button" style="margin-top:0.35rem;">Re-run failed</button>' : ''}</div>
     <div class="small" style="grid-column:1/-1;">Counts include durable attempts. Current pipeline rows below are deduplicated; transport failures can be recovered in a bounded pass, while ${parkedProviderJobs ? `${parkedProviderJobs} provider-wait job(s) captured for another model remain parked` : 'jobs captured for another model remain parked'} rather than being silently rerouted.</div>`;
 
   const bridgePill = el('intelligence-bridge-pill');
@@ -6328,11 +6328,15 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
       throw new Error(result.error || `Intelligence action HTTP ${response.status}`);
     }
     state.intelligence.serviceOutput = ['service', 'run-once'].includes(action) ? JSON.stringify(result.result || result, null, 2) : state.intelligence.serviceOutput;
-    showToast(`Intelligence action completed: ${humanizeSnake(action)}`, 'success');
+    const requeueCount = result?.result?.count;
+    const completionMsg = (action === 'requeue-failed-jobs' || (action === 'requeue' && !payload.job_id)) && requeueCount !== undefined
+      ? `Requeued ${requeueCount} failed job${requeueCount === 1 ? '' : 's'}`
+      : `Intelligence action completed: ${humanizeSnake(action)}`;
+    showToast(completionMsg, 'success');
     const intelligenceJobId = String(
       result?.result?.job_id || result?.result?.job?.job_id || result?.job_id || ''
     ).trim();
-    const backgroundAction = ['enqueue', 'autopilot-run-now', 'investigation-run-due', 'recover-transient-jobs'].includes(action);
+    const backgroundAction = ['enqueue', 'autopilot-run-now', 'investigation-run-due', 'recover-transient-jobs', 'requeue-failed-jobs'].includes(action);
     await refreshAfterAction({
       key: `intelligence:${action}:${intelligenceJobId || 'workspace'}`,
       poll: backgroundAction,
@@ -13085,6 +13089,17 @@ function bindEvents() {
   });
   el('intelligence-recover-transient-btn')?.addEventListener('click', event => {
     runIntelligenceAction('recover-transient-jobs', { limit: 10, max_attempts: 3, min_age_seconds: 300 }, event.currentTarget);
+  });
+  ['intelligence-requeue-failed-btn', 'intelligence-requeue-failed-jobs-btn'].forEach(id => {
+    el(id)?.addEventListener('click', event => {
+      runIntelligenceAction('requeue-failed-jobs', {}, event.currentTarget);
+    });
+  });
+  el('intelligence-summary')?.addEventListener('click', event => {
+    const btn = event.target.closest('#intelligence-requeue-failed-metric-btn');
+    if (btn) {
+      runIntelligenceAction('requeue-failed-jobs', {}, btn);
+    }
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);
