@@ -389,16 +389,27 @@ async function handleHostedIntelligence(request, env) {
       daily_automation: null,
       bridge: { status: "remote", queue_mode: "hosted_core", message: "A local Codex bridge processes this hosted queue." },
       service: { status: "managed_on_sensor", manager: "local" },
-      chatgpt_app: {
-        mode: "hosted-mcp",
+      mcp_gateway: {
+        mode: "hosted-streamable-http",
         configured: Boolean(String(env.SECOPSAI_MCP_URL || "").trim()),
         url: String(env.SECOPSAI_MCP_URL || "").trim(),
+        tools: 9,
+        summary: {},
+        sessions: [],
+        revoked_sessions: [],
+        client_profiles: ["ChatGPT", "Codex", "Claude-compatible clients", "Visual Studio Code", "Cursor-compatible clients", "Generic MCP client"],
       },
     };
     const errors = [];
     if (readToken) {
       try {
         result.actions = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/actions", readToken, "Core intelligence actions");
+      } catch (error) {
+        errors.push(sanitizeHelperErrorDetail(error?.message || error));
+      }
+      try {
+        const gateway = await secopsaiCoreRequest(baseUrl, "/api/v1/mcp/sessions?limit=100", readToken, "Core MCP sessions");
+        result.mcp_gateway = { ...result.mcp_gateway, ...gateway };
       } catch (error) {
         errors.push(sanitizeHelperErrorDetail(error?.message || error));
       }
@@ -443,6 +454,7 @@ async function handleHostedIntelligence(request, env) {
       result.ok = false;
       result.error = errors.join(" ");
     }
+    result.chatgpt_app = result.mcp_gateway;
     return jsonResponse(result, { status: errors.length ? 503 : 200 });
   }
   if (request.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed" }, { status: 405 });
@@ -1294,6 +1306,7 @@ async function handleIntegrationStatus(env) {
     intelligence: {
       mode: String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim() ? "hosted-core-queue" : "disabled",
       configured: Boolean(String(env.SECOPSAI_CORE_API_URL || "").trim() && String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim()),
+      mcp_gateway_configured: Boolean(String(env.SECOPSAI_MCP_URL || "").trim()),
       chatgpt_app_configured: Boolean(String(env.SECOPSAI_MCP_URL || "").trim()),
     },
     edge_operations: {

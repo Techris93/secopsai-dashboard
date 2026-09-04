@@ -40,7 +40,7 @@ SECOPSAI_HELPER_AUTH_TOKEN=
 SECOPSAI_CORE_API_URL=
 SECOPSAI_CORE_READ_TOKEN=
 SECOPSAI_CORE_INTELLIGENCE_TOKEN=
-# Optional. Set only after the OAuth-protected MCP service is deployed.
+# Optional. Canonical provider-neutral Streamable HTTP MCP endpoint.
 SECOPSAI_MCP_URL=
 SECOPSAI_EDGE_API_URL=
 SECOPSAI_EDGE_OPERATIONS_TOKEN=

@@ -443,6 +443,22 @@ def test_local_action_credential_is_adjacent_to_service_controls():
     assert 'id="intelligence-token-hint"' in html
 
 
+def test_mcp_integrations_are_provider_neutral_and_auditable():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    server = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
+    assert "MCP integrations" in html
+    assert 'id="automation-mcp-section"' in html
+    assert 'id="intelligence-mcp-sessions"' in html
+    assert "Remote Streamable HTTP + OAuth; optional local stdio" in app
+    assert "Granted scopes" in app
+    assert "session.workspace_id" in app
+    assert "Revoked sessions" in app
+    assert "Provider credentials are never accepted as workspace credentials" in app
+    assert "mcp_gateway" in server
+    assert 'id="automation-chatgpt-section"' not in html
+
+
 def test_intelligence_unauthorized_response_has_scoped_error_code(monkeypatch):
     monkeypatch.setenv("INTELLIGENCE_ADMIN_TOKEN", "expected-action-token")
     handler = SimpleNamespace(

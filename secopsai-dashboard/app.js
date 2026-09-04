@@ -5856,7 +5856,7 @@ function renderIntelligence() {
   const pipelineGroups = intelligencePipelineGroups(jobs);
   const bridge = data?.bridge || {};
   const service = data?.service || {};
-  const mcp = data?.chatgpt_app || {};
+  const mcp = data?.mcp_gateway || data?.chatgpt_app || {};
   const localMode = data?.mode === 'local-helper';
   const autopilot = data?.autopilot || {};
   const autopilotSettings = autopilot.settings || {};
@@ -5967,12 +5967,31 @@ function renderIntelligence() {
   const mcpPill = el('intelligence-mcp-pill');
   if (mcpPill) mcpPill.textContent = mcp.configured ? 'Configured' : 'Setup required';
   const mcpDetail = el('intelligence-mcp-detail');
+  const mcpSummary = mcp.summary && typeof mcp.summary === 'object' ? mcp.summary : {};
+  const mcpProfiles = Array.isArray(mcp.client_profiles) ? mcp.client_profiles : [];
   if (mcpDetail) mcpDetail.innerHTML = `
-    <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">Read-only OAuth MCP</div></div>
+    <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">Remote Streamable HTTP + OAuth; optional local stdio</div></div>
     <div class="kv-row"><div class="kv-key">Endpoint</div><div class="kv-val">${escapeHtml(mcp.url || 'Not configured in this dashboard')}</div></div>
-    <div class="kv-row"><div class="kv-key">Available tools</div><div class="kv-val">9 read-only tools</div></div>
+    <div class="kv-row"><div class="kv-key">Available tools</div><div class="kv-val">${escapeHtml(String(mcp.tools || 9))} read-only tools</div></div>
+    <div class="kv-row"><div class="kv-key">Client profiles</div><div class="kv-val">${escapeHtml(mcpProfiles.join(', ') || 'Provider-neutral MCP clients')}</div></div>
+    <div class="kv-row"><div class="kv-key">Recent clients</div><div class="kv-val">${escapeHtml(String(mcpSummary.recent_clients || 0))}</div></div>
+    <div class="kv-row"><div class="kv-key">Connected sessions</div><div class="kv-val">${escapeHtml(String(mcpSummary.connected_sessions || 0))}<div class="small">Activity within the gateway's ${escapeHtml(String(mcp.active_window_minutes || 15))}-minute window</div></div></div>
+    <div class="kv-row"><div class="kv-key">Revoked sessions</div><div class="kv-val">${escapeHtml(String(mcpSummary.revoked_sessions || 0))}</div></div>
     <div class="kv-row"><div class="kv-key">Write access</div><div class="kv-val">None</div></div>
-    <div class="small" style="margin-top:10px;">ChatGPT authenticates the model session. SecOpsAI OAuth separately authorizes workspace data.</div>`;
+    <div class="small" style="margin-top:10px;">The client authenticates through SecOpsAI OAuth. Provider credentials are never accepted as workspace credentials or forwarded to Core.</div>`;
+  const mcpSessions = el('intelligence-mcp-sessions');
+  const recentSessions = Array.isArray(mcp.sessions) ? mcp.sessions.slice(0, 20) : [];
+  if (mcpSessions) mcpSessions.innerHTML = recentSessions.length ? `
+    <div class="table-wrap"><table><thead><tr><th>Client</th><th>Workspace</th><th>Transport</th><th>Granted scopes</th><th>Last activity</th><th>Status</th></tr></thead><tbody>
+      ${recentSessions.map(session => `<tr>
+        <td><strong>${escapeHtml(session.client_name || session.client_id || 'MCP client')}</strong><div class="small mono">${escapeHtml(session.client_id || '')}</div></td>
+        <td>${escapeHtml(session.workspace_id || 'Not recorded')}</td>
+        <td>${escapeHtml(humanizeSnake(session.transport || 'unknown'))}</td>
+        <td><div class="small">${escapeHtml((Array.isArray(session.scopes) ? session.scopes : []).join(', ') || 'None recorded')}</div></td>
+        <td>${escapeHtml(formatDate(session.last_seen_at))}</td>
+        <td>${statusBadge(session.status === 'revoked' ? 'revoked' : (session.connected ? 'connected' : 'inactive'))}</td>
+      </tr>`).join('')}
+    </tbody></table></div>` : '<p class="empty-state">No MCP client activity has been recorded yet. Configure a client profile, complete OAuth, and call a read-only tool.</p>';
   const copyMcp = el('intelligence-copy-mcp-btn');
   if (copyMcp) copyMcp.disabled = !mcp.url;
 
@@ -13069,8 +13088,8 @@ function bindEvents() {
     await runIntelligenceAction('service', serviceAction === 'install' ? { service_action: serviceAction, model } : { service_action: serviceAction }, event.currentTarget);
   }));
   el('intelligence-copy-mcp-btn')?.addEventListener('click', async () => {
-    const url = state.intelligence.data?.chatgpt_app?.url || '';
-    if (url) await copyTextWithStatus(url, 'ChatGPT app MCP URL copied');
+    const url = state.intelligence.data?.mcp_gateway?.url || state.intelligence.data?.chatgpt_app?.url || '';
+    if (url) await copyTextWithStatus(url, 'SecOpsAI MCP Gateway URL copied');
   });
   el('intelligence-jobs-table')?.addEventListener('click', event => {
     const reviewButton = event.target.closest('[data-intelligence-review]');

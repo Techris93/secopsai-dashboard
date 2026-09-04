@@ -63,6 +63,15 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     if (parsed.pathname === "/api/v1/intelligence/actions") {
       return new Response(JSON.stringify({ schema_version: "secopsai.intelligence.v1", actions: [] }), { status: 200 });
     }
+    if (parsed.pathname === "/api/v1/mcp/sessions") {
+      return new Response(JSON.stringify({
+        schema_version: "secopsai.mcp.gateway.status.v1",
+        active_window_minutes: 15,
+        summary: { recent_clients: 1, connected_sessions: 1, revoked_sessions: 0, tracked_sessions: 1 },
+        sessions: [{ client_id: "chatgpt-client", client_name: "ChatGPT", transport: "streamable-http", scopes: ["secopsai.workspace.read"], last_seen_at: "2026-09-04T10:00:00Z", status: "active", connected: true }],
+        revoked_sessions: [],
+      }), { status: 200 });
+    }
     if (parsed.pathname === "/api/v1/intelligence/jobs" && (init.method || "GET") === "GET") {
       return new Response(JSON.stringify({ jobs: [] }), { status: 200 });
     }
@@ -100,7 +109,9 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     );
     assert.equal(status.status, 200);
     const statusPayload = await jsonFrom(status);
-    assert.equal(statusPayload.chatgpt_app.configured, true);
+    assert.equal(statusPayload.mcp_gateway.configured, true);
+    assert.equal(statusPayload.mcp_gateway.summary.connected_sessions, 1);
+    assert.deepEqual(statusPayload.chatgpt_app, statusPayload.mcp_gateway);
     assert.equal(statusPayload.autopilot.settings.mode, "advisory");
     assert.equal(JSON.stringify(statusPayload).includes("core-read-secret"), false);
     assert.equal(JSON.stringify(statusPayload).includes("core-intelligence-secret"), false);
@@ -115,7 +126,7 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     );
     assert.equal(queued.status, 200);
     assert.equal((await jsonFrom(queued)).result.status, "queued");
-    assert.equal(calls.filter(call => call.authorization === "Bearer core-read-secret").length, 1);
+    assert.equal(calls.filter(call => call.authorization === "Bearer core-read-secret").length, 2);
     assert.equal(calls.filter(call => call.authorization === "Bearer core-intelligence-secret").length, 4);
     assert.equal(calls.some(call => String(call.body).includes("core-intelligence-secret")), false);
 

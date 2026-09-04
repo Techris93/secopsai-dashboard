@@ -337,7 +337,7 @@
             <div>
               <div class="section-kicker">MODEL ASSISTANCE</div>
               <h3 id="intelligence-title">SecOpsAI Intelligence</h3>
-              <p>Use approved read-only actions through a local ChatGPT subscription bridge or the hosted SecOpsAI ChatGPT app.</p>
+              <p>Use approved model assistance through the local OpenCodex bridge or connect compatible assistants through the provider-neutral SecOpsAI MCP Gateway.</p>
             </div>
             <button class="secondary-btn" id="intelligence-refresh-btn" type="button">Refresh status</button>
           </div>
@@ -392,15 +392,16 @@
               <pre class="intelligence-log" id="intelligence-service-output" hidden></pre>
             </section>
 
-            <section class="intelligence-module" id="automation-chatgpt-section" data-automation-view="models" aria-labelledby="chatgpt-app-title">
+            <section class="intelligence-module" id="automation-mcp-section" data-automation-view="models" aria-labelledby="mcp-gateway-title">
               <div class="module-head">
-                <div><h4 id="chatgpt-app-title">ChatGPT app</h4><p>Read authorized SecOpsAI findings, assets, and research from inside ChatGPT.</p></div>
+                <div><h4 id="mcp-gateway-title">MCP integrations</h4><p>Connect ChatGPT, Codex, Claude-compatible clients, VS Code, Cursor-compatible clients, and other MCP hosts to one audited SecOpsAI gateway.</p></div>
                 <span class="status-pill" id="intelligence-mcp-pill">Checking</span>
               </div>
               <div id="intelligence-mcp-detail" class="kv-list"></div>
+              <div id="intelligence-mcp-sessions"></div>
               <div class="intelligence-actions">
                 <button class="secondary-btn" id="intelligence-copy-mcp-btn" type="button">Copy MCP URL</button>
-                <a class="secondary-btn" href="https://docs.secopsai.dev/intelligence-integrations/" target="_blank" rel="noopener">Open setup guide</a>
+                <a class="secondary-btn" href="https://docs.secopsai.dev/mcp-gateway/" target="_blank" rel="noopener">Open setup guide</a>
               </div>
             </section>
           </div>

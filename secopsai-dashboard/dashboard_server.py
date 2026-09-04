@@ -1708,6 +1708,15 @@ def collect_intelligence_status():
     models_payload = bridge_payload.get('models') if isinstance(bridge_payload.get('models'), dict) else None
     models_error = '' if models_payload else 'Model catalog unavailable'
     investigations = parsed.get('investigations') if isinstance(parsed.get('investigations'), dict) else {}
+    gateway = parsed.get('mcp_gateway') if isinstance(parsed.get('mcp_gateway'), dict) else {}
+    gateway = {
+        **gateway,
+        'mode': 'hosted-streamable-http-and-local-stdio',
+        'configured': bool(mcp_url),
+        'url': mcp_url,
+        'tools': 9,
+        'client_profiles': ['ChatGPT', 'Codex', 'Claude-compatible clients', 'Visual Studio Code', 'Cursor-compatible clients', 'Generic MCP client'],
+    }
     return {
         'ok': True,
         'mode': 'local-helper',
@@ -1715,7 +1724,9 @@ def collect_intelligence_status():
         'models': models_payload,
         'models_error': models_error or None,
         'investigations': investigations,
-        'chatgpt_app': {'mode': 'hosted-mcp', 'configured': bool(mcp_url), 'url': mcp_url},
+        'mcp_gateway': gateway,
+        # One-release compatibility alias for older dashboard builds.
+        'chatgpt_app': gateway,
     }
 
 
