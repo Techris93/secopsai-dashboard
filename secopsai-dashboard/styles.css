@@ -8184,6 +8184,54 @@ pre {
   margin-top: 14px;
 }
 
+.intelligence-provider-section {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(74, 78, 85, 0.34);
+  padding-top: 10px;
+}
+
+.intelligence-provider-heading {
+  font-weight: 700;
+}
+
+.intelligence-provider-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  text-align: left;
+}
+
+.intelligence-provider-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(240px, 1.1fr);
+  align-items: start;
+  gap: 12px 20px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.intelligence-provider-model {
+  min-width: 0;
+  color: var(--text);
+  font: 700 0.78rem/1.45 "JetBrains Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.intelligence-provider-health {
+  min-width: 0;
+  color: var(--muted-strong);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.intelligence-provider-health .small {
+  margin-top: 3px;
+}
+
 .intelligence-actions {
   display: flex;
   flex-wrap: wrap;
@@ -8307,8 +8355,9 @@ pre {
 }
 
 @media (max-width: 1120px) {
+  .intelligence-grid,
   .intelligence-request-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -8326,6 +8375,11 @@ pre {
   .intelligence-grid,
   .intelligence-request-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .intelligence-provider-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
   }
 
   .intelligence-actions > *,

@@ -320,6 +320,7 @@ def test_analysis_decision_card_wraps_long_evidence_without_column_overlap():
 def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
+    css = (ROOT / "styles.css").read_text(encoding="utf-8")
     for element in (
         "intelligence-summary",
         "intelligence-action-select",
@@ -378,6 +379,10 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "Busy · lease active" in app
     assert "bridge.active_job_id" in app
     assert "bridge.active_model" in app
+    assert "intelligence-provider-section" in app
+    assert "intelligence-provider-row" in app
+    assert ".intelligence-provider-row" in css
+    assert "grid-template-columns: minmax(220px, 0.9fr) minmax(240px, 1.1fr)" in css
     assert "autopilot-configure" in app
     assert "data-agent-triage-rollback" in app
     assert "Agent finding and alert review" in html

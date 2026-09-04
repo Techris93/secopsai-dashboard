@@ -5922,7 +5922,7 @@ function renderIntelligence() {
     const detail = status === 'ready'
       ? `${item?.http_status ? `HTTP ${item.http_status}; ` : ''}live probe passed${item?.transport_diagnostic ? ` · ${item.transport_diagnostic}` : ''}`
       : (item?.error || 'provider unavailable');
-    return `<div class="kv-row"><div class="kv-key">${escapeHtml(model)}</div><div class="kv-val"><strong>${escapeHtml(humanizeSnake(status))}</strong><div class="small">${escapeHtml(detail)}</div></div></div>`;
+    return `<div class="intelligence-provider-row"><div class="intelligence-provider-model">${escapeHtml(model)}</div><div class="intelligence-provider-health"><strong>${escapeHtml(humanizeSnake(status))}</strong><div class="small">${escapeHtml(detail)}</div></div></div>`;
   }).join('');
   const codex = bridge.codex && typeof bridge.codex === 'object' ? bridge.codex : {};
   const codexStatus = String(codex.status || '').trim();
@@ -5949,7 +5949,7 @@ function renderIntelligence() {
     <div class="kv-row"><div class="kv-key">Background service</div><div class="kv-val">${escapeHtml(humanizeSnake(service.status || 'unknown'))}</div></div>
     <div class="kv-row"><div class="kv-key">Selected model health</div><div class="kv-val">${escapeHtml(selectedHealthLabel)}${healthAge ? `<div class="small">${escapeHtml(healthAge.replace(/^ · /, ''))}</div>` : ''}</div></div>
     ${activeJobDetail}
-    ${providerRows ? `<div class="kv-row"><div class="kv-key">Live providers</div><div class="kv-val"><div class="kv-list">${providerRows}</div></div></div>` : ''}
+    ${providerRows ? `<section class="intelligence-provider-section" aria-label="Live providers"><div class="kv-key intelligence-provider-heading">Live providers</div><div class="intelligence-provider-list">${providerRows}</div></section>` : ''}
     <div class="kv-row"><div class="kv-key">ChatGPT credentials</div><div class="kv-val">Codex-owned; never stored by SecOpsAI</div></div>
     ${bridge.message ? `<div class="small" style="margin-top:10px;">${escapeHtml(bridge.message)}</div>` : ''}`;
 

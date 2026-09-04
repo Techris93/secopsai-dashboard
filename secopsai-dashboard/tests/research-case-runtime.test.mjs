@@ -351,7 +351,12 @@ const busyBridgeFixture = {
     active_model: 'xai/grok-4.6',
     active_job_id: 'AIJ-BUSYFIXTURE',
     active_job_action: 'review_specialist_work',
-    providers: {},
+    providers: {
+      'google-antigravity/gemini-3.8-flash-medium': {
+        status: 'ready',
+        http_status: 200,
+      },
+    },
     codex: { status: 'ready' },
   },
   service: { status: 'running' },
@@ -363,5 +368,9 @@ vm.runInContext('state.intelligence.data = busyBridgeFixture; renderIntelligence
 assert.equal(runtime.elements.get('intelligence-bridge-pill').textContent, 'Busy · lease active');
 assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /AIJ-BUSYFIXTURE/);
 assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /heartbeat lease is current/);
+assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /intelligence-provider-section/);
+assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /google-antigravity\/gemini-3\.8-flash-medium/);
+assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /HTTP 200; live probe passed/);
+assert.doesNotMatch(runtime.elements.get('intelligence-bridge-detail').innerHTML, /intelligence-provider-list"><div class="kv-row"/);
 
 console.log('research case and detection learning runtime rendering checks passed');
