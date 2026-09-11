@@ -379,6 +379,12 @@ async function handleHostedIntelligence(request, env) {
   if (!rawUrl) return jsonResponse({ ok: false, mode: "hosted-core", error: "SECOPSAI_CORE_API_URL is not configured" }, { status: 501 });
   const baseUrl = serviceBaseUrl(rawUrl, "SECOPSAI_CORE_API_URL");
   if (request.method === "GET") {
+    const jobDetailMatch = new URL(request.url).pathname.match(/^\/api\/secopsai\/intelligence\/jobs\/([^/]+)$/);
+    if (jobDetailMatch) {
+      if (!intelligenceToken) return jsonResponse({ ok: false, error: "SECOPSAI_CORE_INTELLIGENCE_TOKEN is not configured" }, { status: 501 });
+      const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/intelligence/jobs/${encodeURIComponent(jobDetailMatch[1])}`, intelligenceToken, "Core intelligence job");
+      return jsonResponse({ ok: true, mode: "hosted-core", job: payload.job || null });
+    }
     const result = {
       ok: true,
       mode: "hosted-core",
@@ -1552,7 +1558,7 @@ async function routeRequest(request, env) {
         ].some(value => String(value || "").trim()));
         if (directHostedMode) return handleHostedCoreEdgeWorkspace(env);
       }
-      if (url.pathname === "/api/secopsai/intelligence") {
+      if (url.pathname === "/api/secopsai/intelligence" || /^\/api\/secopsai\/intelligence\/jobs\/[^/]+$/.test(url.pathname)) {
         return handleHostedIntelligence(request, env);
       }
       if (request.method === "GET" && url.pathname === "/api/secopsai/enterprise-status") {

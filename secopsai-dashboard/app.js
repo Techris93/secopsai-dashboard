@@ -6355,11 +6355,20 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
     const intelligenceJobId = String(
       result?.result?.job_id || result?.result?.job?.job_id || result?.job_id || ''
     ).trim();
-    const backgroundAction = ['enqueue', 'autopilot-run-now', 'investigation-run-due', 'recover-transient-jobs', 'requeue-failed-jobs'].includes(action);
+    const coordinatorCommandId = String(result?.result?.command_id || result?.result?.command?.command_id || '').trim();
+    const backgroundAction = ['enqueue', 'autopilot-run-now', 'daily-run', 'investigation-run-due', 'recover-transient-jobs', 'requeue-failed-jobs'].includes(action);
     await refreshAfterAction({
-      key: `intelligence:${action}:${intelligenceJobId || 'workspace'}`,
+      key: `intelligence:${action}:${intelligenceJobId || coordinatorCommandId || 'workspace'}`,
       poll: backgroundAction,
       isComplete: () => {
+        if (coordinatorCommandId) {
+          const commandRows = [
+            ...(state.intelligence.data?.daily_automation?.commands || []),
+            ...(state.intelligence.data?.autopilot?.commands || [])
+          ];
+          const command = commandRows.find(item => String(item.command_id || '') === coordinatorCommandId);
+          return Boolean(command && !['queued', 'running'].includes(String(command.status || '').toLowerCase()));
+        }
         if (!intelligenceJobId) return false;
         const jobRows = state.intelligence.data?.jobs?.jobs || [];
         const job = jobRows.find(item => String(item.job_id || '') === intelligenceJobId);
