@@ -167,6 +167,7 @@ function buildBrowserConfig(env) {
     researchWatchlistEndpoint: "/api/secopsai/research-watchlist",
     researchDiscoveryEndpoint: "/api/secopsai/research-discovery",
     intelligenceEndpoint: "/api/secopsai/intelligence",
+    ontologyEndpoint: "/api/secopsai/ontology",
     edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     auth: {
@@ -536,6 +537,29 @@ async function handleHostedIntelligence(request, env) {
     return jsonResponse({ ok: true, action, result: payload.proposal });
   }
   return jsonResponse({ ok: false, error: "Unsupported hosted intelligence action. Bridge service controls run on the local sensor." }, { status: 400 });
+}
+
+async function handleHostedOntology(request, env) {
+  if (request.method !== "GET") return jsonResponse({ ok: false, error: "Ontology hosted surface is read-only" }, { status: 405 });
+  const rawUrl = String(env.SECOPSAI_CORE_API_URL || "").trim();
+  const readToken = String(env.SECOPSAI_CORE_READ_TOKEN || "").trim();
+  const intelligenceToken = String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim();
+  if (!rawUrl) return jsonResponse({ ok: false, mode: "hosted-core", error: "SECOPSAI_CORE_API_URL is not configured" }, { status: 501 });
+  const incoming = new URL(request.url);
+  const suffix = incoming.pathname.replace(/^\/api\/secopsai\/ontology/, "") || "/search";
+  if (!/^\/(?:search|quality|entities\/[A-Za-z0-9@:%._~+%-]+(?:\/(?:neighbors|timeline|lineage|risk))?)$/.test(suffix)) {
+    return jsonResponse({ ok: false, error: "Unsupported ontology route" }, { status: 404 });
+  }
+  const requiresIntelligence = suffix.endsWith("/risk");
+  const token = requiresIntelligence ? intelligenceToken : readToken;
+  if (!token) return jsonResponse({ ok: false, mode: "hosted-core", error: `${requiresIntelligence ? "SECOPSAI_CORE_INTELLIGENCE_TOKEN" : "SECOPSAI_CORE_READ_TOKEN"} is not configured` }, { status: 501 });
+  try {
+    const baseUrl = serviceBaseUrl(rawUrl, "SECOPSAI_CORE_API_URL");
+    const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/ontology${suffix}${incoming.search}`, token, "Core ontology");
+    return jsonResponse({ ok: true, mode: "hosted-core", ...payload });
+  } catch (error) {
+    return jsonResponse({ ok: false, mode: "hosted-core", error: sanitizeHelperErrorDetail(error?.message || error) }, { status: 503 });
+  }
 }
 
 async function handleHostedEnterprise(request, env) {
@@ -1560,6 +1584,9 @@ async function routeRequest(request, env) {
       }
       if (url.pathname === "/api/secopsai/intelligence" || /^\/api\/secopsai\/intelligence\/jobs\/[^/]+$/.test(url.pathname)) {
         return handleHostedIntelligence(request, env);
+      }
+      if (url.pathname === "/api/secopsai/ontology" || url.pathname.startsWith("/api/secopsai/ontology/")) {
+        return handleHostedOntology(request, env);
       }
       if (request.method === "GET" && url.pathname === "/api/secopsai/enterprise-status") {
         const directHostedMode = Boolean(String(env.SECOPSAI_CORE_API_URL || "").trim());

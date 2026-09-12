@@ -1,0 +1,27 @@
+# Never publish local state, credentials, logs, or development tooling.
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+*.log
+.pytest_cache/
+.playwright-cli/
+.wrangler/
+node_modules/
+__pycache__/
+tests/
+output/
+
+# The hosted dashboard does not execute the local helper or its scripts.
+dashboard_server.py
+generate-config.py
+serve-dashboard.sh
+start-local-dashboard-stack.sh
+secopsai-dashboard-seed.sql
+package.json
+package-lock.json
+README.md
+CLOUDFLARE_PAGES.md
+CONTROL_PANEL_MODE.md
+docs/
+scripts/

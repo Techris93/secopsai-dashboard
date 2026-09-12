@@ -40,6 +40,8 @@ SECOPSAI_HELPER_AUTH_TOKEN=
 SECOPSAI_CORE_API_URL=
 SECOPSAI_CORE_READ_TOKEN=
 SECOPSAI_CORE_INTELLIGENCE_TOKEN=
+# Used only by the local Python runner; Pages itself needs read/intelligence
+# tokens above and proxies the read-only /api/secopsai/ontology surface.
 # Optional. Canonical provider-neutral Streamable HTTP MCP endpoint.
 SECOPSAI_MCP_URL=
 SECOPSAI_EDGE_API_URL=

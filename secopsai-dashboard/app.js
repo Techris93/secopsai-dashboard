@@ -169,6 +169,23 @@ const state = {
     loading: false,
     error: null
   },
+  ontology: {
+    query: '',
+    entityType: '',
+    results: [],
+    selectedId: null,
+    detail: null,
+    neighbors: null,
+    timeline: null,
+    lineage: null,
+    risk: null,
+    quality: null,
+    loading: false,
+    error: null,
+    riskError: null,
+    degraded: false,
+    mode: ''
+  },
   coverage: {
     collectors: [],
     events: [],
@@ -315,9 +332,10 @@ const promptModalState = {
 };
 const dragState = { taskId: null };
 let workView = 'table';
-const pages = ["mission-control", "tasks", "findings", "edge", "automation", "integrations", "enterprise", "triage-ops", "research-cases", "coverage", "blog-ops", "operator-guide"];
+const pages = ["mission-control", "ontology", "tasks", "findings", "edge", "automation", "integrations", "enterprise", "triage-ops", "research-cases", "coverage", "blog-ops", "operator-guide"];
 const PAGE_ROUTES = Object.freeze({
   "mission-control": "overview",
+  "ontology": "ontology",
   "tasks": "work",
   "findings": "findings",
   "edge": "assets",
@@ -379,6 +397,7 @@ const ROUTE_PAGES = Object.freeze({
 });
 const TOP_NAV_PAGE = Object.freeze({
   "mission-control": "mission-control",
+  "ontology": "ontology",
   "tasks": "tasks",
   "findings": "findings",
   "edge": "edge",
@@ -399,6 +418,7 @@ function primaryPageFor(pageId) {
 }
 const PAGE_CONTEXT = {
   "mission-control": "Overview · operational priorities",
+  "ontology": "Operating picture · connected security context",
   "tasks": "Work · ownership, approvals, and runs",
   "findings": "Findings · security issues and triage",
   "edge": "Assets · inventory, sensors, and changes",
@@ -413,6 +433,14 @@ const PAGE_CONTEXT = {
 };
 
 const OPERATOR_GUIDANCE = Object.freeze({
+  ontology: {
+    title: 'Start with one canonical object and follow its evidence-backed relationships.',
+    detail: 'Use freshness, provenance, ownership, and contradictions to decide whether the connected picture is complete enough to act.',
+    automation: 'normalize identities, traverse bounded relationships, calculate deterministic risk, and surface missing context',
+    approval: 'confirm ownership, scope, and any consequential remediation before execution',
+    action: 'Open entity search',
+    target: 'ontology-search-section'
+  },
   findings: {
     title: 'Review the highest-priority finding that still needs a decision.',
     detail: 'Separate detection priority, confidence, maliciousness, and local exposure before choosing an action.',
@@ -616,6 +644,7 @@ const OPERATOR_GUIDANCE = Object.freeze({
 });
 const CONTEXT_NAV = Object.freeze({
   "mission-control": [],
+  "ontology": [],
   "findings": [
     ["All findings", "findings", PAGE_ROUTES.findings],
     ["Supply chain", "triage-ops", PAGE_ROUTES['triage-ops']]
@@ -676,6 +705,7 @@ const CONTEXT_NAV = Object.freeze({
 // Secondary navigation must make the destination visible immediately. These
 // targets are deliberately tied to rendered panel IDs, not hidden routes.
 const CONTEXT_SCROLL_TARGETS = Object.freeze({
+  'ontology': 'ontology-search-section',
   'findings/supply-chain': 'page-triage-ops',
   'assets/inventory': 'edge-assets',
   'assets/changes': 'edge-change-timeline',
@@ -719,6 +749,14 @@ const PAGE_SUBSECTION_DEFS = Object.freeze({
     ['Summary', 'mission-stats'],
     ['Operational view', 'mission-overview'],
     ['Research queues', 'mission-queues-section']
+  ],
+  ontology: [
+    ['Search', 'ontology-search-section'],
+    ['Selected entity', 'ontology-entity-section'],
+    ['Relationships', 'ontology-neighbors-section'],
+    ['Timeline', 'ontology-timeline-section'],
+    ['Risk context', 'ontology-risk-section'],
+    ['Data quality', 'ontology-quality-section']
   ],
   tasks: [
     ['Filters', 'work-filters'],
@@ -798,6 +836,7 @@ const PAGE_SUBSECTION_DEFS = Object.freeze({
 // one place: Findings owns Supply Chain, Research owns Coverage and Cases,
 // System owns Health/Integrations/Credentials/Audit, and so on.
 const PAGE_ROUTE_SUBSECTION_DEFS = Object.freeze({
+  ontology: [],
   findings: [
     ['All findings', PAGE_ROUTES.findings],
     ['Supply chain', PAGE_ROUTES['triage-ops']]
@@ -1005,6 +1044,7 @@ function scrollPrimaryPageToTop() {
 }
 const COMMANDS = Object.freeze([
   ["Open Overview", "See priorities, changes, and system health", "mission-control"],
+  ["Open Operating Picture", "Search connected packages, findings, assets, cases, and evidence", "ontology"],
   ["Review Findings", "Triage canonical security issues", "findings"],
   ["Review Supply Chain", "Inspect package and dependency alerts", "triage-ops"],
   ["Open Assets", "Inspect network inventory and Edge sensors", "edge"],
@@ -2035,6 +2075,7 @@ function renderContextNav(pageId, routeOverride = null) {
 function helpCopyForPage(pageId) {
   const copies = {
     'mission-control': ['Overview', 'Start here. Review the items that need attention, then follow each record into Findings, Work, Assets, or Research.'],
+    ontology: ['Operating picture', 'Search any package, finding, asset, case, evidence reference, or run, then follow bounded relationships, lineage, freshness, and deterministic risk context.'],
     findings: ['Findings', 'A finding is a canonical security issue. Read its evidence and history before assigning work, changing status, or creating a research case.'],
     edge: ['Assets', 'Assets show what the local sensor has observed. Use Changes to answer what is new, missing, or exposed, then link back to the related finding.'],
     tasks: ['Work', 'Work is where humans own remediation, approvals, and investigation outcomes. The dashboard records state; local runtimes perform execution.'],
@@ -2231,6 +2272,12 @@ function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTa
     renderCoverage();
     if (state.auth.activeUserId) {
       loadCoverage({ render: false }).then(() => renderCoverage()).catch(error => console.warn('coverage navigation refresh failed', error));
+    }
+  }
+  if (normalizedPageId === 'ontology') {
+    renderOntology();
+    if (state.auth.activeUserId && !state.ontology.loading) {
+      loadOntologySearch({ render: false }).then(() => renderOntology()).catch(error => console.warn('ontology navigation refresh failed', error));
     }
   }
   renderSidebarSubnav(normalizedPageId, activeRoute);
@@ -3393,6 +3440,246 @@ function sessionProgressLabel(session) {
   const total = Number(session?.plan_total ?? (plan.length || 0));
   if (!total) return 'No plan';
   return `${completed}/${total} steps`;
+}
+
+function ontologyEndpoint(path = '') {
+  const base = String(cfg.ontologyEndpoint || '/api/secopsai/ontology').replace(/\/$/, '');
+  return `${base}${path || ''}`;
+}
+
+function ontologyPayloadEntities(payload) {
+  if (Array.isArray(payload?.entities)) return payload.entities;
+  if (Array.isArray(payload?.result?.entities)) return payload.result.entities;
+  return [];
+}
+
+function ontologyPayloadQuality(payload) {
+  return payload?.quality || payload?.result?.quality || null;
+}
+
+function ontologyErrorMessage(payload, response, fallback = 'Operating picture request failed') {
+  return String(payload?.error || payload?.detail || fallback + (response ? ` (HTTP ${response.status})` : '')).slice(0, 500);
+}
+
+async function fetchOntology(path) {
+  const response = await dashboardApiFetch(ontologyEndpoint(path), { cache: 'no-store' });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) throw new Error(ontologyErrorMessage(payload, response));
+  return payload;
+}
+
+function ontologyFreshness(entity) {
+  const value = entity?.freshness_at || entity?.last_seen_at || entity?.updated_at;
+  if (!value) return { label: 'Freshness unknown', stale: true };
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return { label: 'Freshness unknown', stale: true };
+  const ageHours = Math.max(0, (Date.now() - parsed.getTime()) / 3600000);
+  const stale = ageHours > 24 * 7;
+  const label = ageHours < 1 ? 'Observed within the last hour' : ageHours < 24 ? `${Math.round(ageHours)}h old` : `${Math.round(ageHours / 24)}d old`;
+  return { label: stale ? `${label} · stale` : label, stale };
+}
+
+function ontologyJsonSummary(value, max = 700) {
+  if (value === undefined || value === null || value === '') return '—';
+  let text;
+  try { text = typeof value === 'string' ? value : JSON.stringify(value); } catch { text = String(value); }
+  return compactText(text, max);
+}
+
+function ontologyEntityLabel(entity) {
+  return entity?.display_name || entity?.canonical_key || entity?.entity_id || 'Unknown entity';
+}
+
+function ontologyModeLabel() {
+  if (state.ontology.degraded) return 'Degraded · last known data';
+  const mode = String(state.ontology.mode || '').toLowerCase();
+  if (mode.includes('hosted')) return 'Hosted Core';
+  if (mode.includes('local')) return 'Local helper';
+  return 'Operating picture';
+}
+
+function ontologyResultCard(entity) {
+  const freshness = ontologyFreshness(entity);
+  return `<button class="ontology-result" type="button" role="listitem" data-ontology-entity="${escapeHtml(entity.entity_id || '')}">
+    <span class="ontology-result-main"><strong>${escapeHtml(ontologyEntityLabel(entity))}</strong><code>${escapeHtml(entity.entity_id || '')}</code></span>
+    <span class="ontology-result-meta"><span>${escapeHtml(humanizeSnake(entity.entity_type || 'unknown'))}</span><span>${escapeHtml(entity.source || 'unknown')}</span><span class="${freshness.stale ? 'text-warning' : ''}">${escapeHtml(freshness.label)}</span></span>
+  </button>`;
+}
+
+function ontologyEntityRows(entity) {
+  if (!entity) return '<div class="empty-state compact">Select an object from search to inspect its connected context.</div>';
+  const freshness = ontologyFreshness(entity);
+  const aliases = Array.isArray(entity.aliases) ? entity.aliases : [];
+  const properties = entity.properties && typeof entity.properties === 'object' ? entity.properties : {};
+  const propertyEntries = Object.entries(properties).slice(0, 12);
+  return `<div class="ontology-entity-summary">
+    <div class="ontology-entity-title"><div><span class="eyebrow">${escapeHtml(humanizeSnake(entity.entity_type || 'entity'))}</span><h4>${escapeHtml(ontologyEntityLabel(entity))}</h4><code>${escapeHtml(entity.entity_id || '')}</code></div>${renderStatusPill(entity.status || 'active')}</div>
+    <div class="grid cols-3 ontology-facts">
+      <div><span class="small">Namespace</span><strong>${escapeHtml(entity.namespace || 'global')}</strong></div>
+      <div><span class="small">Source</span><strong>${escapeHtml(entity.source || 'unknown')}</strong></div>
+      <div><span class="small">Confidence</span><strong>${escapeHtml(String(entity.confidence ?? '—'))}%</strong></div>
+      <div><span class="small">Owner / workspace</span><strong>${escapeHtml(entity.owner_id || 'Unassigned')} · ${escapeHtml(entity.workspace_id || 'local')}</strong></div>
+      <div><span class="small">First seen</span><strong>${escapeHtml(fmtDate(entity.first_seen_at))}</strong></div>
+      <div><span class="small">Freshness</span><strong class="${freshness.stale ? 'text-warning' : ''}">${escapeHtml(freshness.label)}</strong></div>
+    </div>
+    <div class="ontology-subsection"><span class="small">Canonical key</span><code>${escapeHtml(entity.canonical_key || '—')}</code></div>
+    ${aliases.length ? `<div class="ontology-subsection"><span class="small">Known aliases</span><div class="ontology-chip-list">${aliases.slice(0, 20).map(alias => `<span class="chip">${escapeHtml(alias.value || '')}<small>${escapeHtml(alias.source || '')}</small></span>`).join('')}</div></div>` : ''}
+    ${propertyEntries.length ? `<details class="ontology-properties"><summary>Bounded properties (${propertyEntries.length})</summary><dl>${propertyEntries.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(ontologyJsonSummary(value))}</dd></div>`).join('')}</dl></details>` : '<div class="small muted">No descriptive properties were published for this entity.</div>'}
+  </div>`;
+}
+
+function renderOntologyNeighbors() {
+  const host = el('ontology-neighbors');
+  if (!host) return;
+  const payload = state.ontology.neighbors;
+  if (state.ontology.loading && !payload) { host.innerHTML = '<div class="empty-state compact">Loading bounded relationships…</div>'; return; }
+  if (!payload) { host.innerHTML = '<div class="empty-state compact">Relationships appear after you select an entity.</div>'; return; }
+  const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
+  const relationships = Array.isArray(payload.relationships) ? payload.relationships : [];
+  if (!nodes.length && !relationships.length) { host.innerHTML = '<div class="empty-state compact">No linked objects are recorded within the traversal limit.</div>'; return; }
+  const lineage = state.ontology.lineage;
+  const paths = Array.isArray(lineage?.paths) ? lineage.paths : [];
+  host.innerHTML = `<div class="small muted">Depth ${escapeHtml(String(payload.depth || 1))} · ${nodes.length} related object${nodes.length === 1 ? '' : 's'} · ${relationships.length} relationship${relationships.length === 1 ? '' : 's'}</div>
+    <div class="ontology-neighbor-list">${nodes.slice(0, 100).map(node => `<button class="ontology-neighbor" type="button" data-ontology-entity="${escapeHtml(node.entity_id || '')}"><span><strong>${escapeHtml(ontologyEntityLabel(node))}</strong><code>${escapeHtml(node.entity_id || '')}</code></span><span class="small">${escapeHtml(humanizeSnake(node.entity_type || 'unknown'))}</span></button>`).join('')}</div>
+    <div class="ontology-relation-list">${relationships.slice(0, 100).map(relation => `<div class="ontology-relation"><span class="eyebrow">${escapeHtml(humanizeSnake(relation.relationship_type || 'relationship'))}</span><code>${escapeHtml(relation.from_entity_id || '')}</code><span aria-hidden="true">→</span><code>${escapeHtml(relation.to_entity_id || '')}</code><span class="small">${escapeHtml(relation.source || 'unknown')} · ${escapeHtml(String(relation.confidence ?? '—'))}%</span></div>`).join('')}</div>
+    <div class="ontology-lineage"><span class="small">Evidence lineage paths</span>${paths.length ? `<ol>${paths.slice(0, 30).map(path => `<li>${path.map(item => `<code>${escapeHtml(item)}</code>`).join(' <span aria-hidden="true">→</span> ')}</li>`).join('')}</ol>` : '<div class="small muted">No bounded lineage path was returned.</div>'}</div>`;
+}
+
+function renderOntologyTimeline() {
+  const host = el('ontology-timeline');
+  if (!host) return;
+  const payload = state.ontology.timeline;
+  if (state.ontology.loading && !payload) { host.innerHTML = '<div class="empty-state compact">Loading event history…</div>'; return; }
+  if (!payload) { host.innerHTML = '<div class="empty-state compact">Timeline appears after you select an entity.</div>'; return; }
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  if (!events.length) { host.innerHTML = '<div class="empty-state compact">No observed events or relationship changes are recorded yet.</div>'; return; }
+  host.innerHTML = `<div class="ontology-timeline-list">${events.slice(0, 100).map(item => `<article class="ontology-timeline-item"><div class="ontology-timeline-marker" aria-hidden="true"></div><div><div class="ontology-timeline-head"><strong>${escapeHtml(humanizeSnake(item.event_type || 'observed'))}</strong><time>${escapeHtml(fmtDate(item.occurred_at))}</time></div><div class="small">${escapeHtml(item.source || 'unknown')}${item.source_record_id ? ` · ${escapeHtml(item.source_record_id)}` : ''}</div><p>${escapeHtml(ontologyJsonSummary(item.summary || {}, 320))}</p></div></article>`).join('')}</div>`;
+}
+
+function renderOntologyRisk() {
+  const host = el('ontology-risk');
+  if (!host) return;
+  if (state.ontology.riskError) { host.innerHTML = `<div class="empty-state compact"><strong>Risk context unavailable</strong><div class="small">${escapeHtml(state.ontology.riskError)} The selected object remains available for read-only relationship review.</div></div>`; return; }
+  const risk = state.ontology.risk;
+  if (state.ontology.loading && !risk) { host.innerHTML = '<div class="empty-state compact">Calculating deterministic risk context…</div>'; return; }
+  if (!risk) { host.innerHTML = '<div class="empty-state compact">Risk context appears after you select an entity and the intelligence scope is available.</div>'; return; }
+  const score = Number(risk.risk_score ?? risk.severity_score ?? 0);
+  const findings = Array.isArray(risk.findings) ? risk.findings : [];
+  const evidence = Number(risk.evidence_references ?? 0);
+  const factors = risk.risk_factors && typeof risk.risk_factors === 'object' ? risk.risk_factors : {};
+  const contract = risk.action_contract && typeof risk.action_contract === 'object' ? risk.action_contract : {};
+  host.innerHTML = `<div class="ontology-risk-score"><div><span class="small">Deterministic risk score</span><strong>${escapeHtml(String(Math.round(Number.isFinite(score) ? score : 0)))}/100</strong></div>${renderStatusPill(score >= 80 ? 'critical' : score >= 55 ? 'high' : score >= 25 ? 'medium' : 'low', score >= 80 ? 'High attention' : score >= 55 ? 'Review recommended' : 'Context only')}</div>
+    <p>${escapeHtml(risk.explanation || 'Risk is calculated from linked findings, severity, evidence references, freshness, and relationship confidence.')}</p>
+    <div class="grid cols-3 ontology-facts"><div><span class="small">Confidence</span><strong>${escapeHtml(String(risk.confidence ?? '—'))}%</strong></div><div><span class="small">Linked findings</span><strong>${escapeHtml(String(findings.length))}</strong></div><div><span class="small">Evidence references</span><strong>${escapeHtml(String(evidence))}</strong></div></div>
+    <details class="ontology-properties"><summary>Why this score</summary><dl>${Object.entries(factors).map(([key, value]) => `<div><dt>${escapeHtml(humanizeSnake(key))}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join('') || '<div class="small muted">No optional risk factors were published.</div>'}</dl></details>
+    <div class="ontology-action-contract"><span class="small">What should happen next</span><strong>${escapeHtml(risk.recommended_next_step || 'Review evidence and confirm ownership before proposing a bounded action.')}</strong><span class="small">${escapeHtml(contract.reversible === false ? 'This action is not marked reversible.' : 'Proposal only · reversible · operator approval required')}</span></div>
+    ${findings.length ? `<div class="ontology-risk-findings">${findings.slice(0, 20).map(finding => `<div><strong>${escapeHtml(finding.title || finding.finding_id || 'Finding')}</strong><span class="small">${escapeHtml(finding.finding_id || '')} · ${escapeHtml(finding.severity || 'unknown')} · ${escapeHtml(finding.status || 'unknown')}</span></div>`).join('')}</div>` : '<div class="small muted">No linked legacy finding payload was available; this score is based on the selected entity and graph context.</div>'}`;
+}
+
+function renderOntologyQuality() {
+  const host = el('ontology-quality');
+  if (!host) return;
+  const quality = state.ontology.quality;
+  if (state.ontology.loading && !quality) { host.innerHTML = '<div class="empty-state compact">Loading graph quality…</div>'; return; }
+  if (!quality) { host.innerHTML = '<div class="empty-state compact">Quality metrics will appear when the operating-picture store is reachable.</div>'; return; }
+  const metrics = [
+    ['Entities', quality.entities], ['Relationships', quality.relationships], ['Provenance coverage', `${quality.provenance_coverage_percent ?? 0}%`],
+    ['Findings linked', `${quality.findings_linked_percent ?? 0}%`], ['Orphaned entities', quality.orphan_entities ?? 0], ['Orphaned relationships', quality.orphan_relationships ?? 0],
+    ['Stale entities', quality.stale_entities ?? 0], ['Open conflicts', quality.open_conflicts ?? 0], ['Change records', quality.change_history_records ?? 0]
+  ];
+  host.innerHTML = `<div class="grid cols-3 ontology-quality-grid">${metrics.map(([label, value]) => `<div class="metric"><span class="small">${escapeHtml(label)}</span><strong>${escapeHtml(String(value ?? '—'))}</strong></div>`).join('')}</div><p class="small muted">Metrics are bounded summaries. Orphans, stale sources, and contradictions are data-quality work items; they do not imply a clean or unsafe environment by themselves.</p>`;
+}
+
+function renderOntology() {
+  const mode = el('ontology-data-mode');
+  if (mode) mode.innerHTML = `<span class="dot"></span> ${escapeHtml(ontologyModeLabel())}`;
+  const searchSummary = el('ontology-search-summary');
+  const searchState = el('ontology-search-state');
+  const resultHost = el('ontology-search-results');
+  const results = Array.isArray(state.ontology.results) ? state.ontology.results : [];
+  const query = state.ontology.query ? ` for “${state.ontology.query}”` : '';
+  if (searchSummary) searchSummary.textContent = state.ontology.loading ? 'Loading…' : `${results.length} object${results.length === 1 ? '' : 's'}${query}`;
+  if (searchState) searchState.textContent = state.ontology.error ? `Search unavailable: ${state.ontology.error}` : (state.ontology.degraded ? 'The control plane is degraded. Showing only data successfully retrieved in this session.' : 'Results are scoped to the authenticated workspace and contain bounded summaries only.');
+  if (resultHost) resultHost.innerHTML = state.ontology.loading && !results.length ? '<div class="empty-state compact">Searching the connected operating picture…</div>' : results.length ? results.map(ontologyResultCard).join('') : '<div class="empty-state compact">No canonical objects match this search yet.</div>';
+  const searchInput = el('ontology-search-input');
+  if (searchInput && searchInput.value !== state.ontology.query) searchInput.value = state.ontology.query;
+  const typeInput = el('ontology-type-filter');
+  if (typeInput && typeInput.value !== state.ontology.entityType) typeInput.value = state.ontology.entityType;
+  const detailHost = el('ontology-entity-detail');
+  if (detailHost) detailHost.innerHTML = state.ontology.error && !state.ontology.detail ? `<div class="empty-state compact"><strong>Entity detail unavailable</strong><div class="small">${escapeHtml(state.ontology.error)}</div></div>` : ontologyEntityRows(state.ontology.detail);
+  renderOntologyNeighbors();
+  renderOntologyTimeline();
+  renderOntologyRisk();
+  renderOntologyQuality();
+  bindOntologyResultSelection();
+}
+
+async function loadOntologySearch({ render = true, selectFirst = true } = {}) {
+  state.ontology.loading = true;
+  state.ontology.error = null;
+  state.ontology.degraded = false;
+  if (render) renderOntology();
+  try {
+    const params = new URLSearchParams({ q: state.ontology.query || '', limit: '100' });
+    if (state.ontology.entityType) params.set('entity_type', state.ontology.entityType);
+    const payload = await fetchOntology(`/search?${params.toString()}`);
+    state.ontology.mode = payload.mode || state.ontology.mode || 'connected';
+    state.ontology.results = ontologyPayloadEntities(payload);
+    if (selectFirst && state.ontology.results.length && !state.ontology.results.some(item => item.entity_id === state.ontology.selectedId)) {
+      state.ontology.selectedId = state.ontology.results[0].entity_id;
+    }
+    if (state.ontology.selectedId) await loadOntologyEntity(state.ontology.selectedId, { render: false });
+    const qualityPayload = await fetchOntology('/quality');
+    state.ontology.quality = ontologyPayloadQuality(qualityPayload) || qualityPayload;
+    return state.ontology.results;
+  } catch (error) {
+    state.ontology.error = error?.message || String(error);
+    state.ontology.degraded = true;
+    throw error;
+  } finally {
+    state.ontology.loading = false;
+    if (render) renderOntology();
+  }
+}
+
+async function loadOntologyEntity(entityId, { render = true } = {}) {
+  const identifier = String(entityId || '').trim();
+  if (!identifier) return null;
+  state.ontology.selectedId = identifier;
+  state.ontology.loading = true;
+  state.ontology.error = null;
+  state.ontology.riskError = null;
+  if (render) renderOntology();
+  const requests = await Promise.allSettled([
+    fetchOntology(`/entities/${encodeURIComponent(identifier)}`),
+    fetchOntology(`/entities/${encodeURIComponent(identifier)}/neighbors?depth=2&limit=100`),
+    fetchOntology(`/entities/${encodeURIComponent(identifier)}/timeline?limit=100`),
+    fetchOntology(`/entities/${encodeURIComponent(identifier)}/lineage?depth=3&limit=100`),
+    fetchOntology(`/entities/${encodeURIComponent(identifier)}/risk`),
+    fetchOntology('/quality')
+  ]);
+  const [detail, neighbors, timeline, lineage, risk, quality] = requests;
+  if (detail.status === 'fulfilled') { state.ontology.detail = detail.value.entity || detail.value; state.ontology.mode = detail.value.mode || state.ontology.mode || 'connected'; }
+  else state.ontology.error = detail.reason?.message || String(detail.reason);
+  if (neighbors.status === 'fulfilled') state.ontology.neighbors = neighbors.value;
+  if (timeline.status === 'fulfilled') state.ontology.timeline = timeline.value;
+  if (lineage.status === 'fulfilled') state.ontology.lineage = lineage.value;
+  if (risk.status === 'fulfilled') state.ontology.risk = risk.value;
+  else state.ontology.riskError = risk.reason?.message || String(risk.reason);
+  if (quality.status === 'fulfilled') state.ontology.quality = ontologyPayloadQuality(quality.value) || quality.value;
+  if (requests.every(item => item.status === 'rejected')) state.ontology.degraded = true;
+  state.ontology.loading = false;
+  if (render) renderOntology();
+  return state.ontology.detail;
+}
+
+function bindOntologyResultSelection() {
+  document.querySelectorAll('[data-ontology-entity]').forEach(button => {
+    button.addEventListener('click', async event => {
+      const id = event.currentTarget.dataset.ontologyEntity || '';
+      await loadOntologyEntity(id).catch(error => console.warn('ontology entity load failed', error));
+    });
+  });
 }
 
 function renderMissionControl() {
@@ -8900,6 +9187,7 @@ function renderTriageOps() {
 
 function renderAll() {
   renderMissionControl();
+  renderOntology();
   renderTasks();
   renderFindings();
   renderEdgeWorkspace();
@@ -12560,6 +12848,9 @@ async function refreshActiveSurface({ force = false } = {}) {
     } else if (page === 'blog-ops') {
       await loadBlogOpsStatus({ render: false });
       renderBlogOps();
+    } else if (page === 'ontology') {
+      await loadOntologySearch({ render: false });
+      renderOntology();
     }
     state.lastSurfaceRefreshAt = Date.now();
     return true;
@@ -12699,6 +12990,12 @@ async function boot() {
     console.warn('loadCampaignFixtures failed during boot', err);
   }
 
+  try {
+    await loadOntologySearch({ render: false });
+  } catch (err) {
+    console.warn('loadOntologySearch failed during boot', err);
+  }
+
   renderAll();
   loadIntelligence().catch(err => console.warn('deferred intelligence status failed', err));
   startNativeEventStream();
@@ -12731,6 +13028,27 @@ function bindEvents() {
   el('top-search-btn')?.addEventListener('click', openCommandPalette);
   el('top-help-btn')?.addEventListener('click', () => openHelpDrawer(currentPageFromLocation()));
   el('top-health-btn')?.addEventListener('click', () => setPage('integrations', { routeOverride: SYSTEM_VIEW_ROUTES.health }));
+  el('ontology-search-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    state.ontology.query = el('ontology-search-input')?.value?.trim() || '';
+    state.ontology.entityType = el('ontology-type-filter')?.value || '';
+    await runRefreshAction('ontology-search-btn', () => loadOntologySearch(), {
+      busyLabel: 'Searching…',
+      successMessage: 'Operating picture refreshed',
+      errorMessage: 'Operating picture search failed'
+    });
+  });
+  el('ontology-type-filter')?.addEventListener('change', async event => {
+    state.ontology.entityType = event.currentTarget.value || '';
+    await loadOntologySearch().catch(error => console.warn('ontology type filter failed', error));
+  });
+  el('ontology-refresh-btn')?.addEventListener('click', async event => {
+    await runRefreshAction(event.currentTarget, () => loadOntologySearch(), {
+      busyLabel: 'Refreshing…',
+      successMessage: 'Operating picture refreshed',
+      errorMessage: 'Operating picture refresh failed'
+    });
+  });
   el('workspace-switcher')?.addEventListener('click', () => showToast('This pilot uses one authenticated SecOpsAI workspace. Customer/site switching is available when multi-tenant workspaces are enabled.', 'info'));
   el('enterprise-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadEnterpriseStatus(), { successMessage: 'Enterprise status refreshed' }));
   document.querySelectorAll('[data-enterprise-tab]').forEach(button => button.addEventListener('click', () => selectEnterpriseTab(button.dataset.enterpriseTab)));

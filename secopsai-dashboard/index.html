@@ -83,6 +83,10 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Z"></path><path d="M14 20h6V4h-6v16Z"></path><path d="M4 20h6v-3H4v3Z"></path></svg></span>
           <span class="nav-copy"><span class="title">Overview</span><span class="desc">What needs attention now</span></span>
         </button>
+        <button class="nav-btn" data-page="ontology" data-route="ontology">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.5"></circle><circle cx="19" cy="6" r="2.5"></circle><circle cx="19" cy="18" r="2.5"></circle><path d="M7.3 11 16.7 7"></path><path d="M7.3 13 16.7 17"></path></svg></span>
+          <span class="nav-copy"><span class="title">Operating picture</span><span class="desc">Connected entities and evidence</span></span>
+        </button>
         <button class="nav-btn" data-page="findings" data-route="findings">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v3"></path><path d="M12 18v3"></path><path d="M3 12h3"></path><path d="M18 12h3"></path><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg></span>
           <span class="nav-copy"><span class="title">Findings</span><span class="desc">Security issues and triage</span></span>
@@ -173,6 +177,104 @@
             <div class="mission-queues" id="mission-research-queues" role="status" aria-live="polite"></div>
           </div>
         </details>
+      </section>
+
+      <section class="page" id="page-ontology">
+        <div class="page-header">
+          <div>
+            <span class="eyebrow">Connected security context</span>
+            <h2>Operating picture</h2>
+            <p>Start with any canonical object, follow its evidence-backed relationships, and see what is known, stale, or missing.</p>
+          </div>
+          <div class="page-actions">
+            <span class="status-pill" id="ontology-data-mode"><span class="dot"></span> Waiting for data</span>
+            <button class="secondary-btn" id="ontology-refresh-btn" type="button">Refresh picture</button>
+          </div>
+        </div>
+
+        <section class="card" id="ontology-search-section" aria-labelledby="ontology-search-title">
+          <div class="module-head compact-header">
+            <div>
+              <span class="eyebrow">Find a canonical object</span>
+              <h3 id="ontology-search-title">Universal entity search</h3>
+              <p>Search packages, versions, advisories, findings, assets, cases, evidence, runs, or owners.</p>
+            </div>
+            <span class="small" id="ontology-search-summary" role="status" aria-live="polite">No search performed.</span>
+          </div>
+          <form class="inline-form" id="ontology-search-form">
+            <label class="sr-only" for="ontology-search-input">Search canonical entities</label>
+            <input id="ontology-search-input" type="search" autocomplete="off" placeholder="Try pkg:pypi:requests or a finding ID" />
+            <label class="sr-only" for="ontology-type-filter">Entity type</label>
+            <select id="ontology-type-filter" aria-label="Filter by entity type">
+              <option value="">All object types</option>
+              <option value="package">Package</option>
+              <option value="package_version">Package version</option>
+              <option value="artifact">Artifact</option>
+              <option value="advisory">Advisory</option>
+              <option value="vulnerability">Vulnerability</option>
+              <option value="repository">Repository</option>
+              <option value="build">Build</option>
+              <option value="deployment">Deployment</option>
+              <option value="asset">Asset</option>
+              <option value="service">Service</option>
+              <option value="finding">Finding</option>
+              <option value="alert">Alert</option>
+              <option value="research_case">Research case</option>
+              <option value="investigation">Investigation</option>
+              <option value="evidence">Evidence</option>
+              <option value="collector">Collector</option>
+              <option value="automation_run">Automation run</option>
+              <option value="intelligence_job">Intelligence job</option>
+              <option value="task">Task</option>
+              <option value="remediation_action">Remediation action</option>
+              <option value="owner">Owner</option>
+              <option value="team">Team</option>
+            </select>
+            <button class="primary-btn" id="ontology-search-btn" type="submit">Search</button>
+          </form>
+          <div class="small muted" id="ontology-search-state" role="status" aria-live="polite"></div>
+          <div class="ontology-result-list" id="ontology-search-results" role="list" aria-live="polite"></div>
+        </section>
+
+        <section class="card" id="ontology-entity-section" aria-labelledby="ontology-entity-title">
+          <div class="module-head compact-header">
+            <div>
+              <span class="eyebrow">What it is</span>
+              <h3 id="ontology-entity-title">Selected entity</h3>
+            </div>
+          </div>
+          <div id="ontology-entity-detail" aria-live="polite"></div>
+        </section>
+
+        <section class="grid cols-2" id="ontology-neighbors-section">
+          <article class="card" aria-labelledby="ontology-neighbors-title">
+            <div class="module-head compact-header">
+              <div><span class="eyebrow">What it connects to</span><h3 id="ontology-neighbors-title">Relationships</h3></div>
+            </div>
+            <div id="ontology-neighbors" aria-live="polite"></div>
+          </article>
+          <article class="card" id="ontology-timeline-section" aria-labelledby="ontology-timeline-title">
+            <div class="module-head compact-header">
+              <div><span class="eyebrow">What changed</span><h3 id="ontology-timeline-title">Timeline</h3></div>
+            </div>
+            <div id="ontology-timeline" aria-live="polite"></div>
+          </article>
+        </section>
+
+        <section class="grid cols-2" id="ontology-risk-section">
+          <article class="card" aria-labelledby="ontology-risk-title">
+            <div class="module-head compact-header">
+              <div><span class="eyebrow">Why it matters</span><h3 id="ontology-risk-title">Risk context</h3></div>
+            </div>
+            <div id="ontology-risk" aria-live="polite"></div>
+          </article>
+          <article class="card" id="ontology-quality-section" aria-labelledby="ontology-quality-title">
+            <div class="module-head compact-header">
+              <div><span class="eyebrow">What is missing</span><h3 id="ontology-quality-title">Data quality</h3></div>
+            </div>
+            <div id="ontology-quality" aria-live="polite"></div>
+          </article>
+        </section>
       </section>
 
       <section class="page" id="page-tasks">

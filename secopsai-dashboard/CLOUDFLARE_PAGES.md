@@ -83,6 +83,14 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `BLOG_OPS_GITHUB_TOKEN`
 - `BLOG_OPS_ADMIN_TOKEN`
 
+The **Operating picture** page uses the same-origin `/api/secopsai/ontology`
+proxy. It reads `GET /api/v1/ontology/search`, entity detail, bounded
+neighbors, timeline, lineage, and quality with the Core read token; deterministic
+risk context is fetched with the separate Core intelligence token. The Pages
+Worker never exposes either token in `config.js`. If Core is unreachable, the
+page shows an explicit degraded state and the local dashboard remains available
+for the complete SQLite history.
+
 Notes:
 
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` are required for the app to load.
