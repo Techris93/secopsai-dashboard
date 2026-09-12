@@ -8,6 +8,7 @@ window.SECOPSAI_CONFIG = {
   researchCasesEndpoint: "/api/secopsai/research-cases",
   researchDiscoveryEndpoint: "/api/secopsai/research-discovery",
   intelligenceEndpoint: "/api/secopsai/intelligence",
+  ontologyEndpoint: "/api/secopsai/ontology",
   edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
   edgeDashboardUrl: "__SECOPSAI_EDGE_DASHBOARD_URL__",
   auth: {

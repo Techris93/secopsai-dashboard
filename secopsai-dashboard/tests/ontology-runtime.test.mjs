@@ -8,7 +8,10 @@ const read = (name) => readFileSync(join(root, name), "utf8");
 const app = read("app.js");
 const worker = read("_worker.js");
 const html = read("index.html");
-const config = read("config.js");
+// config.js is generated from local secrets and intentionally ignored. The
+// template is the source of truth available in CI and must contain the same
+// public route contract.
+const config = read("config.template.js");
 
 assert.match(config, /ontologyEndpoint:\s*["']\/api\/secopsai\/ontology/);
 assert.match(app, /function fetchOntology\(/);
