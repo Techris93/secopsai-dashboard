@@ -198,11 +198,82 @@ async function testR2RunOutputResponsesAreBounded() {
   assert.equal((await jsonFrom(response)).code, "run_output_too_large");
 }
 
+async function testHostedOntologyProxyContract() {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  const env = hostedEnv({
+    SECOPSAI_CORE_API_URL: "https://core.example",
+    SECOPSAI_CORE_READ_TOKEN: "read-token",
+    SECOPSAI_CORE_INTELLIGENCE_TOKEN: "intelligence-token",
+  });
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({
+      schema_version: "secopsai.ontology.v1",
+      entities: [{ entity_id: "pkg:pypi:example", entity_type: "package" }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  try {
+    const search = await workerModule.fetch(
+      operatorRequest("https://dashboard.example/api/secopsai/ontology/search/?q=example&limit=25"),
+      env,
+    );
+    assert.equal(search.status, 200);
+    assert.deepEqual((await jsonFrom(search)).entities[0].entity_id, "pkg:pypi:example");
+    assert.equal(calls[0].url, "https://core.example/api/v1/ontology/search?q=example&limit=25");
+    assert.equal(new Headers(calls[0].init.headers).get("Authorization"), "Bearer read-token");
+
+    calls.length = 0;
+    const detail = await workerModule.fetch(
+      operatorRequest("https://dashboard.example/api/secopsai/ontology/entities/finding:test:F-1!*/"),
+      env,
+    );
+    assert.equal(detail.status, 200);
+    assert.equal(calls[0].url, "https://core.example/api/v1/ontology/entities/finding:test:F-1!*");
+    assert.equal(new Headers(calls[0].init.headers).get("Authorization"), "Bearer read-token");
+
+    calls.length = 0;
+    const risk = await workerModule.fetch(
+      operatorRequest("https://dashboard.example/api/secopsai/ontology/entities/finding:test:F-1/risk/"),
+      env,
+    );
+    assert.equal(risk.status, 200);
+    assert.equal(new Headers(calls[0].init.headers).get("Authorization"), "Bearer intelligence-token");
+
+    globalThis.fetch = async () => new Response(JSON.stringify({ code: "route_not_found", error: "missing route" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+    const unavailable = await workerModule.fetch(
+      operatorRequest("https://dashboard.example/api/secopsai/ontology/search"),
+      env,
+    );
+    assert.equal(unavailable.status, 503);
+    assert.equal((await jsonFrom(unavailable)).code, "core_ontology_route_unavailable");
+
+    // Core's canonical error contract uses `error: "not_found"` (with a
+    // human detail only for some failures), so exercise that exact shape.
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: "not_found", detail: "entity missing" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+    const missing = await workerModule.fetch(
+      operatorRequest("https://dashboard.example/api/secopsai/ontology/entities/finding:test:F-404"),
+      env,
+    );
+    assert.equal(missing.status, 404);
+    assert.equal((await jsonFrom(missing)).code, "ontology_entity_not_found");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 await testStaticAssetsAreAllowlisted();
 await testAnonymousOperatorProfilesAreRejected();
 await testContentPackWritesRequireAndForwardActionToken();
 await testHostedHelperProxyRequiresAnHttpsOriginAndRejectsRedirects();
 await testSuccessfulHelperProxyResponsesAreBounded();
 await testR2RunOutputResponsesAreBounded();
+await testHostedOntologyProxyContract();
 
 console.log("dashboard security worker contract: ok");

@@ -38,7 +38,10 @@ for (const id of ["ontology-search-section", "ontology-entity-section", "ontolog
 }
 assert.match(worker, /async function handleHostedOntology\(/);
 assert.match(worker, /SECOPSAI_CORE_INTELLIGENCE_TOKEN/);
-assert.ok(worker.includes("entities\\/[A-Za-z0-9@:%._~+%-]+"));
+assert.ok(worker.includes("const match = suffix.match"));
+assert.match(worker, /function hostedOntologySuffix\(/);
+assert.match(worker, /core_ontology_route_unavailable/);
+assert.match(worker, /ontology_entity_not_found/);
 assert.match(worker, /url\.pathname\.startsWith\(["']\/api\/secopsai\/ontology\//);
 
 console.log("ontology runtime contract: ok");

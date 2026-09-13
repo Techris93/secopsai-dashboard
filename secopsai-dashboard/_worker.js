@@ -29,6 +29,7 @@ const SENSITIVE_QUERY_KEYS = new Set([
 ]);
 const MAX_OPERATOR_PROFILE_BYTES = 64 * 1024;
 const MAX_SECOPSAI_WORKSPACE_BYTES = 5 * 1024 * 1024;
+const HOSTED_ONTOLOGY_PREFIX = "/api/secopsai/ontology";
 const INTELLIGENCE_ACTIONS = new Set([
   "explain_finding",
   "triage_finding",
@@ -491,8 +492,37 @@ async function secopsaiCoreRequest(baseUrl, path, token, label, { method = "GET"
   }, 15000);
   if (response.status >= 300 && response.status < 400) throw new Error(`${label} refused an upstream redirect`);
   const payload = await boundedJson(response, MAX_SECOPSAI_WORKSPACE_BYTES, label);
-  if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}: ${sanitizeHelperErrorDetail(payload?.detail || payload?.error || "request failed")}`);
+  if (!response.ok) {
+    const error = new Error(`${label} returned HTTP ${response.status}: ${sanitizeHelperErrorDetail(payload?.detail || payload?.error || "request failed")}`);
+    // Preserve the bounded upstream status/code for callers that need to
+    // distinguish an unknown entity from a stale deployment.  The response
+    // body is still sanitized and bounded before it reaches the browser.
+    error.status = response.status;
+    error.code = sanitizeHelperErrorDetail(payload?.code || payload?.error || "", 120);
+    throw error;
+  }
   return payload;
+}
+
+function hostedOntologySuffix(pathname) {
+  let suffix = String(pathname || "").slice(HOSTED_ONTOLOGY_PREFIX.length);
+  suffix = suffix.replace(/\/+$/, "") || "/search";
+  if (suffix === "/search" || suffix === "/quality") return suffix;
+  const match = suffix.match(/^\/entities\/([^/]+)(?:\/(neighbors|timeline|lineage|risk))?$/);
+  if (!match) return null;
+  const encodedEntityId = match[1];
+  if (encodedEntityId.length > 1024) return null;
+  let entityId;
+  try {
+    entityId = decodeURIComponent(encodedEntityId);
+  } catch {
+    return null;
+  }
+  // Core entity IDs are opaque but bounded.  Reject encoded path separators
+  // so a proxy request cannot change the route shape after decoding.
+  if (!entityId || entityId.length > 512 || /[\\/\u0000]/.test(entityId)) return null;
+  const operation = match[2] ? `/${match[2]}` : "";
+  return `/entities/${encodedEntityId}${operation}`;
 }
 
 async function handleHostedIntelligence(request, env) {
@@ -668,8 +698,8 @@ async function handleHostedOntology(request, env) {
   const intelligenceToken = String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim();
   if (!rawUrl) return jsonResponse({ ok: false, mode: "hosted-core", error: "SECOPSAI_CORE_API_URL is not configured" }, { status: 501 });
   const incoming = new URL(request.url);
-  const suffix = incoming.pathname.replace(/^\/api\/secopsai\/ontology/, "") || "/search";
-  if (!/^\/(?:search|quality|entities\/[A-Za-z0-9@:%._~+%-]+(?:\/(?:neighbors|timeline|lineage|risk))?)$/.test(suffix)) {
+  const suffix = hostedOntologySuffix(incoming.pathname);
+  if (!suffix) {
     return jsonResponse({ ok: false, error: "Unsupported ontology route" }, { status: 404 });
   }
   const requiresIntelligence = suffix.endsWith("/risk");
@@ -680,7 +710,21 @@ async function handleHostedOntology(request, env) {
     const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/ontology${suffix}${incoming.search}`, token, "Core ontology");
     return jsonResponse({ ok: true, mode: "hosted-core", ...payload });
   } catch (error) {
-    return jsonResponse({ ok: false, mode: "hosted-core", error: sanitizeHelperErrorDetail(error?.message || error) }, { status: 503 });
+    const upstreamStatus = Number(error?.status || 0);
+    const upstreamCode = String(error?.code || "");
+    if (upstreamStatus === 404 && suffix.startsWith("/entities/") && upstreamCode === "not_found") {
+      return jsonResponse({ ok: false, mode: "hosted-core", code: "ontology_entity_not_found", error: "Ontology entity was not found in the authenticated workspace" }, { status: 404 });
+    }
+    const routeUnavailable = upstreamStatus === 404;
+    return jsonResponse({
+      ok: false,
+      mode: "hosted-core",
+      code: routeUnavailable ? "core_ontology_route_unavailable" : "core_ontology_unavailable",
+      ...(routeUnavailable ? { upstream_status: 404 } : {}),
+      error: routeUnavailable
+        ? "The hosted Core ontology route is unavailable; verify the deployed Core Edge version"
+        : sanitizeHelperErrorDetail(error?.message || error),
+    }, { status: 503 });
   }
 }
 

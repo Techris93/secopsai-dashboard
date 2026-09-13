@@ -110,6 +110,23 @@ Worker never exposes either token in `config.js`. If Core is unreachable, the
 page shows an explicit degraded state and the local dashboard remains available
 for the complete SQLite history.
 
+The proxy accepts the canonical routes with or without a trailing slash and
+preserves the query string and workspace scope. Entity IDs are treated as one
+bounded opaque path segment; encoded path separators are rejected before any
+upstream request. A Core `404` for a missing entity remains an honest `404`,
+while a `404` from a missing/stale Core route is surfaced as `503
+core_ontology_route_unavailable` so the UI reports a degraded control plane
+instead of pretending that the graph is empty. The Pages deployment workflow
+smoke-tests `/api/secopsai/ontology/search` without credentials and requires a
+`401` operator-auth response; a static `404` therefore fails the release.
+
+The production workflow deploys the nested `secopsai-dashboard/` directory.
+The repository-root Worker remains compatible with root-configured Pages
+projects and forwards both `/` and `/secopsai-dashboard/` assets, including
+`url-safety.js`, to that same nested output. If a deployment predates the
+ontology routes, redeploy Core Edge first, then Pages, and verify the smoke
+request and an authenticated search before inviting operators to use the page.
+
 Notes:
 
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` are required for the app to load.

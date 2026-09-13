@@ -32,6 +32,13 @@ Technical views such as Supply Chain Triage, Campaign Research, Blog Ops, and
 SecOpsAI Intelligence live under the operator job they support rather than
 appearing as competing products.
 
+Cloudflare Pages production deploys the nested `secopsai-dashboard/` directory.
+The repository-root Worker remains a compatibility entry point for projects
+that upload the root: it forwards the root and nested shell assets to the same
+output, including `url-safety.js`. The hosted Operating picture uses the
+authenticated same-origin `/api/secopsai/ontology` proxy; its release smoke
+check rejects a static `404` before a deployment is considered healthy.
+
 ## Local Quick Start
 
 The complete helper-backed operator mode runs from the application directory:
