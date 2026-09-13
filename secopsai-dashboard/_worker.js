@@ -8,6 +8,20 @@ const DEFAULT_HOSTED_AI_MAX_COST_USD = 3;
 const DEFAULT_BLOG_OPS_OWNER = "Techris93";
 const DEFAULT_BLOG_OPS_REPO = "secopsai";
 const DEFAULT_BLOG_OPS_WORKFLOW = "blog-ops.yml";
+const HOSTED_HELPER_TIMEOUT_MS = 15000;
+const HOSTED_RUN_OUTPUT_TIMEOUT_MS = 10000;
+const MAX_RUN_OUTPUT_BYTES = 5 * 1024 * 1024;
+const PUBLIC_ASSET_PATHS = new Set([
+  "/",
+  "/index.html",
+  "/app.js",
+  "/url-safety.js",
+  "/styles.css",
+  "/favicon.svg",
+  "/radar-texture.png",
+  "/log-agent-run.html",
+  "/view-run-output.html",
+]);
 const SENSITIVE_QUERY_KEYS = new Set([
   "email", "password", "pass", "passwd", "pwd", "token", "secret",
   "api_key", "apikey", "access_token", "refresh_token", "id_token",
@@ -254,18 +268,119 @@ function serviceBaseUrl(value, label, { requireSupabaseHost = false } = {}) {
   return url;
 }
 
-async function boundedJson(response, maxBytes, label) {
-  const declaredLength = Number(response.headers.get("content-length") || 0);
-  if (declaredLength > maxBytes) throw new Error(`${label} exceeded the response size limit`);
-  const text = await response.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes) {
-    throw new Error(`${label} exceeded the response size limit`);
+function serviceOrigin(value, label) {
+  const url = serviceBaseUrl(value, label);
+  if (url.pathname !== "/") {
+    throw new Error(`${label} must be an HTTPS origin without a path`);
   }
+  return url;
+}
+
+function configuredOriginAllowlist(value, label) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    throw new Error(`${label} is required when the upstream proxy is configured`);
+  }
+  const origins = new Set();
+  for (const entry of raw.split(",")) {
+    const candidate = entry.trim();
+    if (!candidate) continue;
+    const origin = serviceOrigin(candidate, label);
+    origins.add(origin.origin);
+  }
+  if (!origins.size) throw new Error(`${label} must contain at least one HTTPS origin`);
+  return origins;
+}
+
+function serviceOriginFromAllowlist(value, label, allowlistValue, allowlistLabel) {
+  const origin = serviceOrigin(value, label);
+  const allowed = configuredOriginAllowlist(allowlistValue, allowlistLabel);
+  if (!allowed.has(origin.origin)) {
+    throw new Error(`${label} is not present in ${allowlistLabel}`);
+  }
+  return origin;
+}
+
+function isPublicAssetPath(pathname) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(String(pathname || ""));
+  } catch {
+    return false;
+  }
+  if (decoded !== String(pathname || "") || decoded.includes("\\")) return false;
+  if (decoded.split("/").some((part) => part.startsWith(".") || ["log", "logs"].includes(part.toLowerCase()))) return false;
+  if (decoded.endsWith(".log") || decoded.endsWith(".log.gz")) return false;
+  return PUBLIC_ASSET_PATHS.has(decoded);
+}
+
+function staticAssetNotFound() {
+  return new Response("Not Found", {
+    status: 404,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+async function boundedJson(response, maxBytes, label) {
+  const text = await boundedText(response, maxBytes, label);
   try {
     return JSON.parse(text);
   } catch {
     throw new Error(`${label} returned invalid JSON`);
   }
+}
+
+async function boundedText(response, maxBytes, label) {
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+  if (declaredLength > maxBytes) throw new Error(`${label} exceeded the response size limit`);
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+    totalBytes += chunk.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`${label} exceeded the response size limit`);
+    }
+    chunks.push(chunk);
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function boundedR2Text(object, maxBytes, label) {
+  const declaredLength = Number(object?.size || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error(`${label} exceeded the response size limit`);
+  }
+  // R2ObjectBody exposes a ReadableStream. Read it incrementally so an
+  // object with missing or forged size metadata cannot exhaust the Worker
+  // before the bound is enforced.
+  if (object?.body && typeof object.body.getReader === "function") {
+    return boundedText(new Response(object.body), maxBytes, label);
+  }
+  if (typeof object?.arrayBuffer === "function") {
+    const bytes = new Uint8Array(await object.arrayBuffer());
+    if (bytes.byteLength > maxBytes) throw new Error(`${label} exceeded the response size limit`);
+    return new TextDecoder().decode(bytes);
+  }
+  if (typeof object?.text === "function") {
+    const text = await object.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new Error(`${label} exceeded the response size limit`);
+    }
+    return text;
+  }
+  throw new Error(`${label} is unavailable`);
 }
 
 async function timedFetch(fetcher, input, init = {}, timeoutMs = 10000) {
@@ -334,7 +449,14 @@ async function requireDashboardOperator(request, env) {
   }
   try {
     const profile = await boundedJson(response, MAX_OPERATOR_PROFILE_BYTES, "Operator profile");
-    if (!profile || typeof profile !== "object" || !String(profile.id || "").trim()) {
+    const anonymous = profile?.is_anonymous === true
+      || String(profile?.is_anonymous || "").trim().toLowerCase() === "true"
+      || profile?.user_metadata?.is_anonymous === true
+      || String(profile?.user_metadata?.is_anonymous || "").trim().toLowerCase() === "true"
+      || String(profile?.role || "").trim().toLowerCase() === "anon"
+      || String(profile?.aud || "").trim().toLowerCase() === "anon"
+      || String(profile?.app_metadata?.provider || "").trim().toLowerCase() === "anonymous";
+    if (!profile || typeof profile !== "object" || !String(profile.id || "").trim() || anonymous) {
       throw new Error("Operator profile is incomplete");
     }
   } catch {
@@ -806,6 +928,7 @@ function isTriageOpsWriteRoute(request, pathname) {
   if (request.method.toUpperCase() !== "POST") return false;
   if (pathname.startsWith("/api/secopsai/research-cases/")) return true;
   if (pathname === "/api/secopsai/research-discovery") return true;
+  if (pathname === "/api/secopsai/content-packs/generate") return true;
   const action = pathname.split("/").filter(Boolean).pop() || "";
   return ["close", "escalate", "create-blog-draft", "campaign-persist-findings", "campaign-blog-draft", "campaign-watchlist"].includes(action);
 }
@@ -1246,10 +1369,30 @@ function extractDiscordErrorDetail(rawText, httpStatus) {
 }
 
 async function proxyRunOutputFromUpstream(relPath, env) {
-  const baseUrl = String(env.RUN_OUTPUT_BASE_URL || "").trim();
-  if (!baseUrl) return null;
+  const rawBaseUrl = String(env.RUN_OUTPUT_BASE_URL || "").trim();
+  if (!rawBaseUrl) return null;
 
-  const url = new URL(baseUrl);
+  let baseUrl;
+  try {
+    baseUrl = serviceOriginFromAllowlist(
+      rawBaseUrl,
+      "RUN_OUTPUT_BASE_URL",
+      env.RUN_OUTPUT_ALLOWED_ORIGINS,
+      "RUN_OUTPUT_ALLOWED_ORIGINS",
+    );
+  } catch (error) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Run output proxy configuration is invalid. Use an HTTPS origin without a path, credentials, query parameters, or fragments.",
+        code: "run_output_proxy_config_invalid",
+        detail: sanitizeHelperErrorDetail(error?.message || error),
+      },
+      { status: 503 },
+    );
+  }
+
+  const url = new URL(baseUrl.toString());
   url.searchParams.set("path", relPath);
 
   const headers = new Headers();
@@ -1259,8 +1402,32 @@ async function proxyRunOutputFromUpstream(relPath, env) {
     headers.set(authHeader, authToken);
   }
 
-  const resp = await fetch(url.toString(), { headers });
-  const bodyText = await resp.text();
+  let resp;
+  let bodyText;
+  try {
+    resp = await timedFetch((input, init) => fetch(input, init), url.toString(), {
+      method: "GET",
+      headers,
+      redirect: "manual",
+    }, HOSTED_RUN_OUTPUT_TIMEOUT_MS);
+    if (resp.status >= 300 && resp.status < 400) {
+      return jsonResponse(
+        { ok: false, error: "Run output proxy refused an upstream redirect", code: "run_output_proxy_redirect" },
+        { status: 502 },
+      );
+    }
+    bodyText = await boundedText(resp, MAX_RUN_OUTPUT_BYTES, "Run output proxy");
+  } catch (error) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Run output proxy is unreachable or returned an oversized response.",
+        code: "run_output_proxy_unreachable",
+        detail: sanitizeHelperErrorDetail(error?.message || error),
+      },
+      { status: 502 },
+    );
+  }
   const contentType = resp.headers.get("content-type") || "";
 
   if (!resp.ok) {
@@ -1367,8 +1534,8 @@ function helperUpstreamFailureHint(status, detail) {
 }
 
 async function proxySecopsaiHelper(request, env) {
-  const baseUrl = String(env.SECOPSAI_HELPER_BASE_URL || "").trim();
-  if (!baseUrl) {
+  const rawBaseUrl = String(env.SECOPSAI_HELPER_BASE_URL || "").trim();
+  if (!rawBaseUrl) {
     return jsonResponse(
       {
         ok: false,
@@ -1380,10 +1547,34 @@ async function proxySecopsaiHelper(request, env) {
     );
   }
 
+  let baseUrl;
+  try {
+    baseUrl = serviceOriginFromAllowlist(
+      rawBaseUrl,
+      "SECOPSAI_HELPER_BASE_URL",
+      env.SECOPSAI_HELPER_ALLOWED_ORIGINS,
+      "SECOPSAI_HELPER_ALLOWED_ORIGINS",
+    );
+  } catch (error) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "SecOpsAI helper proxy configuration is invalid. Use an HTTPS origin without a path, credentials, query parameters, or fragments.",
+        code: "helper_proxy_config_invalid",
+        detail: sanitizeHelperErrorDetail(error?.message || error),
+      },
+      { status: 503 },
+    );
+  }
+
   const incomingUrl = new URL(request.url);
-  const upstreamUrl = new URL(baseUrl);
-  upstreamUrl.pathname = incomingUrl.pathname;
-  upstreamUrl.search = incomingUrl.search;
+  const upstreamUrl = new URL(`${incomingUrl.pathname}${incomingUrl.search}`, baseUrl);
+  if (upstreamUrl.origin !== baseUrl.origin) {
+    return jsonResponse(
+      { ok: false, error: "SecOpsAI helper proxy refused an origin change", code: "helper_proxy_origin_invalid" },
+      { status: 503 },
+    );
+  }
 
   const headers = new Headers();
   const contentType = request.headers.get("content-type");
@@ -1400,6 +1591,7 @@ async function proxySecopsaiHelper(request, env) {
     || incomingUrl.pathname.startsWith("/api/secopsai/research-cases/")
     || incomingUrl.pathname === "/api/secopsai/research-watchlist"
     || incomingUrl.pathname === "/api/secopsai/research-discovery"
+    || incomingUrl.pathname === "/api/secopsai/content-packs/generate"
   )) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
@@ -1419,7 +1611,10 @@ async function proxySecopsaiHelper(request, env) {
 
   let response;
   try {
-    response = await fetch(upstreamUrl.toString(), init);
+    response = await timedFetch((input, requestInit) => fetch(input, requestInit), upstreamUrl.toString(), {
+      ...init,
+      redirect: "manual",
+    }, HOSTED_HELPER_TIMEOUT_MS);
   } catch (error) {
     return jsonResponse(
       {
@@ -1432,8 +1627,26 @@ async function proxySecopsaiHelper(request, env) {
     );
   }
 
+  if (response.status >= 300 && response.status < 400) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "SecOpsAI helper refused an upstream redirect",
+        code: "helper_proxy_redirect",
+      },
+      { status: 502 },
+    );
+  }
+
   if (!response.ok) {
-    const bodyText = await response.text().catch(() => "");
+    let bodyText = "";
+    try {
+      bodyText = await boundedText(response, MAX_SECOPSAI_WORKSPACE_BYTES, "SecOpsAI helper response");
+    } catch {
+      // Keep the upstream failure generic if its diagnostic body is too large
+      // or cannot be read. The status and local remediation hint are enough.
+      bodyText = "";
+    }
     let upstreamPayload = null;
     try {
       upstreamPayload = bodyText ? JSON.parse(bodyText) : null;
@@ -1454,9 +1667,28 @@ async function proxySecopsaiHelper(request, env) {
     );
   }
 
+  let bodyText;
+  try {
+    // Helper responses are server-controlled, but a successful response can
+    // still be an unbounded stream. Read through the same byte cap used for
+    // workspace and run-output payloads before returning it to the browser.
+    bodyText = await boundedText(response, MAX_SECOPSAI_WORKSPACE_BYTES, "SecOpsAI helper response");
+  } catch (error) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "SecOpsAI helper returned an oversized or unreadable response.",
+        code: "helper_response_too_large",
+        detail: sanitizeHelperErrorDetail(error?.message || error),
+      },
+      { status: 502 },
+    );
+  }
   const responseHeaders = new Headers(response.headers);
+  responseHeaders.delete("Content-Length");
+  responseHeaders.delete("Content-Encoding");
   responseHeaders.set("Cache-Control", "no-store");
-  return new Response(response.body, {
+  return new Response([204, 205, 304].includes(response.status) ? null : bodyText, {
     status: response.status,
     headers: responseHeaders,
   });
@@ -1531,7 +1763,20 @@ async function handleRunOutput(request, env) {
     if (!object) {
       return jsonResponse({ ok: false, error: "File not found" }, { status: 404 });
     }
-    const text = await object.text();
+    let text;
+    try {
+      text = await boundedR2Text(object, MAX_RUN_OUTPUT_BYTES, "Run output");
+    } catch (error) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Run output is unavailable or exceeds the response size limit.",
+          code: "run_output_too_large",
+          detail: sanitizeHelperErrorDetail(error?.message || error),
+        },
+        { status: 502 },
+      );
+    }
     return jsonResponse({
       ok: true,
       text,
@@ -1661,6 +1906,12 @@ async function routeRequest(request, env) {
       );
     }
 
+    // Pages' asset binding can serve any file that is present in the upload.
+    // Keep the public surface allowlisted so an accidentally included dotfile,
+    // log, fixture, or generated state file cannot become downloadable.
+    if (!isPublicAssetPath(url.pathname) || !["GET", "HEAD"].includes(request.method.toUpperCase())) {
+      return staticAssetNotFound();
+    }
     return env.ASSETS.fetch(request);
 }
 

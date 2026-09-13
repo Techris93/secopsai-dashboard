@@ -53,6 +53,12 @@ Open [http://127.0.0.1:45680](http://127.0.0.1:45680) and keep the terminal
 open. The browser never runs arbitrary shell commands. Buttons call typed
 helper routes mapped to fixed SecOpsAI argument arrays.
 
+The local helper is loopback-only by default. Set
+`DASHBOARD_LOCAL_AUTH_TOKEN` in `.env`; every local API request requires that
+bearer token, including loopback requests. The dashboard accepts it as
+`X-SecOpsAI-Local-Token`, while direct callers can use a Bearer authorization
+header. Keep the token out of browser configuration.
+
 ## Operating Modes
 
 | Capability | Local helper | Hosted Cloudflare Pages |

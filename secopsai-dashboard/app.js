@@ -130,7 +130,8 @@ const state = {
     session: null,
     user: null,
     activeUserId: null,
-    recoveryMode: false
+    recoveryMode: false,
+    localToken: sessionStorage.getItem('secopsai_dashboard_local_auth_token') || ''
   },
   runs: [],
   runRequests: [],
@@ -184,7 +185,27 @@ const state = {
     error: null,
     riskError: null,
     degraded: false,
-    mode: ''
+    mode: '',
+    searchLoading: false,
+    entityLoading: false,
+    searchRequestId: 0,
+    entityRequestId: 0,
+    panelStates: {
+      detail: 'idle',
+      neighbors: 'idle',
+      timeline: 'idle',
+      lineage: 'idle',
+      risk: 'idle',
+      quality: 'idle'
+    },
+    panelErrors: {
+      detail: null,
+      neighbors: null,
+      timeline: null,
+      lineage: null,
+      risk: null,
+      quality: null
+    }
   },
   coverage: {
     collectors: [],
@@ -1063,8 +1084,24 @@ function dashboardAuthRequired() {
   return cfg?.auth?.required !== false;
 }
 
+function isAnonymousOperatorSession(session) {
+  const user = session?.user || {};
+  return user.is_anonymous === true
+    || String(user.is_anonymous || '').trim().toLowerCase() === 'true'
+    || user.user_metadata?.is_anonymous === true
+    || String(user.user_metadata?.is_anonymous || '').trim().toLowerCase() === 'true'
+    || String(user.role || '').trim().toLowerCase() === 'anon'
+    || String(user.aud || '').trim().toLowerCase() === 'anon'
+    || String(user.app_metadata?.provider || '').trim().toLowerCase() === 'anonymous';
+}
+
 async function dashboardApiFetch(input, init = {}) {
   const headers = new Headers(init.headers || {});
+  const localToken = String(state.auth?.localToken || '').trim();
+  // Local helper auth is deliberately a separate header.  The Authorization
+  // bearer remains the Supabase operator session for hosted Worker requests;
+  // the Worker does not forward this local-only credential upstream.
+  if (localToken) headers.set('X-SecOpsAI-Local-Token', localToken);
   if (dashboardAuthRequired()) {
     const accessToken = state.auth.session?.access_token || '';
     if (!accessToken) throw new Error('Operator session required');
@@ -1166,8 +1203,8 @@ function stopDashboardRuntime() {
 
 async function enterAuthenticatedDashboard(session) {
   const userId = session?.user?.id || (dashboardAuthRequired() ? null : 'local-auth-disabled');
-  if (dashboardAuthRequired() && !userId) {
-    showAuthSurface({ message: 'Sign in with an invited operator account.' });
+  if (dashboardAuthRequired() && (!userId || isAnonymousOperatorSession(session))) {
+    leaveAuthenticatedDashboard('Sign in with an invited operator account. Anonymous sessions cannot access Mission Control.');
     return;
   }
   state.auth.session = session || null;
@@ -3461,6 +3498,39 @@ function ontologyErrorMessage(payload, response, fallback = 'Operating picture r
   return String(payload?.error || payload?.detail || fallback + (response ? ` (HTTP ${response.status})` : '')).slice(0, 500);
 }
 
+const ONTOLOGY_PANEL_LABELS = Object.freeze({
+  detail: 'Entity detail',
+  neighbors: 'Relationships',
+  timeline: 'Timeline',
+  lineage: 'Evidence lineage',
+  risk: 'Risk context',
+  quality: 'Data quality'
+});
+
+const ONTOLOGY_PANEL_NAMES = Object.freeze(Object.keys(ONTOLOGY_PANEL_LABELS));
+
+function resetOntologyPanels(status = 'idle') {
+  state.ontology.panelStates = Object.fromEntries(ONTOLOGY_PANEL_NAMES.map(name => [name, status]));
+  state.ontology.panelErrors = Object.fromEntries(ONTOLOGY_PANEL_NAMES.map(name => [name, null]));
+  state.ontology.detail = null;
+  state.ontology.neighbors = null;
+  state.ontology.timeline = null;
+  state.ontology.lineage = null;
+  state.ontology.risk = null;
+  state.ontology.quality = null;
+}
+
+function ontologyPanelNotice(panel, loadingMessage, idleMessage) {
+  const panelState = state.ontology.panelStates?.[panel] || 'idle';
+  if (panelState === 'loading') return `<div class="empty-state compact">${escapeHtml(loadingMessage)}</div>`;
+  if (panelState === 'unavailable') {
+    const reason = state.ontology.panelErrors?.[panel] || 'The connected source did not return this panel.';
+    return `<div class="empty-state compact"><strong>${escapeHtml(ONTOLOGY_PANEL_LABELS[panel] || 'Panel')} unavailable</strong><div class="small">${escapeHtml(reason)}</div></div>`;
+  }
+  if (panelState === 'idle') return `<div class="empty-state compact">${escapeHtml(idleMessage)}</div>`;
+  return '';
+}
+
 async function fetchOntology(path) {
   const response = await dashboardApiFetch(ontologyEndpoint(path), { cache: 'no-store' });
   const payload = await response.json().catch(() => ({}));
@@ -3531,26 +3601,33 @@ function ontologyEntityRows(entity) {
 function renderOntologyNeighbors() {
   const host = el('ontology-neighbors');
   if (!host) return;
+  const notice = ontologyPanelNotice('neighbors', 'Loading bounded relationships…', 'Relationships appear after you select an entity.');
+  if (notice) { host.innerHTML = notice; return; }
   const payload = state.ontology.neighbors;
-  if (state.ontology.loading && !payload) { host.innerHTML = '<div class="empty-state compact">Loading bounded relationships…</div>'; return; }
-  if (!payload) { host.innerHTML = '<div class="empty-state compact">Relationships appear after you select an entity.</div>'; return; }
+  if (!payload) { host.innerHTML = '<div class="empty-state compact">Relationships were not returned for the selected entity.</div>'; return; }
   const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const relationships = Array.isArray(payload.relationships) ? payload.relationships : [];
-  if (!nodes.length && !relationships.length) { host.innerHTML = '<div class="empty-state compact">No linked objects are recorded within the traversal limit.</div>'; return; }
+  if (!nodes.length && !relationships.length) {
+    const lineageNotice = ontologyPanelNotice('lineage', 'Loading evidence lineage…', 'Lineage appears after you select an entity.');
+    host.innerHTML = `<div class="empty-state compact">No linked objects are recorded within the traversal limit.</div>${lineageNotice ? `<div class="ontology-lineage">${lineageNotice}</div>` : ''}`;
+    return;
+  }
   const lineage = state.ontology.lineage;
   const paths = Array.isArray(lineage?.paths) ? lineage.paths : [];
+  const lineageNotice = ontologyPanelNotice('lineage', 'Loading evidence lineage…', 'Lineage appears after you select an entity.');
   host.innerHTML = `<div class="small muted">Depth ${escapeHtml(String(payload.depth || 1))} · ${nodes.length} related object${nodes.length === 1 ? '' : 's'} · ${relationships.length} relationship${relationships.length === 1 ? '' : 's'}</div>
     <div class="ontology-neighbor-list">${nodes.slice(0, 100).map(node => `<button class="ontology-neighbor" type="button" data-ontology-entity="${escapeHtml(node.entity_id || '')}"><span><strong>${escapeHtml(ontologyEntityLabel(node))}</strong><code>${escapeHtml(node.entity_id || '')}</code></span><span class="small">${escapeHtml(humanizeSnake(node.entity_type || 'unknown'))}</span></button>`).join('')}</div>
     <div class="ontology-relation-list">${relationships.slice(0, 100).map(relation => `<div class="ontology-relation"><span class="eyebrow">${escapeHtml(humanizeSnake(relation.relationship_type || 'relationship'))}</span><code>${escapeHtml(relation.from_entity_id || '')}</code><span aria-hidden="true">→</span><code>${escapeHtml(relation.to_entity_id || '')}</code><span class="small">${escapeHtml(relation.source || 'unknown')} · ${escapeHtml(String(relation.confidence ?? '—'))}%</span></div>`).join('')}</div>
-    <div class="ontology-lineage"><span class="small">Evidence lineage paths</span>${paths.length ? `<ol>${paths.slice(0, 30).map(path => `<li>${path.map(item => `<code>${escapeHtml(item)}</code>`).join(' <span aria-hidden="true">→</span> ')}</li>`).join('')}</ol>` : '<div class="small muted">No bounded lineage path was returned.</div>'}</div>`;
+    <div class="ontology-lineage"><span class="small">Evidence lineage paths</span>${lineageNotice || (paths.length ? `<ol>${paths.slice(0, 30).map(path => `<li>${path.map(item => `<code>${escapeHtml(item)}</code>`).join(' <span aria-hidden="true">→</span> ')}</li>`).join('')}</ol>` : '<div class="small muted">No bounded lineage path was returned.</div>')}</div>`;
 }
 
 function renderOntologyTimeline() {
   const host = el('ontology-timeline');
   if (!host) return;
+  const notice = ontologyPanelNotice('timeline', 'Loading event history…', 'Timeline appears after you select an entity.');
+  if (notice) { host.innerHTML = notice; return; }
   const payload = state.ontology.timeline;
-  if (state.ontology.loading && !payload) { host.innerHTML = '<div class="empty-state compact">Loading event history…</div>'; return; }
-  if (!payload) { host.innerHTML = '<div class="empty-state compact">Timeline appears after you select an entity.</div>'; return; }
+  if (!payload) { host.innerHTML = '<div class="empty-state compact">Timeline was not returned for the selected entity.</div>'; return; }
   const events = Array.isArray(payload.events) ? payload.events : [];
   if (!events.length) { host.innerHTML = '<div class="empty-state compact">No observed events or relationship changes are recorded yet.</div>'; return; }
   host.innerHTML = `<div class="ontology-timeline-list">${events.slice(0, 100).map(item => `<article class="ontology-timeline-item"><div class="ontology-timeline-marker" aria-hidden="true"></div><div><div class="ontology-timeline-head"><strong>${escapeHtml(humanizeSnake(item.event_type || 'observed'))}</strong><time>${escapeHtml(fmtDate(item.occurred_at))}</time></div><div class="small">${escapeHtml(item.source || 'unknown')}${item.source_record_id ? ` · ${escapeHtml(item.source_record_id)}` : ''}</div><p>${escapeHtml(ontologyJsonSummary(item.summary || {}, 320))}</p></div></article>`).join('')}</div>`;
@@ -3559,10 +3636,10 @@ function renderOntologyTimeline() {
 function renderOntologyRisk() {
   const host = el('ontology-risk');
   if (!host) return;
-  if (state.ontology.riskError) { host.innerHTML = `<div class="empty-state compact"><strong>Risk context unavailable</strong><div class="small">${escapeHtml(state.ontology.riskError)} The selected object remains available for read-only relationship review.</div></div>`; return; }
+  const notice = ontologyPanelNotice('risk', 'Calculating deterministic risk context…', 'Risk context appears after you select an entity and the intelligence scope is available.');
+  if (notice) { host.innerHTML = notice; return; }
   const risk = state.ontology.risk;
-  if (state.ontology.loading && !risk) { host.innerHTML = '<div class="empty-state compact">Calculating deterministic risk context…</div>'; return; }
-  if (!risk) { host.innerHTML = '<div class="empty-state compact">Risk context appears after you select an entity and the intelligence scope is available.</div>'; return; }
+  if (!risk) { host.innerHTML = '<div class="empty-state compact">Risk context was not returned for the selected entity.</div>'; return; }
   const score = Number(risk.risk_score ?? risk.severity_score ?? 0);
   const findings = Array.isArray(risk.findings) ? risk.findings : [];
   const evidence = Number(risk.evidence_references ?? 0);
@@ -3579,12 +3656,14 @@ function renderOntologyRisk() {
 function renderOntologyQuality() {
   const host = el('ontology-quality');
   if (!host) return;
+  const notice = ontologyPanelNotice('quality', 'Loading graph quality…', 'Quality metrics will appear when the operating-picture store is reachable.');
+  if (notice) { host.innerHTML = notice; return; }
   const quality = state.ontology.quality;
-  if (state.ontology.loading && !quality) { host.innerHTML = '<div class="empty-state compact">Loading graph quality…</div>'; return; }
-  if (!quality) { host.innerHTML = '<div class="empty-state compact">Quality metrics will appear when the operating-picture store is reachable.</div>'; return; }
+  if (!quality) { host.innerHTML = '<div class="empty-state compact">Quality metrics were not returned for the selected workspace.</div>'; return; }
+  const qualityPercent = value => value == null ? '—' : `${value}%`;
   const metrics = [
-    ['Entities', quality.entities], ['Relationships', quality.relationships], ['Provenance coverage', `${quality.provenance_coverage_percent ?? 0}%`],
-    ['Findings linked', `${quality.findings_linked_percent ?? 0}%`], ['Orphaned entities', quality.orphan_entities ?? 0], ['Orphaned relationships', quality.orphan_relationships ?? 0],
+    ['Entities', quality.entities], ['Relationships', quality.relationships], ['Provenance coverage', qualityPercent(quality.provenance_coverage_percent)],
+    ['Findings linked', qualityPercent(quality.findings_linked_percent)], ['Orphaned entities', quality.orphan_entities ?? 0], ['Orphaned relationships', quality.orphan_relationships ?? 0],
     ['Stale entities', quality.stale_entities ?? 0], ['Open conflicts', quality.open_conflicts ?? 0], ['Change records', quality.change_history_records ?? 0]
   ];
   host.innerHTML = `<div class="grid cols-3 ontology-quality-grid">${metrics.map(([label, value]) => `<div class="metric"><span class="small">${escapeHtml(label)}</span><strong>${escapeHtml(String(value ?? '—'))}</strong></div>`).join('')}</div><p class="small muted">Metrics are bounded summaries. Orphans, stale sources, and contradictions are data-quality work items; they do not imply a clean or unsafe environment by themselves.</p>`;
@@ -3606,7 +3685,8 @@ function renderOntology() {
   const typeInput = el('ontology-type-filter');
   if (typeInput && typeInput.value !== state.ontology.entityType) typeInput.value = state.ontology.entityType;
   const detailHost = el('ontology-entity-detail');
-  if (detailHost) detailHost.innerHTML = state.ontology.error && !state.ontology.detail ? `<div class="empty-state compact"><strong>Entity detail unavailable</strong><div class="small">${escapeHtml(state.ontology.error)}</div></div>` : ontologyEntityRows(state.ontology.detail);
+  const detailNotice = ontologyPanelNotice('detail', 'Loading entity detail…', 'Select an object from search to inspect its connected context.');
+  if (detailHost) detailHost.innerHTML = detailNotice || (state.ontology.error && !state.ontology.detail ? `<div class="empty-state compact"><strong>Entity detail unavailable</strong><div class="small">${escapeHtml(state.ontology.error)}</div></div>` : ontologyEntityRows(state.ontology.detail));
   renderOntologyNeighbors();
   renderOntologyTimeline();
   renderOntologyRisk();
@@ -3615,40 +3695,91 @@ function renderOntology() {
 }
 
 async function loadOntologySearch({ render = true, selectFirst = true } = {}) {
+  const requestId = ++state.ontology.searchRequestId;
+  const isCurrent = () => requestId === state.ontology.searchRequestId;
+  // A new search supersedes any entity fan-out started for the previous
+  // result set. Capture the selection generation so a click made while this
+  // search is in flight remains authoritative when results arrive.
+  state.ontology.entityRequestId += 1;
+  state.ontology.entityLoading = false;
+  const selectionRequestId = state.ontology.entityRequestId;
+  state.ontology.searchLoading = true;
   state.ontology.loading = true;
   state.ontology.error = null;
   state.ontology.degraded = false;
+  state.ontology.panelStates.quality = 'loading';
+  state.ontology.panelErrors.quality = null;
+  state.ontology.quality = null;
   if (render) renderOntology();
   try {
     const params = new URLSearchParams({ q: state.ontology.query || '', limit: '100' });
     if (state.ontology.entityType) params.set('entity_type', state.ontology.entityType);
     const payload = await fetchOntology(`/search?${params.toString()}`);
+    if (!isCurrent()) return state.ontology.results;
     state.ontology.mode = payload.mode || state.ontology.mode || 'connected';
     state.ontology.results = ontologyPayloadEntities(payload);
-    if (selectFirst && state.ontology.results.length && !state.ontology.results.some(item => item.entity_id === state.ontology.selectedId)) {
-      state.ontology.selectedId = state.ontology.results[0].entity_id;
+    const resultIds = new Set(state.ontology.results.map(item => String(item?.entity_id || '')));
+    const selectionChangedWhileSearching = state.ontology.entityRequestId !== selectionRequestId;
+    if (!selectionChangedWhileSearching && !resultIds.has(String(state.ontology.selectedId || ''))) {
+      const nextId = selectFirst && state.ontology.results.length
+        ? String(state.ontology.results[0].entity_id || '').trim()
+        : '';
+      state.ontology.entityRequestId += 1;
+      state.ontology.entityLoading = false;
+      state.ontology.selectedId = nextId || null;
+      resetOntologyPanels('idle');
+      state.ontology.riskError = null;
+      if (!nextId) state.ontology.panelStates.quality = 'loading';
     }
-    if (state.ontology.selectedId) await loadOntologyEntity(state.ontology.selectedId, { render: false });
+    if (state.ontology.selectedId && isCurrent() && !selectionChangedWhileSearching) {
+      await loadOntologyEntity(state.ontology.selectedId, { render: false });
+    }
+    if (!isCurrent()) return state.ontology.results;
     const qualityPayload = await fetchOntology('/quality');
-    state.ontology.quality = ontologyPayloadQuality(qualityPayload) || qualityPayload;
+    if (!isCurrent()) return state.ontology.results;
+    // When an entity fan-out ran above, its quality result belongs to the
+    // selected entity and is already authoritative. A search response must
+    // never overwrite it after a user selection changed during the request.
+    if (state.ontology.entityRequestId === selectionRequestId) {
+      const qualityValue = ontologyPayloadQuality(qualityPayload) || qualityPayload;
+      state.ontology.quality = qualityValue;
+      state.ontology.panelStates.quality = qualityValue && typeof qualityValue === 'object' ? 'ready' : 'unavailable';
+      state.ontology.panelErrors.quality = qualityValue && typeof qualityValue === 'object' ? null : 'The quality endpoint returned no metrics.';
+    }
     return state.ontology.results;
   } catch (error) {
+    if (!isCurrent()) return state.ontology.results;
     state.ontology.error = error?.message || String(error);
     state.ontology.degraded = true;
+    if (state.ontology.panelStates.quality === 'loading') {
+      state.ontology.panelStates.quality = 'unavailable';
+      state.ontology.panelErrors.quality = 'Quality data could not be loaded while the operating picture was unavailable.';
+    }
     throw error;
   } finally {
-    state.ontology.loading = false;
-    if (render) renderOntology();
+    if (isCurrent()) {
+      state.ontology.searchLoading = false;
+      state.ontology.loading = state.ontology.entityLoading;
+      if (render) renderOntology();
+    }
   }
 }
 
 async function loadOntologyEntity(entityId, { render = true } = {}) {
   const identifier = String(entityId || '').trim();
   if (!identifier) return null;
+  const requestId = ++state.ontology.entityRequestId;
+  const isCurrent = () => requestId === state.ontology.entityRequestId;
   state.ontology.selectedId = identifier;
+  state.ontology.entityLoading = true;
   state.ontology.loading = true;
   state.ontology.error = null;
   state.ontology.riskError = null;
+  state.ontology.degraded = false;
+  // Selection invalidates every panel, including quality. Mark all panels as
+  // loading before the fan-out so stale data cannot remain visible while the
+  // next entity is being resolved.
+  resetOntologyPanels('loading');
   if (render) renderOntology();
   const requests = await Promise.allSettled([
     fetchOntology(`/entities/${encodeURIComponent(identifier)}`),
@@ -3658,17 +3789,43 @@ async function loadOntologyEntity(entityId, { render = true } = {}) {
     fetchOntology(`/entities/${encodeURIComponent(identifier)}/risk`),
     fetchOntology('/quality')
   ]);
+  if (!isCurrent()) return null;
   const [detail, neighbors, timeline, lineage, risk, quality] = requests;
-  if (detail.status === 'fulfilled') { state.ontology.detail = detail.value.entity || detail.value; state.ontology.mode = detail.value.mode || state.ontology.mode || 'connected'; }
-  else state.ontology.error = detail.reason?.message || String(detail.reason);
-  if (neighbors.status === 'fulfilled') state.ontology.neighbors = neighbors.value;
-  if (timeline.status === 'fulfilled') state.ontology.timeline = timeline.value;
-  if (lineage.status === 'fulfilled') state.ontology.lineage = lineage.value;
-  if (risk.status === 'fulfilled') state.ontology.risk = risk.value;
-  else state.ontology.riskError = risk.reason?.message || String(risk.reason);
-  if (quality.status === 'fulfilled') state.ontology.quality = ontologyPayloadQuality(quality.value) || quality.value;
-  if (requests.every(item => item.status === 'rejected')) state.ontology.degraded = true;
-  state.ontology.loading = false;
+  const panelResults = [
+    ['detail', detail],
+    ['neighbors', neighbors],
+    ['timeline', timeline],
+    ['lineage', lineage],
+    ['risk', risk],
+    ['quality', quality]
+  ];
+  for (const [panel, result] of panelResults) {
+    if (result.status === 'fulfilled') {
+      const value = panel === 'detail'
+        ? result.value?.entity || null
+        : panel === 'quality'
+          ? ontologyPayloadQuality(result.value) || result.value
+          : result.value;
+      state.ontology[panel] = value;
+      state.ontology.panelStates[panel] = value && typeof value === 'object' ? 'ready' : 'unavailable';
+      state.ontology.panelErrors[panel] = state.ontology.panelStates[panel] === 'ready'
+        ? null
+        : `The ${ONTOLOGY_PANEL_LABELS[panel].toLowerCase()} endpoint returned no data.`;
+      if (panel === 'detail') state.ontology.mode = result.value?.mode || state.ontology.mode || 'connected';
+    } else {
+      const message = result.reason?.message || String(result.reason);
+      state.ontology.panelStates[panel] = 'unavailable';
+      state.ontology.panelErrors[panel] = message;
+      if (panel === 'detail') state.ontology.error = message;
+      if (panel === 'risk') state.ontology.riskError = message;
+    }
+  }
+  // A partial fan-out is still degraded: callers must see which panel failed
+  // and must not mistake a missing panel for an empty successful response.
+  const panelUnavailable = panelResults.some(([panel, result]) => result.status === 'fulfilled' && state.ontology.panelStates[panel] === 'unavailable');
+  if (requests.some(item => item.status === 'rejected') || panelUnavailable) state.ontology.degraded = true;
+  state.ontology.entityLoading = false;
+  state.ontology.loading = state.ontology.searchLoading;
   if (render) renderOntology();
   return state.ontology.detail;
 }
@@ -5515,6 +5672,7 @@ function renderIntegrations() {
   const credentialsEl = el('system-credentials');
   if (credentialsEl) {
     const sessionReady = Boolean(state.auth?.user?.email || state.auth?.session || state.auth?.activeUserId);
+    const localTokenReady = Boolean(state.auth?.localToken);
     const researchTokenReady = Boolean(state.researchCases?.adminToken || state.triageOps?.adminToken);
     const blogTokenReady = Boolean(state.blogOps?.adminToken);
     credentialsEl.innerHTML = `
@@ -5523,12 +5681,22 @@ function renderIntegrations() {
       </div>
       <div class="credential-status-grid">
         <div class="credential-status-row"><span>Operator session</span>${renderStatusPill(sessionReady ? 'ready' : 'missing', sessionReady ? 'Signed in' : 'Sign in required')}</div>
+        <div class="credential-status-row"><span>Local helper bearer</span>${renderStatusPill(localTokenReady ? 'ready' : 'required', localTokenReady ? 'Ready for local API requests' : 'Required for local API requests')}</div>
         <div class="credential-status-row"><span>Research action token</span>${renderStatusPill(researchTokenReady ? 'ready' : 'required', researchTokenReady ? 'Ready for protected research actions' : 'Required for changes')}</div>
         <div class="credential-status-row"><span>Blog Ops token</span>${renderStatusPill(blogTokenReady ? 'ready' : 'required', blogTokenReady ? 'Ready for publication actions' : 'Required for publishing')}</div>
         <div class="credential-status-row"><span>Intelligence bridge</span>${renderStatusPill(state.integrationStatus?.helper?.secopsai_intelligence_api ? 'ready' : 'unavailable', state.integrationStatus?.helper?.secopsai_intelligence_api ? 'Server-side bridge available' : 'Unavailable')}</div>
         <div class="credential-status-row"><span>Sensor credentials</span>${renderStatusPill('server-managed', 'Stored by Edge/Core services')}</div>
       </div>
+      <div class="research-auth-controls" style="margin-top:14px;">
+        <label class="sr-only" for="dashboard-local-auth-token">Local helper bearer token</label>
+        <input id="dashboard-local-auth-token" type="password" autocomplete="one-time-code" data-1p-ignore="true" data-lpignore="true" placeholder="Paste DASHBOARD_LOCAL_AUTH_TOKEN for local API requests" />
+        <button class="secondary-btn" id="dashboard-local-auth-save-btn" type="button">Use token</button>
+        <button class="mini-btn" id="dashboard-local-auth-clear-btn" type="button">Clear</button>
+      </div>
+      <p class="small" style="margin:10px 0 0;">The local helper requires this token even on loopback. It is kept in this browser session and sent only in the local authentication header.</p>
       <p class="small" style="margin:14px 0 0;">Use the Research, Publications, or Automation workspace to enter a session-scoped credential when a protected action requires it. Rotate credentials in the server or local helper, never in this page.</p>`;
+    const localTokenInput = el('dashboard-local-auth-token');
+    if (localTokenInput && localTokenInput.value !== state.auth.localToken) localTokenInput.value = state.auth.localToken;
   }
   const sessionsTable = el('native-sessions-table');
   if (sessionsTable) {
@@ -9307,29 +9475,6 @@ async function advanceTaskAfterSuccessfulRun(itemId) {
   return true;
 }
 
-async function synchronizeSuccessfulTaskTransitions() {
-  const pendingTaskIds = [...new Set(state.runRequests
-    .map(req => {
-      const run = relatedRunForRequest(req);
-      const lifecycle = runRequestLifecycle(req, run);
-      return lifecycle.displayStatus === 'completed' ? req?.related_work_item_id : null;
-    })
-    .filter(Boolean)
-    .map(id => String(id)))];
-  if (!pendingTaskIds.length) return false;
-  let changed = false;
-  for (const taskId of pendingTaskIds) {
-    try {
-      const updated = await advanceTaskAfterSuccessfulRun(taskId);
-      changed = changed || updated;
-    } catch (e) {
-      console.warn('synchronizeSuccessfulTaskTransitions failed', taskId, e);
-    }
-  }
-  if (changed) refreshTaskViewsOnly();
-  return changed;
-}
-
 function getRunRequestOutputRelativePath(req, run = relatedRunForRequest(req)) {
   const outputPath = firstNonEmpty(req?.output_path, run?.output_path);
   return outputPath ? String(outputPath).replace('/Users/chrixchange/.openclaw/workspace/', '') : '';
@@ -10407,6 +10552,13 @@ async function loadContentPacks() {
   }
 }
 
+function contentPackWriteHeaders() {
+  const token = state.researchCases.adminToken || state.triageOps.adminToken;
+  return token
+    ? { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }
+    : null;
+}
+
 function renderContentPacks(packs) {
   const host = el('research-content-packs-list');
   if (!host) return;
@@ -10456,9 +10608,11 @@ function renderContentPacks(packs) {
         let pack = packs.find(p => p.pack_id === packId);
         let textContent = pack?.content?.[type];
         if (!textContent) {
+          const headers = contentPackWriteHeaders();
+          if (!headers) throw new Error('Use the protected research action token before generating a content pack.');
           const res = await dashboardApiFetch('/api/secopsai/content-packs/generate', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ case_id: caseId })
           });
           const resData = await res.json().catch(() => ({}));
@@ -10508,11 +10662,17 @@ function renderContentPacks(packs) {
 
 async function generateContentPackForCase(caseId, btn) {
   if (!caseId) { setStatus('Enter or select a Case ID first.', true); return; }
+  const headers = contentPackWriteHeaders();
+  if (!headers) {
+    setStatus('Use the protected research action token before generating a content pack.', true);
+    el('research-cases-admin-token')?.focus();
+    return;
+  }
   setButtonBusy(btn, true, 'Generating Pack…');
   try {
     const response = await dashboardApiFetch('/api/secopsai/content-packs/generate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ case_id: caseId })
     });
     const data = await response.json().catch(() => ({}));
@@ -12771,7 +12931,6 @@ async function backgroundRefreshLiveExecutionState() {
     state.runRequests = runRequests;
     await loadLocalTriageState();
     await hydrateRunRequestOutputEvidence();
-    await synchronizeSuccessfulTaskTransitions();
     renderTasks();
     renderMissionControl();
     renderFindings();
@@ -12796,7 +12955,6 @@ async function refreshOperationalWorkspace() {
   state.findings = sortLatestFirst(findings, FINDING_LATEST_FIELDS);
   await Promise.all([loadIntegrationStatus(), loadLocalTriageState()]);
   await hydrateRunRequestOutputEvidence();
-  await synchronizeSuccessfulTaskTransitions();
   renderTasks();
   renderMissionControl();
   renderFindings();
@@ -12900,13 +13058,6 @@ async function boot() {
   } catch (err) {
     console.warn('hydrateRunRequestOutputEvidence failed', err);
     errors.push(`run output evidence: ${err.message || String(err)}`);
-  }
-
-  try {
-    await synchronizeSuccessfulTaskTransitions();
-  } catch (err) {
-    console.warn('synchronizeSuccessfulTaskTransitions failed during boot', err);
-    errors.push(`task sync: ${err.message || String(err)}`);
   }
 
   try {
@@ -13708,6 +13859,22 @@ function bindEvents() {
     if (el('research-cases-admin-token')) el('research-cases-admin-token').value = '';
     renderResearchCases();
     setStatus('Research action token cleared');
+  });
+  el('dashboard-local-auth-save-btn')?.addEventListener('click', () => {
+    const token = el('dashboard-local-auth-token')?.value?.trim() || '';
+    state.auth.localToken = token;
+    if (token) sessionStorage.setItem('secopsai_dashboard_local_auth_token', token);
+    else sessionStorage.removeItem('secopsai_dashboard_local_auth_token');
+    renderIntegrations();
+    loadIntegrationStatus().then(() => renderIntegrations());
+    setStatus(token ? '<span class="dot"></span> Local helper authentication enabled for this browser session' : 'Local helper authentication cleared');
+  });
+  el('dashboard-local-auth-clear-btn')?.addEventListener('click', () => {
+    state.auth.localToken = '';
+    sessionStorage.removeItem('secopsai_dashboard_local_auth_token');
+    renderIntegrations();
+    loadIntegrationStatus().then(() => renderIntegrations());
+    setStatus('Local helper authentication cleared');
   });
   el('research-create-submit-btn')?.addEventListener('click', async event => {
     const result = await runResearchCaseAction('create', {

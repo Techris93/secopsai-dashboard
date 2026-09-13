@@ -10,7 +10,9 @@ This dashboard is now prepared for **Cloudflare Pages advanced mode** with a roo
 - `POST /api/discord-send-message`
 - `GET /api/run-output`
 
-The worker falls back to `env.ASSETS.fetch(request)` for normal static files, which is the pattern Cloudflare documents for Pages advanced mode.
+The worker falls back to `env.ASSETS.fetch(request)` only for the explicit browser
+asset allowlist. Dotfiles, logs, test fixtures, generated state, and every other
+uploaded path return `404`.
 
 The frontend uses an OKComputer_Sec-inspired dark command-plane skin documented in [`docs/okcomputer-reference-audit.md`](docs/okcomputer-reference-audit.md). The deployed dashboard does not import the Kimi seed script, compiled reference bundles, external image assets, or mock data from the reference project.
 
@@ -22,6 +24,8 @@ The frontend uses an OKComputer_Sec-inspired dark command-plane skin documented 
   - **Recommended:** read output files from an R2 bucket binding.
   - **Fallback:** proxy to an upstream helper via `RUN_OUTPUT_BASE_URL`.
 - Hosted native triage/session/research actions and the native event stream can optionally proxy to a secured local or private SecOpsAI helper via `SECOPSAI_HELPER_BASE_URL`.
+- Authenticated hosted sessions must belong to an invited operator account;
+  anonymous Supabase sessions are rejected by both the browser and Worker.
 - The retired `/api/discord-send-message` route still returns `410 Gone` so the current UI behavior stays compatible.
 
 ## Recommended production architecture
@@ -58,11 +62,17 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `RUN_OUTPUT_R2_BINDING`
 - `RUN_OUTPUT_R2_PREFIX`
 - `RUN_OUTPUT_BASE_URL`
+- `RUN_OUTPUT_ALLOWED_ORIGINS`
 - `RUN_OUTPUT_AUTH_HEADER`
 - `SECOPSAI_HELPER_BASE_URL` is optional. Leave it unset in production unless
   you intentionally operate a live private helper. Hosted production currently
   uses local helper mode for SecOpsAI helper-backed actions instead of the
-  retired `secopsai-helper.secopsai.dev` tunnel.
+  retired `secopsai-helper.secopsai.dev` tunnel. When set, it must be an HTTPS
+  origin with no path, credentials, query string, or fragment, and the exact
+  origin must be included in `SECOPSAI_HELPER_ALLOWED_ORIGINS`.
+- `SECOPSAI_HELPER_ALLOWED_ORIGINS` is a comma-separated allowlist of HTTPS
+  origins permitted for the helper proxy. The Worker refuses a configured
+  helper when this list is absent or does not contain its exact origin.
 - `SECOPSAI_HELPER_AUTH_HEADER`
 - `SECOPSAI_CORE_API_URL`
 - `SECOPSAI_EDGE_API_URL`
@@ -82,6 +92,15 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `SECOPSAI_EDGE_OPERATIONS_TOKEN`
 - `BLOG_OPS_GITHUB_TOKEN`
 - `BLOG_OPS_ADMIN_TOKEN`
+
+`RUN_OUTPUT_BASE_URL` follows the same HTTPS-origin rule: configure only the
+scheme and host, such as `https://private-helper.example`, and include that
+exact origin in `RUN_OUTPUT_ALLOWED_ORIGINS`. The Worker appends
+the relative output path as `?path=...`, refuses upstream redirects, limits the
+response to 5 MiB, and applies a 10-second request timeout. The helper proxy
+uses the same origin validation, refuses redirects, and applies a 15-second
+request timeout. `SECOPSAI_HELPER_ALLOWED_ORIGINS` is required whenever the
+helper proxy is enabled.
 
 The **Operating picture** page uses the same-origin `/api/secopsai/ontology`
 proxy. It reads `GET /api/v1/ontology/search`, entity detail, bounded
@@ -104,6 +123,9 @@ Notes:
   any server-side Core, Edge, helper, Blog Ops, or run-output credential. The
   Worker refuses protected backend configuration while
   `DASHBOARD_AUTH_REQUIRED=false`.
+- Authenticated workspace refreshes are read-only. A completed run changes a
+  task only from the explicit operator initiated run flow, so opening or
+  refreshing Mission Control cannot silently write task state.
 - An auth-disabled deployment is deliberately locked: its browser config omits
   Supabase credentials and the app does not boot the live workspace. This is a
   rollout safety state, not a public demo data mode.
@@ -114,17 +136,23 @@ Notes:
 - `RUN_OUTPUT_R2_BINDING` defaults to `RUN_OUTPUTS`; only change it if you deliberately use a different binding name.
 - You only need **one** run-output mode:
   - R2 mode: configure an R2 binding and optionally `RUN_OUTPUT_R2_PREFIX`.
-  - Proxy mode: configure `RUN_OUTPUT_BASE_URL` and optionally auth settings.
+  - Proxy mode: configure `RUN_OUTPUT_BASE_URL` as an HTTPS origin (without a
+    path, credentials, query string, or fragment) and optionally auth settings.
 - Native triage/session features in hosted mode need a reachable SecOpsAI helper:
-  - Set `SECOPSAI_HELPER_BASE_URL` to a helper that exposes `/api/secopsai/triage-state`, `/api/secopsai/events`, `/api/secopsai/sessions`, `/api/secopsai/session`, `/api/secopsai/research-finding`, `/api/secopsai/triage-ops/alerts`, and the mutation endpoints used by the dashboard.
+  - Set `SECOPSAI_HELPER_BASE_URL` to an HTTPS origin (without a path,
+    credentials, query string, or fragment) for a helper that exposes
+    `/api/secopsai/triage-state`, `/api/secopsai/events`, `/api/secopsai/sessions`, `/api/secopsai/session`, `/api/secopsai/research-finding`, `/api/secopsai/triage-ops/alerts`, and the mutation endpoints used by the dashboard.
   - Optionally protect that helper with `SECOPSAI_HELPER_AUTH_HEADER` and `SECOPSAI_HELPER_AUTH_TOKEN`.
+- Content-pack generation is a protected write. Set the Triage Ops action token
+  in the Research workspace before generating a pack; read-only pack listing
+  remains available to authenticated operators.
 - `HOSTED_AI_*` values are rendered into `window.SECOPSAI_CONFIG.aiGuard` so the hosted dashboard can show model/budget/mutation guardrails without hardcoding them in the bundle.
 
 ## Blog Ops Control Plane
 
 The dashboard includes a protected **Blog Ops** tab for SecOpsAI security-blog operations. The browser never runs shell commands. Buttons call same-origin Pages Worker endpoints under `/api/blog/*`, and the Worker dispatches the SecOpsAI GitHub Actions workflow `blog-ops.yml`.
 
-For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`. When local deploy capability is available, **Deploy blog** runs one fixed allowlisted command: `wrangler pages deploy ${SECOPSAI_ROOT}/blog --project-name secopsai-blog --branch main`, or the equivalent `npx --yes wrangler@latest ...` fallback. The browser cannot supply arbitrary shell commands.
+For local operator testing, `dashboard_server.py` now serves the same `/api/blog/*` route family and maps actions to allowlisted `secopsai blog ...` CLI arguments. Local Blog Ops can load status, list drafts, and show draft details without GitHub tokens. Write actions still require `BLOG_OPS_ADMIN_TOKEN`. When local deploy capability is available, **Deploy blog** runs one fixed allowlisted command: `wrangler pages deploy ${SECOPSAI_ROOT}/blog --project-name secopsai-blog --branch main`, or the equivalent pinned `npx --yes wrangler@4.131.1 ...` fallback. The browser cannot supply arbitrary shell commands.
 
 If local deploy capability is unavailable, use hosted Blog Ops or the
 `blog-ops.yml` GitHub Actions / Cloudflare Pages workflow when a reviewed blog
@@ -133,7 +161,7 @@ change is ready to publish.
 Local Blog Ops deploy prerequisites:
 
 - `SECOPSAI_ROOT` points at the SecOpsAI repo and `${SECOPSAI_ROOT}/blog` exists.
-- Wrangler is installed and authenticated, or Node/npm is available so `npx --yes wrangler@latest` can run.
+- Wrangler is installed and authenticated, or Node/npm is available so `npx --yes wrangler@4.131.1` can run.
 - Optional overrides are valid if set: `BLOG_OPS_LOCAL_DEPLOY_PROJECT` and `BLOG_OPS_LOCAL_DEPLOY_BRANCH`.
 - The deploy source is always `${SECOPSAI_ROOT}/blog`; operators cannot submit arbitrary shell commands or alternate source paths from the browser.
 
@@ -371,10 +399,14 @@ openclaw-workspace/secopsai-dashboard/runs/2026-04-20/output.txt
 
 If you are not ready to move run outputs into R2 yet, point `RUN_OUTPUT_BASE_URL` at any helper endpoint that:
 
-1. Accepts `GET ?path=<relative-path>`.
-2. Returns either:
+1. Is an HTTPS origin with no path, credentials, query string, or fragment.
+2. Accepts `GET ?path=<relative-path>`.
+3. Returns either:
    - JSON shaped like `{ "ok": true, "text": "..." }`, or
    - plain text.
+
+The Worker refuses redirects, caps the response at 5 MiB, and times out the
+upstream request after 10 seconds.
 
 Optional auth:
 
@@ -386,10 +418,15 @@ Optional auth:
 Create a local `.dev.vars` from [`.dev.vars.example`](./.dev.vars.example), then run:
 
 ```bash
-npx wrangler pages dev .
+npx --yes wrangler@4.131.1 pages dev .
 ```
 
 That lets you test the worker, `config.js`, and `/api/*` routes locally before deploying.
+The Python local helper keeps `config.js` out of its generic static-file
+allowlist. Its dedicated bootstrap route accepts only the generated public
+Supabase client schema and rejects local/admin/server credential fields; all
+local `/api/*` requests still require `DASHBOARD_LOCAL_AUTH_TOKEN` (health
+probes are the public exception).
 
 ## Step-by-step Cloudflare Pages setup
 
@@ -467,7 +504,8 @@ Recommended if this dashboard is going to be your permanent hosted control plane
 Good bridge option if you already have a helper service that can read the files.
 
 1. Deploy or keep a small helper endpoint somewhere private.
-2. Set `RUN_OUTPUT_BASE_URL` to that helper endpoint.
+2. Set `RUN_OUTPUT_BASE_URL` to that helper's HTTPS origin (for example,
+   `https://private-helper.example`; do not include a path or query string).
 3. If the helper requires auth, also set:
    - `RUN_OUTPUT_AUTH_HEADER`
    - `RUN_OUTPUT_AUTH_TOKEN`
@@ -483,6 +521,9 @@ After deployment, verify:
 3. **Integrations** shows helper state for hosted Discord and native triage/session proxying.
 4. If `SECOPSAI_HELPER_BASE_URL` is configured, the Native Triage page shows real session/approval state.
 5. A run output link opens `view-run-output.html` on the same domain.
+
+The Worker rejects redirects from helper and run-output proxies and returns a
+bounded error when either upstream exceeds its timeout or response-size limit.
 
 ### 7. Attach your custom domain
 

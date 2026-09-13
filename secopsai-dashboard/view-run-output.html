@@ -6,6 +6,7 @@
   <title>Run output</title>
   <meta name="referrer" content="no-referrer" />
   <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/dist/umd/supabase.js" integrity="sha384-yifgV8iFWyp5cgu+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP/NlXVJT3vO" crossorigin="anonymous"></script>
 </head>
 <body>
   <main class="main" style="max-width: 980px; margin: 0 auto;">
@@ -33,15 +34,37 @@
     const out = document.getElementById('output');
     const runOutputUrl = relPath => {
       const url = new URL(cfg.runOutputEndpoint || '/api/run-output', window.location.origin);
+      if (url.origin !== window.location.origin) throw new Error('Run output endpoint must be same-origin.');
       url.searchParams.set('path', relPath);
       return url.toString();
     };
+
+    async function runOutputHeaders() {
+      const headers = {};
+      let localToken = '';
+      try { localToken = sessionStorage.getItem('secopsai_dashboard_local_auth_token') || ''; } catch {}
+      if (localToken) headers['X-SecOpsAI-Local-Token'] = localToken;
+      if (cfg?.auth?.required !== false) {
+        if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+          throw new Error('Operator session client is unavailable.');
+        }
+        if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
+          throw new Error('Operator session configuration is unavailable.');
+        }
+        const client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+        const { data, error } = await client.auth.getSession();
+        if (error || !data?.session?.access_token) throw new Error('Operator session required.');
+        headers.Authorization = `Bearer ${data.session.access_token}`;
+      }
+      return headers;
+    }
 
     if (!path) {
       meta.textContent = 'Missing path parameter.';
     } else {
       meta.textContent = `${role ? role + ' • ' : ''}${id ? id + ' • ' : ''}${path}`;
-      fetch(runOutputUrl(path))
+      runOutputHeaders()
+        .then(headers => fetch(runOutputUrl(path), { headers }))
         .then(r => r.json())
         .then(data => {
           if (!data.ok) {

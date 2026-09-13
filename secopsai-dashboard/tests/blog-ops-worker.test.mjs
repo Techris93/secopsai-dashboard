@@ -22,6 +22,8 @@ const worker = {
         SUPABASE_URL: "https://test-project.supabase.co",
         SUPABASE_ANON_KEY: "test-anon-key",
         SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+        SECOPSAI_HELPER_ALLOWED_ORIGINS: "https://helper.example,https://stale-tunnel.example",
+        RUN_OUTPUT_ALLOWED_ORIGINS: "https://output.example",
         ...env,
       },
     );

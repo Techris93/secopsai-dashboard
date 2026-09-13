@@ -20,6 +20,18 @@ assert.match(app, /fetchOntology\(`?\/entities/);
 assert.match(app, /fetchOntology\(['"]\/quality/);
 assert.match(app, /riskError/);
 assert.match(app, /Degraded · last known data/);
+assert.match(app, /searchRequestId/);
+assert.match(app, /entityRequestId/);
+assert.match(app, /const selectionRequestId = state\.ontology\.entityRequestId/);
+assert.match(app, /selectionChangedWhileSearching/);
+assert.match(app, /if \(!isCurrent\(\)\) return state\.ontology\.results/);
+assert.match(app, /if \(!isCurrent\(\)\) return null/);
+assert.match(app, /panelStates/);
+assert.match(app, /panelErrors/);
+assert.match(app, /resetOntologyPanels\('loading'\)/);
+assert.match(app, /The connected source did not return this panel/);
+assert.match(app, /state\.ontology\.quality = null/);
+assert.match(app, /panelUnavailable/);
 assert.match(html, /id=["']page-ontology["']/);
 for (const id of ["ontology-search-section", "ontology-entity-section", "ontology-neighbors-section", "ontology-timeline-section", "ontology-risk-section", "ontology-quality-section"]) {
   assert.match(html, new RegExp(`id=["']${id}["']`), `missing Mission Control surface ${id}`);

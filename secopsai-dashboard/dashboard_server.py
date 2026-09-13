@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -36,6 +37,60 @@ SECOPSAI_ENTERPRISE_DB_PATH = os.environ.get(
     str((SECOPSAI_ROOT / 'data' / 'enterprise' / 'enterprise.db').resolve()),
 ).strip()
 OPENCLAW_WORKSPACE = Path('/Users/chrixchange/.openclaw/workspace').resolve()
+WRANGLER_NPX_VERSION = '4.131.1'
+LOCAL_BOOTSTRAP_CONFIG_MAX_BYTES = 64 * 1024
+LOCAL_BOOTSTRAP_CONFIG_KEYS = frozenset({
+    'supabaseUrl', 'supabaseAnonKey', 'appName', 'integrationStatusEndpoint',
+    'runOutputEndpoint', 'triageOpsEndpoint', 'researchCasesEndpoint',
+    'researchDiscoveryEndpoint', 'intelligenceEndpoint', 'ontologyEndpoint',
+    'edgeWorkspaceEndpoint', 'edgeDashboardUrl', 'auth', 'aiGuard',
+    'departments', 'roleGroups',
+})
+LOCAL_BOOTSTRAP_NESTED_KEYS = {
+    'auth': frozenset({'required'}),
+    'aiGuard': frozenset({'hostedEnabled', 'defaultModel', 'maxCostUsd', 'allowMutations'}),
+    'departments': frozenset({'exec', 'platform', 'security', 'product', 'revenue', 'support'}),
+    'roleGroups': frozenset({'exec', 'platform', 'security', 'product', 'revenue', 'support'}),
+}
+# The helper is normally loopback-only, which provides the local process
+# boundary used by Mission Control.  If an operator intentionally binds it to
+# another interface (for example behind a tunnel), require a separate local
+# bearer token for every API request.  This token is never sent to the hosted
+# Pages Worker or embedded in browser configuration.
+DASHBOARD_LOCAL_AUTH_TOKEN = os.environ.get('DASHBOARD_LOCAL_AUTH_TOKEN', '').strip()
+LOCAL_RUN_OUTPUT_MAX_BYTES = 5 * 1024 * 1024
+
+
+class RunOutputTooLarge(ValueError):
+    """Raised when a local run output exceeds the bounded response size."""
+
+
+def _read_bounded_run_output(path: Path) -> str:
+    # Read one byte beyond the limit so a file that grows after validation is
+    # still rejected without ever loading an unbounded response into memory.
+    with path.open('rb') as handle:
+        payload = handle.read(LOCAL_RUN_OUTPUT_MAX_BYTES + 1)
+    if len(payload) > LOCAL_RUN_OUTPUT_MAX_BYTES:
+        raise RunOutputTooLarge
+    return payload.decode('utf-8', errors='ignore')
+
+
+# Keep local development useful while making the HTTP surface explicit.  The
+# helper runs from the dashboard checkout, which also contains ignored env
+# files, generated config, logs, test fixtures, and runtime state.  None of
+# those are browser assets and they must not be reachable through the static
+# file fallback.
+PUBLIC_STATIC_FILES = frozenset({
+    '/',
+    '/index.html',
+    '/app.js',
+    '/url-safety.js',
+    '/styles.css',
+    '/favicon.svg',
+    '/radar-texture.png',
+    '/log-agent-run.html',
+    '/view-run-output.html',
+})
 # Stable finding identifiers use different namespace lengths (for example
 # ``OCF-...``, ``AIDG-...`` and ``EDGE-...``). Keep the namespace bounded,
 # uppercase, and explicit instead of assuming every producer uses three
@@ -1000,7 +1055,7 @@ def require_triage_ops_admin(handler):
     auth = handler.headers.get('Authorization', '').strip()
     if auth.lower().startswith('bearer '):
         supplied = supplied or auth[7:].strip()
-    if supplied != expected:
+    if not hmac.compare_digest(supplied, expected):
         json_response(handler, 401, {'ok': False, 'error': 'Unauthorized Triage Ops action'})
         return True
     return False
@@ -2737,8 +2792,8 @@ def local_blog_deploy_command():
         return [wrangler, 'pages', 'deploy', str(blog_dir), '--project-name', project, '--branch', branch]
     npx = shutil.which('npx')
     if npx:
-        return [npx, '--yes', 'wrangler@latest', 'pages', 'deploy', str(blog_dir), '--project-name', project, '--branch', branch]
-    raise RuntimeError('Wrangler is not available. Install wrangler or Node/npm so npx can run wrangler@latest.')
+        return [npx, '--yes', f'wrangler@{WRANGLER_NPX_VERSION}', 'pages', 'deploy', str(blog_dir), '--project-name', project, '--branch', branch]
+    raise RuntimeError(f'Wrangler is not available. Install wrangler or Node/npm so npx can run wrangler@{WRANGLER_NPX_VERSION}.')
 
 
 def local_blog_deploy_available():
@@ -4093,6 +4148,92 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, directory=None, **kwargs):
         super().__init__(*args, directory=str(DIR), **kwargs)
 
+    @staticmethod
+    def _is_public_static_path(path):
+        """Return whether *path* is one of the dashboard's browser assets.
+
+        ``SimpleHTTPRequestHandler`` otherwise exposes every file below its
+        directory, including ignored dotfiles and local logs.  Keep the
+        fallback allowlisted so a future file added to the checkout cannot
+        silently become an HTTP endpoint.
+        """
+        try:
+            decoded = urllib.parse.unquote(str(path or ''))
+        except (TypeError, ValueError):
+            return False
+        if decoded != str(path or '') or '\\' in decoded:
+            return False
+        if any(part.startswith('.') or part.lower() in {'log', 'logs'} for part in decoded.split('/')):
+            return False
+        if decoded.endswith('.log') or decoded.endswith('.log.gz'):
+            return False
+        return decoded in PUBLIC_STATIC_FILES
+
+    def send_head(self):
+        parsed = urlparse(self.path)
+        if not self._is_public_static_path(parsed.path):
+            self.send_error(404, 'Not found')
+            return None
+        return super().send_head()
+
+    def _serve_local_bootstrap_config(self):
+        """Serve the generated browser bootstrap through an explicit route.
+
+        ``config.js`` contains only the public Supabase client bootstrap and
+        dashboard display settings generated by ``generate-config.py``.  It is
+        intentionally handled here instead of by ``SimpleHTTPRequestHandler``
+        so a generated file can never become public merely because it exists
+        in the checkout.  Server credentials, including the local bearer, are
+        rejected if a malformed hand-written file is present.
+        """
+        config_path = DIR / 'config.js'
+        try:
+            body = config_path.read_bytes()
+        except OSError:
+            return json_response(self, 404, {'ok': False, 'error': 'Dashboard bootstrap is not generated'})
+        if len(body) > LOCAL_BOOTSTRAP_CONFIG_MAX_BYTES:
+            return json_response(self, 503, {'ok': False, 'error': 'Dashboard bootstrap is unavailable'})
+        try:
+            script = body.decode('utf-8')
+            prefix = 'window.SECOPSAI_CONFIG = '
+            if not script.startswith(prefix):
+                raise ValueError('missing config prefix')
+            config_source = script[len(prefix):].rstrip().rstrip(';')
+            try:
+                payload = json.loads(config_source)
+            except json.JSONDecodeError:
+                # The checked-in template uses JavaScript's valid shorthand
+                # object keys. Quote only syntactic object keys before parsing;
+                # values remain data and are never evaluated as JavaScript.
+                normalized_source = re.sub(
+                    r'([,{]\s*)([A-Za-z_$][A-Za-z0-9_$]*)\s*:',
+                    r'\1"\2":',
+                    config_source,
+                )
+                payload = json.loads(normalized_source)
+            if not isinstance(payload, dict) or set(payload) != LOCAL_BOOTSTRAP_CONFIG_KEYS:
+                raise ValueError('config contains unsupported fields')
+            for section, allowed_keys in LOCAL_BOOTSTRAP_NESTED_KEYS.items():
+                value = payload.get(section)
+                if not isinstance(value, dict) or set(value) != allowed_keys:
+                    raise ValueError(f'config section {section} contains unsupported fields')
+            # The only token-like value allowed in this browser bootstrap is
+            # the public Supabase anon client key. All server/admin credentials
+            # would require a field outside the schema above and are rejected.
+            for key, value in payload.items():
+                if key in {'supabaseUrl', 'edgeDashboardUrl'} and value:
+                    parsed_url = urllib.parse.urlparse(str(value))
+                    if parsed_url.username or parsed_url.password or parsed_url.query or parsed_url.fragment:
+                        raise ValueError('config URL contains credentials or query data')
+        except (UnicodeDecodeError, TypeError, ValueError, json.JSONDecodeError):
+            return json_response(self, 503, {'ok': False, 'error': 'Dashboard bootstrap is unavailable'})
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/javascript; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return None
+
     def end_headers(self):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('Referrer-Policy', 'no-referrer')
@@ -4133,10 +4274,58 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         return
 
+    @staticmethod
+    def _is_loopback_host(host):
+        try:
+            return ipaddress.ip_address(str(host).split('%', 1)[0]).is_loopback
+        except ValueError:
+            return str(host or '').strip().lower() == 'localhost'
+
+    def _local_api_authorized(self, parsed):
+        """Require a local bearer for every API request, including loopback.
+
+        Binding the helper to loopback reduces accidental exposure, but it is
+        not an authorization boundary: local browsers, extensions, tunnels,
+        and another process can all issue requests to the listener.  Health
+        probes remain public so a supervisor can determine whether the process
+        is alive without receiving application data.  The token is accepted
+        in the dedicated local-token header or as an HTTP Bearer token and is
+        never included in browser configuration.
+        """
+        if not str(parsed.path or '').startswith('/api/'):
+            return True
+        if getattr(self, 'command', 'GET') == 'GET' and parsed.path in {'/api/healthz', '/api/readyz'}:
+            return True
+        if not DASHBOARD_LOCAL_AUTH_TOKEN:
+            json_response(
+                self,
+                503,
+                {
+                    'ok': False,
+                    'error': 'DASHBOARD_LOCAL_AUTH_TOKEN is required before local API access is enabled',
+                    'code': 'local_auth_not_configured',
+                },
+            )
+            return False
+        supplied = (self.headers.get('X-SecOpsAI-Local-Token') or '').strip()
+        authorization = self.headers.get('Authorization', '').strip()
+        if not supplied and authorization.lower().startswith('bearer '):
+            supplied = authorization[7:].strip()
+        if not supplied or not hmac.compare_digest(supplied, DASHBOARD_LOCAL_AUTH_TOKEN):
+            json_response(self, 401, {'ok': False, 'error': 'Local dashboard authentication required', 'code': 'local_auth_required'})
+            return False
+        return True
+
     def do_GET(self):
         parsed = urlparse(self.path)
+        if not self._local_api_authorized(parsed):
+            return
         if self._has_sensitive_query(parsed.query):
             return self._reject_sensitive_url(parsed)
+        if parsed.path == '/config.js':
+            return self._serve_local_bootstrap_config()
+        if parsed.path in {'/api/healthz', '/api/readyz'}:
+            return json_response(self, 200, {'ok': True, 'status': 'ok'})
         if parsed.path == '/api/secopsai/ontology' or parsed.path.startswith('/api/secopsai/ontology/'):
             try:
                 from secopsai.ontology import (
@@ -4613,8 +4802,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     return json_response(self, 403, {'ok': False, 'error': 'Path outside workspace'})
                 if not target.exists() or not target.is_file():
                     return json_response(self, 404, {'ok': False, 'error': 'File not found'})
-                text = target.read_text(encoding='utf-8', errors='ignore')
+                text = _read_bounded_run_output(target)
                 return json_response(self, 200, {'ok': True, 'text': text})
+            except RunOutputTooLarge:
+                return json_response(self, 413, {'ok': False, 'error': 'Run output exceeds response size limit', 'code': 'run_output_too_large'})
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
@@ -4622,6 +4813,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if not self._local_api_authorized(parsed):
+            return
         if self._has_sensitive_query(parsed.query):
             return self._reject_sensitive_url(parsed)
         if parsed.path == '/api/secopsai/research-artifacts/import':
@@ -4990,6 +5183,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
         if parsed.path == '/api/secopsai/content-packs/generate':
+            if require_triage_ops_admin(self):
+                return
             case_id = _clean_string(payload.get('case_id') or '', 80)
             if not case_id:
                 return json_response(self, 400, {'ok': False, 'error': 'Case ID or Finding ID is required'})
@@ -5606,6 +5801,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     host = os.environ.get('HOST', '127.0.0.1')
     port = int(os.environ.get('PORT', '45680'))
+    if not DashboardHandler._is_loopback_host(host) and not DASHBOARD_LOCAL_AUTH_TOKEN:
+        raise SystemExit('Refusing non-loopback dashboard binding without DASHBOARD_LOCAL_AUTH_TOKEN')
     print(f'Serving SecOpsAI dashboard from: {DIR}')
     print(f'URL: http://{host}:{port}')
     server = ThreadingHTTPServer((host, port), DashboardHandler)

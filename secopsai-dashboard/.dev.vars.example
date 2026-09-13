@@ -15,9 +15,11 @@ DISCORD_KANBAN_UPDATES_WEBHOOK=
 RUN_OUTPUT_R2_BINDING=RUN_OUTPUTS
 RUN_OUTPUT_R2_PREFIX=
 
-# Fallback hosted run-output mode: proxy to an upstream helper that accepts ?path=
-# and returns either { ok, text } JSON or plain text.
+# Fallback hosted run-output mode: use an HTTPS origin only (no path, query,
+# fragment, credentials, or HTTP). The Worker appends ?path=, refuses redirects,
+# caps responses at 5 MiB, and times out the upstream after 10 seconds.
 RUN_OUTPUT_BASE_URL=
+RUN_OUTPUT_ALLOWED_ORIGINS=
 RUN_OUTPUT_AUTH_HEADER=
 RUN_OUTPUT_AUTH_TOKEN=
 
@@ -29,10 +31,12 @@ BLOG_OPS_REF=main
 BLOG_OPS_GITHUB_TOKEN=
 BLOG_OPS_ADMIN_TOKEN=
 
-# Triage Ops uses the local/private SecOpsAI helper for supply-chain alerts
-# and Campaign Research actions.
-# Hosted Pages can proxy /api/secopsai/* to this helper.
+# Triage Ops uses the local/private SecOpsAI helper for supply-chain alerts,
+# Campaign Research, and protected content-pack writes. Hosted Pages can proxy
+# /api/secopsai/* to this HTTPS origin (no path, query, fragment, credentials,
+# or HTTP); helper requests refuse redirects and time out after 15 seconds.
 SECOPSAI_HELPER_BASE_URL=
+SECOPSAI_HELPER_ALLOWED_ORIGINS=
 SECOPSAI_HELPER_AUTH_HEADER=
 SECOPSAI_HELPER_AUTH_TOKEN=
 # Preferred hosted canonical workspace. These credentials are consumed only by

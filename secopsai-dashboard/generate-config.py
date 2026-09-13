@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import json
 from pathlib import Path
 
 DIR = Path(__file__).resolve().parent
@@ -25,7 +26,10 @@ def load_env(path: Path):
 
 
 def js_escape(value: str) -> str:
-    return value.replace('\\', '\\\\').replace('"', '\\"')
+    # The generated file is an executable browser script. JSON string
+    # encoding handles control characters and line separators that a manual
+    # quote/backslash replacement would leave available for script injection.
+    return json.dumps(str(value), ensure_ascii=True)[1:-1]
 
 
 def js_bool(value, default: bool = False) -> str:

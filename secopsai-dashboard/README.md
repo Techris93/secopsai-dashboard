@@ -71,6 +71,13 @@ Start the stack:
 Open [http://127.0.0.1:45680](http://127.0.0.1:45680). Keep the terminal open
 while using the console.
 
+The helper intentionally binds to loopback. Every local API request requires
+`DASHBOARD_LOCAL_AUTH_TOKEN`, including loopback requests; a loopback binding
+is a network boundary, not an authorization boundary. Set the token in `.env`,
+then paste the same value into System → Credentials, or send it in
+`X-SecOpsAI-Local-Token` or a Bearer authorization header for direct API calls.
+The token is never generated into `config.js` or sent to hosted services.
+
 The browser never runs arbitrary shell commands. Local buttons call typed
 helper routes that map to fixed SecOpsAI argument arrays. Exact local artifact
 paths remain CLI-only.
@@ -93,11 +100,16 @@ production unless a live private helper is deliberately operated. The retired
 hosted UI explains which actions require local mode instead of returning a
 misleading tunnel failure.
 
+When a helper or run-output proxy is enabled, its exact HTTPS origin must also
+be listed in `SECOPSAI_HELPER_ALLOWED_ORIGINS` or `RUN_OUTPUT_ALLOWED_ORIGINS`.
+
 ## Safety Model
 
 - Operator sign-in and action authorization are separate controls.
 - Hosted protected routes validate the Supabase operator session before using server-side Core, Edge, helper, Blog Ops, or run-output credentials.
+- Anonymous Supabase sessions are rejected; content-pack generation carries the protected Triage Ops action token.
 - Action tokens are retained only for the current browser session and are never written into URLs.
+- Authenticated refreshes read current run and task state; task transitions occur only in the explicit run-completion flow.
 - Artifact analysis does not install packages, run lifecycle scripts, activate extensions, execute binaries, or accept browser-selected filesystem paths.
 - Model fallback is explicit; primary-only mode never silently selects a different provider.
 - Sandbox submission, external disclosure, unverified rule activation, publication, and deployment remain separately approval-gated.
@@ -194,7 +206,7 @@ Mission Control is compatible with Cloudflare Pages advanced mode through
 headers, protects backend routes, and falls back to static assets for the UI.
 
 ```bash
-npx --yes wrangler@latest pages deploy . \
+npx --yes wrangler@4.131.1 pages deploy . \
   --project-name secopsai-dashboard \
   --branch main
 ```
