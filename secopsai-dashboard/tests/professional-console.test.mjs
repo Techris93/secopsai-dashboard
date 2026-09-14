@@ -179,11 +179,13 @@ assert.match(app, /\['operator_session_required', 'operator_session_invalid'\]/)
 assert.match(app, /Enter the Automation action token in Administration/);
 assert.match(app, /result\.code === 'intelligence_action_unauthorized'/);
 assert.equal((index.match(/id="intelligence-admin-token"/g) || []).length, 1);
+assert.match(index, /separate from <code>DASHBOARD_LOCAL_AUTH_TOKEN<\/code>/);
+assert.equal((index.match(/id="intelligence-clear-token-btn"/g) || []).length, 1);
 assert.ok(index.indexOf('id="intelligence-admin-token"') < index.indexOf('id="intelligence-service-actions"'));
 assert.ok(index.indexOf('id="intelligence-service-actions"') < index.indexOf('id="intelligence-request-title"'));
 
 assert.match(index, /styles\.css\?v=20260830-reliability-v3/);
-assert.match(index, /app\.js\?v=20260914-local-research-recovery/);
+assert.match(index, /app\.js\?v=20260914-automation-token-scope/);
 assert.doesNotMatch(index, /styles\.css\?v=20260803-subsection-navigation/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function humanizeMachineText/);

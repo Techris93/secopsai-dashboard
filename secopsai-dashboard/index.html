@@ -496,7 +496,8 @@
                 <span>Automation action token</span>
                 <input id="intelligence-admin-token" name="secopsai-automation-token" type="password" autocomplete="one-time-code" data-1p-ignore="true" data-lpignore="true" aria-describedby="intelligence-token-hint" placeholder="Paste the INTELLIGENCE_ADMIN_TOKEN here" />
               </label>
-              <p class="small" id="intelligence-token-hint">Required for <strong>Run learning cycle</strong>, model review, investigation controls, and service controls. Paste the value configured as <code>INTELLIGENCE_ADMIN_TOKEN</code> in the local helper, or the same approved Triage Ops token when your installation shares it. It is retained only in this browser tab.</p>
+              <p class="small" id="intelligence-token-hint">Required for <strong>Run learning cycle</strong>, model review, investigation controls, and service controls. Paste the value configured as <code>INTELLIGENCE_ADMIN_TOKEN</code> in the local helper <code>.env</code>. This is separate from <code>DASHBOARD_LOCAL_AUTH_TOKEN</code> (read-only), <code>TRIAGE_OPS_ADMIN_TOKEN</code>, and <code>BLOG_OPS_ADMIN_TOKEN</code> unless your installation deliberately shares the same value. It is retained only in this browser tab.</p>
+              <button class="mini-btn" id="intelligence-clear-token-btn" type="button">Clear saved token</button>
               <div class="intelligence-actions" id="intelligence-service-actions">
                 <button class="secondary-btn" data-intelligence-service="install" type="button">Install service</button>
                 <button class="secondary-btn" data-intelligence-service="start" type="button">Start</button>
@@ -1794,7 +1795,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260914-local-research-recovery"></script>
-  <script src="./app.js?v=20260914-local-research-recovery"></script>
+  <script src="./app.js?v=20260914-automation-token-scope"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

@@ -479,3 +479,22 @@ def test_intelligence_unauthorized_response_has_scoped_error_code(monkeypatch):
     payload = handler.wfile.getvalue().decode("utf-8")
     assert '"code": "intelligence_action_unauthorized"' in payload
     assert "operator_session" not in payload
+
+
+def test_intelligence_rejects_local_read_token_with_actionable_scope_hint(monkeypatch):
+    monkeypatch.setenv("INTELLIGENCE_ADMIN_TOKEN", "expected-action-token")
+    monkeypatch.setattr(dashboard_server, "DASHBOARD_LOCAL_AUTH_TOKEN", "local-read-token")
+    handler = SimpleNamespace(
+        headers={"X-SecOpsAI-Intelligence-Token": "local-read-token"},
+        send_response=Mock(),
+        send_header=Mock(),
+        end_headers=Mock(),
+        wfile=io.BytesIO(),
+    )
+
+    assert dashboard_server.require_intelligence_admin(handler) is True
+    handler.send_response.assert_called_once_with(401)
+    payload = handler.wfile.getvalue().decode("utf-8")
+    assert '"code": "local_token_used_for_intelligence_action"' in payload
+    assert "INTELLIGENCE_ADMIN_TOKEN" in payload
+    assert "local-read-token" not in payload

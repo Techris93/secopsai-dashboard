@@ -1109,7 +1109,47 @@ def require_intelligence_admin(handler):
         )
         return True
     supplied = handler.headers.get('X-SecOpsAI-Intelligence-Token', '').strip()
-    if supplied != expected:
+    # Keep action credential scopes explicit. Operators commonly have a local
+    # read token and separate Triage/Blog Ops tokens in the same browser;
+    # identifying a known wrong-scope credential makes the 401 actionable
+    # without disclosing either secret. A deliberately shared token still
+    # works because the expected value is checked first.
+    wrong_scope = None
+    candidates = (
+        (
+            'local_token_used_for_intelligence_action',
+            DASHBOARD_LOCAL_AUTH_TOKEN,
+            'DASHBOARD_LOCAL_AUTH_TOKEN only authorizes local read access. Use INTELLIGENCE_ADMIN_TOKEN for Automation actions.',
+        ),
+        (
+            'triage_token_used_for_intelligence_action',
+            os.environ.get('TRIAGE_OPS_ADMIN_TOKEN', '').strip(),
+            'TRIAGE_OPS_ADMIN_TOKEN is scoped to Research/Triage writes. Use INTELLIGENCE_ADMIN_TOKEN for Automation actions.',
+        ),
+        (
+            'blog_ops_token_used_for_intelligence_action',
+            os.environ.get('BLOG_OPS_ADMIN_TOKEN', '').strip(),
+            'BLOG_OPS_ADMIN_TOKEN is scoped to Blog Ops. Use INTELLIGENCE_ADMIN_TOKEN for Automation actions.',
+        ),
+    )
+    if not hmac.compare_digest(supplied, expected):
+        for code, candidate, message in candidates:
+            if candidate and not hmac.compare_digest(candidate, expected) and hmac.compare_digest(supplied, candidate):
+                wrong_scope = (code, message)
+                break
+    if wrong_scope:
+        code, message = wrong_scope
+        json_response(
+            handler,
+            401,
+            {
+                'ok': False,
+                'error': message,
+                'code': code,
+            },
+        )
+        return True
+    if not hmac.compare_digest(supplied, expected):
         json_response(
             handler,
             401,

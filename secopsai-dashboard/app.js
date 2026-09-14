@@ -145,7 +145,10 @@ const state = {
     loading: false,
     error: null,
     stale: false,
-    adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || sessionStorage.getItem('secopsai_triage_ops_admin_token') || '',
+    // Action credentials are intentionally isolated by scope. Reusing a
+    // saved Triage Ops token here made Automation POSTs fail whenever the
+    // helper configured a distinct INTELLIGENCE_ADMIN_TOKEN.
+    adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || '',
     selectedModel: sessionStorage.getItem('secopsai_bridge_model') || '',
     pendingSelectedModel: '',
     view: 'models',
@@ -3680,6 +3683,17 @@ function ontologyErrorMessage(payload, response, fallback = 'Operating picture r
   return `${fallback} (HTTP ${status})`;
 }
 
+function intelligenceActionErrorMessage(result, status, fallback = 'Intelligence action failed') {
+  const code = String(result?.code || '').trim().toLowerCase();
+  const scopedMessages = {
+    local_token_used_for_intelligence_action: 'The local dashboard token only authorizes read access. Use INTELLIGENCE_ADMIN_TOKEN from the helper .env for Automation actions.',
+    triage_token_used_for_intelligence_action: 'The Triage Ops token is scoped to research writes. Use INTELLIGENCE_ADMIN_TOKEN from the helper .env for Automation actions.',
+    blog_ops_token_used_for_intelligence_action: 'The Blog Ops token is scoped to publications. Use INTELLIGENCE_ADMIN_TOKEN from the helper .env for Automation actions.',
+    intelligence_action_unauthorized: 'Automation action token rejected. Use INTELLIGENCE_ADMIN_TOKEN from the helper .env; DASHBOARD_LOCAL_AUTH_TOKEN only authorizes reads.'
+  };
+  return scopedMessages[code] || result?.error || `${fallback} HTTP ${status}`;
+}
+
 const ONTOLOGY_PANEL_LABELS = Object.freeze({
   detail: 'Entity detail',
   neighbors: 'Relationships',
@@ -4604,7 +4618,7 @@ async function specialistApiAction(action, payload = {}, button = null, { write 
       body: JSON.stringify({ action, ...payload })
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.ok === false) throw new Error(result.error || `Specialist action HTTP ${response.status}`);
+    if (!response.ok || result.ok === false) throw new Error(intelligenceActionErrorMessage(result, response.status, 'Specialist action failed'));
     return result.result || result;
   } catch (error) {
     showToast(error?.message || String(error), 'error');
@@ -6621,7 +6635,9 @@ function renderIntelligence() {
   // mode. Keep the field visible so the operator can see where the token goes.
   if (tokenField) tokenField.hidden = false;
   const tokenInput = el('intelligence-admin-token');
-  if (tokenInput && tokenInput.value !== state.intelligence.adminToken) tokenInput.value = state.intelligence.adminToken;
+  // Do not overwrite a credential while the operator is actively replacing
+  // it; background status refreshes can otherwise restore a stale token.
+  if (tokenInput && document.activeElement !== tokenInput && tokenInput.value !== state.intelligence.adminToken) tokenInput.value = state.intelligence.adminToken;
 
   const mcpPill = el('intelligence-mcp-pill');
   if (mcpPill) mcpPill.textContent = mcp.configured ? 'Configured' : 'Setup required';
@@ -7016,7 +7032,7 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
       if (result.code === 'intelligence_action_unauthorized') {
         tokenInput?.focus();
       }
-      throw new Error(result.error || `Intelligence action HTTP ${response.status}`);
+      throw new Error(intelligenceActionErrorMessage(result, response.status));
     }
     state.intelligence.serviceOutput = ['service', 'run-once'].includes(action) ? JSON.stringify(result.result || result, null, 2) : state.intelligence.serviceOutput;
     const requeueCount = result?.result?.count;
@@ -13634,6 +13650,12 @@ function bindEvents() {
     await runRefreshAction(event.currentTarget, () => loadIntelligence(), {
       successMessage: 'Model assistance status refreshed'
     });
+  });
+  el('intelligence-clear-token-btn')?.addEventListener('click', () => {
+    state.intelligence.adminToken = '';
+    sessionStorage.removeItem('secopsai_intelligence_admin_token');
+    if (el('intelligence-admin-token')) el('intelligence-admin-token').value = '';
+    setStatus('Automation action token cleared for this browser session');
   });
   el('intelligence-action-select')?.addEventListener('change', syncIntelligenceTarget);
   el('intelligence-target-id')?.addEventListener('input', event => { event.currentTarget.dataset.suggested = '0'; });
