@@ -3494,8 +3494,55 @@ function ontologyPayloadQuality(payload) {
   return payload?.quality || payload?.result?.quality || null;
 }
 
-function ontologyErrorMessage(payload, response, fallback = 'Operating picture request failed') {
-  return String(payload?.error || payload?.detail || fallback + (response ? ` (HTTP ${response.status})` : '')).slice(0, 500);
+function ontologyErrorMessage(payload, response, fallback = 'Operating picture request failed', path = '') {
+  if (payload?.error && typeof payload.error === 'string' && payload.error.trim()) {
+    const detail = payload.detail ? ` (${payload.detail})` : '';
+    return `${payload.error.trim()}${detail}`.slice(0, 500);
+  }
+  if (payload?.detail && typeof payload.detail === 'string' && payload.detail.trim()) {
+    return payload.detail.trim().slice(0, 500);
+  }
+  if (!response) return fallback;
+  const status = Number(response.status || 0);
+  const routePath = String(path || '');
+  const isEntityRoute = routePath.includes('/entities/');
+
+  if (status === 404) {
+    if (isEntityRoute) {
+      return 'The requested ontology entity was not found in the connected workspace (HTTP 404).';
+    }
+    return 'The requested ontology endpoint route was not found (HTTP 404). If running locally, ensure the latest dashboard server is running.';
+  }
+  if (status === 401 || status === 403) {
+    const code = String(payload?.code || '').toLowerCase();
+    if (code === 'local_auth_required') {
+      return 'Local dashboard authentication required (HTTP 401). Provide DASHBOARD_LOCAL_AUTH_TOKEN in System → Credentials.';
+    }
+    if (code === 'operator_session_required' || code === 'operator_session_invalid') {
+      return 'Operator session required or expired (HTTP 401). Sign in with an authorized account.';
+    }
+    return `Authentication or authorization required (HTTP ${status}). Check credentials or permissions.`;
+  }
+  if (status === 501) {
+    return payload?.error || 'The requested capability is not configured or not supported in this deployment mode (HTTP 501).';
+  }
+  if (status === 502) {
+    return 'Upstream proxy gateway error (HTTP 502). The upstream service may be down or unreachable.';
+  }
+  if (status === 503) {
+    const code = String(payload?.code || '').toLowerCase();
+    if (code === 'core_ontology_route_unavailable') {
+      return 'The hosted Core ontology route is unavailable (HTTP 503). Verify the deployed Core Edge version.';
+    }
+    if (code === 'local_auth_not_configured') {
+      return 'Local API access is disabled because DASHBOARD_LOCAL_AUTH_TOKEN is not configured in .env (HTTP 503).';
+    }
+    return payload?.error || 'The ontology service is temporarily unavailable (HTTP 503). Verify service health.';
+  }
+  if (status === 504) {
+    return 'Upstream gateway timeout (HTTP 504). The service did not respond within the timeout window.';
+  }
+  return `${fallback} (HTTP ${status})`;
 }
 
 const ONTOLOGY_PANEL_LABELS = Object.freeze({
@@ -3532,10 +3579,32 @@ function ontologyPanelNotice(panel, loadingMessage, idleMessage) {
 }
 
 async function fetchOntology(path) {
-  const response = await dashboardApiFetch(ontologyEndpoint(path), { cache: 'no-store' });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.ok === false) throw new Error(ontologyErrorMessage(payload, response));
-  return payload;
+  let response;
+  try {
+    response = await dashboardApiFetch(ontologyEndpoint(path), { cache: 'no-store' });
+  } catch (error) {
+    const isNetwork = error instanceof TypeError || /fetch|network|connect|offline/i.test(error?.message || '');
+    if (isNetwork) {
+      throw new Error(`Cannot connect to the dashboard backend (${error.message || 'connection failed'}). Verify the server is running.`);
+    }
+    throw error;
+  }
+  let payload = null;
+  const contentType = String(response.headers?.get('content-type') || '').toLowerCase();
+  if (contentType.includes('application/json')) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  } else {
+    const rawText = await response.text().catch(() => '');
+    if (rawText && !rawText.includes('<html') && rawText.length < 300) {
+      payload = { error: rawText.trim() };
+    }
+  }
+  if (!response.ok || payload?.ok === false) throw new Error(ontologyErrorMessage(payload, response, 'Operating picture request failed', path));
+  return payload || {};
 }
 
 function ontologyFreshness(entity) {

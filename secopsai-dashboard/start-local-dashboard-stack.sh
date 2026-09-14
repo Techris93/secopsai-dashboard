@@ -53,6 +53,7 @@ stop_owned_dashboard_listener() {
   cwd="$(listener_cwd "$pid")"
   command="$(listener_command "$pid")"
   if [[ "$cwd" == "$DIR" && "$command" == *"dashboard_server.py"* ]] \
+    || [[ "$command" == *"dashboard_server.py"* ]] \
     || { [[ "${SECOPSAI_DASHBOARD_REPLACE_OTHER_CHECKOUT:-1}" == "1" ]] && is_related_dashboard_checkout "$cwd" "$command"; }; then
     if [[ "${SECOPSAI_DASHBOARD_REPLACE_STALE_HELPER:-1}" != "1" ]]; then
       return 1
@@ -90,11 +91,12 @@ then
   if [[ -n "$existing_pid" ]] && stop_owned_dashboard_listener "$existing_pid"; then
     :
   else
-  echo "[secopsai-dashboard] A server is already listening on http://$HOST:$PORT"
-  echo "[secopsai-dashboard] Open that URL, or stop the existing process before starting another:"
-  echo "  lsof -nP -iTCP:$PORT -sTCP:LISTEN"
-  echo "  kill <PID>"
-  exit 0
+  alien_cmd="$(listener_command "$existing_pid")"
+  echo "[secopsai-dashboard] Port $PORT is in use by another process ($alien_cmd, PID $existing_pid)." >&2
+  echo "[secopsai-dashboard] Stop that process before starting the dashboard:" >&2
+  echo "  lsof -nP -iTCP:$PORT -sTCP:LISTEN" >&2
+  echo "  kill <PID>" >&2
+  exit 1
   fi
 fi
 
@@ -114,7 +116,29 @@ echo "[secopsai-dashboard] Starting local stack on http://$HOST:$PORT"
 DASH_PID=$!
 
 echo "[secopsai-dashboard] Dashboard PID: $DASH_PID"
-echo "[secopsai-dashboard] Press Ctrl+C to stop"
+echo "[secopsai-dashboard] Verifying local helper health on http://$HOST:$PORT/api/healthz..."
+
+healthy=0
+for _ in {1..50}; do
+  if ! kill -0 "$DASH_PID" 2>/dev/null; then
+    echo "[secopsai-dashboard] Dashboard server exited prematurely during startup" >&2
+    exit 1
+  fi
+  if curl -sS --max-time 1 "http://$HOST:$PORT/api/healthz" >/dev/null 2>&1; then
+    healthy=1
+    break
+  fi
+  sleep 0.1
+done
+
+if [[ "$healthy" -eq 1 ]]; then
+  echo "[secopsai-dashboard] Dashboard is ready and healthy at http://$HOST:$PORT"
+  echo "[secopsai-dashboard] Press Ctrl+C to stop"
+else
+  echo "[secopsai-dashboard] Health probe failed for http://$HOST:$PORT/api/healthz" >&2
+  kill -TERM "$DASH_PID" 2>/dev/null || true
+  exit 1
+fi
 
 while true; do
   if ! kill -0 "$DASH_PID" 2>/dev/null; then

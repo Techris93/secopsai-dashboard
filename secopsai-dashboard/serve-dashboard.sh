@@ -53,6 +53,7 @@ stop_owned_dashboard_listener() {
   cwd="$(listener_cwd "$pid")"
   command="$(listener_command "$pid")"
   if [[ "$cwd" == "$DIR" && "$command" == *"dashboard_server.py"* ]] \
+    || [[ "$command" == *"dashboard_server.py"* ]] \
     || { [[ "${SECOPSAI_DASHBOARD_REPLACE_OTHER_CHECKOUT:-1}" == "1" ]] && is_related_dashboard_checkout "$cwd" "$command"; }; then
     if [[ "${SECOPSAI_DASHBOARD_REPLACE_STALE_HELPER:-1}" != "1" ]]; then
       return 1

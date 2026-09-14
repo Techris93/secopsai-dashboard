@@ -21,6 +21,8 @@ from urllib.parse import urlparse
 
 DIR = Path(__file__).resolve().parent
 SECOPSAI_ROOT = Path(os.environ.get('SECOPSAI_ROOT', '/Users/chrixchange/secopsai')).expanduser().resolve()
+if str(SECOPSAI_ROOT) not in sys.path:
+    sys.path.insert(0, str(SECOPSAI_ROOT))
 SECOPSAI_SESSION_DIR = Path(
     os.environ.get('SECOPSAI_SESSION_DIR', str(SECOPSAI_ROOT / 'data' / 'sessions'))
 ).expanduser().resolve()
@@ -4358,10 +4360,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     parts = suffix.split('/')
                     entity_id = urllib.parse.unquote('/'.join(parts[1:-1] if parts[-1] in {'neighbors', 'timeline', 'lineage', 'risk'} else parts[1:]))
                     operation = parts[-1] if parts[-1] in {'neighbors', 'timeline', 'lineage', 'risk'} else 'detail'
+                    entity = get_entity(entity_id, db_path=SECOPSAI_DB_PATH)
+                    if entity is None:
+                        return json_response(self, 404, {'ok': False, 'code': 'ontology_entity_not_found', 'error': 'Ontology entity not found', 'entity_id': entity_id})
                     if operation == 'detail':
-                        entity = get_entity(entity_id, db_path=SECOPSAI_DB_PATH)
-                        if entity is None:
-                            return json_response(self, 404, {'ok': False, 'error': 'Ontology entity not found'})
                         payload = {'schema_version': 'secopsai.ontology.v1', 'entity': entity}
                     elif operation == 'neighbors':
                         payload = {'schema_version': 'secopsai.ontology.v1', **neighbors(entity_id, depth=int((query.get('depth') or ['1'])[0]), relationship_type=(query.get('relationship_type') or [''])[0] or None, limit=limit, db_path=SECOPSAI_DB_PATH)}
@@ -4370,14 +4372,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     elif operation == 'lineage':
                         payload = {'schema_version': 'secopsai.ontology.v1', **lineage(entity_id, depth=int((query.get('depth') or ['2'])[0]), limit=limit, db_path=SECOPSAI_DB_PATH)}
                     else:
-                        payload = {'schema_version': 'secopsai.ontology.v1', **risk_context(entity_id, db_path=SECOPSAI_DB_PATH)}
+                        risk = risk_context(entity_id, db_path=SECOPSAI_DB_PATH)
+                        if risk.get('status') == 'not_found':
+                            return json_response(self, 404, {'ok': False, 'code': 'ontology_entity_not_found', 'error': 'Ontology entity not found', 'entity_id': entity_id})
+                        payload = {'schema_version': 'secopsai.ontology.v1', **risk}
                 else:
-                    return json_response(self, 404, {'ok': False, 'error': 'Unsupported ontology route'})
+                    return json_response(self, 404, {'ok': False, 'code': 'ontology_route_not_found', 'error': 'Unsupported ontology route'})
                 return json_response(self, 200, {'ok': True, 'mode': 'local-helper', **payload})
             except ValueError as exc:
-                return json_response(self, 422, {'ok': False, 'error': str(exc)})
+                return json_response(self, 422, {'ok': False, 'code': 'invalid_parameter', 'error': str(exc)})
             except Exception as exc:
-                return json_response(self, 503, {'ok': False, 'mode': 'local-helper', 'error': str(exc)})
+                return json_response(self, 503, {'ok': False, 'mode': 'local-helper', 'code': 'local_ontology_unavailable', 'error': str(exc)})
         if parsed.path == '/api/secopsai/research-artifacts':
             try:
                 qs = urllib.parse.parse_qs(parsed.query or '')

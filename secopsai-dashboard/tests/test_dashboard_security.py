@@ -233,6 +233,68 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
         self.assertIn("npm run check", checks)
         self.assertIn("npm test", checks)
 
+    def test_local_ontology_routes_dispatch_and_return_typed_json(self):
+        class FakeServer:
+            server_address = ("127.0.0.1", 45680)
+
+        class FakeHandler(dashboard_server.DashboardHandler):
+            server = FakeServer()
+            def __init__(self, path="/", command="GET", headers=None):
+                self.path = path
+                self.command = command
+                self.headers = headers or {}
+                self.status = None
+                self.response_headers = {}
+                self.wfile = BytesIO()
+            def send_response(self, status):
+                self.status = status
+            def send_header(self, name, value):
+                self.response_headers[name] = value
+            def end_headers(self):
+                return None
+
+        old_token = dashboard_server.DASHBOARD_LOCAL_AUTH_TOKEN
+        try:
+            dashboard_server.DASHBOARD_LOCAL_AUTH_TOKEN = "local-test-token"
+            # Public healthz
+            health = FakeHandler(path="/api/healthz")
+            health.do_GET()
+            self.assertEqual(health.status, 200)
+            self.assertEqual(json.loads(health.wfile.getvalue().decode())["status"], "ok")
+
+            # Authenticated search
+            search = FakeHandler(path="/api/secopsai/ontology/search?limit=5", headers={"X-SecOpsAI-Local-Token": "local-test-token"})
+            search.do_GET()
+            self.assertEqual(search.status, 200)
+            search_payload = json.loads(search.wfile.getvalue().decode())
+            self.assertTrue(search_payload.get("ok"))
+            self.assertEqual(search_payload.get("schema_version"), "secopsai.ontology.v1")
+            self.assertIn("entities", search_payload)
+
+            # Authenticated quality
+            quality = FakeHandler(path="/api/secopsai/ontology/quality", headers={"X-SecOpsAI-Local-Token": "local-test-token"})
+            quality.do_GET()
+            self.assertEqual(quality.status, 200)
+            quality_payload = json.loads(quality.wfile.getvalue().decode())
+            self.assertTrue(quality_payload.get("ok"))
+            self.assertIn("quality", quality_payload)
+
+            # Missing entity returns clean 404 JSON
+            missing = FakeHandler(path="/api/secopsai/ontology/entities/missing:test:id", headers={"X-SecOpsAI-Local-Token": "local-test-token"})
+            missing.do_GET()
+            self.assertEqual(missing.status, 404)
+            missing_payload = json.loads(missing.wfile.getvalue().decode())
+            self.assertEqual(missing_payload.get("code"), "ontology_entity_not_found")
+
+            # Unsupported route returns clean 404 JSON
+            unsupported = FakeHandler(path="/api/secopsai/ontology/unknown_subroute", headers={"X-SecOpsAI-Local-Token": "local-test-token"})
+            unsupported.do_GET()
+            self.assertEqual(unsupported.status, 404)
+            unsupported_payload = json.loads(unsupported.wfile.getvalue().decode())
+            self.assertEqual(unsupported_payload.get("code"), "ontology_route_not_found")
+        finally:
+            dashboard_server.DASHBOARD_LOCAL_AUTH_TOKEN = old_token
+
     def test_manual_sandbox_download_uses_nosniff_and_no_store_headers(self):
         source = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
         self.assertIn("def attachment_response", source)

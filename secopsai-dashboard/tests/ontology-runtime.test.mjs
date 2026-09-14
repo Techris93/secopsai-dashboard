@@ -44,4 +44,21 @@ assert.match(worker, /core_ontology_route_unavailable/);
 assert.match(worker, /ontology_entity_not_found/);
 assert.match(worker, /url\.pathname\.startsWith\(["']\/api\/secopsai\/ontology\//);
 
+
+const startScript = read("start-local-dashboard-stack.sh");
+assert.match(startScript, /\/api\/healthz/, "start-local-dashboard-stack.sh must probe healthz");
+assert.match(startScript, /kill -TERM/, "start-local-dashboard-stack.sh must send SIGTERM");
+assert.match(startScript, /kill -9/, "start-local-dashboard-stack.sh must force kill stale helper");
+assert.match(startScript, /Dashboard is ready and healthy/, "start-local-dashboard-stack.sh must confirm healthy status");
+
+const serverSource = read("dashboard_server.py");
+assert.match(serverSource, /sys\.path\.insert\(0, str\(SECOPSAI_ROOT\)\)/, "dashboard_server.py must resolve SECOPSAI_ROOT");
+assert.match(serverSource, /ontology_entity_not_found/, "dashboard_server.py must return typed ontology_entity_not_found");
+assert.match(serverSource, /ontology_route_not_found/, "dashboard_server.py must return typed ontology_route_not_found");
+
+assert.match(app, /The requested ontology entity was not found in the connected workspace/);
+assert.match(app, /The requested ontology endpoint route was not found/);
+assert.match(app, /Local dashboard authentication required/);
+assert.match(app, /Cannot connect to the dashboard backend/);
+
 console.log("ontology runtime contract: ok");
