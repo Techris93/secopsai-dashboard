@@ -234,6 +234,8 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
         self.assertIn("npm test", checks)
 
     def test_local_ontology_routes_dispatch_and_return_typed_json(self):
+        import sys
+        from unittest.mock import MagicMock
         class FakeServer:
             server_address = ("127.0.0.1", 45680)
 
@@ -252,6 +254,21 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
                 self.response_headers[name] = value
             def end_headers(self):
                 return None
+
+        # Ensure ontology module is mocked so CI without Core repository passes cleanly
+        mock_ontology = MagicMock()
+        mock_ontology.search_entities.return_value = [{"entity_id": "pkg:pypi:example"}]
+        mock_ontology.quality.return_value = {"entities": 1}
+        mock_ontology.get_entity.side_effect = lambda eid, **kw: {"entity_id": eid} if eid != "missing:test:id" else None
+        mock_ontology.neighbors.return_value = {"nodes": [], "relationships": []}
+        mock_ontology.timeline.return_value = []
+        mock_ontology.lineage.return_value = {"paths": []}
+        mock_ontology.risk_context.return_value = {"risk_score": 50}
+
+        orig_secopsai = sys.modules.get("secopsai")
+        orig_ontology = sys.modules.get("secopsai.ontology")
+        sys.modules["secopsai"] = MagicMock()
+        sys.modules["secopsai.ontology"] = mock_ontology
 
         old_token = dashboard_server.DASHBOARD_LOCAL_AUTH_TOKEN
         try:
@@ -294,6 +311,14 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
             self.assertEqual(unsupported_payload.get("code"), "ontology_route_not_found")
         finally:
             dashboard_server.DASHBOARD_LOCAL_AUTH_TOKEN = old_token
+            if orig_secopsai is not None:
+                sys.modules["secopsai"] = orig_secopsai
+            else:
+                sys.modules.pop("secopsai", None)
+            if orig_ontology is not None:
+                sys.modules["secopsai.ontology"] = orig_ontology
+            else:
+                sys.modules.pop("secopsai.ontology", None)
 
     def test_manual_sandbox_download_uses_nosniff_and_no_store_headers(self):
         source = (ROOT / "dashboard_server.py").read_text(encoding="utf-8")
