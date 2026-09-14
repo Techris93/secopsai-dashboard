@@ -20,6 +20,38 @@ from threading import RLock
 from urllib.parse import urlparse
 
 DIR = Path(__file__).resolve().parent
+
+
+def _load_local_env(path: Path) -> None:
+    """Load the dashboard's ignored ``.env`` for direct server launches.
+
+    The supervisor scripts already export this file, but operators also start
+    ``dashboard_server.py`` directly while recovering a local stack.  Without
+    loading the same configuration here, the process would silently start
+    with an empty ``DASHBOARD_LOCAL_AUTH_TOKEN`` and every protected read would
+    return ``local_auth_not_configured``.  Existing process environment values
+    always win, and this deliberately supports only simple KEY=VALUE lines so
+    shell syntax is never evaluated.
+    """
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        os.environ[key] = value
+
+
+_load_local_env(DIR / '.env')
 SECOPSAI_ROOT = Path(os.environ.get('SECOPSAI_ROOT', '/Users/chrixchange/secopsai')).expanduser().resolve()
 if str(SECOPSAI_ROOT) not in sys.path:
     sys.path.insert(0, str(SECOPSAI_ROOT))

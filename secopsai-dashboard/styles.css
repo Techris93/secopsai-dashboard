@@ -6712,6 +6712,26 @@ label span,
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42);
 }
 
+.local-auth-gate-panel {
+  margin: 18px 0 20px;
+  padding: 16px;
+  border: 1px solid rgba(15, 157, 182, 0.28);
+  border-radius: 14px;
+  background: rgba(236, 254, 255, 0.58);
+}
+.local-auth-gate-panel[hidden] { display: none; }
+.local-auth-gate-panel h2 { margin: 5px 0 8px; font-size: 1.05rem; color: #102033; }
+.local-auth-gate-panel p { margin: 7px 0 0; line-height: 1.45; }
+.local-auth-gate-panel label { display: block; margin-top: 12px; font-size: 0.82rem; font-weight: 700; color: #314154; }
+.local-auth-gate-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 6px; }
+.local-auth-gate-controls input { min-width: 0; }
+.local-auth-gate-panel code { overflow-wrap: anywhere; }
+
+@media (max-width: 520px) {
+  .local-auth-gate-controls { grid-template-columns: 1fr; }
+  .local-auth-gate-controls button { width: 100%; }
+}
+
 .auth-brand {
   width: 44px;
   height: 44px;

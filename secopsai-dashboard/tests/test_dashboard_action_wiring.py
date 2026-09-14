@@ -72,5 +72,20 @@ def test_initial_route_collapses_sidebar_subnavigation_until_operator_opens_it()
 def test_action_fix_bumps_the_frontend_bundle_cache_key():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
 
-    assert 'app.js?v=20260830-reliability-v3' in html
+    assert 'app.js?v=20260914-local-research-recovery' in html
     assert 'app.js?v=20260803-subsection-navigation' not in html
+
+
+def test_local_auth_is_reachable_before_operator_shell_and_refresh_preserves_history():
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="local-auth-gate-panel"' in html
+    assert 'id="local-auth-gate-input"' in html
+    assert "renderLocalAuthGate();" in app
+    assert "DASHBOARD_LOCAL_AUTH_TOKEN is required before local API access is enabled" in app
+    assert "!['/api/healthz', '/api/readyz'].includes(target.pathname)" in app
+    assert "async function refreshLocalSourcesAfterAuth()" in app
+    assert "state.researchCases.stale = Boolean(state.researchCases.cases.length);" in app
+    assert "state.intelligence.stale = Boolean(state.intelligence.data);" in app
+    assert "state.localTriage = previous && typeof previous === 'object'" in app

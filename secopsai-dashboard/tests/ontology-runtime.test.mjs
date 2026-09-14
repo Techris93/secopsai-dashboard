@@ -49,6 +49,8 @@ const startScript = read("start-local-dashboard-stack.sh");
 assert.match(startScript, /\/api\/healthz/, "start-local-dashboard-stack.sh must probe healthz");
 assert.match(startScript, /kill -TERM/, "start-local-dashboard-stack.sh must send SIGTERM");
 assert.match(startScript, /kill -9/, "start-local-dashboard-stack.sh must force kill stale helper");
+assert.match(startScript, /curl -fsS .*\/api\/healthz/, "startup must require a successful health response");
+assert.match(startScript, /token is intentionally not printed/, "startup must not print the local bearer token");
 assert.match(startScript, /Dashboard is ready and healthy/, "start-local-dashboard-stack.sh must confirm healthy status");
 
 const serverSource = read("dashboard_server.py");

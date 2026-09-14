@@ -51,6 +51,19 @@
         <button class="primary-btn auth-primary" id="auth-update-password-btn" type="submit">Update password</button>
       </form>
 
+      <section id="local-auth-gate-panel" class="local-auth-gate-panel" hidden aria-labelledby="local-auth-gate-title">
+        <div class="eyebrow">Local helper</div>
+        <h2 id="local-auth-gate-title">Reconnect local research data</h2>
+        <p class="small">The local Python helper uses a separate bearer token before it will return research cases, processed jobs, findings, or ontology data. Enter it here before signing in; it is kept only in this browser session.</p>
+        <label for="local-auth-gate-input">DASHBOARD_LOCAL_AUTH_TOKEN</label>
+        <div class="local-auth-gate-controls">
+          <input id="local-auth-gate-input" type="password" autocomplete="one-time-code" data-1p-ignore="true" data-lpignore="true" placeholder="Paste the local helper token" />
+          <button class="secondary-btn" id="local-auth-gate-save" type="button">Save token</button>
+        </div>
+        <p class="small" id="local-auth-gate-status" role="status" aria-live="polite"></p>
+        <p class="small muted">Get the value from <code>secopsai-dashboard/.env</code> after starting the local stack. The startup script intentionally does not print secret values. Never use a hosted Core or Supabase token in this field.</p>
+      </section>
+
       <p class="auth-boundary" id="auth-boundary">Access is invitation-only. Sensor and integration credentials cannot sign in to this console.</p>
     </div>
   </section>
@@ -1691,7 +1704,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
       </div>
       <p id="local-auth-modal-message">The local Python helper requires <code>DASHBOARD_LOCAL_AUTH_TOKEN</code> from your <code>.env</code> file to load research cases, findings, and the operating picture.</p>
       <div class="small" style="margin:10px 0 6px;color:var(--text-muted, #64748b);">
-        <strong>Where do I get this token?</strong> Look in <code>secopsai-dashboard/.env</code> for <code>DASHBOARD_LOCAL_AUTH_TOKEN=...</code>, or check the terminal output from <code>./start-local-dashboard-stack.sh</code> where it is printed on boot.
+        <strong>Where do I get this token?</strong> It is the value after <code>DASHBOARD_LOCAL_AUTH_TOKEN=</code> in the <code>.env</code> file beside <code>start-local-dashboard-stack.sh</code>. If the file has no value, start the local stack once; it generates one and saves it there. The startup script confirms that the token is configured but intentionally never prints the secret.
       </div>
       <div class="field" style="margin:12px 0;">
         <label for="local-auth-modal-input" style="font-weight:600;display:block;margin-bottom:6px;">Local helper bearer token:</label>
@@ -1780,8 +1793,8 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
     </div>
   </div>
 
-  <script src="./config.js?v=20260722-asd-console-theme"></script>
-  <script src="./app.js?v=20260830-reliability-v3"></script>
+  <script src="./config.js?v=20260914-local-research-recovery"></script>
+  <script src="./app.js?v=20260914-local-research-recovery"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

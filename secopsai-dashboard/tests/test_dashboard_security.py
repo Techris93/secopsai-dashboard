@@ -1,4 +1,5 @@
 import re
+import os
 import unittest
 from io import BytesIO
 import json
@@ -120,6 +121,31 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
             self.assertTrue(dashboard_server.DashboardHandler._local_api_authorized(local_header, urlparse('/api/integration-status')))
         finally:
             dashboard_server.DASHBOARD_LOCAL_AUTH_TOKEN = old_token
+
+    def test_direct_server_launch_loads_ignored_env_without_overwriting_process_values(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / '.env'
+            env_path.write_text(
+                "DASHBOARD_LOCAL_AUTH_TOKEN=from-file\nQUOTED_VALUE='quoted value'\n",
+                encoding='utf-8',
+            )
+            old_token = os.environ.get('DASHBOARD_LOCAL_AUTH_TOKEN')
+            old_quoted = os.environ.get('QUOTED_VALUE')
+            try:
+                os.environ.pop('DASHBOARD_LOCAL_AUTH_TOKEN', None)
+                os.environ['QUOTED_VALUE'] = 'from-process'
+                dashboard_server._load_local_env(env_path)
+                self.assertEqual(os.environ.get('DASHBOARD_LOCAL_AUTH_TOKEN'), 'from-file')
+                self.assertEqual(os.environ.get('QUOTED_VALUE'), 'from-process')
+            finally:
+                if old_token is None:
+                    os.environ.pop('DASHBOARD_LOCAL_AUTH_TOKEN', None)
+                else:
+                    os.environ['DASHBOARD_LOCAL_AUTH_TOKEN'] = old_token
+                if old_quoted is None:
+                    os.environ.pop('QUOTED_VALUE', None)
+                else:
+                    os.environ['QUOTED_VALUE'] = old_quoted
 
     def test_local_bootstrap_is_explicit_and_rejects_server_credentials(self):
         class FakeHandler:

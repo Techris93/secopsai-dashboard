@@ -144,6 +144,7 @@ const state = {
     data: null,
     loading: false,
     error: null,
+    stale: false,
     adminToken: sessionStorage.getItem('secopsai_intelligence_admin_token') || sessionStorage.getItem('secopsai_triage_ops_admin_token') || '',
     selectedModel: sessionStorage.getItem('secopsai_bridge_model') || '',
     pendingSelectedModel: '',
@@ -242,6 +243,7 @@ const state = {
     selected: null,
     loading: false,
     error: null,
+    stale: false,
     lastAction: null,
     resolution: { settings: {}, summary: {}, runs: [] },
     retractTarget: null,
@@ -249,6 +251,7 @@ const state = {
       packages: [],
       loading: false,
       error: null,
+      stale: false,
       result: null
     },
     discovery: {
@@ -1098,6 +1101,21 @@ function isAnonymousOperatorSession(session) {
 async function dashboardApiFetch(input, init = {}) {
   const headers = new Headers(init.headers || {});
   const localToken = String(state.auth?.localToken || '').trim();
+  const target = (() => {
+    try { return new URL(String(input || ''), window.location.href); } catch { return null; }
+  })();
+  // Avoid a burst of predictable 401s when a local tab has not been given
+  // its helper credential yet.  The old behavior let every boot request hit
+  // the server, repeatedly reopen the dialog, and briefly render empty state.
+  // Health probes stay public; all other local API reads wait for the token.
+  if (isLocalDashboardOrigin()
+      && !localToken
+      && target?.pathname?.startsWith('/api/')
+      && !['/api/healthz', '/api/readyz'].includes(target.pathname)) {
+    const message = 'DASHBOARD_LOCAL_AUTH_TOKEN is required before local API access is enabled. Enter it in the Local helper authentication dialog.';
+    openLocalAuthModal(message);
+    throw new Error(message);
+  }
   // Local helper auth is deliberately a separate header.  The Authorization
   // bearer remains the Supabase operator session for hosted Worker requests;
   // the Worker does not forward this local-only credential upstream.
@@ -1165,6 +1183,7 @@ function showAuthSurface({ recovery = false, locked = false, message = '', error
       : 'Access is invitation-only. Sensor and integration credentials cannot sign in to this console.';
   }
   state.auth.recoveryMode = recovery;
+  renderLocalAuthGate();
   if (message) setAuthMessage(message, { error, update: recovery });
   if (!locked) window.setTimeout(() => el(recovery ? 'auth-new-password' : 'auth-email')?.focus(), 0);
 }
@@ -1183,6 +1202,27 @@ function updateLocalTokenIndicator() {
   }
   if (label) {
     label.textContent = hasToken ? 'Local active' : 'Local token';
+  }
+}
+
+function isLocalDashboardOrigin() {
+  const hostname = String(window.location?.hostname || '').trim().toLowerCase();
+  return hostname === 'localhost'
+    || hostname === '::1'
+    || /^(?:127\.)\d{1,3}(?:\.\d{1,3}){2}$/.test(hostname);
+}
+
+function renderLocalAuthGate() {
+  const panel = el('local-auth-gate-panel');
+  if (!panel) return;
+  panel.hidden = !isLocalDashboardOrigin();
+  const input = el('local-auth-gate-input');
+  if (input && input.value !== state.auth.localToken) input.value = state.auth.localToken;
+  const status = el('local-auth-gate-status');
+  if (status) {
+    status.textContent = state.auth.localToken
+      ? 'A local helper token is saved for this browser session. Sign in to load the local workspace.'
+      : 'A local helper token is required for local research and ontology reads.';
   }
 }
 
@@ -1216,12 +1256,43 @@ function saveLocalAuthToken(rawToken) {
     showToast('Local helper token cleared', 'info');
   }
   updateLocalTokenIndicator();
+  renderLocalAuthGate();
   closeLocalAuthModal();
   const sysInput = el('dashboard-local-auth-token');
   if (sysInput) sysInput.value = token;
   renderIntegrations();
   loadIntegrationStatus().then(() => renderIntegrations()).catch(() => {});
-  refreshActiveSurface().catch(err => console.warn('surface reload after local auth failed', err));
+  refreshLocalSourcesAfterAuth().catch(err => console.warn('local data reload after local auth failed', err));
+}
+
+async function refreshLocalSourcesAfterAuth() {
+  // Entering the token should repopulate every local-backed surface, not only
+  // the page that happened to be open when the prompt appeared.  All of these
+  // operations are read-only; failed requests leave the last successful data
+  // visible and are represented as stale/degraded state by their renderer.
+  if (!state.auth.activeUserId) return false;
+  // The research and triage commands share SQLite. Run them in a bounded
+  // sequence after authentication instead of starting seven CLI/database
+  // readers at once; the latter can recreate the lock contention that made
+  // the history appear to disappear during recovery.
+  const loaders = [
+    ['local triage', () => loadLocalTriageState()],
+    ['research cases', () => loadResearchCases({ render: false, preserveSelection: true })],
+    ['research watchlist', () => loadResearchWatchlist({ render: false })],
+    ['research discovery', () => loadResearchDiscovery({ render: false })],
+    ['coverage', () => loadCoverage({ render: false })],
+    ['ontology', () => loadOntologySearch({ render: false })],
+    ['intelligence', () => loadIntelligence({ render: false })]
+  ];
+  for (const [label, load] of loaders) {
+    try {
+      await load();
+    } catch (error) {
+      console.warn(`${label} reload after local auth failed`, error);
+    }
+  }
+  renderAll();
+  return true;
 }
 
 function showAuthenticatedShell(session) {
@@ -1239,6 +1310,7 @@ function showAuthenticatedShell(session) {
   }
   if (signOut) signOut.hidden = !session;
   updateLocalTokenIndicator();
+  renderLocalAuthGate();
 }
 
 function stopDashboardRuntime() {
@@ -6841,6 +6913,9 @@ function renderIntelligence() {
 
   const table = el('intelligence-jobs-table');
   if (table) {
+    const staleNotice = state.intelligence.stale && jobs.length && state.intelligence.error
+      ? `<div class="small text-warning" role="status">Showing the last successful job history; the latest refresh failed: ${escapeHtml(state.intelligence.error)}.</div>`
+      : '';
     if (state.intelligence.loading && !data) {
       table.innerHTML = '<div class="empty-state compact">Loading intelligence status…</div>';
     } else if (state.intelligence.error && !jobs.length) {
@@ -6848,7 +6923,7 @@ function renderIntelligence() {
     } else if (!jobs.length) {
       table.innerHTML = '<div class="empty-state compact">No analysis jobs yet. Queue an approved action above.</div>';
     } else {
-      table.innerHTML = `<div class="intelligence-pipeline-list" role="list" aria-label="Analysis job pipelines">${pipelineGroups.map(group => {
+      table.innerHTML = `${staleNotice}<div class="intelligence-pipeline-list" role="list" aria-label="Analysis job pipelines">${pipelineGroups.map(group => {
         const current = group.current || {};
         const currentResult = intelligenceResultView(current);
         const stageSummary = group.jobs.map(job => {
@@ -6895,10 +6970,20 @@ async function loadIntelligence({ render = true } = {}) {
   try {
     const response = await dashboardApiFetch(cfg.intelligenceEndpoint || '/api/secopsai/intelligence');
     const payload = await response.json().catch(() => ({}));
-    state.intelligence.data = payload;
-    state.intelligence.error = response.ok ? null : (payload.error || `Intelligence status HTTP ${response.status}`);
+    if (response.ok && payload?.ok !== false) {
+      state.intelligence.data = payload;
+      state.intelligence.error = null;
+      state.intelligence.stale = false;
+    } else {
+      // Keep the last successful job list visible during an auth lapse or
+      // transient helper outage.  Replacing it with an error payload made
+      // previously processed jobs appear to have disappeared.
+      state.intelligence.error = payload.error || `Intelligence status HTTP ${response.status}`;
+      state.intelligence.stale = Boolean(state.intelligence.data);
+    }
   } catch (error) {
     state.intelligence.error = error?.message || String(error);
+    state.intelligence.stale = Boolean(state.intelligence.data);
   } finally {
     state.intelligence.loading = false;
     if (render) renderIntelligence();
@@ -9991,6 +10076,7 @@ async function loadResearchCases({ render = true, preserveSelection = true } = {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.ok === false) throw new Error(payload.error || `Research cases HTTP ${response.status}`);
     state.researchCases.cases = Array.isArray(payload.cases) ? payload.cases : [];
+    state.researchCases.stale = false;
     state.researchCases.resolution = payload.resolution && typeof payload.resolution === 'object'
       ? payload.resolution
       : { settings: {}, summary: {}, runs: [] };
@@ -10003,8 +10089,10 @@ async function loadResearchCases({ render = true, preserveSelection = true } = {
     await loadResearchSandboxRecommendations({ render: false });
   } catch (error) {
     state.researchCases.error = error?.message || String(error);
-    state.researchCases.cases = [];
-    state.researchCases.selected = null;
+    // A failed refresh must not erase a previously loaded research queue.
+    // Keep it visible with a stale/error indicator until the helper recovers
+    // or the operator supplies the required local token.
+    state.researchCases.stale = Boolean(state.researchCases.cases.length);
   } finally {
     state.researchCases.loading = false;
     if (render) renderResearchCases();
@@ -10055,9 +10143,10 @@ async function loadResearchWatchlist({ render = true } = {}) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.ok === false) throw new Error(payload.error || `Research watchlist HTTP ${response.status}`);
     watchlist.packages = Array.isArray(payload.packages) ? payload.packages : [];
+    watchlist.stale = false;
   } catch (error) {
     watchlist.error = error?.message || String(error);
-    watchlist.packages = [];
+    watchlist.stale = Boolean(watchlist.packages.length);
   } finally {
     watchlist.loading = false;
     if (render) renderResearchCases();
@@ -12005,11 +12094,14 @@ function renderResearchCases() {
   renderResearchStageQueues(state.researchCases.discovery.candidates || []);
   const list = el('research-case-list');
   const filtered = filteredResearchCases();
-  if (list) list.innerHTML = state.researchCases.loading && !cases.length
+  const staleNotice = state.researchCases.stale && cases.length
+    ? `<div class="small text-warning" role="status">Showing ${cases.length} previously loaded case${cases.length === 1 ? '' : 's'}; the latest local refresh failed: ${escapeHtml(state.researchCases.error || 'helper unavailable')}.</div>`
+    : '';
+  if (list) list.innerHTML = staleNotice + (state.researchCases.loading && !cases.length
     ? '<div class="empty-state">Loading research cases…</div>'
     : filtered.length
       ? `<div class="small research-case-list-note">Severity is investigation priority, not a maliciousness verdict. Use assessment, evidence quality, and local exposure to decide what is proven.</div><div class="research-case-list">${filtered.map(item => { const assessment = humanizeSnake(item.assessment || 'unconfirmed_static_lead'); const evidenceQuality = humanizeSnake(item.evidence_quality || 'insufficient'); const localExposure = humanizeSnake(item.local_exposure || 'unknown'); return `<button class="research-case-row ${item.case_id === state.researchCases.selectedId ? 'selected' : ''}" type="button" data-research-case-id="${escapeHtml(item.case_id)}"><span class="research-case-row-head"><strong>${escapeHtml(item.title)}</strong>${renderSeverityPill(item.potential_impact || item.severity)}</span><span class="small"><code>${escapeHtml(item.case_id)}</code> · ${escapeHtml(statusLabel(item.status))} · confidence ${escapeHtml(String(item.confidence || 0))}</span><span class="small">Assessment: ${escapeHtml(assessment)} · evidence: ${escapeHtml(evidenceQuality)} · exposure: ${escapeHtml(localExposure)}</span><span class="small">${escapeHtml(String(item.evidence_count || 0))} evidence · ${escapeHtml(String(item.ioc_count || 0))} IOCs · ${escapeHtml(fmtDate(item.updated_at))}</span></button>`; }).join('')}</div>`
-      : `<div class="empty-state">${escapeHtml(state.researchCases.error || 'No research cases match this view.')}</div>`;
+      : `<div class="empty-state">${escapeHtml(state.researchCases.error || 'No research cases match this view.')}</div>`);
   list?.querySelectorAll('[data-research-case-id]').forEach(button => button.addEventListener('click', async () => {
     state.researchCases.selectedId = button.dataset.researchCaseId;
     state.researchCases.loading = true;
@@ -12794,16 +12886,21 @@ async function runSourceResearchFollowup(action, button = null) {
 }
 
 async function loadLocalTriageState() {
+  const previous = state.localTriage;
   try {
     const res = await dashboardApiFetch('/api/secopsai/triage-state');
     if (!res.ok) throw new Error(`Local triage HTTP ${res.status}`);
     state.localTriage = await res.json();
+    if (state.localTriage && typeof state.localTriage === 'object') state.localTriage.stale = false;
     applyNativeFindingStatuses(state.localTriage);
     await refreshSelectedSessionDetail();
   } catch (error) {
     console.warn('local triage load failed', error);
-    state.localTriage = { ok: false, error: error?.message || String(error) };
-    state.selectedSessionDetail = null;
+    state.localTriage = previous && typeof previous === 'object'
+      ? { ...previous, ok: false, stale: true, error: error?.message || String(error) }
+      : { ok: false, stale: false, error: error?.message || String(error) };
+    // Preserve the last selected session and its evidence while the helper is
+    // unavailable.  The UI will mark the source stale instead of blanking it.
   }
 }
 
@@ -13294,6 +13391,15 @@ function bindEvents() {
   el('auth-reset-request-btn')?.addEventListener('click', requestPasswordReset);
   el('auth-update-form')?.addEventListener('submit', updateRecoveredPassword);
   el('auth-signout-btn')?.addEventListener('click', signOutOperator);
+  el('local-auth-gate-save')?.addEventListener('click', () => {
+    saveLocalAuthToken(el('local-auth-gate-input')?.value || '');
+  });
+  el('local-auth-gate-input')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      saveLocalAuthToken(el('local-auth-gate-input')?.value || '');
+    }
+  });
   el('top-local-token-btn')?.addEventListener('click', () => openLocalAuthModal());
   el('local-auth-modal-close')?.addEventListener('click', closeLocalAuthModal);
   el('local-auth-modal-cancel')?.addEventListener('click', closeLocalAuthModal);
@@ -14107,6 +14213,7 @@ window.addEventListener('DOMContentLoaded', () => {
   collapseSidebarForInitialRoute(initialPage);
   setPage(initialPage, { skipHistory: true });
   bindEvents();
+  renderLocalAuthGate();
   restoreFindingSavedView();
   startTopStripClock();
   initializeDashboardAuth();

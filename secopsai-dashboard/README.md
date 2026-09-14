@@ -73,10 +73,13 @@ while using the console.
 
 The helper intentionally binds to loopback. Every local API request requires
 `DASHBOARD_LOCAL_AUTH_TOKEN`, including loopback requests; a loopback binding
-is a network boundary, not an authorization boundary. Set the token in `.env`,
-then paste the same value into System → Credentials, or send it in
-`X-SecOpsAI-Local-Token` or a Bearer authorization header for direct API calls.
-The token is never generated into `config.js` or sent to hosted services.
+is a network boundary, not an authorization boundary. The token is stored in
+the ignored `.env` file beside `start-local-dashboard-stack.sh`. If it is
+missing, the startup script generates a cryptographically random value and
+saves it there. Paste that value into the local-auth dialog or System →
+Credentials, or send it in `X-SecOpsAI-Local-Token` or a Bearer authorization
+header for direct API calls. The token is never generated into `config.js` or
+sent to hosted services.
 
 The browser never runs arbitrary shell commands. Local buttons call typed
 helper routes that map to fixed SecOpsAI argument arrays. Exact local artifact

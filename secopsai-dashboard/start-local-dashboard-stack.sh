@@ -135,7 +135,7 @@ for _ in {1..50}; do
     echo "[secopsai-dashboard] Dashboard server exited prematurely during startup" >&2
     exit 1
   fi
-  if curl -sS --max-time 1 "http://$HOST:$PORT/api/healthz" >/dev/null 2>&1; then
+  if curl -fsS --max-time 1 "http://$HOST:$PORT/api/healthz" >/dev/null 2>&1; then
     healthy=1
     break
   fi
@@ -144,8 +144,8 @@ done
 
 if [[ "$healthy" -eq 1 ]]; then
   echo "[secopsai-dashboard] Dashboard is ready and healthy at http://$HOST:$PORT"
-  echo "[secopsai-dashboard] Local auth token: $DASHBOARD_LOCAL_AUTH_TOKEN"
-  echo "[secopsai-dashboard] (Enter this token in the dashboard prompt to authenticate local helper API requests)"
+  echo "[secopsai-dashboard] Local auth is configured from $DIR/.env (the token is intentionally not printed)"
+  echo "[secopsai-dashboard] Enter it in the local auth panel or System > Credentials"
   echo "[secopsai-dashboard] Press Ctrl+C to stop"
 else
   echo "[secopsai-dashboard] Health probe failed for http://$HOST:$PORT/api/healthz" >&2
