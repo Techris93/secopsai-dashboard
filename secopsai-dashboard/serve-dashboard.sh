@@ -103,6 +103,13 @@ set -a
 source "$DIR/.env"
 set +a
 
+if [[ -z "${DASHBOARD_LOCAL_AUTH_TOKEN:-}" ]]; then
+  NEW_LOCAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  echo "DASHBOARD_LOCAL_AUTH_TOKEN=$NEW_LOCAL_TOKEN" >> "$DIR/.env"
+  export DASHBOARD_LOCAL_AUTH_TOKEN="$NEW_LOCAL_TOKEN"
+  echo "[secopsai-dashboard] Generated missing DASHBOARD_LOCAL_AUTH_TOKEN in .env"
+fi
+
 python3 "$DIR/generate-config.py"
 
 export PORT HOST

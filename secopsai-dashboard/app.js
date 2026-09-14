@@ -1112,6 +1112,13 @@ async function dashboardApiFetch(input, init = {}) {
     const authFailure = await response.clone().json().catch(() => ({}));
     if (['operator_session_required', 'operator_session_invalid'].includes(String(authFailure?.code || ''))) {
       leaveAuthenticatedDashboard('Your operator session expired. Sign in again to continue.');
+    } else if (authFailure?.code === 'local_auth_required' || authFailure?.code === 'local_auth_not_configured') {
+      openLocalAuthModal(authFailure.error || 'Local helper authentication required.');
+    }
+  } else if (response.status === 503) {
+    const errorBody = await response.clone().json().catch(() => ({}));
+    if (errorBody?.code === 'local_auth_not_configured') {
+      openLocalAuthModal(errorBody.error || 'DASHBOARD_LOCAL_AUTH_TOKEN is required before local API access is enabled.');
     }
   }
   return response;
@@ -1162,6 +1169,61 @@ function showAuthSurface({ recovery = false, locked = false, message = '', error
   if (!locked) window.setTimeout(() => el(recovery ? 'auth-new-password' : 'auth-email')?.focus(), 0);
 }
 
+function updateLocalTokenIndicator() {
+  const dot = el('top-local-token-dot');
+  const label = el('top-local-token-label');
+  const btn = el('top-local-token-btn');
+  const hasToken = Boolean(state.auth?.localToken);
+  if (btn) {
+    btn.classList.toggle('text-warning', !hasToken);
+    btn.classList.toggle('text-success', hasToken);
+  }
+  if (dot) {
+    dot.className = hasToken ? 'dot text-success' : 'dot text-warning';
+  }
+  if (label) {
+    label.textContent = hasToken ? 'Local active' : 'Local token';
+  }
+}
+
+function openLocalAuthModal(initialError = '') {
+  const modal = el('local-auth-modal');
+  if (!modal) return;
+  const input = el('local-auth-modal-input');
+  const errorEl = el('local-auth-modal-error');
+  if (input) input.value = state.auth?.localToken || '';
+  if (errorEl) errorEl.textContent = initialError || '';
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  window.setTimeout(() => input?.focus(), 50);
+}
+
+function closeLocalAuthModal() {
+  const modal = el('local-auth-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+function saveLocalAuthToken(rawToken) {
+  const token = String(rawToken || '').trim();
+  state.auth.localToken = token;
+  if (token) {
+    sessionStorage.setItem('secopsai_dashboard_local_auth_token', token);
+    showToast('Local helper authentication enabled for this browser session', 'success');
+  } else {
+    sessionStorage.removeItem('secopsai_dashboard_local_auth_token');
+    showToast('Local helper token cleared', 'info');
+  }
+  updateLocalTokenIndicator();
+  closeLocalAuthModal();
+  const sysInput = el('dashboard-local-auth-token');
+  if (sysInput) sysInput.value = token;
+  renderIntegrations();
+  loadIntegrationStatus().then(() => renderIntegrations()).catch(() => {});
+  refreshActiveSurface().catch(err => console.warn('surface reload after local auth failed', err));
+}
+
 function showAuthenticatedShell(session) {
   const gate = el('auth-gate');
   const shell = el('app-shell');
@@ -1176,6 +1238,7 @@ function showAuthenticatedShell(session) {
     identity.hidden = !email;
   }
   if (signOut) signOut.hidden = !session;
+  updateLocalTokenIndicator();
 }
 
 function stopDashboardRuntime() {
@@ -13231,6 +13294,19 @@ function bindEvents() {
   el('auth-reset-request-btn')?.addEventListener('click', requestPasswordReset);
   el('auth-update-form')?.addEventListener('submit', updateRecoveredPassword);
   el('auth-signout-btn')?.addEventListener('click', signOutOperator);
+  el('top-local-token-btn')?.addEventListener('click', () => openLocalAuthModal());
+  el('local-auth-modal-close')?.addEventListener('click', closeLocalAuthModal);
+  el('local-auth-modal-cancel')?.addEventListener('click', closeLocalAuthModal);
+  el('local-auth-modal-save')?.addEventListener('click', () => saveLocalAuthToken(el('local-auth-modal-input')?.value));
+  el('local-auth-modal-input')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      saveLocalAuthToken(el('local-auth-modal-input')?.value);
+    }
+  });
+  el('local-auth-modal')?.addEventListener('click', event => {
+    if (event.target === el('local-auth-modal')) closeLocalAuthModal();
+  });
   document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => togglePrimarySectionNavigation(btn)));
   el('mobile-menu-btn')?.addEventListener('click', toggleMobileNav);
   el('work-table-view-btn')?.addEventListener('click', () => { workView = 'table'; renderTasks(); });
@@ -13930,13 +14006,7 @@ function bindEvents() {
     setStatus('Research action token cleared');
   });
   el('dashboard-local-auth-save-btn')?.addEventListener('click', () => {
-    const token = el('dashboard-local-auth-token')?.value?.trim() || '';
-    state.auth.localToken = token;
-    if (token) sessionStorage.setItem('secopsai_dashboard_local_auth_token', token);
-    else sessionStorage.removeItem('secopsai_dashboard_local_auth_token');
-    renderIntegrations();
-    loadIntegrationStatus().then(() => renderIntegrations());
-    setStatus(token ? '<span class="dot"></span> Local helper authentication enabled for this browser session' : 'Local helper authentication cleared');
+    saveLocalAuthToken(el('dashboard-local-auth-token')?.value);
   });
   el('dashboard-local-auth-clear-btn')?.addEventListener('click', () => {
     state.auth.localToken = '';

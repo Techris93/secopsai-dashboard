@@ -14,6 +14,17 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+set -a
+source "$DIR/.env"
+set +a
+
+if [[ -z "${DASHBOARD_LOCAL_AUTH_TOKEN:-}" ]]; then
+  NEW_LOCAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  echo "DASHBOARD_LOCAL_AUTH_TOKEN=$NEW_LOCAL_TOKEN" >> "$DIR/.env"
+  export DASHBOARD_LOCAL_AUTH_TOKEN="$NEW_LOCAL_TOKEN"
+  echo "[secopsai-dashboard] Generated missing DASHBOARD_LOCAL_AUTH_TOKEN in .env"
+fi
+
 listener_pid() {
   lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true
 }
@@ -133,6 +144,8 @@ done
 
 if [[ "$healthy" -eq 1 ]]; then
   echo "[secopsai-dashboard] Dashboard is ready and healthy at http://$HOST:$PORT"
+  echo "[secopsai-dashboard] Local auth token: $DASHBOARD_LOCAL_AUTH_TOKEN"
+  echo "[secopsai-dashboard] (Enter this token in the dashboard prompt to authenticate local helper API requests)"
   echo "[secopsai-dashboard] Press Ctrl+C to stop"
 else
   echo "[secopsai-dashboard] Health probe failed for http://$HOST:$PORT/api/healthz" >&2
