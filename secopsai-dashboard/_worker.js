@@ -803,6 +803,38 @@ async function handleHostedOntology(request, env) {
   }
 }
 
+// Read-only research cases from the hosted Core projection, used when no
+// private helper is configured.  Case mutations stay helper-only.
+async function handleHostedResearchCases(request, env) {
+  const rawUrl = String(env.SECOPSAI_CORE_API_URL || "").trim();
+  const readToken = String(env.SECOPSAI_CORE_READ_TOKEN || "").trim();
+  if (!rawUrl || !readToken) return null;
+  const url = new URL(request.url);
+  if (request.method !== "GET") {
+    return jsonResponse({ ok: false, code: "hosted_read_only", error: "Research cases are read-only in hosted mode. Use the local helper to change a case." }, { status: 501 });
+  }
+  const baseUrl = serviceBaseUrl(rawUrl, "SECOPSAI_CORE_API_URL");
+  const detail = url.pathname.match(/^\/api\/secopsai\/research-cases\/(RSC-[A-F0-9]{12})$/i);
+  try {
+    if (detail) {
+      const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/research/cases/${detail[1].toUpperCase()}`, readToken, "Core research case");
+      return jsonResponse({ ok: true, mode: "hosted-core", case: payload.case });
+    }
+    if (url.pathname !== "/api/secopsai/research-cases") return null;
+    const params = new URLSearchParams();
+    const limit = Math.max(1, Math.min(500, Number.parseInt(url.searchParams.get("limit") || "100", 10) || 100));
+    params.set("limit", String(limit));
+    const status = String(url.searchParams.get("status") || "").trim();
+    if (/^[a-z_]{1,40}$/.test(status)) params.set("status", status);
+    const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/research/cases?${params}`, readToken, "Core research cases");
+    return jsonResponse({ ok: true, mode: "hosted-core", read_only: true, cases: payload.cases || [], resolution: { settings: {}, summary: {}, runs: [] } });
+  } catch (error) {
+    const status = Number(error?.status || 0);
+    if (status === 404 && detail) return jsonResponse({ ok: false, mode: "hosted-core", error: "Research case is not synchronized to the hosted Core yet" }, { status: 404 });
+    return jsonResponse({ ok: false, mode: "hosted-core", error: sanitizeHelperErrorDetail(error?.message || error) }, { status: 503 });
+  }
+}
+
 async function handleHostedEnterprise(request, env) {
   const rawUrl = String(env.SECOPSAI_CORE_API_URL || "").trim();
   const readToken = String(env.SECOPSAI_CORE_READ_TOKEN || "").trim();
@@ -1621,6 +1653,8 @@ async function handleIntegrationStatus(env) {
       secopsai_intelligence_api: Boolean(secopsaiHelperBase || String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim()),
       // Specialists and Artifact Fleet are helper-only; enterprise connector
       // storage is not served by Core Edge.
+      // Read-only case projection served by Core when no helper is set.
+      secopsai_research_cases_api: Boolean(secopsaiHelperBase || (String(env.SECOPSAI_CORE_API_URL || "").trim() && String(env.SECOPSAI_CORE_READ_TOKEN || "").trim())),
       secopsai_specialists_api: Boolean(secopsaiHelperBase),
       secopsai_artifact_fleet_api: Boolean(secopsaiHelperBase),
       secopsai_enterprise_api: Boolean(secopsaiHelperBase),
@@ -1975,6 +2009,10 @@ async function routeRequest(request, env) {
       }
       if (url.pathname === "/api/secopsai/ontology" || url.pathname.startsWith("/api/secopsai/ontology/")) {
         return handleHostedOntology(request, env);
+      }
+      if (!String(env.SECOPSAI_HELPER_BASE_URL || "").trim() && (url.pathname === "/api/secopsai/research-cases" || url.pathname.startsWith("/api/secopsai/research-cases/"))) {
+        const hosted = await handleHostedResearchCases(request, env);
+        if (hosted) return hosted;
       }
       if (request.method === "GET" && url.pathname === "/api/secopsai/enterprise-status") {
         const directHostedMode = Boolean(String(env.SECOPSAI_CORE_API_URL || "").trim());

@@ -1175,8 +1175,9 @@ function isAnonymousOperatorSession(session) {
 // the Worker would return, instead of ~20 failing network calls per load.
 let integrationStatusOnce = null;
 const HELPER_CAPABILITY_ROUTES = [
-  ['/api/secopsai/research-cases', 'secopsai_research_api'],
+  ['/api/secopsai/research-cases', 'secopsai_research_cases_api'],
   ['/api/secopsai/research-discovery', 'secopsai_research_api'],
+  ['/api/secopsai/research-sandbox-recommendations', 'secopsai_research_api'],
   ['/api/secopsai/research-watchlist', 'secopsai_research_api'],
   ['/api/secopsai/triage-ops/campaign', 'secopsai_campaign_api'],
   ['/api/secopsai/triage-ops', 'secopsai_triage_api'],
@@ -4081,10 +4082,15 @@ async function loadOntologySearch({ render = true, selectFirst = true } = {}) {
       state.ontology.riskError = null;
       if (!nextId) state.ontology.panelStates.quality = 'loading';
     }
+    let entityLoaded = false;
     if (state.ontology.selectedId && isCurrent() && !selectionChangedWhileSearching) {
       await loadOntologyEntity(state.ontology.selectedId, { render: false });
+      entityLoaded = true;
     }
     if (!isCurrent()) return state.ontology.results;
+    // The entity fan-out already fetched quality; a second request per page
+    // load doubled the hosted Core's most expensive read.
+    if (entityLoaded) return state.ontology.results;
     const qualityPayload = await fetchOntology('/quality');
     if (!isCurrent()) return state.ontology.results;
     // When an entity fan-out ran above, its quality result belongs to the

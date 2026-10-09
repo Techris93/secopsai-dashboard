@@ -326,6 +326,47 @@ async function testHostedOntologyProxyContract() {
   }
 }
 
+async function testHostedResearchCasesAreReadOnlyCoreProjections() {
+  const calls = [];
+  const env = hostedEnv({ SECOPSAI_CORE_API_URL: "https://core.example", SECOPSAI_CORE_READ_TOKEN: "read-token" });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+    const url = String(input);
+    if (url.includes("/api/v1/research/cases/RSC-98BE7E080D02")) {
+      return Response.json({ case: { case_id: "RSC-98BE7E080D02", title: "Synthetic", hosted_projection: true } });
+    }
+    if (url.includes("/api/v1/research/cases/RSC-000000000000")) {
+      return Response.json({ error: "not_found" }, { status: 404 });
+    }
+    return Response.json({ cases: [{ case_id: "RSC-98BE7E080D02", status: "ready_to_publish" }] });
+  };
+  try {
+    const list = await workerModule.fetch(operatorRequest("https://dashboard.example/api/secopsai/research-cases?limit=250&status=draft;drop"), env);
+    assert.equal(list.status, 200);
+    const listed = await jsonFrom(list);
+    assert.equal(listed.read_only, true);
+    assert.equal(listed.cases[0].case_id, "RSC-98BE7E080D02");
+    assert.equal(calls[0].url, "https://core.example/api/v1/research/cases?limit=250");
+    assert.equal(new Headers(calls[0].init.headers).get("Authorization"), "Bearer read-token");
+
+    const detail = await workerModule.fetch(operatorRequest("https://dashboard.example/api/secopsai/research-cases/rsc-98be7e080d02"), env);
+    assert.equal((await jsonFrom(detail)).case.hosted_projection, true);
+    const missing = await workerModule.fetch(operatorRequest("https://dashboard.example/api/secopsai/research-cases/RSC-000000000000"), env);
+    assert.equal(missing.status, 404);
+
+    const write = await workerModule.fetch(operatorRequest("https://dashboard.example/api/secopsai/research-cases", { method: "POST", body: "{}" }), env);
+    assert.equal(write.status, 501);
+    assert.equal((await jsonFrom(write)).code, "hosted_read_only");
+
+    const status = await jsonFrom(await workerModule.fetch(operatorRequest("https://dashboard.example/api/integration-status"), env));
+    assert.equal(status.helper.secopsai_research_cases_api, true);
+    assert.equal(status.helper.secopsai_research_api, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 await testStaticAssetsAreAllowlisted();
 await testAnonymousOperatorProfilesAreRejected();
 await testSessionsRequireExplicitOperatorAuthorization();
@@ -334,5 +375,6 @@ await testHostedHelperProxyRequiresAnHttpsOriginAndRejectsRedirects();
 await testSuccessfulHelperProxyResponsesAreBounded();
 await testR2RunOutputResponsesAreBounded();
 await testHostedOntologyProxyContract();
+await testHostedResearchCasesAreReadOnlyCoreProjections();
 
 console.log("dashboard security worker contract: ok");
