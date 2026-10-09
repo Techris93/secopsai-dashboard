@@ -76,7 +76,8 @@ jobs:
           # A new deployment takes a little while to replace the previous one
           # everywhere; retry the whole set instead of failing on the first blip.
           for attempt in $(seq 1 12); do
-            reason="$(verify)"; rc=$?
+            # GitHub runs steps with bash -e; capture the status explicitly.
+            rc=0; reason="$(verify)" || rc=$?
             if [ $rc -eq 0 ]; then echo "Deployed dashboard verified (attempt $attempt)"; exit 0; fi
             echo "attempt $attempt: $reason"
             [ $rc -eq 2 ] && exit 1   # never retry a credential exposure
