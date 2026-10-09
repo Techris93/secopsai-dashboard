@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import workerModule from "../_worker.js";
 
 const OPERATOR_TOKEN = "operator-session";
-const authProfile = { id: "operator-1", email: "operator@example.com", role: "authenticated" };
+const authProfile = {
+  id: "operator-1",
+  email: "operator@example.com",
+  email_confirmed_at: "2026-01-01T00:00:00Z",
+  role: "authenticated",
+};
 
 function authFetcher(profile = authProfile) {
   return {
@@ -21,6 +26,7 @@ function hostedEnv(overrides = {}) {
     SUPABASE_URL: "https://test-project.supabase.co",
     SUPABASE_ANON_KEY: "test-anon-key",
     SUPABASE_AUTH_FETCHER: authFetcher(),
+    DASHBOARD_OPERATOR_EMAILS: "Operator@Example.com",
     SECOPSAI_HELPER_ALLOWED_ORIGINS: "https://helper.example",
     RUN_OUTPUT_ALLOWED_ORIGINS: "https://output.example",
     ...overrides,
@@ -70,6 +76,43 @@ async function testAnonymousOperatorProfilesAreRejected() {
   assert.equal(response.status, 401);
   const payload = await jsonFrom(response);
   assert.equal(payload.code, "operator_session_invalid");
+}
+
+async function operatorStatus(profile, overrides = {}) {
+  const response = await workerModule.fetch(
+    operatorRequest("https://dashboard.example/api/integration-status"),
+    hostedEnv({ SUPABASE_AUTH_FETCHER: authFetcher(profile), ...overrides }),
+  );
+  return { status: response.status, payload: await jsonFrom(response) };
+}
+
+async function testSessionsRequireExplicitOperatorAuthorization() {
+  // A self-registered Supabase user holds a valid session but is not an operator.
+  const stranger = { id: "user-9", email: "stranger@example.net", email_confirmed_at: "2026-01-01T00:00:00Z" };
+  let result = await operatorStatus(stranger);
+  assert.equal(result.status, 403);
+  assert.equal(result.payload.code, "operator_not_authorized");
+
+  // user_metadata is writable by the user and must never grant access.
+  result = await operatorStatus({ ...stranger, user_metadata: { secopsai_role: "admin" } });
+  assert.equal(result.status, 403);
+
+  // Fails closed when no allowlist is configured.
+  result = await operatorStatus(authProfile, { DASHBOARD_OPERATOR_EMAILS: "" });
+  assert.equal(result.status, 403);
+
+  // An allowlisted email must be confirmed.
+  result = await operatorStatus({ ...authProfile, email_confirmed_at: null });
+  assert.equal(result.status, 403);
+
+  // Server-controlled app_metadata role and explicit user ids are accepted.
+  result = await operatorStatus({ ...stranger, app_metadata: { secopsai_role: "operator" } });
+  assert.notEqual(result.status, 403);
+  assert.notEqual(result.status, 401);
+  result = await operatorStatus(stranger, { DASHBOARD_OPERATOR_USER_IDS: "user-1, user-9" });
+  assert.notEqual(result.status, 403);
+  result = await operatorStatus(authProfile);
+  assert.notEqual(result.status, 403);
 }
 
 async function testContentPackWritesRequireAndForwardActionToken() {
@@ -270,6 +313,7 @@ async function testHostedOntologyProxyContract() {
 
 await testStaticAssetsAreAllowlisted();
 await testAnonymousOperatorProfilesAreRejected();
+await testSessionsRequireExplicitOperatorAuthorization();
 await testContentPackWritesRequireAndForwardActionToken();
 await testHostedHelperProxyRequiresAnHttpsOriginAndRejectsRedirects();
 await testSuccessfulHelperProxyResponsesAreBounded();

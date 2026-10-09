@@ -176,6 +176,7 @@ The local template is [`.env.example`](.env.example). Important settings:
 | --- | --- |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Authenticated dashboard data access |
 | `DASHBOARD_AUTH_REQUIRED` | Must remain `true` for hosted and pilot environments |
+| `DASHBOARD_OPERATOR_EMAILS`, `DASHBOARD_OPERATOR_USER_IDS` | Hosted operator allowlist; a valid Supabase session without it (or `app_metadata.secopsai_role`) receives `403` |
 | `SECOPSAI_ROOT` | Absolute path to the local SecOpsAI Core checkout |
 | `INTELLIGENCE_ADMIN_TOKEN` | Model, investigation, learning, and service controls |
 | `TRIAGE_OPS_ADMIN_TOKEN` | Protected triage and research write actions |
