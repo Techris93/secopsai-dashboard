@@ -1345,6 +1345,10 @@ function showAuthSurface({ recovery = false, locked = false, message = '', error
   const summary = el('auth-summary');
   const boundary = el('auth-boundary');
   gate?.classList.remove('hidden');
+  // The page starts in a neutral "Verifying access" state so a session that is
+  // already authenticated (Cloudflare Access) never flashes the sign-in form.
+  gate?.classList.remove('auth-checking');
+  gate?.removeAttribute('aria-busy');
   shell?.classList.add('auth-pending');
   shell?.setAttribute('aria-hidden', 'true');
   loginForm?.classList.toggle('hidden', recovery || locked || localTokenAuthMode());
@@ -1484,6 +1488,8 @@ function showAuthenticatedShell(session) {
   const identity = el('operator-identity');
   const signOut = el('auth-signout-btn');
   gate?.classList.add('hidden');
+  gate?.classList.remove('auth-checking');
+  gate?.removeAttribute('aria-busy');
   shell?.classList.remove('auth-pending');
   shell?.setAttribute('aria-hidden', 'false');
   const email = session?.user?.email || '';

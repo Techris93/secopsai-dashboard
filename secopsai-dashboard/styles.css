@@ -11030,3 +11030,10 @@ body.professional-ui .icon-btn:hover {
   }
   body.professional-ui .sidebar { overflow-y: auto; }
 }
+
+
+/* Neutral state while the session is checked: no sign-in form flash. */
+.auth-gate.auth-checking .auth-form,
+.auth-gate.auth-checking .auth-locked-message,
+.auth-gate.auth-checking .local-auth-gate-panel,
+.auth-gate.auth-checking .auth-boundary { display: none !important; }
