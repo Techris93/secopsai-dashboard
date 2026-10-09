@@ -10977,3 +10977,18 @@ body.professional-ui .intelligence-child-job {
   body.professional-ui .intelligence-pipeline-next button { width: 100%; }
   body.professional-ui .intelligence-child-job > span:last-child { justify-content: flex-start; }
 }
+
+/* Legacy signal-skin rules paint .icon-btn with a near-black gradient while
+   the professional theme sets dark text, which made every dialog close
+   button (✕) invisible.  Reset the gradient for the current theme. */
+body.professional-ui .icon-btn {
+  background-image: none;
+  background-color: var(--contrast-surface);
+  border-color: var(--contrast-border, #dce7e1);
+  color: var(--contrast-text);
+  box-shadow: none;
+}
+body.professional-ui .icon-btn:hover {
+  background-color: var(--contrast-green-soft);
+  color: var(--contrast-text);
+}
