@@ -1359,7 +1359,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <p>SecOpsAI has separate credentials for the dashboard, research actions, and Edge sensor operations. None of these should be shared or pasted into another field.</p>
               </div>
               <div class="guide-card-grid">
-                <div class="guide-mini-card"><strong>Dashboard login</strong><span>Your hosted operator email and password are managed by Supabase Auth. There is no public signup and no shared default production password.</span></div>
+                <div class="guide-mini-card"><strong>Dashboard login</strong><span>The hosted console signs you in through Cloudflare Access (one-time PIN to an allowed operator email). The local console uses the local operator token. There is no public signup and no shared password.</span></div>
                 <div class="guide-mini-card"><strong>Research action token</strong><span><code>TRIAGE_OPS_ADMIN_TOKEN</code> protects Research Cases and Supply Chain Triage writes. <code>BLOG_OPS_ADMIN_TOKEN</code> is the documented fallback when configured.</span></div>
                 <div class="guide-mini-card"><strong>Edge API credentials</strong><span><code>SECOPSAI_ADMIN_TOKEN</code> is an API administrator secret for sensor enrollment and recovery. Sensor tokens are separate, scoped credentials.</span></div>
               </div>
@@ -1799,7 +1799,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260914-local-research-recovery"></script>
-  <script src="./app.js?v=20261009-auth-check"></script>
+  <script src="./app.js?v=20261009-no-supabase"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

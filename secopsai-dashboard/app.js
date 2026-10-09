@@ -139,6 +139,12 @@ function createLocalEmptyDataClient() {
   };
 }
 
+function dataBackendLabel() {
+  if (accessAuthMode()) return 'Cloudflare D1 (hosted workspace)';
+  if (localTokenAuthMode()) return 'Local helper (no hosted tables)';
+  return 'Supabase';
+}
+
 function accessAuthMode() {
   return cfg?.auth?.mode === 'access';
 }
@@ -5283,7 +5289,7 @@ function renderFindings() {
             <div class="kv-row"><div class="kv-key">Pending actions</div><div class="kv-val">${escapeHtml(triageSummary?.pending_actions ?? pendingActions.length)}</div></div>
             <div class="kv-row"><div class="kv-key">Latest orchestrator run</div><div class="kv-val">${escapeHtml(fmtDate(triageLatest.generated_at))}</div></div>
           </div>
-          <div class="small" style="margin-top:12px;">Supabase findings are not available yet. The dashboard is falling back to local SecOpsAI triage state via the helper API.</div>
+          <div class="small" style="margin-top:12px;">Hosted findings are not available yet. The dashboard is falling back to local SecOpsAI triage state via the helper API.</div>
         </div>
       ` : `<div class="empty">Correlation detail will appear here once the optional <code>findings</code> table exists.</div>`;
       return;
@@ -6120,14 +6126,14 @@ function renderIntegrations() {
         <div class="small" style="margin-top:12px;">These guardrails make hosted AI use explicit. Local SecOpsAI triage remains the authority for investigations and writes.</div>
       </div>
       <div class="card">
-        <h3>Supabase and run visibility</h3>
+        <h3>Workspace data and run visibility</h3>
         <div class="kv-list">
-          <div class="kv-row"><div class="kv-key">Project URL</div><div class="kv-val">${escapeHtml(cfg.supabaseUrl)}</div></div>
+          <div class="kv-row"><div class="kv-key">Data backend</div><div class="kv-val">${escapeHtml(dataBackendLabel())}</div></div>
           <div class="kv-row"><div class="kv-key">Queued run requests</div><div class="kv-val">${queuedRequests}</div></div>
           <div class="kv-row"><div class="kv-key">Running run requests</div><div class="kv-val">${runningRequests}</div></div>
           <div class="kv-row"><div class="kv-key">Active routes</div><div class="kv-val">${state.channelRoutes.filter(r => r.active).length}</div></div>
         </div>
-        <div class="small" style="margin-top:12px;">Supabase remains useful for tasks and run visibility, but native triage queue state now sits above it in the dashboard.</div>
+        <div class="small" style="margin-top:12px;">Tasks and run requests come from the workspace data store; native triage queue state sits above it in the dashboard.</div>
       </div>`;
   }
   const credentialsEl = el('system-credentials');
@@ -9847,7 +9853,7 @@ function renderAll() {
   const triageBit = triageSummary
     ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending / ${openLocalSessionsCount()} sessions`
     : '';
-  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : 'Supabase connected'} • ${state.channelRoutes.length} routes loaded${triageBit}`);
+  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : (localTokenAuthMode() ? 'Local helper connected' : 'Supabase connected')} • ${state.channelRoutes.length} routes loaded${triageBit}`);
 }
 
 async function loadTable(table, options = {}) {
