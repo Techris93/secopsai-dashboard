@@ -1170,7 +1170,50 @@ function isAnonymousOperatorSession(session) {
     || String(user.app_metadata?.provider || '').trim().toLowerCase() === 'anonymous';
 }
 
+// Hosted Pages reports which local-helper capabilities exist.  Requests for
+// an unavailable capability are answered locally with the same 501 contract
+// the Worker would return, instead of ~20 failing network calls per load.
+let integrationStatusOnce = null;
+const HELPER_CAPABILITY_ROUTES = [
+  ['/api/secopsai/research-cases', 'secopsai_research_api'],
+  ['/api/secopsai/research-discovery', 'secopsai_research_api'],
+  ['/api/secopsai/research-watchlist', 'secopsai_research_api'],
+  ['/api/secopsai/triage-ops/campaign', 'secopsai_campaign_api'],
+  ['/api/secopsai/triage-ops', 'secopsai_triage_api'],
+  ['/api/secopsai/triage-state', 'secopsai_triage_api'],
+  ['/api/secopsai/sessions', 'secopsai_sessions_api'],
+  ['/api/secopsai/events', 'secopsai_events_api'],
+];
+
+function hostedHelperCapability(pathname) {
+  if (isLocalDashboardOrigin()) return true;
+  const helper = state.integrationStatus?.helper;
+  if (!helper || typeof helper !== 'object') return true;
+  const match = HELPER_CAPABILITY_ROUTES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`) || pathname.startsWith(`${prefix}?`));
+  return !match || helper[match[1]] !== false;
+}
+
+function helperUnavailableResponse() {
+  return new Response(JSON.stringify({
+    ok: false,
+    code: 'not_configured',
+    error: 'This capability needs the local SecOpsAI helper. Run ./start-local-dashboard-stack.sh and open http://127.0.0.1:45680.'
+  }), { status: 501, headers: { 'Content-Type': 'application/json' } });
+}
+
 async function dashboardApiFetch(input, init = {}) {
+  const requestPath = (() => {
+    try { return new URL(String(input || ''), window.location.href).pathname; } catch { return ''; }
+  })();
+  if (requestPath && requestPath !== '/api/integration-status') {
+    const helperRoute = HELPER_CAPABILITY_ROUTES.some(([prefix]) => requestPath === prefix || requestPath.startsWith(`${prefix}/`));
+    if (helperRoute && !isLocalDashboardOrigin() && !state.integrationStatus?.helper) {
+      // First load: learn the hosted capabilities once before helper calls.
+      integrationStatusOnce ||= loadIntegrationStatus().catch(() => {});
+      await integrationStatusOnce;
+    }
+    if (!hostedHelperCapability(requestPath)) return helperUnavailableResponse();
+  }
   const headers = new Headers(init.headers || {});
   const localToken = String(state.auth?.localToken || '').trim();
   const target = (() => {
@@ -13026,6 +13069,9 @@ function applyNativeStreamPayload(payload) {
 
 function startNativeEventStream() {
   if (!window.EventSource) return;
+  // EventSource cannot send the operator bearer, and hosted Pages has no
+  // helper event stream; only open it where the helper serves events.
+  if (!hostedHelperCapability('/api/secopsai/events')) return;
   if (state.nativeEventSource) {
     state.nativeEventSource.close();
     state.nativeEventSource = null;

@@ -592,11 +592,12 @@ function hostedOntologySuffix(pathname) {
   } catch {
     return null;
   }
-  // Core entity IDs are opaque but bounded.  Reject encoded path separators
-  // so a proxy request cannot change the route shape after decoding.
-  if (!entityId || entityId.length > 512 || /[\\/\u0000]/.test(entityId)) return null;
+  // Core entity IDs are opaque but bounded.  Scoped npm packages contain "/"
+  // (pkgver:npm:@scope/name@1.0.0), so a slash is allowed in the ID; the ID
+  // is re-encoded as one path segment so it can never change the route shape.
+  if (!entityId || entityId.length > 512 || /[\\\u0000-\u001f]/.test(entityId)) return null;
   const operation = match[2] ? `/${match[2]}` : "";
-  return `/entities/${encodedEntityId}${operation}`;
+  return `/entities/${encodeURIComponent(entityId)}${operation}`;
 }
 
 async function handleHostedIntelligence(request, env) {

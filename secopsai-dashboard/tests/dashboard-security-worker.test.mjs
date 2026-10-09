@@ -272,8 +272,23 @@ async function testHostedOntologyProxyContract() {
       env,
     );
     assert.equal(detail.status, 200);
-    assert.equal(calls[0].url, "https://core.example/api/v1/ontology/entities/finding:test:F-1!*");
+    assert.equal(decodeURIComponent(calls[0].url), "https://core.example/api/v1/ontology/entities/finding:test:F-1!*");
     assert.equal(new Headers(calls[0].init.headers).get("Authorization"), "Bearer read-token");
+
+    // Scoped npm package IDs contain "/"; they must reach Core as one
+    // encoded path segment instead of being rejected.
+    calls.length = 0;
+    const scoped = await workerModule.fetch(
+      operatorRequest(`https://dashboard.example/api/secopsai/ontology/entities/${encodeURIComponent("pkgver:npm:@scope/name@1.0.0")}/neighbors?depth=2`),
+      env,
+    );
+    assert.equal(scoped.status, 200);
+    assert.equal(calls[0].url, "https://core.example/api/v1/ontology/entities/pkgver%3Anpm%3A%40scope%2Fname%401.0.0/neighbors?depth=2");
+    const traversal = await workerModule.fetch(
+      operatorRequest(`https://dashboard.example/api/secopsai/ontology/entities/${encodeURIComponent("..\\x")}`),
+      env,
+    );
+    assert.equal(traversal.status, 404);
 
     calls.length = 0;
     const risk = await workerModule.fetch(
