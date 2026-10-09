@@ -5,7 +5,7 @@ import workerModule from "../_worker.js";
 const TEST_OPERATOR_TOKEN = "test-operator-session";
 const TEST_AUTH_FETCHER = {
   async fetch() {
-    return new Response(JSON.stringify({ id: "operator-1", email: "operator@example.com" }), {
+    return new Response(JSON.stringify({ id: "operator-1", email: "operator@example.com", app_metadata: { secopsai_role: "operator" } }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

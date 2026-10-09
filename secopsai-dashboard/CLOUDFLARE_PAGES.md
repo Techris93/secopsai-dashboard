@@ -53,6 +53,7 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 - `SUPABASE_ANON_KEY`
 - `APP_NAME`
 - `DASHBOARD_AUTH_REQUIRED` (set to `true` for every hosted environment)
+- `DASHBOARD_OPERATOR_EMAILS` and/or `DASHBOARD_OPERATOR_USER_IDS` (comma-separated operator allowlist; required unless operators carry `app_metadata.secopsai_role`)
 - `DISCORD_SERVER_ID`
 - `DISCORD_NOTIFY_TOKEN`
 - `HOSTED_AI_ENABLED`
@@ -134,6 +135,12 @@ Notes:
   least one invited Supabase Auth operator before deploying the auth-gated UI.
   The migration revokes `anon` table/view access. Do not set
   `DASHBOARD_AUTH_REQUIRED=false` to work around a missing operator account.
+- A Supabase session alone is not authorization. Protected routes return
+  `403 operator_not_authorized` unless the user has a server-controlled
+  `app_metadata.secopsai_role` of `operator`/`admin`, a listed user id, or a
+  confirmed email in `DASHBOARD_OPERATOR_EMAILS`. With none configured the
+  Worker fails closed. Apply `supabase_migrations/2026-10-09_operator_role_rls.sql`
+  so table access enforces the same role, and disable public email sign-up.
 - The current policy is single-tenant. Invite users from only one pilot
   organization until workspace membership policies are deployed.
 - Protected Worker routes validate the browser Supabase session before using

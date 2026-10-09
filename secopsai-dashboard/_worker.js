@@ -28,6 +28,7 @@ const SENSITIVE_QUERY_KEYS = new Set([
   "client_secret",
 ]);
 const MAX_OPERATOR_PROFILE_BYTES = 64 * 1024;
+const OPERATOR_ROLES = new Set(["operator", "admin"]);
 const MAX_SECOPSAI_WORKSPACE_BYTES = 5 * 1024 * 1024;
 const HOSTED_ONTOLOGY_PREFIX = "/api/secopsai/ontology";
 const INTELLIGENCE_ACTIONS = new Set([
@@ -448,6 +449,7 @@ async function requireDashboardOperator(request, env) {
   if (!response.ok) {
     return jsonResponse({ ok: false, code: "operator_session_invalid", error: "Operator session is invalid or expired" }, { status: 401 });
   }
+  let operatorProfile;
   try {
     const profile = await boundedJson(response, MAX_OPERATOR_PROFILE_BYTES, "Operator profile");
     const anonymous = profile?.is_anonymous === true
@@ -460,10 +462,40 @@ async function requireDashboardOperator(request, env) {
     if (!profile || typeof profile !== "object" || !String(profile.id || "").trim() || anonymous) {
       throw new Error("Operator profile is incomplete");
     }
+    operatorProfile = profile;
   } catch {
     return jsonResponse({ ok: false, code: "operator_session_invalid", error: "Operator session is invalid or expired" }, { status: 401 });
   }
+  // Authentication only proves that Supabase issued the session.  Public
+  // sign-up can be enabled on the project, so a valid session is not enough:
+  // the user must also be explicitly authorized as an operator.
+  if (!isAuthorizedOperator(operatorProfile, env)) {
+    return jsonResponse({ ok: false, code: "operator_not_authorized", error: "This account is not authorized for Mission Control" }, { status: 403 });
+  }
   return null;
+}
+
+function csvSet(value, normalize = (item) => item) {
+  return new Set(String(value || "")
+    .split(",")
+    .map((item) => normalize(item.trim()))
+    .filter(Boolean));
+}
+
+// An operator is authorized by one of:
+// - a server-controlled `app_metadata.secopsai_role` of operator/admin
+//   (app_metadata is writable only with the service role, never by the user);
+// - the Supabase user id in DASHBOARD_OPERATOR_USER_IDS;
+// - a confirmed email address in DASHBOARD_OPERATOR_EMAILS.
+// With none configured the deployment fails closed.
+function isAuthorizedOperator(profile, env) {
+  const role = String(profile?.app_metadata?.secopsai_role || "").trim().toLowerCase();
+  if (OPERATOR_ROLES.has(role)) return true;
+  const userId = String(profile?.id || "").trim();
+  if (userId && csvSet(env.DASHBOARD_OPERATOR_USER_IDS).has(userId)) return true;
+  const email = String(profile?.email || "").trim().toLowerCase();
+  const emailConfirmed = Boolean(profile?.email_confirmed_at || profile?.confirmed_at);
+  return Boolean(email && emailConfirmed && csvSet(env.DASHBOARD_OPERATOR_EMAILS, (item) => item.toLowerCase()).has(email));
 }
 
 async function secopsaiApiJson(baseUrl, path, token, label) {

@@ -1136,6 +1136,14 @@ async function dashboardApiFetch(input, init = {}) {
     } else if (authFailure?.code === 'local_auth_required' || authFailure?.code === 'local_auth_not_configured') {
       openLocalAuthModal(authFailure.error || 'Local helper authentication required.');
     }
+  } else if (response.status === 403 && dashboardAuthRequired()) {
+    const authFailure = await response.clone().json().catch(() => ({}));
+    if (authFailure?.code === 'operator_not_authorized') {
+      // A valid account that is not an operator must not see a half-loaded
+      // console.  End the session so its token is not reused.
+      await supabaseClient?.auth?.signOut().catch(() => {});
+      leaveAuthenticatedDashboard('This account is not authorized for Mission Control. Ask an administrator to grant operator access.');
+    }
   } else if (response.status === 503) {
     const errorBody = await response.clone().json().catch(() => ({}));
     if (errorBody?.code === 'local_auth_not_configured') {
