@@ -1183,6 +1183,11 @@ const HELPER_CAPABILITY_ROUTES = [
   ['/api/secopsai/triage-state', 'secopsai_triage_api'],
   ['/api/secopsai/sessions', 'secopsai_sessions_api'],
   ['/api/secopsai/events', 'secopsai_events_api'],
+  ['/api/secopsai/specialists', 'secopsai_specialists_api'],
+  ['/api/secopsai/artifact-fleet', 'secopsai_artifact_fleet_api'],
+  ['/api/secopsai/artifact-fleet-status', 'secopsai_artifact_fleet_api'],
+  ['/api/secopsai/enterprise-status', 'secopsai_enterprise_api'],
+  ['/api/secopsai/enterprise-action', 'secopsai_enterprise_api'],
 ];
 
 function hostedHelperCapability(pathname) {

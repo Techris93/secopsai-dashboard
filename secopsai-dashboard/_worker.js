@@ -826,6 +826,11 @@ async function handleHostedEnterprise(request, env) {
       },
     });
   } catch (error) {
+    if (Number(error?.status || 0) === 404) {
+      // Core Edge (the Cloudflare Core) does not serve enterprise connector
+      // storage; say so instead of reporting an outage.
+      return jsonResponse({ ok: false, mode: "hosted-core", code: "enterprise_not_supported", error: "Enterprise connector storage is available in local helper mode; the hosted Core does not serve it." }, { status: 501 });
+    }
     return jsonResponse({ ok: false, mode: "hosted-core", error: sanitizeHelperErrorDetail(error?.message || error) }, { status: 503 });
   }
 }
@@ -1614,6 +1619,11 @@ async function handleIntegrationStatus(env) {
       secopsai_events_api: Boolean(secopsaiHelperBase),
       secopsai_edge_api: Boolean(secopsaiHelperBase),
       secopsai_intelligence_api: Boolean(secopsaiHelperBase || String(env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim()),
+      // Specialists and Artifact Fleet are helper-only; enterprise connector
+      // storage is not served by Core Edge.
+      secopsai_specialists_api: Boolean(secopsaiHelperBase),
+      secopsai_artifact_fleet_api: Boolean(secopsaiHelperBase),
+      secopsai_enterprise_api: Boolean(secopsaiHelperBase),
     },
     core: {
       mode: String(env.SECOPSAI_CORE_API_URL || "").trim() ? "hosted-api" : "disabled",
