@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/dist/umd/supabase.js" integrity="sha384-yifgV8iFWyp5cgu+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP/NlXVJT3vO" crossorigin="anonymous"></script>
   <script src="./url-safety.js?v=20260803-credential-url-hardening"></script>
-  <link rel="stylesheet" href="./styles.css?v=20261009-icon-contrast" />
+  <link rel="stylesheet" href="./styles.css?v=20261009-mobile-nav" />
 </head>
 <body class="okcomputer-skin professional-ui">
   <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
@@ -69,6 +69,7 @@
   </section>
 
   <div class="app-shell auth-pending" id="app-shell" aria-hidden="true">
+    <div class="mobile-nav-backdrop" id="mobile-nav-backdrop" aria-hidden="true"></div>
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-badge" aria-hidden="true">
@@ -146,6 +147,9 @@
     <main class="main">
       <div class="top-strip">
         <div class="topbar-primary">
+          <button class="topbar-menu-btn" id="topbar-menu-btn" type="button" aria-expanded="false" aria-controls="dashboard-nav" aria-label="Open navigation menu">
+            <span></span><span></span><span></span>
+          </button>
           <div class="workspace-context">
             <span class="top-strip-live"><span class="dot"></span><span>Workspace</span></span>
             <button class="workspace-switcher" id="workspace-switcher" type="button" title="Workspace selection is single-tenant in this pilot">SecOpsAI pilot <span aria-hidden="true">⌄</span></button>
@@ -1795,7 +1799,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260914-local-research-recovery"></script>
-  <script src="./app.js?v=20261009-hosted-research"></script>
+  <script src="./app.js?v=20261009-mobile-nav"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

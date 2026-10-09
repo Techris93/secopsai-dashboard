@@ -10992,3 +10992,41 @@ body.professional-ui .icon-btn:hover {
   background-color: var(--contrast-green-soft);
   color: var(--contrast-text);
 }
+
+/* Mobile navigation: the sidebar is off-canvas at <=720px, so the menu is
+   opened from the always-visible top bar. */
+.topbar-menu-btn,
+.mobile-nav-backdrop { display: none; }
+@media (max-width: 720px) {
+  body.professional-ui .topbar-menu-btn {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    width: 40px;
+    height: 40px;
+    margin-right: 8px;
+    flex: 0 0 auto;
+    border: 1px solid var(--contrast-border, #dce7e1);
+    border-radius: 10px;
+    background: var(--contrast-surface, #fff);
+    cursor: pointer;
+  }
+  body.professional-ui .topbar-menu-btn span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--contrast-text, #17211e);
+  }
+  body.professional-ui .topbar-primary { display: flex; align-items: center; }
+  body.professional-ui.mobile-nav-open .mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgba(15, 23, 42, 0.45);
+  }
+  body.professional-ui .sidebar { overflow-y: auto; }
+}

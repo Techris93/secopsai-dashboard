@@ -1077,10 +1077,7 @@ function renderSidebarSubnav(pageId, routeOverride = null) {
       if (!elementIsVisible(target)) return;
       setActiveSubsectionButton(buttons, target.id);
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      if (window.innerWidth <= 720) {
-        document.body.classList.remove('mobile-nav-open');
-        el('mobile-menu-btn')?.setAttribute('aria-expanded', 'false');
-      }
+      closeMobileNav();
     });
   });
 
@@ -1112,7 +1109,9 @@ function togglePrimarySectionNavigation(button) {
   }
 
   collapsedSidebarPrimaryPage = null;
-  setPage(requestedPage, { routeOverride: button?.dataset.route || null, scrollToTarget: false });
+  // On phones, keep the menu open after choosing a section so its
+  // subsections are shown; choosing a subsection closes it.
+  setPage(requestedPage, { routeOverride: button?.dataset.route || null, scrollToTarget: false, keepMobileNav: isMobileNavLayout() });
 }
 
 function collapseSidebarForInitialRoute(pageId = currentPageFromLocation()) {
@@ -2536,7 +2535,7 @@ function startTopStripClock() {
   window.setInterval(updateTopStripClock, 1000);
 }
 
-function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTarget = true } = {}) {
+function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTarget = true, keepMobileNav = false } = {}) {
   const normalizedPageId = pages.includes(pageId) ? pageId : pageIdForRoute(pageId);
   if (normalizedPageId !== 'findings') closeFindingReview();
   if (normalizedPageId === 'research-cases' && routeOverride) state.researchCases.view = researchViewForRoute(routeOverride);
@@ -2560,8 +2559,7 @@ function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTa
     const matchesAssetFallback = buttonRoute === 'assets' && activeRoute.startsWith('assets/');
     btn.classList.toggle("active", matchesPage && (matchesExactRoute || matchesSystemFallback || matchesResearchFallback || matchesPublicationFallback || matchesAssetFallback || !buttonRoute.includes('/')));
   });
-  document.body.classList.remove('mobile-nav-open');
-  el('mobile-menu-btn')?.setAttribute('aria-expanded', 'false');
+  if (!keepMobileNav) closeMobileNav();
   updateTopStrip(normalizedPageId);
   renderContextNav(normalizedPageId, activeRoute);
   if (normalizedPageId === 'research-cases') renderResearchCases();
@@ -2598,9 +2596,21 @@ function setPage(pageId, { skipHistory = false, routeOverride = null, scrollToTa
   else scrollPrimaryPageToTop();
 }
 
+function isMobileNavLayout() {
+  return window.matchMedia ? window.matchMedia('(max-width: 720px)').matches : window.innerWidth <= 720;
+}
+
+function setMobileNavOpen(isOpen) {
+  document.body.classList.toggle('mobile-nav-open', isOpen);
+  for (const id of ['mobile-menu-btn', 'topbar-menu-btn']) el(id)?.setAttribute('aria-expanded', String(isOpen));
+}
+
+function closeMobileNav() {
+  setMobileNavOpen(false);
+}
+
 function toggleMobileNav() {
-  const isOpen = document.body.classList.toggle('mobile-nav-open');
-  el('mobile-menu-btn')?.setAttribute('aria-expanded', String(isOpen));
+  setMobileNavOpen(!document.body.classList.contains('mobile-nav-open'));
 }
 
 function roleDepartment(role) {
@@ -13575,6 +13585,13 @@ function bindEvents() {
   });
   document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => togglePrimarySectionNavigation(btn)));
   el('mobile-menu-btn')?.addEventListener('click', toggleMobileNav);
+  // The sidebar is off-canvas on phones, so the menu also needs a control in
+  // the always-visible top bar; the backdrop and Escape close it.
+  el('topbar-menu-btn')?.addEventListener('click', toggleMobileNav);
+  el('mobile-nav-backdrop')?.addEventListener('click', closeMobileNav);
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && document.body.classList.contains('mobile-nav-open')) closeMobileNav();
+  });
   el('work-table-view-btn')?.addEventListener('click', () => { workView = 'table'; renderTasks(); });
   el('work-board-view-btn')?.addEventListener('click', () => { workView = 'board'; renderTasks(); });
   el('specialist-refresh-btn')?.addEventListener('click', event => runRefreshAction(event.currentTarget, () => loadSpecialists(), { successMessage: 'Specialist Orchestrator refreshed' }));
