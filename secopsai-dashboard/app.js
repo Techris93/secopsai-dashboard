@@ -13319,6 +13319,8 @@ async function moveTaskToStatus(taskId, nextStatus) {
 
 
 async function backgroundRefreshLiveExecutionState() {
+  // Hidden tabs need no live updates; refreshActiveSurface catches up on return.
+  if (document.hidden) return;
   try {
     const [runs, runRequests] = await Promise.all([
       loadTable('agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }),
