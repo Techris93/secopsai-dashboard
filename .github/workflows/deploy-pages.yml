@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: secopsai-dashboard-pages-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -44,30 +48,39 @@ jobs:
         env:
           PAGES_SMOKE_URL: https://secopsai-dashboard.pages.dev
         run: |
-          set -euo pipefail
-          headers_file="$(mktemp)"
-          body_file="$(mktemp)"
-          config_file="$(mktemp)"
-          ontology_file="$(mktemp)"
-          trap 'rm -f "$headers_file" "$body_file" "$config_file" "$ontology_file"' EXIT
-          curl --fail --silent --show-error --location --max-time 30 --retry 5 --retry-delay 5 --dump-header "$headers_file" "$PAGES_SMOKE_URL/" -o "$body_file"
-          grep -Eiq '^content-security-policy:' "$headers_file"
-          grep -Eiq '^x-content-type-options:[[:space:]]*nosniff' "$headers_file"
-          grep -Eiq 'SecOpsAI|app-shell|operator' "$body_file"
-          curl --fail --silent --show-error --location --max-time 30 --retry 5 --retry-delay 5 "$PAGES_SMOKE_URL/config.js" -o "$config_file"
-          grep -q 'window.SECOPSAI_CONFIG' "$config_file"
-          ! grep -Eiq 'DASHBOARD_LOCAL_AUTH_TOKEN|TRIAGE_OPS_ADMIN_TOKEN|BLOG_OPS_ADMIN_TOKEN|INTELLIGENCE_ADMIN_TOKEN|SECOPSAI_CORE_(READ|INTELLIGENCE)_TOKEN|SECOPSAI_HELPER_AUTH_TOKEN' "$config_file"
+          set -uo pipefail
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
 
-          # The ontology proxy is operator-authenticated.  An unauthenticated
-          # request must reach the Worker and be rejected by auth (401), not
-          # fall through to Pages' static 404 handler.  This catches stale
-          # artifacts, wrong route prefixes, and root-vs-nested deployments.
-          ontology_status="$(curl --silent --show-error --location --max-time 30 --retry 5 --retry-delay 5 \
-            --output "$ontology_file" --write-out '%{http_code}' \
-            "$PAGES_SMOKE_URL/api/secopsai/ontology/search?q=&limit=1")"
-          test "$ontology_status" = "401" || {
-            echo "Expected hosted ontology proxy to reject unauthenticated access with HTTP 401, got ${ontology_status}" >&2
-            cat "$ontology_file" >&2
-            exit 1
+          # One pass over every check; prints the first failing reason.
+          verify() {
+            curl --fail --silent --show-error --location --max-time 30 \
+              --dump-header "$work/headers" "$PAGES_SMOKE_URL/" -o "$work/body" || { echo "root page request failed"; return 1; }
+            grep -Eiq '^content-security-policy:' "$work/headers" || { echo "missing Content-Security-Policy header"; return 1; }
+            grep -Eiq '^x-content-type-options:[[:space:]]*nosniff' "$work/headers" || { echo "missing X-Content-Type-Options header"; return 1; }
+            grep -Eiq 'SecOpsAI|app-shell|operator' "$work/body" || { echo "root page is not the console"; return 1; }
+            curl --fail --silent --show-error --location --max-time 30 "$PAGES_SMOKE_URL/config.js" -o "$work/config" || { echo "config.js request failed"; return 1; }
+            grep -q 'window.SECOPSAI_CONFIG' "$work/config" || { echo "config.js has no SECOPSAI_CONFIG"; return 1; }
+            if grep -Eiq 'DASHBOARD_LOCAL_AUTH_TOKEN|TRIAGE_OPS_ADMIN_TOKEN|BLOG_OPS_ADMIN_TOKEN|INTELLIGENCE_ADMIN_TOKEN|SECOPSAI_CORE_(READ|INTELLIGENCE)_TOKEN|SECOPSAI_HELPER_AUTH_TOKEN' "$work/config"; then
+              echo "SECURITY: config.js exposes a server credential name"; return 2
+            fi
+            # The ontology proxy is operator-authenticated: an unauthenticated
+            # request must reach the Worker and get 401, not Pages' static 404.
+            status="$(curl --silent --show-error --location --max-time 30 --output "$work/ontology" --write-out '%{http_code}' \
+              "$PAGES_SMOKE_URL/api/secopsai/ontology/search?q=&limit=1")"
+            [ "$status" = "401" ] || { echo "ontology proxy returned HTTP $status, expected 401: $(head -c 200 "$work/ontology")"; return 1; }
+            grep -Eq 'operator_session_(required|invalid)' "$work/ontology" || { echo "ontology 401 without operator_session code"; return 1; }
+            return 0
           }
-          grep -Eq 'operator_session_(required|invalid)' "$ontology_file"
+
+          # A new deployment takes a little while to replace the previous one
+          # everywhere; retry the whole set instead of failing on the first blip.
+          for attempt in $(seq 1 12); do
+            reason="$(verify)"; rc=$?
+            if [ $rc -eq 0 ]; then echo "Deployed dashboard verified (attempt $attempt)"; exit 0; fi
+            echo "attempt $attempt: $reason"
+            [ $rc -eq 2 ] && exit 1   # never retry a credential exposure
+            sleep 15
+          done
+          echo "::error::Deployed dashboard failed verification: $reason"
+          exit 1
