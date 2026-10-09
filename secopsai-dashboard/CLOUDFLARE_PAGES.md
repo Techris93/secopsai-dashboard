@@ -600,3 +600,33 @@ After the first live deployment:
 - Git integration: https://developers.cloudflare.com/pages/configuration/git-integration/
 - Build configuration: https://developers.cloudflare.com/pages/configuration/build-configuration/
 - Custom domains: https://developers.cloudflare.com/pages/configuration/custom-domains/
+
+## Cloudflare-native mode (Access + D1, no Supabase)
+
+Supabase is optional. When `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` are
+set, the Worker authenticates operators with Cloudflare Access and serves
+dashboard tables from D1; the browser never contacts Supabase and the CSP
+drops the Supabase and CDN origins.
+
+1. Add a custom domain to the `secopsai-dashboard` Pages project (for example
+   `console.secopsai.dev`). Some networks block `*.pages.dev`, and Access
+   policies are applied to custom domains.
+2. Zero Trust -> Access -> Applications: create a self-hosted application for
+   that domain with an allow policy for the operator identities (email or
+   GitHub organization). Copy its Application Audience (AUD) tag.
+3. Create the database and apply the schema:
+   `npx wrangler d1 create secopsai-dashboard`
+   `npx wrangler d1 execute secopsai-dashboard --remote --file d1_migrations/0001_dashboard.sql`
+4. Pages project -> Settings -> Bindings: D1 database `DASHBOARD_DB`.
+5. Variables: `CF_ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com`,
+   `CF_ACCESS_AUD=<aud tag>`, `DASHBOARD_OPERATOR_EMAILS=<operators>`.
+   Remove `SUPABASE_URL` / `SUPABASE_ANON_KEY` once verified.
+6. Deploy, sign in through Access, and confirm `GET /api/session` returns
+   your email. The Worker still verifies every Access JWT (RS256 signature,
+   audience, issuer, expiry) and the operator allowlist; Access alone is not
+   trusted as a header.
+
+The Supabase project held no dashboard rows at the time of migration (all
+tables were empty and none had RLS policies), so no data copy was needed.
+Blog comments move separately to the `secopsai-blog-comments` D1 database
+(see the core repository).

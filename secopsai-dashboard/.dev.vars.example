@@ -6,6 +6,10 @@ DASHBOARD_AUTH_REQUIRED=true
 # own; users must be listed here or carry app_metadata.secopsai_role=operator.
 DASHBOARD_OPERATOR_EMAILS=
 DASHBOARD_OPERATOR_USER_IDS=
+# Cloudflare-native mode: Access authenticates operators, D1 (binding
+# DASHBOARD_DB) stores dashboard tables, and Supabase is not used.
+CF_ACCESS_TEAM_DOMAIN=
+CF_ACCESS_AUD=
 DISCORD_SERVER_ID=1484917962245668874
 
 # Optional notification webhooks used by /api/discord-notify

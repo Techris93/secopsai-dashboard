@@ -1,3 +1,5 @@
+import { DataApiError, accessConfigured, handleDataRequest, verifyAccessRequest } from "./data-api.js";
+
 const DEFAULT_APP_NAME = "SecOpsAI Mission Control";
 const DEFAULT_SERVER_ID = "1484917962245668874";
 const DEFAULT_RUN_OUTPUT_PROXY_PATH = "/api/run-output";
@@ -82,24 +84,29 @@ const DASHBOARD_ROLE_GROUPS = {
   support: ["support/support-responder"],
 };
 const ALLOWED_DISCORD_CHANNELS = new Set(["ops-log", "kanban-updates"]);
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-  "font-src 'self' https://fonts.gstatic.com",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "frame-src 'none'",
-  "img-src 'self' data: https:",
-  "object-src 'none'",
-  "script-src 'self' https://cdn.jsdelivr.net",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "upgrade-insecure-requests",
-].join("; ");
+// With Cloudflare Access the browser never talks to Supabase, so the
+// Supabase origins and the CDN-hosted client drop out of the policy.
+function contentSecurityPolicy(env = {}) {
+  const access = accessConfigured(env);
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    access ? "connect-src 'self'" : "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    "font-src 'self' https://fonts.gstatic.com",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "frame-src 'none'",
+    "img-src 'self' data: https:",
+    "object-src 'none'",
+    access ? "script-src 'self'" : "script-src 'self' https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
 
-function withSecurityHeaders(response) {
+function withSecurityHeaders(response, env) {
   const headers = new Headers(response.headers);
-  headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  headers.set("Content-Security-Policy", contentSecurityPolicy(env));
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("Cross-Origin-Resource-Policy", "same-origin");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
@@ -167,11 +174,16 @@ function rejectSensitiveUrl(url) {
 
 function buildBrowserConfig(env) {
   const authRequired = truthyEnv(env.DASHBOARD_AUTH_REQUIRED, true);
+  const access = authRequired && accessConfigured(env);
   return {
     // Never hand browser-readable database credentials to an auth-disabled
     // deployment. The static app renders a locked rollout state instead.
-    supabaseUrl: authRequired ? env.SUPABASE_URL || "" : "",
-    supabaseAnonKey: authRequired ? env.SUPABASE_ANON_KEY || "" : "",
+    // Cloudflare Access deployments use the Worker data API instead.
+    supabaseUrl: authRequired && !access ? env.SUPABASE_URL || "" : "",
+    supabaseAnonKey: authRequired && !access ? env.SUPABASE_ANON_KEY || "" : "",
+    dataBackend: access ? "worker" : "supabase",
+    dataEndpoint: "/api/data",
+    sessionEndpoint: "/api/session",
     appName: env.APP_NAME || DEFAULT_APP_NAME,
     serverId: env.DISCORD_SERVER_ID || DEFAULT_SERVER_ID,
     discordNotifyEndpoint: "/api/discord-notify",
@@ -188,7 +200,7 @@ function buildBrowserConfig(env) {
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     auth: {
       required: authRequired,
-      mode: authRequired ? "operator" : "locked",
+      mode: access ? "access" : authRequired ? "operator" : "locked",
     },
     aiGuard: buildAiGuard(env),
     departments: DASHBOARD_DEPARTMENTS,
@@ -410,6 +422,17 @@ async function requireDashboardOperator(request, env) {
     return null;
   }
 
+  if (accessConfigured(env)) {
+    const identity = await verifyAccessRequest(request, env, accessCertsFetcher(env));
+    if (!identity) {
+      return jsonResponse({ ok: false, code: "operator_session_required", error: "Cloudflare Access session required" }, { status: 401 });
+    }
+    if (!isAuthorizedOperator(identity, env)) {
+      return jsonResponse({ ok: false, code: "operator_not_authorized", error: "This account is not authorized for Mission Control" }, { status: 403 });
+    }
+    return null;
+  }
+
   const token = bearerToken(request);
   if (!token) {
     return jsonResponse({ ok: false, code: "operator_session_required", error: "Operator session required" }, { status: 401 });
@@ -473,6 +496,25 @@ async function requireDashboardOperator(request, env) {
     return jsonResponse({ ok: false, code: "operator_not_authorized", error: "This account is not authorized for Mission Control" }, { status: 403 });
   }
   return null;
+}
+
+function accessCertsFetcher(env) {
+  const fetcher = env.ACCESS_CERTS_FETCHER;
+  return fetcher && typeof fetcher.fetch === "function"
+    ? (input, init) => fetcher.fetch(input, init)
+    : (input, init) => fetch(input, init);
+}
+
+async function handleDataApi(request, env, table) {
+  try {
+    const rows = await handleDataRequest(request, env.DASHBOARD_DB, table);
+    return jsonResponse({ ok: true, data: rows });
+  } catch (error) {
+    if (error instanceof DataApiError) {
+      return jsonResponse({ ok: false, code: error.code, error: error.message }, { status: error.status });
+    }
+    return jsonResponse({ ok: false, code: "data_request_failed", error: "Dashboard data request failed" }, { status: 500 });
+  }
 }
 
 function csvSet(value, normalize = (item) => item) {
@@ -1885,6 +1927,20 @@ async function routeRequest(request, env) {
       return jsResponse(buildConfigScript(env));
     }
 
+    if (url.pathname === "/api/session" && request.method === "GET") {
+      const authResponse = await requireDashboardOperator(request, env);
+      if (authResponse) return authResponse;
+      const identity = accessConfigured(env) ? await verifyAccessRequest(request, env, accessCertsFetcher(env)) : null;
+      return jsonResponse({ ok: true, mode: accessConfigured(env) ? "access" : "operator", email: identity?.email || null });
+    }
+
+    const dataMatch = url.pathname.match(/^\/api\/data\/([a-z_]{1,40})$/);
+    if (dataMatch) {
+      const authResponse = await requireDashboardOperator(request, env);
+      if (authResponse) return authResponse;
+      return handleDataApi(request, env, dataMatch[1]);
+    }
+
     if (request.method === "GET" && url.pathname === "/api/integration-status") {
       const authResponse = await requireDashboardOperator(request, env);
       if (authResponse) return authResponse;
@@ -1993,6 +2049,6 @@ async function routeRequest(request, env) {
 
 export default {
   async fetch(request, env) {
-    return withSecurityHeaders(await routeRequest(request, env));
+    return withSecurityHeaders(await routeRequest(request, env), env);
   },
 };
