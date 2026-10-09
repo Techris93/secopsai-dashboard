@@ -36,7 +36,76 @@ let supabaseClient = null;
 let bootError = null;
 let authSubscription = null;
 
-if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
+// Cloudflare Access deployments: identity comes from Access at the edge and
+// data from the Worker's D1 API.  This client implements the subset of the
+// Supabase client used below so the rest of the app is backend-agnostic.
+function createWorkerDataClient(config) {
+  const dataEndpoint = config.dataEndpoint || '/api/data';
+  const sessionEndpoint = config.sessionEndpoint || '/api/session';
+  class WorkerQuery {
+    constructor(table) {
+      this.table = table;
+      this.method = 'GET';
+      this.params = new URLSearchParams();
+      this.body = undefined;
+      this.single = false;
+    }
+    select(columns = '*') { if (this.method === 'GET') this.params.set('select', columns); return this; }
+    order(column, { ascending = false } = {}) { this.params.set('order', `${column}.${ascending ? 'asc' : 'desc'}`); return this; }
+    limit(count) { this.params.set('limit', String(count)); return this; }
+    eq(column, value) { this.params.append(`eq.${column}`, String(value)); return this; }
+    insert(rows) { this.method = 'POST'; this.body = rows; return this; }
+    update(values) { this.method = 'PATCH'; this.body = values; return this; }
+    delete() { this.method = 'DELETE'; return this; }
+    single() { this.single = 'required'; return this; }
+    maybeSingle() { this.single = 'optional'; return this; }
+    then(resolve, reject) { return this.execute().then(resolve, reject); }
+    async execute() {
+      const query = this.params.toString();
+      const response = await dashboardApiFetch(`${dataEndpoint}/${encodeURIComponent(this.table)}${query ? `?${query}` : ''}`, {
+        method: this.method,
+        credentials: 'same-origin',
+        headers: this.body === undefined ? {} : { 'Content-Type': 'application/json' },
+        body: this.body === undefined ? undefined : JSON.stringify(this.body)
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) {
+        return { data: null, error: { message: payload.error || `HTTP ${response.status}`, code: payload.code || '', status: response.status } };
+      }
+      let data = Array.isArray(payload.data) ? payload.data : [];
+      if (this.single) {
+        if (!data.length && this.single === 'required') return { data: null, error: { message: 'No rows returned', code: 'PGRST116' } };
+        data = data[0] ?? null;
+      }
+      return { data, error: null };
+    }
+  }
+  const unsupported = async () => ({ data: null, error: { message: 'Sign-in is handled by Cloudflare Access.' } });
+  return {
+    from: (table) => new WorkerQuery(table),
+    auth: {
+      async getSession() {
+        const response = await dashboardApiFetch(sessionEndpoint, { credentials: 'same-origin' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.email) return { data: { session: null }, error: null };
+        return { data: { session: { access_token: '', user: { id: payload.email, email: payload.email } } }, error: null };
+      },
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      async signOut() { window.location.assign('/cdn-cgi/access/logout'); return { error: null }; },
+      signInWithPassword: unsupported,
+      resetPasswordForEmail: unsupported,
+      updateUser: unsupported
+    }
+  };
+}
+
+function accessAuthMode() {
+  return cfg?.auth?.mode === 'access';
+}
+
+if (accessAuthMode()) {
+  supabaseClient = createWorkerDataClient(cfg);
+} else if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
   bootError = 'Supabase client library failed to load.';
 } else if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) {
   bootError = 'SecOpsAI dashboard config is missing Supabase credentials.';
@@ -1123,7 +1192,9 @@ async function dashboardApiFetch(input, init = {}) {
   // bearer remains the Supabase operator session for hosted Worker requests;
   // the Worker does not forward this local-only credential upstream.
   if (localToken) headers.set('X-SecOpsAI-Local-Token', localToken);
-  if (dashboardAuthRequired()) {
+  // Cloudflare Access authenticates same-origin requests with its cookie;
+  // only the Supabase mode forwards a bearer session token.
+  if (dashboardAuthRequired() && !accessAuthMode()) {
     const accessToken = state.auth.session?.access_token || '';
     if (!accessToken) throw new Error('Operator session required');
     headers.set('Authorization', `Bearer ${accessToken}`);
@@ -1141,7 +1212,7 @@ async function dashboardApiFetch(input, init = {}) {
     if (authFailure?.code === 'operator_not_authorized') {
       // A valid account that is not an operator must not see a half-loaded
       // console.  End the session so its token is not reused.
-      await supabaseClient?.auth?.signOut().catch(() => {});
+      if (!accessAuthMode()) await supabaseClient?.auth?.signOut().catch(() => {});
       leaveAuthenticatedDashboard('This account is not authorized for Mission Control. Ask an administrator to grant operator access.');
     }
   } else if (response.status === 503) {
@@ -1415,7 +1486,12 @@ async function initializeDashboardAuth() {
   } else if (data?.session && !state.auth.recoveryMode) {
     await enterAuthenticatedDashboard(data.session);
   } else if (!state.auth.recoveryMode) {
-    showAuthSurface({ message: 'Sign in with an invited operator account.' });
+    showAuthSurface({
+      message: accessAuthMode()
+        ? 'This account is not authorized for Mission Control. Sign in through Cloudflare Access with an operator identity.'
+        : 'Sign in with an invited operator account.',
+      error: accessAuthMode()
+    });
   }
 }
 
@@ -9612,7 +9688,7 @@ function renderAll() {
   const triageBit = triageSummary
     ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending / ${openLocalSessionsCount()} sessions`
     : '';
-  setStatus(`<span class="dot"></span> Supabase connected • ${state.channelRoutes.length} routes loaded${triageBit}`);
+  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : 'Supabase connected'} • ${state.channelRoutes.length} routes loaded${triageBit}`);
 }
 
 async function loadTable(table, options = {}) {
@@ -12228,6 +12304,7 @@ function syncResearchPipelinePolling() {
 }
 
 async function loadIntegrationStatus() {
+  if (dashboardAuthRequired() && !state.auth.activeUserId) return;
   try {
     const res = await dashboardApiFetch(cfg.integrationStatusEndpoint || '/api/integration-status');
     if (!res.ok) throw new Error(`Integration status HTTP ${res.status}`);
@@ -13218,6 +13295,8 @@ async function refreshOperationalWorkspace() {
 async function refreshActiveSurface({ force = false } = {}) {
   const now = Date.now();
   if (state.surfaceRefreshInFlight || document.hidden) return false;
+  // Nothing protected can load before sign-in; avoid a burst of 401 errors.
+  if (dashboardAuthRequired() && !state.auth.activeUserId) return false;
   if (!force && now - state.lastSurfaceRefreshAt < 4000) return false;
   state.surfaceRefreshInFlight = true;
   try {
