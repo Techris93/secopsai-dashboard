@@ -12,7 +12,8 @@ window.SECOPSAI_CONFIG = {
   edgeWorkspaceEndpoint: "/api/secopsai/edge-workspace",
   edgeDashboardUrl: "__SECOPSAI_EDGE_DASHBOARD_URL__",
   auth: {
-    required: __DASHBOARD_AUTH_REQUIRED__
+    required: __DASHBOARD_AUTH_REQUIRED__,
+    mode: "__DASHBOARD_AUTH_MODE__"
   },
   aiGuard: {
     hostedEnabled: __HOSTED_AI_ENABLED__,

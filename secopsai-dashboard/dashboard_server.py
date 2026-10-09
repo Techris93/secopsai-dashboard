@@ -81,7 +81,7 @@ LOCAL_BOOTSTRAP_CONFIG_KEYS = frozenset({
     'departments', 'roleGroups',
 })
 LOCAL_BOOTSTRAP_NESTED_KEYS = {
-    'auth': frozenset({'required'}),
+    'auth': frozenset({'required', 'mode'}),
     'aiGuard': frozenset({'hostedEnabled', 'defaultModel', 'maxCostUsd', 'allowMutations'}),
     'departments': frozenset({'exec', 'platform', 'security', 'product', 'revenue', 'support'}),
     'roleGroups': frozenset({'exec', 'platform', 'security', 'product', 'revenue', 'support'}),
@@ -4291,6 +4291,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 value = payload.get(section)
                 if not isinstance(value, dict) or set(value) != allowed_keys:
                     raise ValueError(f'config section {section} contains unsupported fields')
+            if payload['auth'].get('mode') not in {'local', 'supabase'}:
+                raise ValueError('config auth mode is not supported')
             # The only token-like value allowed in this browser bootstrap is
             # the public Supabase anon client key. All server/admin credentials
             # would require a field outside the schema above and are rejected.

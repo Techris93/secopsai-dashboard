@@ -99,12 +99,61 @@ function createWorkerDataClient(config) {
   };
 }
 
+// Local mode without Supabase: the operational tables (runs, work items,
+// events, findings) live in the hosted dashboard's D1 database, so reads are
+// empty here and writes explain where to go.  Helper-backed panels (research,
+// triage, ontology, intelligence) use their own local endpoints and still work.
+function createLocalEmptyDataClient() {
+  const unavailable = { message: 'Operational tables live in the hosted dashboard (dashboard.secopsai.dev).', code: 'local_tables_unavailable' };
+  class EmptyQuery {
+    constructor() { this.writes = false; this.single = false; }
+    select() { return this; }
+    order() { return this; }
+    limit() { return this; }
+    eq() { return this; }
+    insert() { this.writes = true; return this; }
+    update() { this.writes = true; return this; }
+    delete() { this.writes = true; return this; }
+    single() { this.single = true; return this; }
+    maybeSingle() { this.single = true; return this; }
+    then(resolve, reject) {
+      const result = this.writes ? { data: null, error: unavailable } : { data: this.single ? null : [], error: null };
+      return Promise.resolve(result).then(resolve, reject);
+    }
+  }
+  const noAuth = async () => ({ data: null, error: { message: 'Local mode has no sign-in.' } });
+  return {
+    from: () => new EmptyQuery(),
+    auth: {
+      async getSession() { return { data: { session: null }, error: null }; },
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      async signOut() {
+        sessionStorage.removeItem('secopsai_dashboard_local_auth_token');
+        window.location.reload();
+        return { error: null };
+      },
+      signInWithPassword: noAuth,
+      resetPasswordForEmail: noAuth,
+      updateUser: noAuth
+    }
+  };
+}
+
 function accessAuthMode() {
   return cfg?.auth?.mode === 'access';
 }
 
+// Local console without Supabase: the operator proves possession of
+// DASHBOARD_LOCAL_AUTH_TOKEN, which the local server already requires on
+// every /api route, and the console opens only after that check passes.
+function localTokenAuthMode() {
+  return cfg?.auth?.mode === 'local';
+}
+
 if (accessAuthMode()) {
   supabaseClient = createWorkerDataClient(cfg);
+} else if (localTokenAuthMode()) {
+  supabaseClient = createLocalEmptyDataClient();
 } else if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
   bootError = 'Supabase client library failed to load.';
 } else if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) {
@@ -1298,7 +1347,7 @@ function showAuthSurface({ recovery = false, locked = false, message = '', error
   gate?.classList.remove('hidden');
   shell?.classList.add('auth-pending');
   shell?.setAttribute('aria-hidden', 'true');
-  loginForm?.classList.toggle('hidden', recovery || locked);
+  loginForm?.classList.toggle('hidden', recovery || locked || localTokenAuthMode());
   updateForm?.classList.toggle('hidden', !recovery || locked);
   if (lockedMessage) lockedMessage.hidden = !locked;
   if (title) title.textContent = locked ? 'Operator access is not activated' : (recovery ? 'Reset operator password' : 'Operator sign in');
@@ -1392,6 +1441,10 @@ function saveLocalAuthToken(rawToken) {
   if (sysInput) sysInput.value = token;
   renderIntegrations();
   loadIntegrationStatus().then(() => renderIntegrations()).catch(() => {});
+  if (localTokenAuthMode() && !state.auth.session) {
+    initializeLocalTokenAuth().catch(err => console.warn('local operator sign-in failed', err));
+    return;
+  }
   refreshLocalSourcesAfterAuth().catch(err => console.warn('local data reload after local auth failed', err));
 }
 
@@ -1495,7 +1548,43 @@ function leaveAuthenticatedDashboard(message = 'Your session ended. Sign in agai
   showAuthSurface({ message });
 }
 
+async function verifyLocalOperatorToken() {
+  const token = String(state.auth?.localToken || '').trim();
+  if (!token) return false;
+  try {
+    const response = await fetch('/api/integration-status', {
+      credentials: 'same-origin',
+      headers: { 'X-SecOpsAI-Local-Token': token }
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function initializeLocalTokenAuth() {
+  if (await verifyLocalOperatorToken()) {
+    await enterAuthenticatedDashboard({
+      access_token: '',
+      user: { id: 'local-operator', email: 'local operator', app_metadata: { provider: 'local_token' } }
+    });
+    return;
+  }
+  const hadToken = Boolean(state.auth?.localToken);
+  showAuthSurface({
+    message: hadToken
+      ? 'The local operator token was rejected. Enter DASHBOARD_LOCAL_AUTH_TOKEN from the dashboard .env.'
+      : 'Enter the local operator token (DASHBOARD_LOCAL_AUTH_TOKEN from the dashboard .env) to open the local console.',
+    error: hadToken
+  });
+  openLocalAuthModal(hadToken ? 'Token rejected by the local server.' : '');
+}
+
 async function initializeDashboardAuth() {
+  if (localTokenAuthMode()) {
+    await initializeLocalTokenAuth();
+    return;
+  }
   if (!dashboardAuthRequired()) {
     showAuthSurface({
       locked: true,

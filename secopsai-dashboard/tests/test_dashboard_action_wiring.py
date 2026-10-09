@@ -72,7 +72,7 @@ def test_initial_route_collapses_sidebar_subnavigation_until_operator_opens_it()
 def test_action_fix_bumps_the_frontend_bundle_cache_key():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
 
-    assert 'app.js?v=20261009-access' in html
+    assert 'app.js?v=20261009-local-auth' in html
     assert 'app.js?v=20260803-subsection-navigation' not in html
 
 

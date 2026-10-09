@@ -176,7 +176,7 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
             'ontologyEndpoint': '/api/secopsai/ontology',
             'edgeWorkspaceEndpoint': '/api/secopsai/edge-workspace',
             'edgeDashboardUrl': '',
-            'auth': {'required': True},
+            'auth': {'required': True, 'mode': 'supabase'},
             'aiGuard': {'hostedEnabled': False, 'defaultModel': 'gpt-5.4-mini', 'maxCostUsd': 3, 'allowMutations': False},
             'departments': {'exec': '#06B6D4', 'platform': '#3B82F6', 'security': '#8B5CF6', 'product': '#6366F1', 'revenue': '#F59E0B', 'support': '#10B981'},
             'roleGroups': {'exec': [], 'platform': [], 'security': [], 'product': [], 'revenue': [], 'support': []},
@@ -192,6 +192,12 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
                 self.assertEqual(good.status, 200)
                 self.assertIn(b'public-anon-key', good.wfile.getvalue())
                 self.assertNotIn(b'DASHBOARD_LOCAL_AUTH_TOKEN', good.wfile.getvalue())
+
+                unknown_mode = dict(public_config, auth={'required': True, 'mode': 'disabled'})
+                config_path.write_text(f"window.SECOPSAI_CONFIG = {json.dumps(unknown_mode)};\n", encoding='utf-8')
+                odd = FakeHandler()
+                dashboard_server.DashboardHandler._serve_local_bootstrap_config(odd)
+                self.assertEqual(odd.status, 503)
 
                 private_config = dict(public_config)
                 private_config['DASHBOARD_LOCAL_AUTH_TOKEN'] = 'server-secret'

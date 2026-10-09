@@ -49,10 +49,12 @@ def js_number(value, default: float = 0.0) -> str:
 def main():
     env = load_env(ENV_PATH)
     merged = {**os.environ, **env}
-    required = ['SUPABASE_URL', 'SUPABASE_ANON_KEY']
-    missing = [k for k in required if not merged.get(k)]
-    if missing:
-        raise SystemExit(f'Missing required env vars: {", ".join(missing)}')
+    # Supabase is optional: local mode without it shows helper-backed panels
+    # and leaves the operational tables to the hosted dashboard.  A partial
+    # configuration is still an error.
+    supabase = [k for k in ('SUPABASE_URL', 'SUPABASE_ANON_KEY') if merged.get(k)]
+    if len(supabase) == 1:
+        raise SystemExit('Set both SUPABASE_URL and SUPABASE_ANON_KEY, or neither')
 
     values = {
         '__SUPABASE_URL__': js_escape(merged.get('SUPABASE_URL', '')),
@@ -64,6 +66,9 @@ def main():
         '__HOSTED_AI_ALLOW_MUTATIONS__': js_bool(merged.get('HOSTED_AI_ALLOW_MUTATIONS'), default=False),
         '__SECOPSAI_EDGE_DASHBOARD_URL__': js_escape(merged.get('SECOPSAI_EDGE_DASHBOARD_URL', '')),
         '__DASHBOARD_AUTH_REQUIRED__': js_bool(merged.get('DASHBOARD_AUTH_REQUIRED'), default=True),
+        # "local": the local operator token (DASHBOARD_LOCAL_AUTH_TOKEN) signs
+        # the operator in; used when no Supabase project is configured.
+        '__DASHBOARD_AUTH_MODE__': js_escape('local' if not merged.get('SUPABASE_URL') else 'supabase'),
     }
 
     text = TEMPLATE_PATH.read_text(encoding='utf-8')
