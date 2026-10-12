@@ -373,4 +373,13 @@ assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /goog
 assert.match(runtime.elements.get('intelligence-bridge-detail').innerHTML, /HTTP 200; live probe passed/);
 assert.doesNotMatch(runtime.elements.get('intelligence-bridge-detail').innerHTML, /intelligence-provider-list"><div class="kv-row"/);
 
+const triageView = (result) => vm.runInContext(`intelligenceResultView(${JSON.stringify({ action: 'triage_artifact', status: 'succeeded', result })})`, runtime.context);
+assert.equal(triageView({ finding_verdict: 'benign_expected', malicious_probability: 8, finding_confidence: 80 }).assessment, 'Likely benign (8%)');
+assert.equal(triageView({ finding_verdict: 'needs_more_evidence', malicious_probability: 45 }).assessment, 'Needs review (45%)');
+assert.equal(triageView({ finding_verdict: 'needs_more_evidence', malicious_probability: 82 }).assessment, 'Suspicious (82%)');
+assert.equal(triageView({ finding_verdict: 'true_positive', malicious_probability: 40 }).assessment, 'Suspicious (40%)');
+assert.equal(triageView({ finding_verdict: 'needs_more_evidence', malicious_probability: -1 }).assessment, 'Needs review');
+assert.equal(triageView({ finding_verdict: 'benign_expected', malicious_probability: 8 }).maliciousProbability, 8);
+assert.equal(vm.runInContext(`intelligenceResultView(${JSON.stringify({ action: 'investigation_brief', result: { malicious_probability: 8 } })}).assessment`, runtime.context), 'unconfirmed_static_lead');
+
 console.log('research case and detection learning runtime rendering checks passed');

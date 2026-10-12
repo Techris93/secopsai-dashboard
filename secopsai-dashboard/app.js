@@ -6394,11 +6394,27 @@ function intelligenceResultList(value) {
   });
 }
 
+// Artifact triage is advisory, but its probability and verdict are the
+// model's actual answer; label the job from them instead of a generic
+// "unconfirmed" placeholder. An analyst verdict on the case still overrides.
+function artifactTriageAssessment(data) {
+  const probability = Number(data.malicious_probability);
+  const verdict = String(data.finding_verdict || '').trim();
+  const hasProbability = Number.isFinite(probability) && probability >= 0;
+  if (!hasProbability && !verdict) return null;
+  const suffix = hasProbability ? ` (${Math.round(probability)}%)` : '';
+  const benign = ['benign_expected', 'false_positive', 'policy_noise'].includes(verdict);
+  if (verdict === 'true_positive' || (hasProbability && probability >= 70)) return { label: `Suspicious${suffix}`, probability };
+  if ((benign && (!hasProbability || probability <= 30)) || (hasProbability && probability <= 10)) return { label: `Likely benign${suffix}`, probability };
+  return { label: `Needs review${suffix}`, probability };
+}
+
 function intelligenceResultView(job) {
   const envelope = job?.result && typeof job.result === 'object' ? job.result : {};
   const data = envelope?.data && typeof envelope.data === 'object' ? envelope.data : envelope;
   const action = String(job?.action || '').trim().toLowerCase();
   const finalVerdictAction = ['analyze_research_case', 'review_finding', 'investigation_verdict'].includes(action);
+  const triageAssessment = action === 'triage_artifact' ? artifactTriageAssessment(data) : null;
   const brief = data?.analyst_brief && typeof data.analyst_brief === 'object' ? data.analyst_brief : {};
   const triage = data?.triage_analysis && typeof data.triage_analysis === 'object' ? data.triage_analysis : {};
   const handling = data?.handling_proposal && typeof data.handling_proposal === 'object' ? data.handling_proposal : {};
@@ -6431,8 +6447,9 @@ function intelligenceResultView(job) {
     automationRecommendation: String(data.automation_recommendation || '').trim(),
     counterarguments: intelligenceResultList(data.counterarguments),
     tuningProposals: Array.isArray(data.rule_tuning_proposals) ? data.rule_tuning_proposals : [],
-    assessment: String(data.assessment || data.assessment_label || data.maliciousness_verdict || (finalVerdictAction ? data.verdict_recommendation || data.finding_verdict : '') || 'unconfirmed_static_lead').trim(),
+    assessment: String(data.assessment || data.assessment_label || data.maliciousness_verdict || (finalVerdictAction ? data.verdict_recommendation || data.finding_verdict : '') || triageAssessment?.label || 'unconfirmed_static_lead').trim(),
     assessmentConfidence: Number(data.detection_confidence ?? data.assessment_confidence ?? data.verdict_confidence ?? data.finding_confidence ?? 0),
+    maliciousProbability: triageAssessment && Number.isFinite(triageAssessment.probability) && triageAssessment.probability >= 0 ? Math.round(triageAssessment.probability) : null,
     investigationPriority: String(data.investigation_priority || data.priority || 'normal').trim(),
     potentialImpact: String(data.potential_impact || data.impact_severity || job?.severity || 'medium').trim(),
     localExposure: String(data.local_exposure || data.exposure_assessment || 'unknown').trim(),
@@ -6514,7 +6531,7 @@ function renderIntelligenceResultModal() {
   const decisionContradictions = view.contradictions.slice(0, 2);
   const decisionCard = `<section class="intelligence-decision-card" aria-label="Decision card">
     <div class="intelligence-decision-card-head"><div><span class="eyebrow">Assessment</span><strong>${escapeHtml(humanizeSnake(decisionAssessment))}</strong><p>${escapeHtml(view.summary || 'Evidence is available for analyst review; no automatic maliciousness verdict was established.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(view.publicationReadiness))}</span></div>
-    <div class="intelligence-decision-metrics"><div><span>Detection confidence</span><b>${escapeHtml(String(view.assessmentConfidence))}%</b></div><div><span>Investigation priority</span><b>${escapeHtml(humanizeSnake(view.investigationPriority))}</b></div><div><span>Potential impact</span><b>${escapeHtml(humanizeSnake(view.potentialImpact))}</b></div><div><span>Local exposure</span><b>${escapeHtml(humanizeSnake(view.localExposure))}</b></div><div><span>Evidence quality</span><b>${escapeHtml(humanizeSnake(view.evidenceQuality))}</b></div><div><span>Observations</span><b>${escapeHtml(String(view.uniqueObservations))} unique · ${escapeHtml(String(view.repeatObservations))} repeated</b></div></div>
+    <div class="intelligence-decision-metrics">${view.maliciousProbability !== null ? `<div><span>Malicious probability</span><b>${escapeHtml(String(view.maliciousProbability))}%</b></div><div><span>Model confidence</span><b>${escapeHtml(String(view.assessmentConfidence))}%</b></div>` : `<div><span>Detection confidence</span><b>${escapeHtml(String(view.assessmentConfidence))}%</b></div>`}<div><span>Investigation priority</span><b>${escapeHtml(humanizeSnake(view.investigationPriority))}</b></div><div><span>Potential impact</span><b>${escapeHtml(humanizeSnake(view.potentialImpact))}</b></div><div><span>Local exposure</span><b>${escapeHtml(humanizeSnake(view.localExposure))}</b></div><div><span>Evidence quality</span><b>${escapeHtml(humanizeSnake(view.evidenceQuality))}</b></div><div><span>Observations</span><b>${escapeHtml(String(view.uniqueObservations))} unique · ${escapeHtml(String(view.repeatObservations))} repeated</b></div></div>
     <div class="intelligence-decision-columns"><div class="intelligence-decision-facts"><h4>Confirmed facts</h4>${renderIntelligenceResultList(decisionFacts, 'No confirmed facts returned.')}</div><div class="intelligence-decision-contradictions"><h4>Contradictions</h4>${renderIntelligenceResultList(decisionContradictions, 'None identified.')}</div><div class="intelligence-decision-next"><h4>Next action</h4><p>${escapeHtml(view.recommendedActions[0] || 'Review the evidence and record a human decision.')}</p></div></div>
   </section>`;
   const sections = [
