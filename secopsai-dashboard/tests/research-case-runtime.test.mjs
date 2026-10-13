@@ -382,4 +382,9 @@ assert.equal(triageView({ finding_verdict: 'needs_more_evidence', malicious_prob
 assert.equal(triageView({ finding_verdict: 'benign_expected', malicious_probability: 8 }).maliciousProbability, 8);
 assert.equal(vm.runInContext(`intelligenceResultView(${JSON.stringify({ action: 'investigation_brief', result: { malicious_probability: 8 } })}).assessment`, runtime.context), 'unconfirmed_static_lead');
 
-console.log('research case and detection learning runtime rendering checks passed');
+assert.equal(vm.runInContext("intelligenceModelSupportsAction('typesafe/jev-latest', 'triage_artifact')", runtime.context), true);
+assert.equal(vm.runInContext("intelligenceModelSupportsAction('typesafe/jev-latest', 'analyze_research_case')", runtime.context), false);
+assert.equal(vm.runInContext("intelligenceModelSupportsAction('cloudflare/clef', 'review_publication_safety')", runtime.context), false);
+assert.equal(vm.runInContext("intelligenceModelSupportsAction('cloudflare/clef-flash', 'triage_finding')", runtime.context), true);
+assert.equal(vm.runInContext("intelligenceModelSupportsAction('native', 'analyze_research_case')", runtime.context), true);
+console.log('research case, decision capability, and detection learning runtime rendering checks passed');
