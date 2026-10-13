@@ -7,9 +7,10 @@ import pytest
 import dashboard_server as server
 
 
+@pytest.mark.parametrize("action", ["brief-approve", "assistant-team-start", "assistant-team-cancel"])
 @pytest.mark.parametrize("request_id,expected", [("review-request-fixture", 200), ("", 400)])
-def test_operation_helper_preserves_exact_input_and_stable_identity(monkeypatch, request_id, expected):
-    payload = {"action": "brief-approve", "actor": "human.editor", "request_id": request_id,
+def test_operation_helper_preserves_exact_input_and_stable_identity(monkeypatch, request_id, expected, action):
+    payload = {"action": action, "actor": "human.editor", "request_id": request_id,
                "id": "BRIEF-fixture", "data": {"reviewed_draft": "Exact complete draft\nUnicode: λ", "expected_fingerprint": "a" * 64}}
     calls, response, files = [], [], []
     handler = SimpleNamespace(path="/api/secopsai/research-operation", _local_api_authorized=lambda parsed: True,

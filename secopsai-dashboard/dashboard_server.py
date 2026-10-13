@@ -5244,7 +5244,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             try:
                 action = _clean_string(payload.get('action'), 40)
                 actor = _clean_string(payload.get('actor'), 160)
-                if action not in {'person-register', 'claim-assess', 'prior-art', 'experiment', 'behavior', 'case-review', 'source-configure', 'event-verify', 'roster', 'board', 'brief-create', 'brief-edit', 'brief-approve', 'brief-correct', 'disclosure-milestone', 'requirement', 'outcome', 'compare-releases'} or not actor:
+                if action not in {'person-register', 'claim-assess', 'prior-art', 'experiment', 'behavior', 'case-review', 'source-configure', 'event-verify', 'roster', 'board', 'brief-create', 'brief-edit', 'brief-approve', 'brief-correct', 'disclosure-milestone', 'requirement', 'outcome', 'compare-releases', 'assistant-team-start', 'assistant-team-cancel'} or not actor:
                     raise ValueError('Supported research action and named human actor are required')
                 data = payload.get('data')
                 if not isinstance(data, dict):

@@ -10913,6 +10913,7 @@ function renderResearchOperation() {
     ${missing.length ? `<p>Operational requirements awaiting evidence: ${missing.map(v => escapeHtml(humanizeSnake(v))).join(', ')}.</p>` : ''}
     <p>Reviewed daily editions: ${Number(operation.reviewed_daily_brief_streak) || 0} consecutive days. Collection and assembly do not grant release approval.</p>
     ${researchTable(['Source', 'Coverage', 'Observed', 'Analyzed', 'Last success', 'Health'], sources.map(s => `<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(humanizeSnake(s.coverage_mode || 'unknown'))}</td><td>${escapeHtml(String(s.observed_events ?? 'Unknown'))}</td><td>${escapeHtml(String(s.artifacts_analyzed ?? 'Unknown'))}</td><td>${escapeHtml(fmtDate(s.last_success_at))}</td><td>${escapeHtml(s.fresh ? 'Fresh' : s.enabled ? 'Collection gap' : 'Paused')}</td></tr>`), 'No sources have reported a baseline.')}
+    ${researchTable(['Assistant team', 'Case', 'Progress', 'Status', 'Control'], (operation.assistant_teams || []).map(t => `<tr><td>${escapeHtml(t.team_id)}</td><td>${escapeHtml(t.case_id)}</td><td>${(t.completed_stages || []).length}/6 roles</td><td>${escapeHtml(humanizeSnake(t.status))}${t.reason ? `<br>${escapeHtml(t.reason)}` : ''}</td><td>${!['awaiting_human_review', 'stale', 'failed', 'canceled'].includes(t.status) ? `<button type="button" class="secondary-btn research-team-cancel" data-team="${escapeHtml(t.team_id)}">Stop</button>` : 'Human review required'}</td></tr>`), 'No assistant teams have been started.')}
     ${(operation.editions || []).slice(0, 5).map(edition => `<details class="research-action-drawer"><summary>${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}</summary>
       ${edition.draft ? `<p>${escapeHtml(edition.draft.title)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto;">${escapeHtml(edition.draft.body_markdown)}</pre>
         <div class="research-form-grid">${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" data-edition="${escapeHtml(edition.edition_id)}" data-check="${key}" />${label}</label>`).join('')}</div>
@@ -10927,6 +10928,16 @@ function renderResearchOperation() {
     if (Object.values(checks).some(v => v !== 'passed') || !rationale) { setStatus('Complete every release check and explain your editorial decision.', true); return; }
     await runResearchOperation('brief-approve', { checks, rationale, expected_fingerprint: edition.fingerprint, reviewed_draft: edition.draft.body_markdown }, { identity: edition.edition_id, button });
   }));
+  host.querySelectorAll('.research-team-cancel').forEach(button => button.addEventListener('click', () => runResearchOperation('assistant-team-cancel', {}, { identity: button.dataset.team, button })));
+  const startTeam = el('research-team-start');
+  if (startTeam && !startTeam.dataset.bound) {
+    startTeam.dataset.bound = 'true';
+    startTeam.addEventListener('click', () => {
+      const caseId = el('research-team-case')?.value.trim() || '';
+      if (!/^RSC-[A-F0-9]{12}$/.test(caseId)) { setStatus('Enter a valid research case identity.', true); return; }
+      runResearchOperation('assistant-team-start', { request_id: crypto.randomUUID() }, { caseId, button: startTeam });
+    });
+  }
   const create = el('research-operation-brief-create');
   if (create && !create.dataset.bound) { create.dataset.bound = 'true'; create.addEventListener('click', () => runResearchOperation('brief-create', {}, { button: create })); }
   const claim = el('research-claim-assess');

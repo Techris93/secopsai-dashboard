@@ -392,12 +392,17 @@ console.log('research case, decision capability, and detection learning runtime 
 const operationFixture = {
   coverage: {public_summary: 'Synthetic preview: bounded collection; upstream denominators remain unknown.', sources: [{name: 'Primary vendor fixture', enabled: true, fresh: true, coverage_mode: 'source_reporting', observed_events: 12, artifacts_analyzed: null, last_success_at: '2026-10-13T09:00:00Z'}]},
   missing_requirements: ['named_seven_day_roster', 'held_out_quality_evaluation'], reviewed_daily_brief_streak: 0,
+  assistant_teams: [{team_id: '<script>untrusted-team</script>', case_id: 'RSC-fixture', status: 'running', completed_stages: ['synthesis']}],
   editions: [{edition_id: 'BRIEF-2026-10-13', edition_date: '2026-10-13', state: 'verifying', fingerprint: 'fixture', draft: {title: 'Synthetic daily review fixture', body_markdown: 'Verified source reporting stays separate from independent SecOpsAI observations.\n\nThis fixture is not a published article.'}}],
 };
 runtime.context.operationFixture = operationFixture;
 vm.runInContext('state.researchCases.operation = operationFixture; renderResearchOperation();', runtime.context);
 const operationHtml = runtime.elements.get('research-operation-status').innerHTML;
 assert.ok(operationHtml.includes('Synthetic daily review fixture'));
+assert.ok(operationHtml.includes('1/6 roles'));
+assert.ok(operationHtml.includes('research-team-cancel'));
+assert.ok(!operationHtml.includes('<script>untrusted-team</script>'));
+assert.ok(operationHtml.includes('&lt;script&gt;untrusted-team&lt;/script&gt;'));
 assert.ok(operationHtml.includes('Approve this exact draft for release'));
 assert.equal((operationHtml.match(/class="research-edition-check"/g) || []).length, 12);
 assert.ok(!/type="checkbox"[^>]*checked/.test(operationHtml));
