@@ -388,3 +388,26 @@ assert.equal(vm.runInContext("intelligenceModelSupportsAction('cloudflare/clef',
 assert.equal(vm.runInContext("intelligenceModelSupportsAction('cloudflare/clef-flash', 'triage_finding')", runtime.context), true);
 assert.equal(vm.runInContext("intelligenceModelSupportsAction('native', 'analyze_research_case')", runtime.context), true);
 console.log('research case, decision capability, and detection learning runtime rendering checks passed');
+
+const operationFixture = {
+  coverage: {public_summary: 'Synthetic preview: bounded collection; upstream denominators remain unknown.', sources: [{name: 'Primary vendor fixture', enabled: true, fresh: true, coverage_mode: 'source_reporting', observed_events: 12, artifacts_analyzed: null, last_success_at: '2026-10-13T09:00:00Z'}]},
+  missing_requirements: ['named_seven_day_roster', 'held_out_quality_evaluation'], reviewed_daily_brief_streak: 0,
+  editions: [{edition_id: 'BRIEF-2026-10-13', edition_date: '2026-10-13', state: 'verifying', fingerprint: 'fixture', draft: {title: 'Synthetic daily review fixture', body_markdown: 'Verified source reporting stays separate from independent SecOpsAI observations.\n\nThis fixture is not a published article.'}}],
+};
+runtime.context.operationFixture = operationFixture;
+vm.runInContext('state.researchCases.operation = operationFixture; renderResearchOperation();', runtime.context);
+const operationHtml = runtime.elements.get('research-operation-status').innerHTML;
+assert.ok(operationHtml.includes('Synthetic daily review fixture'));
+assert.ok(operationHtml.includes('Approve this exact draft for release'));
+assert.equal((operationHtml.match(/class="research-edition-check"/g) || []).length, 12);
+assert.ok(!/type="checkbox"[^>]*checked/.test(operationHtml));
+operationFixture.editions[0] = {edition_id: 'BRIEF-2026-10-13', edition_date: '2026-10-13', state: 'verifying', draft_omitted: 'Complete draft exceeds budget'};
+vm.runInContext('renderResearchOperation();', runtime.context);
+assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes('research-edition-approve'));
+operationFixture.coverage.sources[0].name = '<img src=x onerror=alert(1)>';
+vm.runInContext('renderResearchOperation();', runtime.context);
+assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes('<img src=x'));
+if (process.env.SECOPSAI_RESEARCH_PREVIEW_PATH) {
+  fs.writeFileSync(process.env.SECOPSAI_RESEARCH_PREVIEW_PATH, '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="styles.css"><title>Synthetic research-operation preview</title></head><body class="okcomputer-skin professional-ui"><main style="padding:24px;max-width:1100px;margin:auto"><h1>Research operation · synthetic test preview</h1>' + operationHtml + '</main></body></html>');
+}
+console.log('research operation review rendering and untrusted-source escaping: ok');

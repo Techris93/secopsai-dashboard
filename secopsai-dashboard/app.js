@@ -10385,6 +10385,15 @@ async function loadResearchCases({ render = true, preserveSelection = true } = {
     // The sandbox queue is a separate read-only policy view. Keep its failure
     // isolated so a provider outage never hides the research case queue.
     await loadResearchSandboxRecommendations({ render: false });
+    try {
+      const operationResponse = await dashboardApiFetch('/api/secopsai/research-operation', { cache: 'no-store' });
+      const operation = await operationResponse.json();
+      if (!operationResponse.ok || operation.ok === false) throw new Error(operation.error || 'Research operation is unavailable');
+      state.researchCases.operation = operation;
+      state.researchCases.operationError = null;
+    } catch (error) {
+      state.researchCases.operationError = error?.message || String(error);
+    }
   } catch (error) {
     state.researchCases.error = error?.message || String(error);
     // A failed refresh must not erase a previously loaded research queue.
@@ -10862,6 +10871,80 @@ function renderCoverage() {
 }
 
 const researchCaseActionQueues = new Map();
+
+const RESEARCH_BRIEF_CHECK_LABELS = {
+  claims: 'Every material claim was checked', primary_sources: 'Primary sources and attribution were checked',
+  affected_versions: 'Affected versions were checked', defensive_actions: 'Defensive actions were checked',
+  uncertainty: 'Uncertainty and limitations are stated', privacy: 'Privacy was reviewed', secrets: 'Secrets were reviewed',
+  sharing_rights: 'Sharing rights permit release', licensing: 'Licensing was reviewed', embargo: 'No embargo prevents release',
+  credits: 'Authors and sources receive credit', conflicts: 'Commercial conflicts are disclosed',
+};
+
+async function runResearchOperation(action, data, { identity = '', caseId = '', button = null } = {}) {
+  const actor = el('research-operation-actor')?.value.trim() || '';
+  const token = el('research-operation-token')?.value || '';
+  if (!actor || !token) { setStatus('Enter your registered human identity and protected operation token.', true); return null; }
+  setButtonBusy(button, true, 'Recording…');
+  try {
+    const response = await dashboardApiFetch('/api/secopsai/research-operation', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-SecOpsAI-Intelligence-Token': token },
+      body: JSON.stringify({ action, actor, data, id: identity, case_id: caseId, request_id: crypto.randomUUID() }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || payload.result?.error || 'Research action failed');
+    setStatus(payload.queued ? 'The authenticated research worker will record this action. Refresh after its next cycle.' : 'Research operation recorded.');
+    await loadResearchCases();
+    return payload;
+  } catch (error) { setStatus(error?.message || String(error), true); return null; }
+  finally { setButtonBusy(button, false); }
+}
+
+function renderResearchOperation() {
+  const host = el('research-operation-status');
+  if (!host) return;
+  const operation = state.researchCases.operation;
+  if (!operation) { host.textContent = state.researchCases.operationError || 'Collection and editorial readiness have not been reported yet.'; return; }
+  const coverage = operation.coverage || {};
+  const sources = coverage.sources || [];
+  const missing = operation.missing_requirements || [];
+  host.innerHTML = `${state.researchCases.operationError ? `<p role="alert">This view is stale: ${escapeHtml(state.researchCases.operationError)}</p>` : ''}
+    <p>Research programs: software supply chains and AI/agent security. Daily briefs report verified developments; original findings publish when their evidence and disclosure are ready.</p>
+    <p>${escapeHtml(coverage.public_summary || 'Coverage has not been measured.')}</p>
+    ${missing.length ? `<p>Operational requirements awaiting evidence: ${missing.map(v => escapeHtml(humanizeSnake(v))).join(', ')}.</p>` : ''}
+    <p>Reviewed daily editions: ${Number(operation.reviewed_daily_brief_streak) || 0} consecutive days. Collection and assembly do not grant release approval.</p>
+    ${researchTable(['Source', 'Coverage', 'Observed', 'Analyzed', 'Last success', 'Health'], sources.map(s => `<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(humanizeSnake(s.coverage_mode || 'unknown'))}</td><td>${escapeHtml(String(s.observed_events ?? 'Unknown'))}</td><td>${escapeHtml(String(s.artifacts_analyzed ?? 'Unknown'))}</td><td>${escapeHtml(fmtDate(s.last_success_at))}</td><td>${escapeHtml(s.fresh ? 'Fresh' : s.enabled ? 'Collection gap' : 'Paused')}</td></tr>`), 'No sources have reported a baseline.')}
+    ${(operation.editions || []).slice(0, 5).map(edition => `<details class="research-action-drawer"><summary>${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}</summary>
+      ${edition.draft ? `<p>${escapeHtml(edition.draft.title)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto;">${escapeHtml(edition.draft.body_markdown)}</pre>
+        <div class="research-form-grid">${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" data-edition="${escapeHtml(edition.edition_id)}" data-check="${key}" />${label}</label>`).join('')}</div>
+        <label><span>Editorial decision rationale</span><textarea class="research-edition-rationale" data-edition="${escapeHtml(edition.edition_id)}"></textarea></label>
+        <button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
+      ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`).join('')}`;
+  host.querySelectorAll('.research-edition-approve').forEach(button => button.addEventListener('click', async () => {
+    const edition = (operation.editions || []).find(e => e.edition_id === button.dataset.edition);
+    const checks = {};
+    host.querySelectorAll('.research-edition-check').forEach(input => { if (input.dataset.edition === edition.edition_id) checks[input.dataset.check] = input.checked ? 'passed' : 'blocked'; });
+    const rationale = [...host.querySelectorAll('.research-edition-rationale')].find(input => input.dataset.edition === edition.edition_id)?.value.trim() || '';
+    if (Object.values(checks).some(v => v !== 'passed') || !rationale) { setStatus('Complete every release check and explain your editorial decision.', true); return; }
+    await runResearchOperation('brief-approve', { checks, rationale, expected_fingerprint: edition.fingerprint, reviewed_draft: edition.draft.body_markdown }, { identity: edition.edition_id, button });
+  }));
+  const create = el('research-operation-brief-create');
+  if (create && !create.dataset.bound) { create.dataset.bound = 'true'; create.addEventListener('click', () => runResearchOperation('brief-create', {}, { button: create })); }
+  const claim = el('research-claim-assess');
+  if (claim && !claim.dataset.bound) {
+    claim.dataset.bound = 'true'; claim.addEventListener('click', () => {
+      const value = name => el(`research-claim-${name}`)?.value.trim() || '';
+      const lines = name => value(name).split('\n').map(v => v.trim()).filter(Boolean);
+      if (!value('confidence') || !value('start')) { setStatus('Provide explicit confidence and passage start values.', true); return; }
+      const excerpt = value('excerpt'), start = Number(value('start'));
+      runResearchOperation('claim-assess', { statement: value('statement'), assessment: value('assessment'), confidence: Number(value('confidence')),
+        malicious_behavior: Boolean(el('research-claim-malicious')?.checked), references: [{ evidence_id: value('evidence'), selector: value('selector'), start, end: start + [...excerpt].length, excerpt }],
+        scope: { versions: value('versions'), environment: value('environment'), sample_set: value('samples'), observation_period: value('period') },
+        rationale: value('rationale'), quality: value('quality'), alternatives: lines('alternatives'), contradictions: lines('contradictions'),
+        contradiction_resolution: value('resolution'), limitations: lines('limitations'),
+      }, { caseId: value('case'), button: claim });
+    });
+  }
+}
 
 async function runResearchCaseAction(action, payload = {}, button = null) {
   const key = researchActionQueueKey('case', action, payload);
@@ -12390,6 +12473,7 @@ function renderResearchCases() {
   renderResearchDiscovery();
   renderResearchResolutions();
   renderResearchStageQueues(state.researchCases.discovery.candidates || []);
+  renderResearchOperation();
   const list = el('research-case-list');
   const filtered = filteredResearchCases();
   const staleNotice = state.researchCases.stale && cases.length

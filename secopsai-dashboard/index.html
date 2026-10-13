@@ -1057,6 +1057,38 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
               <select id="research-filter-status"><option value="all">All statuses</option><option value="draft">Draft</option><option value="investigating">Investigating</option><option value="validation">Validation</option><option value="disclosure_pending">Disclosure pending</option><option value="ready_to_publish">Ready to publish</option><option value="published">Published</option><option value="closed">Closed</option></select>
               <input id="research-filter-search" type="search" placeholder="Search case, subject, owner" />
             </div>
+            <details class="research-action-drawer" open>
+              <summary>Daily research operation</summary>
+              <div id="research-operation-status" aria-live="polite">Loading collection and editorial readiness…</div>
+              <div class="research-form-grid">
+                <label><span>Your registered human identity</span><input id="research-operation-actor" autocomplete="username" /></label>
+                <label><span>Protected operation token</span><input id="research-operation-token" type="password" autocomplete="off" /></label>
+              </div>
+              <div class="research-form-actions"><button class="secondary-btn" id="research-operation-brief-create" type="button">Assemble today's review draft</button></div>
+              <details><summary>Record an independent claim assessment</summary>
+                <div class="research-form-grid">
+                  <label><span>Case</span><input id="research-claim-case" /></label>
+                  <label class="research-span-2"><span>Exact statement</span><textarea id="research-claim-statement"></textarea></label>
+                  <label><span>Evidence record</span><input id="research-claim-evidence" /></label>
+                  <label><span>Location in archived evidence</span><input id="research-claim-selector" placeholder="/metadata/file_contents/install.js" /></label>
+                  <label><span>Passage start</span><input id="research-claim-start" type="number" min="0" /></label>
+                  <label class="research-span-2"><span>Exact supporting passage</span><textarea id="research-claim-excerpt"></textarea></label>
+                  <label><span>Assessment</span><select id="research-claim-assessment"><option value="observation">Direct observation</option><option value="source_reported">Source reported</option><option value="inference">Inference</option><option value="disputed">Disputed</option><option value="unknown">Unknown</option></select></label>
+                  <label><span>Analytic confidence (0–100)</span><input id="research-claim-confidence" type="number" min="0" max="100" /></label>
+                  <label><span>Affected versions</span><input id="research-claim-versions" /></label>
+                  <label><span>Environment</span><input id="research-claim-environment" /></label>
+                  <label><span>Sample set</span><input id="research-claim-samples" /></label>
+                  <label><span>Observation period</span><input id="research-claim-period" /></label>
+                  <label class="research-span-2"><span>Why the passage supports this statement</span><textarea id="research-claim-rationale"></textarea></label>
+                  <label class="research-span-2"><span>Evidence quality and independence</span><textarea id="research-claim-quality"></textarea></label>
+                  <label class="research-span-2"><span>Competing explanations (one per line)</span><textarea id="research-claim-alternatives"></textarea></label>
+                  <label class="research-span-2"><span>Contrary evidence (one per line)</span><textarea id="research-claim-contradictions"></textarea></label>
+                  <label class="research-span-2"><span>Resolution of contrary evidence</span><textarea id="research-claim-resolution"></textarea></label>
+                  <label class="research-span-2"><span>Limitations (one per line)</span><textarea id="research-claim-limitations"></textarea></label>
+                  <label><input id="research-claim-malicious" type="checkbox" />This observation demonstrates malicious behavior within the stated scope</label>
+                </div><button class="secondary-btn" id="research-claim-assess" type="button">Record qualified independent assessment</button>
+              </details>
+            </details>
             <div id="research-case-list"></div>
           </div>
           <div class="card research-case-detail-panel">

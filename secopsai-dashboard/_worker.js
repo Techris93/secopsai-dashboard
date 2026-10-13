@@ -837,6 +837,26 @@ async function handleHostedResearchCases(request, env) {
   }
 }
 
+async function handleHostedResearchOperation(request, env) {
+  const rawUrl = String(env.SECOPSAI_CORE_API_URL || "").trim();
+  const token = String(request.method === "GET" ? env.SECOPSAI_CORE_READ_TOKEN || "" : env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || "").trim();
+  if (!rawUrl || !token) return jsonResponse({ ok: false, error: "Research operation storage is not configured" }, { status: 501 });
+  if (!["GET", "POST"].includes(request.method)) return jsonResponse({ ok: false, error: "Method not allowed" }, { status: 405 });
+  if (request.method === "POST") {
+    const denied = requireArtifactFleetAdmin(request, env);
+    if (denied) return denied;
+  }
+  try {
+    const data = request.method === "POST" ? await boundedJson(request, 65536, "Research operation input") : null;
+    const payload = await secopsaiCoreRequest(serviceBaseUrl(rawUrl, "SECOPSAI_CORE_API_URL"), "/api/v1/research/operation", token, "Research operation", {
+      method: request.method, body: data ? { payload: data, requested_by: data.actor, idempotency_key: data.request_id || crypto.randomUUID() } : undefined,
+    });
+    return jsonResponse({ ok: true, ...(request.method === "GET" ? payload : { result: payload, queued: true }), mode: "hosted-core" }, { status: request.method === "GET" ? 200 : 202 });
+  } catch (error) {
+    return jsonResponse({ ok: false, error: sanitizeHelperErrorDetail(error?.message || error) }, { status: error.status || 503 });
+  }
+}
+
 async function handleHostedEnterprise(request, env) {
   const rawUrl = String(env.SECOPSAI_CORE_API_URL || "").trim();
   const readToken = String(env.SECOPSAI_CORE_READ_TOKEN || "").trim();
@@ -2015,6 +2035,9 @@ async function routeRequest(request, env) {
       if (!String(env.SECOPSAI_HELPER_BASE_URL || "").trim() && (url.pathname === "/api/secopsai/research-cases" || url.pathname.startsWith("/api/secopsai/research-cases/"))) {
         const hosted = await handleHostedResearchCases(request, env);
         if (hosted) return hosted;
+      }
+      if (!String(env.SECOPSAI_HELPER_BASE_URL || "").trim() && url.pathname === "/api/secopsai/research-operation") {
+        return handleHostedResearchOperation(request, env);
       }
       if (request.method === "GET" && url.pathname === "/api/secopsai/enterprise-status") {
         const directHostedMode = Boolean(String(env.SECOPSAI_CORE_API_URL || "").trim());
