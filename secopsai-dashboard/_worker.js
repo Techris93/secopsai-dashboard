@@ -699,11 +699,13 @@ async function handleHostedIntelligence(request, env) {
   if (action === "enqueue") {
     const intelligenceAction = String(body.intelligence_action || "").trim();
     const targetId = String(body.target_id || "").trim();
+    const model = String(body.model || "").trim();
+    if ((/^(typesafe|typesafe-ai)\//.test(model) || /^cloudflare\/clef(?:-flash)?$/.test(model)) && !['triage_finding', 'triage_artifact'].includes(intelligenceAction)) return jsonResponse({ ok: false, error: 'Selected decision model does not support this action' }, { status: 422 });
     if (!INTELLIGENCE_ACTIONS.has(intelligenceAction)) return jsonResponse({ ok: false, error: "Unsupported intelligence action" }, { status: 400 });
     if (!INTELLIGENCE_TARGET_RE.test(targetId)) return jsonResponse({ ok: false, error: "Invalid intelligence target" }, { status: 400 });
     const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/jobs", intelligenceToken, "Queue intelligence job", {
       method: "POST",
-      body: { action: intelligenceAction, target_id: targetId, requested_by: "mission-control-hosted" },
+      body: { action: intelligenceAction, target_id: targetId, requested_by: "mission-control-hosted", ...(model ? { inputs: { selected_model: model, fallback_mode: ['disabled', 'quota_auth', 'any_provider'].includes(body.fallback_mode) ? body.fallback_mode : 'disabled', fallback_models: Array.isArray(body.fallback_models) ? body.fallback_models.filter(item => typeof item === 'string').slice(0, 8) : [] } } : {}) },
     });
     return jsonResponse({ ok: true, action, result: payload.job });
   }

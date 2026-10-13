@@ -367,6 +367,25 @@ async function testHostedResearchCasesAreReadOnlyCoreProjections() {
   }
 }
 
+async function testDecisionCapabilitiesAndCapturedRouting() {
+  const env = hostedEnv({ SECOPSAI_CORE_API_URL: 'https://core.example', SECOPSAI_CORE_INTELLIGENCE_TOKEN: 'synthetic-intelligence-token' });
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return Response.json({ job: { job_id: 'AIJ-1234567890ABCDEF' } });
+  };
+  const queue = body => workerModule.fetch(operatorRequest('https://dashboard.example/api/secopsai/intelligence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'enqueue', target_id: 'RSC-1234567890AB', ...body }) }), env);
+  try {
+    assert.equal((await queue({ intelligence_action: 'analyze_research_case', model: 'typesafe/jev-latest' })).status, 422);
+    assert.equal((await queue({ intelligence_action: 'generate_analyst_brief', model: 'cloudflare/clef' })).status, 422);
+    assert.equal(calls.length, 0, 'unsupported actions never reach Core');
+    assert.equal((await queue({ intelligence_action: 'triage_finding', model: 'typesafe/jev-latest', fallback_mode: 'quota_auth', fallback_models: ['cloudflare/clef'] })).status, 200);
+    assert.deepEqual(calls[0].body.inputs, { selected_model: 'typesafe/jev-latest', fallback_mode: 'quota_auth', fallback_models: ['cloudflare/clef'] });
+  } finally { globalThis.fetch = originalFetch; }
+}
+
+await testDecisionCapabilitiesAndCapturedRouting();
 await testStaticAssetsAreAllowlisted();
 await testAnonymousOperatorProfilesAreRejected();
 await testSessionsRequireExplicitOperatorAuthorization();

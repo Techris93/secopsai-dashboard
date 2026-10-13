@@ -6275,6 +6275,16 @@ function intelligenceModels() {
   return Array.isArray(state.intelligence.data?.models?.models) ? state.intelligence.data.models.models : [];
 }
 
+function intelligenceModelSupportsAction(model, action) {
+  const entry = intelligenceModels().find(item => item.id === model);
+  if (Array.isArray(entry?.supported_actions)) return entry.supported_actions.includes(action);
+  // Older catalogs still need a safe compatibility check during rollout.
+  if (/^(typesafe|typesafe-ai)\//.test(model) || /^cloudflare\/clef(?:-flash)?$/.test(model)) {
+    return ['triage_finding', 'triage_artifact'].includes(action);
+  }
+  return true;
+}
+
 function isDurableIntelligenceTarget(target) {
   return /^(?:RSC|RSCF)-/.test(String(target || '').trim());
 }
@@ -6638,7 +6648,7 @@ function renderIntelligenceModelSelect() {
     const optionHtml = Object.keys(groups).sort().map(provider => {
       const options = groups[provider].map(item => {
         const id = String(item?.id || '');
-        const mark = fallback.includes(id) ? ' — fallback' : '';
+        const mark = (fallback.includes(id) ? ' — fallback' : '') + (item.decision_only ? ' — finding and artifact triage' : '');
         return `<option value="${escapeHtml(id)}"${id === selected ? ' selected' : ''}>${escapeHtml(id)}${escapeHtml(mark)}</option>`;
       }).join('');
       return `<optgroup label="${escapeHtml(provider)}">${options}</optgroup>`;
@@ -6652,7 +6662,9 @@ function renderIntelligenceModelSelect() {
     hint.textContent = selected
       ? `Runs the next queued job on ${selected}.${fallbackText || ' No fallback models are enabled.'}`
       : 'Pick a model. The next job and health probe will use only that selection.';
+    if (state.intelligence.data?.bridge?.decision_policy?.closure_enabled === false) hint.textContent += ' Decision models are in observation mode; alerts remain open for review.';
   }
+  syncIntelligenceTarget();
   state.intelligence.selectedModel = selected;
   if (selected) sessionStorage.setItem('secopsai_bridge_model', selected);
   renderIntelligenceRouting();
@@ -6766,6 +6778,9 @@ function suggestedIntelligenceTarget(action) {
 
 function syncIntelligenceTarget() {
   const action = el('intelligence-action-select')?.value || 'prioritize_findings';
+  const supported = intelligenceModelSupportsAction(intelligenceSelectedModel(), action);
+  const queue = el('intelligence-queue-btn');
+  if (queue) queue.disabled = !supported;
   const target = el('intelligence-target-id');
   if (!target) return;
   const suggested = suggestedIntelligenceTarget(action);
@@ -6784,6 +6799,7 @@ function syncIntelligenceTarget() {
   if (hint) hint.textContent = target.required
     ? (suggested ? `Using the currently selected SecOpsAI record: ${suggested}` : 'This action requires a finding, asset, graph node, or research case ID.')
     : 'This action reviews the current open finding queue and does not need a target ID.';
+  if (hint && !supported) hint.textContent = 'The selected decision model supports finding and artifact triage. Choose another model for this action.';
 }
 
 function renderIntelligence() {
@@ -13943,12 +13959,17 @@ function bindEvents() {
   el('intelligence-queue-btn')?.addEventListener('click', async event => {
     const action = el('intelligence-action-select')?.value || 'prioritize_findings';
     const targetId = el('intelligence-target-id')?.value?.trim() || '';
+    const selectedModel = intelligenceSelectedModel();
+    if (!intelligenceModelSupportsAction(selectedModel, action)) {
+      showToast('Choose a model that supports this action.', 'error');
+      return;
+    }
     if (intelligenceActionNeedsTarget(action) && !targetId) {
       showToast('Select or enter the SecOpsAI record ID required by this action.', 'error');
       el('intelligence-target-id')?.focus();
       return;
     }
-    await runIntelligenceAction('enqueue', { intelligence_action: action, target_id: targetId }, event.currentTarget);
+    await runIntelligenceAction('enqueue', { intelligence_action: action, target_id: targetId, model: selectedModel, fallback_mode: state.intelligence.data?.bridge?.fallback_mode || "disabled", fallback_models: state.intelligence.data?.bridge?.fallback_models || [] }, event.currentTarget);
   });
   document.querySelectorAll('[data-automation-tab]').forEach(button => button.addEventListener('click', () => {
     const view = button.dataset.automationTab || 'models';

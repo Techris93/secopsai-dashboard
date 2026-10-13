@@ -1175,6 +1175,13 @@ def build_intelligence_args(action, payload):
         args = ['intelligence', 'enqueue', '--action', intelligence_action, '--requested-by', 'mission-control']
         if target_id:
             args.extend(['--target-id', target_id])
+        model = str(payload.get('model') or '').strip()
+        if model:
+            if (model.startswith(('typesafe/', 'typesafe-ai/')) or model in {'cloudflare/clef', 'cloudflare/clef-flash'}) and intelligence_action not in {'triage_finding', 'triage_artifact'}:
+                raise ValueError('Selected decision model does not support this action')
+            raw_fallbacks = payload.get('fallback_models')
+            fallbacks = raw_fallbacks if isinstance(raw_fallbacks, list) else []
+            args.extend(['--inputs-json', json.dumps({'selected_model': model, 'fallback_mode': payload.get('fallback_mode') if payload.get('fallback_mode') in {'disabled', 'quota_auth', 'any_provider'} else 'disabled', 'fallback_models': [item for item in fallbacks if isinstance(item, str)][:8]})])
         return [*args, *secopsai_db_args()]
     if action == 'cancel':
         job_id = str(payload.get('job_id') or '').strip()
