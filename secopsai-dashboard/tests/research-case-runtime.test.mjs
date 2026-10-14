@@ -412,6 +412,15 @@ assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes(
 operationFixture.coverage.sources[0].name = '<img src=x onerror=alert(1)>';
 vm.runInContext('renderResearchOperation();', runtime.context);
 assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes('<img src=x'));
+operationFixture.coverage.artifact_backup = {enabled: true, coverage: '<img src=x onerror=alert(1)>'};
+vm.runInContext('renderResearchOperation();', runtime.context);
+assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('Unknown registered public artifacts awaiting durable backup'));
+assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes('<img src=x'));
+operationFixture.coverage.artifact_backup.pending_registered_public = 7;
+operationFixture.coverage.sources[0].error_category = 'source_http_403';
+vm.runInContext('renderResearchOperation();', runtime.context);
+assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('7 registered public artifacts awaiting durable backup'));
+assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('Source denied collector access (HTTP 403)'));
 if (process.env.SECOPSAI_RESEARCH_PREVIEW_PATH) {
   fs.writeFileSync(process.env.SECOPSAI_RESEARCH_PREVIEW_PATH, '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="styles.css"><title>Synthetic research-operation preview</title></head><body class="okcomputer-skin professional-ui"><main style="padding:24px;max-width:1100px;margin:auto"><h1>Research operation · synthetic test preview</h1>' + operationHtml + '</main></body></html>');
 }
