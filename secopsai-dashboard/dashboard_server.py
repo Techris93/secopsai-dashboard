@@ -4641,6 +4641,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 return json_response(self, 500, {'ok': False, 'error': str(exc)})
 
+        if parsed.path == '/api/secopsai/research-operation':
+            try:
+                result, operation = run_cli_json(['research', 'operation', 'status', *secopsai_db_args()], timeout=60)
+                editions_result, editions = run_cli_json(['research', 'operation', 'editions', *secopsai_db_args()], timeout=60)
+                return json_response(self, 200 if result['ok'] else 503, {'ok': result['ok'], **(operation or {}), 'editions': (editions or {}).get('editions', []) if editions_result['ok'] else []})
+            except Exception as exc:
+                return json_response(self, 503, {'ok': False, 'error': str(exc)})
+
         if parsed.path == '/api/secopsai/research-cases':
             try:
                 qs = urllib.parse.parse_qs(parsed.query or '')
@@ -5227,6 +5235,34 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 args = build_research_discovery_command(action, payload)
                 result, parsed_result = run_cli_json(args, timeout=180)
                 return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'action': action, 'result': parsed_result, 'cli': compact_cli_result(result)})
+            except Exception as exc:
+                return json_response(self, 400, {'ok': False, 'error': str(exc)})
+
+        if parsed.path == '/api/secopsai/research-operation':
+            if require_intelligence_admin(self):
+                return
+            try:
+                action = _clean_string(payload.get('action'), 40)
+                actor = _clean_string(payload.get('actor'), 160)
+                if action not in {'person-register', 'claim-assess', 'prior-art', 'experiment', 'behavior', 'case-review', 'source-configure', 'event-verify', 'roster', 'board', 'brief-create', 'brief-edit', 'brief-approve', 'brief-correct', 'disclosure-milestone', 'requirement', 'outcome', 'compare-releases', 'assistant-team-start', 'assistant-team-cancel'} or not actor:
+                    raise ValueError('Supported research action and named human actor are required')
+                data = payload.get('data')
+                if not isinstance(data, dict):
+                    raise ValueError('Research operation data must be an object')
+                with tempfile.TemporaryDirectory(prefix='secopsai-review-') as directory:
+                    input_path = Path(directory) / 'input.json'
+                    input_path.write_text(json.dumps(data), encoding='utf-8')
+                    input_path.chmod(0o600)
+                    args = ['research', 'operation', action, '--actor', actor, '--input', str(input_path), *secopsai_db_args()]
+                    command_id = _clean_string(payload.get('request_id'), 160)
+                    if not command_id:
+                        raise ValueError('A stable request identity is required for safe redelivery')
+                    args.extend(['--command-id', command_id])
+                    for field, flag in (('case_id', '--case-id'), ('id', '--id')):
+                        if payload.get(field):
+                            args.extend([flag, _clean_string(payload[field], 160)])
+                    result, operation = run_cli_json(args, timeout=120)
+                return json_response(self, 200 if result['ok'] else 400, {'ok': result['ok'], 'result': operation})
             except Exception as exc:
                 return json_response(self, 400, {'ok': False, 'error': str(exc)})
 
