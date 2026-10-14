@@ -10915,7 +10915,7 @@ function renderResearchOperation() {
     <p>Research programs: software supply chains and AI/agent security. Daily briefs report verified developments; original findings publish when their evidence and disclosure are ready.</p>
     <p>${escapeHtml(coverage.public_summary || 'Coverage has not been measured.')}</p>
     <p>Private artifact backups: ${backup.enabled === true ? `${escapeHtml(String(pendingBackups))} registered public artifacts awaiting durable backup.` : backup.enabled === false ? 'Disabled.' : 'Coverage has not been reported yet.'}</p>
-    <p>Research data delivery: ${escapeHtml(String(pendingDelivery))} records awaiting confirmation from the dashboard service.</p>
+    <p>Research data delivery: ${escapeHtml(String(pendingDelivery))} batches awaiting confirmation from the dashboard service.</p>
     ${backup.enabled === true ? `<p>${escapeHtml(backup.coverage || 'Backup coverage scope has not been reported.')}</p>` : ''}
     ${missing.length ? `<p>Operational requirements awaiting evidence: ${missing.map(v => escapeHtml(humanizeSnake(v))).join(', ')}.</p>` : ''}
     <p>Reviewed daily editions: ${Number(operation.reviewed_daily_brief_streak) || 0} consecutive days. Collection and assembly do not grant release approval.</p>
