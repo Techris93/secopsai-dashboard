@@ -421,6 +421,15 @@ operationFixture.coverage.sources[0].error_category = 'source_http_403';
 vm.runInContext('renderResearchOperation();', runtime.context);
 assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('7 registered public artifacts awaiting durable backup'));
 assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('Source denied collector access (HTTP 403)'));
+assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('Unknown records awaiting confirmation'));
+operationFixture.coverage.health = {ontology_pending: 23};
+operationFixture.coverage.sources[0].collection_scope = '<img src=x onerror=alert(1)>';
+vm.runInContext('renderResearchOperation();', runtime.context);
+assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('23 records awaiting confirmation'));
+assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes('<img src=x'));
+operationFixture.coverage.health.ontology_pending = -1;
+vm.runInContext('renderResearchOperation();', runtime.context);
+assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('Unknown records awaiting confirmation'));
 if (process.env.SECOPSAI_RESEARCH_PREVIEW_PATH) {
   fs.writeFileSync(process.env.SECOPSAI_RESEARCH_PREVIEW_PATH, '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="styles.css"><title>Synthetic research-operation preview</title></head><body class="okcomputer-skin professional-ui"><main style="padding:24px;max-width:1100px;margin:auto"><h1>Research operation · synthetic test preview</h1>' + operationHtml + '</main></body></html>');
 }
