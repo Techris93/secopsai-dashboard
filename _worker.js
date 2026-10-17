@@ -5,7 +5,6 @@ const ROOT_ASSET_PATHS = new Set([
   "/index.html",
   "/favicon.svg",
   "/app.js",
-  "/vendor/supabase-2.110.2.js",
   "/url-safety.js",
   "/styles.css",
   "/radar-texture.png",

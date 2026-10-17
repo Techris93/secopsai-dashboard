@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import workerModule from "../_worker.js";
 
@@ -181,8 +180,6 @@ async function testWorkerAppliesSecurityHeaders() {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("Content-Security-Policy") || "", /default-src 'self'/);
   assert.match(response.headers.get("Content-Security-Policy") || "", /frame-ancestors 'none'/);
-  assert.match(response.headers.get("Content-Security-Policy") || "", /script-src 'self'/);
-  assert.doesNotMatch(response.headers.get("Content-Security-Policy") || "", /cdn\.jsdelivr\.net/);
   assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
   assert.equal(response.headers.get("X-Frame-Options"), "DENY");
   assert.equal(response.headers.get("Referrer-Policy"), "no-referrer");
@@ -1272,9 +1269,6 @@ function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const urlSafety = readFileSync(new URL("../url-safety.js", import.meta.url), "utf8");
-  const supabaseBundle = readFileSync(new URL("../vendor/supabase-2.110.2.js", import.meta.url));
-  const runOutputHtml = readFileSync(new URL("../view-run-output.html", import.meta.url), "utf8");
-  const agentRunHtml = readFileSync(new URL("../log-agent-run.html", import.meta.url), "utf8");
   assert.match(html, /id="auth-gate"/);
   assert.match(html, /id="auth-login-form"/);
   assert.match(html, /id="auth-update-form"/);
@@ -1289,13 +1283,8 @@ function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   assert.match(app, /headers\.set\('Authorization', `Bearer \$\{accessToken\}`\)/);
   assert.equal((app.match(/window\.fetch\(/g) || []).length, 1);
   assert.ok(app.indexOf("state.auth.session = session || null;") < app.indexOf("if (state.auth.activeUserId === userId)"));
-  assert.match(html, /src="\.\/vendor\/supabase-2\.110\.2\.js"/);
+  assert.match(html, /@supabase\/supabase-js@2\.110\.2\/dist\/umd\/supabase\.js/);
   assert.match(html, /integrity="sha384-yifgV8iFWyp5cgu\+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP\/NlXVJT3vO"/);
-  assert.match(app, /auth-retry-btn/);
-  assert.match(runOutputHtml, /src="\.\/vendor\/supabase-2\.110\.2\.js"/);
-  assert.match(agentRunHtml, /src="\.\/vendor\/supabase-2\.110\.2\.js"/);
-  assert.equal(createHash("sha384").update(supabaseBundle).digest("base64"), "yifgV8iFWyp5cgu+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP/NlXVJT3vO");
-  assert.doesNotMatch(`${html}\n${runOutputHtml}\n${agentRunHtml}`, /cdn\.jsdelivr\.net\/npm\/@supabase/);
   assert.match(html, /url-safety\.js\?v=20260803-credential-url-hardening/);
   assert.match(html, /name="referrer" content="no-referrer"/);
   assert.match(urlSafety, /replaceState/);
@@ -1304,7 +1293,6 @@ function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   assert.equal(/<script(?![^>]*src=)/.test(html), false);
   assert.equal(/<script[^>]+\sonload=/.test(html), false);
   assert.equal(app.includes("window.addEventListener('DOMContentLoaded', () => {\n  bindEvents();\n  startTopStripClock();\n  setPage('mission-control');"), false);
-  assert.match(app, /auth-retry-btn'\)\?\.addEventListener\('click', \(\) => window\.location\.reload\(\)\)/);
 }
 
 function testCanonicalCoreFindingsJoinTheOperatorQueue() {

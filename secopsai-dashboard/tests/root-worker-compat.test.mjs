@@ -16,12 +16,10 @@ for (const path of [
   "/index.html",
   "/app.js",
   "/url-safety.js",
-  "/vendor/supabase-2.110.2.js",
   "/styles.css",
   "/secopsai-dashboard/",
   "/secopsai-dashboard/index.html",
   "/secopsai-dashboard/url-safety.js",
-  "/secopsai-dashboard/vendor/supabase-2.110.2.js",
 ]) {
   const response = await rootWorker.fetch(new Request(`https://dashboard.example${path}`), env);
   assert.equal(response.status, 200, path);
@@ -32,12 +30,10 @@ assert.deepEqual(forwarded, [
   "/secopsai-dashboard/",
   "/secopsai-dashboard/app.js",
   "/secopsai-dashboard/url-safety.js",
-  "/secopsai-dashboard/vendor/supabase-2.110.2.js",
   "/secopsai-dashboard/styles.css",
   "/secopsai-dashboard/",
   "/secopsai-dashboard/index.html",
   "/secopsai-dashboard/url-safety.js",
-  "/secopsai-dashboard/vendor/supabase-2.110.2.js",
 ]);
 
 const config = await rootWorker.fetch(new Request("https://dashboard.example/secopsai-dashboard/config.js"), {
