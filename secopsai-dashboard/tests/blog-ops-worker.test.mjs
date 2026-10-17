@@ -8,6 +8,8 @@ const worker = {
   fetch(request, env = {}) {
     const headers = new Headers(request.headers);
     if (!headers.has(ACCESS_HEADER)) headers.set(ACCESS_HEADER, TEST_OPERATOR_TOKEN);
+    // Browsers mark requests the console itself makes as same-origin.
+    if (!headers.has("Sec-Fetch-Site")) headers.set("Sec-Fetch-Site", "same-origin");
     return workerModule.fetch(
       new Request(request, { headers }),
       {
@@ -336,12 +338,12 @@ async function testResearchCaseWriteRequiresAndForwardsOperatorToken() {
   const unauthorized = await worker.fetch(
     new Request("https://dashboard.example/api/secopsai/research-cases/create", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
       body,
     }),
     { SECOPSAI_HELPER_BASE_URL: "https://helper.example", TRIAGE_OPS_ADMIN_TOKEN: "research-admin" },
   );
-  assert.equal(unauthorized.status, 401);
+  assert.equal(unauthorized.status, 403);
 
   const calls = [];
   const originalFetch = globalThis.fetch;
@@ -356,7 +358,9 @@ async function testResearchCaseWriteRequiresAndForwardsOperatorToken() {
     const authorized = await worker.fetch(
       new Request("https://dashboard.example/api/secopsai/research-cases/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Triage-Ops-Admin-Token": "research-admin" },
+        // No pasted token: the Access-verified console session authorizes it,
+        // and the Worker supplies the helper's token from its own secrets.
+        headers: { "Content-Type": "application/json" },
         body,
       }),
       { SECOPSAI_HELPER_BASE_URL: "https://helper.example", TRIAGE_OPS_ADMIN_TOKEN: "research-admin" },
@@ -521,6 +525,8 @@ async function testTriageOpsWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/secopsai/triage-ops/close", {
       method: "POST",
+      // Another site cannot drive a signed-in operator's browser into an action.
+      headers: { "Sec-Fetch-Site": "cross-site" },
       body: JSON.stringify({ finding_id: "SCM-ABC123" }),
     }),
     {
@@ -528,9 +534,9 @@ async function testTriageOpsWriteNeedsAdminToken() {
       TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
     },
   );
-  assert.equal(response.status, 401);
+  assert.equal(response.status, 403);
   const payload = await jsonFrom(response);
-  assert.match(payload.error, /Unauthorized/);
+  assert.equal(payload.code, "cross_site_action");
   assert.equal(JSON.stringify(payload).includes("triage-admin"), false);
 }
 
@@ -761,6 +767,8 @@ async function testCampaignWriteNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/secopsai/triage-ops/campaign-persist-findings", {
       method: "POST",
+      // Another site cannot drive a signed-in operator's browser into an action.
+      headers: { "Sec-Fetch-Site": "cross-site" },
       body: JSON.stringify({ campaign: { packages: [{ ecosystem: "npm", package: "chalk-tempalte", version: "0.0.1" }] } }),
     }),
     {
@@ -768,9 +776,9 @@ async function testCampaignWriteNeedsAdminToken() {
       TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
     },
   );
-  assert.equal(response.status, 401);
+  assert.equal(response.status, 403);
   const payload = await jsonFrom(response);
-  assert.match(payload.error, /Unauthorized/);
+  assert.equal(payload.code, "cross_site_action");
   assert.equal(JSON.stringify(payload).includes("triage-admin"), false);
 }
 
@@ -778,6 +786,8 @@ async function testCampaignWatchlistNeedsAdminToken() {
   const response = await worker.fetch(
     new Request("https://dashboard.example/api/secopsai/triage-ops/campaign-watchlist", {
       method: "POST",
+      // Another site cannot drive a signed-in operator's browser into an action.
+      headers: { "Sec-Fetch-Site": "cross-site" },
       body: JSON.stringify({ package: "npm:chalk-tempalte" }),
     }),
     {
@@ -785,9 +795,9 @@ async function testCampaignWatchlistNeedsAdminToken() {
       TRIAGE_OPS_ADMIN_TOKEN: "triage-admin",
     },
   );
-  assert.equal(response.status, 401);
+  assert.equal(response.status, 403);
   const payload = await jsonFrom(response);
-  assert.match(payload.error, /Unauthorized/);
+  assert.equal(payload.code, "cross_site_action");
   assert.equal(JSON.stringify(payload).includes("triage-admin"), false);
 }
 
@@ -920,14 +930,16 @@ function testOperatorGuideUiIsPresent() {
 }
 
 async function testWriteNeedsAdminToken() {
+  // Behind Cloudflare Access no Blog Ops admin token is needed, but a write
+  // must come from the console itself.
   const response = await worker.fetch(
-    new Request("https://dashboard.example/api/blog/news-run", { method: "POST", body: "{}" }),
+    new Request("https://dashboard.example/api/blog/news-run", { method: "POST", body: "{}", headers: { "Sec-Fetch-Site": "cross-site" } }),
     { BLOG_OPS_GITHUB_TOKEN: "ghp_test_value" },
   );
-  assert.equal(response.status, 501);
+  assert.equal(response.status, 403);
   const payload = await jsonFrom(response);
-  assert.equal(payload.code, "not_configured");
-  assert.match(payload.error, /admin token/i);
+  assert.equal(payload.code, "cross_site_action");
+
 }
 
 async function testDispatchPayloadIsWorkflowOnly() {
@@ -941,7 +953,6 @@ async function testDispatchPayloadIsWorkflowOnly() {
     const response = await worker.fetch(
       new Request("https://dashboard.example/api/blog/news-run", {
         method: "POST",
-        headers: { "X-Blog-Ops-Admin-Token": "admin-test" },
         body: JSON.stringify({ limit: 3 }),
       }),
       {

@@ -1046,7 +1046,20 @@ def blog_ops_expected_token():
     return os.environ.get('BLOG_OPS_ADMIN_TOKEN', '').strip()
 
 
+def local_operator_authenticated(handler):
+    """The local console's single credential: a valid DASHBOARD_LOCAL_AUTH_TOKEN.
+
+    Every local /api request already proves it; it also authorizes the console's
+    actions, so the operator does not paste separate Intelligence, Triage, or
+    Blog Ops tokens.  Those tokens still work for scripts and the hosted Worker.
+    """
+    supplied = handler.headers.get('X-SecOpsAI-Local-Token', '').strip()
+    return bool(DASHBOARD_LOCAL_AUTH_TOKEN and supplied and hmac.compare_digest(supplied, DASHBOARD_LOCAL_AUTH_TOKEN))
+
+
 def require_blog_ops_admin(handler):
+    if local_operator_authenticated(handler):
+        return False
     expected = blog_ops_expected_token()
     if not expected:
         json_response(
@@ -1070,6 +1083,8 @@ def require_blog_ops_admin(handler):
 
 
 def require_triage_ops_admin(handler):
+    if local_operator_authenticated(handler):
+        return False
     expected = triage_ops_expected_token()
     if not expected:
         json_response(
@@ -1096,6 +1111,8 @@ def require_triage_ops_admin(handler):
 
 
 def require_intelligence_admin(handler):
+    if local_operator_authenticated(handler):
+        return False
     expected = intelligence_expected_token()
     if not expected:
         json_response(
@@ -1119,7 +1136,7 @@ def require_intelligence_admin(handler):
         (
             'local_token_used_for_intelligence_action',
             DASHBOARD_LOCAL_AUTH_TOKEN,
-            'DASHBOARD_LOCAL_AUTH_TOKEN only authorizes local read access. Use INTELLIGENCE_ADMIN_TOKEN for Automation actions.',
+            'DASHBOARD_LOCAL_AUTH_TOKEN authorizes actions only as the console credential (X-SecOpsAI-Local-Token); as a script, use INTELLIGENCE_ADMIN_TOKEN for Automation actions.',
         ),
         (
             'triage_token_used_for_intelligence_action',

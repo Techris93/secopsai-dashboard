@@ -1243,6 +1243,32 @@ function helperUnavailableResponse() {
   }), { status: 501, headers: { 'Content-Type': 'application/json' } });
 }
 
+// The console's sign-in authorizes its actions.  Hosted: Cloudflare Access plus
+// the operator allowlist, enforced by the Worker (which also checks that each
+// action comes from this console).  Local: DASHBOARD_LOCAL_AUTH_TOKEN, sent with
+// every request.  Operators no longer paste separate Automation, Triage/Research
+// or Blog Ops action tokens; those remain only for scripts and the API.
+const CONSOLE_SESSION_ACTION_TOKEN = 'console-session';
+const ACTION_TOKEN_HEADERS = ['X-SecOpsAI-Intelligence-Token', 'X-Triage-Ops-Admin-Token', 'X-Blog-Ops-Admin-Token'];
+const ACTION_TOKEN_SECTIONS = ['intelligence-token-field', 'intelligence-token-hint', 'intelligence-clear-token-btn', 'research-access-section', 'blog-access-section', 'triage-access-section'];
+
+function consoleActionsAuthorized() {
+  return accessAuthMode() || (localTokenAuthMode() && Boolean(state.auth?.localToken));
+}
+
+function adoptConsoleActionAuthorization() {
+  const authorized = consoleActionsAuthorized();
+  for (const section of [state.intelligence, state.triageOps, state.researchCases, state.blogOps]) {
+    if (!section) continue;
+    if (authorized && !section.adminToken) section.adminToken = CONSOLE_SESSION_ACTION_TOKEN;
+    if (!authorized && section.adminToken === CONSOLE_SESSION_ACTION_TOKEN) section.adminToken = '';
+  }
+  for (const id of ACTION_TOKEN_SECTIONS) {
+    const node = el(id);
+    if (node) node.hidden = authorized;
+  }
+}
+
 async function dashboardApiFetch(input, init = {}) {
   const requestPath = (() => {
     try { return new URL(String(input || ''), window.location.href).pathname; } catch { return ''; }
@@ -1257,6 +1283,7 @@ async function dashboardApiFetch(input, init = {}) {
     if (!hostedHelperCapability(requestPath)) return helperUnavailableResponse();
   }
   const headers = new Headers(init.headers || {});
+  if (consoleActionsAuthorized()) ACTION_TOKEN_HEADERS.forEach(name => headers.delete(name));
   const localToken = String(state.auth?.localToken || '').trim();
   const target = (() => {
     try { return new URL(String(input || ''), window.location.href); } catch { return null; }
@@ -1439,6 +1466,7 @@ function saveLocalAuthToken(rawToken) {
   }
   updateLocalTokenIndicator();
   renderLocalAuthGate();
+  adoptConsoleActionAuthorization();
   closeLocalAuthModal();
   const sysInput = el('dashboard-local-auth-token');
   if (sysInput) sysInput.value = token;
@@ -1525,6 +1553,7 @@ function stopDashboardRuntime() {
 }
 
 async function enterAuthenticatedDashboard(session) {
+  adoptConsoleActionAuthorization();
   const userId = session?.user?.id || (dashboardAuthRequired() ? null : 'local-auth-disabled');
   if (dashboardAuthRequired() && !userId) {
     leaveAuthenticatedDashboard('Sign in through Cloudflare Access with an invited operator identity.', { reauth: accessAuthMode() });
@@ -6054,9 +6083,11 @@ function renderIntegrations() {
       </div>
       <div class="credential-status-grid">
         <div class="credential-status-row"><span>Operator session</span>${renderStatusPill(sessionReady ? 'ready' : 'missing', sessionReady ? 'Signed in' : 'Sign in required')}</div>
-        <div class="credential-status-row"><span>Local helper bearer</span>${renderStatusPill(localTokenReady ? 'ready' : 'required', localTokenReady ? 'Ready for local API requests' : 'Required for local API requests')}</div>
-        <div class="credential-status-row"><span>Research action token</span>${renderStatusPill(researchTokenReady ? 'ready' : 'required', researchTokenReady ? 'Ready for protected research actions' : 'Required for changes')}</div>
-        <div class="credential-status-row"><span>Blog Ops token</span>${renderStatusPill(blogTokenReady ? 'ready' : 'required', blogTokenReady ? 'Ready for publication actions' : 'Required for publishing')}</div>
+        ${accessAuthMode() ? '' : `<div class="credential-status-row"><span>Local helper bearer</span>${renderStatusPill(localTokenReady ? 'ready' : 'required', localTokenReady ? 'Ready for local API requests and actions' : 'Required for local API requests')}</div>`}
+        ${consoleActionsAuthorized()
+          ? `<div class="credential-status-row"><span>Protected actions</span>${renderStatusPill('ready', 'Authorized by your console sign-in')}</div>`
+          : `<div class="credential-status-row"><span>Research action token</span>${renderStatusPill(researchTokenReady ? 'ready' : 'required', researchTokenReady ? 'Ready for protected research actions' : 'Required for changes')}</div>
+        <div class="credential-status-row"><span>Blog Ops token</span>${renderStatusPill(blogTokenReady ? 'ready' : 'required', blogTokenReady ? 'Ready for publication actions' : 'Required for publishing')}</div>`}
         <div class="credential-status-row"><span>Intelligence bridge</span>${renderStatusPill(state.integrationStatus?.helper?.secopsai_intelligence_api ? 'ready' : 'unavailable', state.integrationStatus?.helper?.secopsai_intelligence_api ? 'Server-side bridge available' : 'Unavailable')}</div>
         <div class="credential-status-row"><span>Sensor credentials</span>${renderStatusPill('server-managed', 'Stored by Edge/Core services')}</div>
       </div>
@@ -7368,6 +7399,7 @@ function renderBulletList(values, empty = 'None') {
 }
 
 function blogOpsAdminTokenHint() {
+  if (consoleActionsAuthorized()) return 'Write actions are authorized by your console sign-in';
   return state.blogOps.adminToken ? 'Token ready for write actions' : 'Paste admin token to enable write actions';
 }
 
@@ -7910,6 +7942,7 @@ function filteredTriageOpsAlerts() {
 }
 
 function triageOpsAdminTokenHint() {
+  if (consoleActionsAuthorized()) return 'Write actions are authorized by your console sign-in';
   return state.triageOps.adminToken ? 'Token ready for write actions' : 'Paste admin token to enable close/escalate/blog-draft actions';
 }
 

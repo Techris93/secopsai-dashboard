@@ -17,11 +17,12 @@ try {
   let response = await worker.fetch(request(endpoint), env);
   assert.equal(response.status, 200);
   assert.equal(calls[0].init.headers.Authorization, 'Bearer read-fixture');
-  response = await worker.fetch(request(endpoint, {method: 'POST', body: '{}'}), env);
-  assert.equal(response.status, 401);
+  // A cross-site POST cannot ride the operator's Access session.
+  response = await worker.fetch(request(endpoint, {method: 'POST', headers: {'Sec-Fetch-Site': 'cross-site'}, body: '{}'}), env);
+  assert.equal(response.status, 403);
   assert.equal(calls.length, 1);
   const payload = {action: 'brief-approve', actor: 'qualified.human', id: 'BRIEF-2026-10-13', request_id: 'retry-fixture', data: {expected_fingerprint: 'exact-draft', reviewed_draft: 'The complete reviewed text', checks: {claims: 'passed'}}};
-  response = await worker.fetch(request(endpoint, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-SecOpsAI-Intelligence-Token': 'operator-fixture'}, body: JSON.stringify(payload)}), env);
+  response = await worker.fetch(request(endpoint, {method: 'POST', headers: {'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin'}, body: JSON.stringify(payload)}), env);
   assert.equal(response.status, 202);
   assert.equal((await response.json()).queued, true);
   assert.equal(calls[1].init.headers.Authorization, 'Bearer write-fixture');

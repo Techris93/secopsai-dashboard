@@ -123,15 +123,18 @@ async function testSessionsRequireExplicitOperatorAuthorization() {
 }
 
 async function testContentPackWritesRequireAndForwardActionToken() {
+  // A signed-in operator needs no pasted token, but another site cannot drive
+  // their browser into the action.
   const unauthorised = await workerModule.fetch(
     operatorRequest("https://dashboard.example/api/secopsai/content-packs/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
       body: JSON.stringify({ case_id: "RSC-ABCDEF123456" }),
     }),
     hostedEnv({ SECOPSAI_HELPER_BASE_URL: "https://helper.example", TRIAGE_OPS_ADMIN_TOKEN: "research-admin" }),
   );
-  assert.equal(unauthorised.status, 401);
+  assert.equal(unauthorised.status, 403);
+  assert.equal((await jsonFrom(unauthorised)).code, "cross_site_action");
 
   const calls = [];
   const originalFetch = globalThis.fetch;
@@ -148,7 +151,7 @@ async function testContentPackWritesRequireAndForwardActionToken() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Triage-Ops-Admin-Token": "research-admin",
+          "Sec-Fetch-Site": "same-origin",
         },
         body: JSON.stringify({ case_id: "RSC-ABCDEF123456" }),
       }),
@@ -157,6 +160,7 @@ async function testContentPackWritesRequireAndForwardActionToken() {
     assert.equal(response.status, 200);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].url, "https://helper.example/api/secopsai/content-packs/generate");
+    // The Worker supplies the helper's action token from its own secret.
     assert.equal(calls[0].init.headers.get("X-Triage-Ops-Admin-Token"), "research-admin");
   } finally {
     globalThis.fetch = originalFetch;
