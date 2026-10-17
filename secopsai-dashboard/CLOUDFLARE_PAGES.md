@@ -40,8 +40,11 @@ For `dashboard.secopsai.dev` or any other permanent hosted domain, use:
 This keeps the browser talking only to same-origin dashboard endpoints while the worker reads config and private integrations server-side.
 
 The Worker applies the dashboard security-header baseline to every response.
-`@supabase/supabase-js` is exact-version pinned with SRI; a library upgrade must
-update both the URL and integrity digest and must pass browser CSP checks.
+The dashboard serves the pinned `@supabase/supabase-js` 2.110.2 browser bundle
+from `vendor/` with Subresource Integrity (SRI), so sign-in does not depend on a
+third-party CDN being reachable. The corresponding MIT license is in
+`vendor/SUPABASE-LICENSE.txt`. When upgrading the library, update the vendored
+bundle, its SRI digest, and this version reference together.
 
 ## Required Cloudflare values
 

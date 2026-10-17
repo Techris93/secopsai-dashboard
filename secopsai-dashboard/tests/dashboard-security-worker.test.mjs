@@ -55,17 +55,17 @@ async function testStaticAssetsAreAllowlisted() {
     },
   };
 
-  for (const path of ["/index.html", "/url-safety.js"]) {
+  for (const path of ["/index.html", "/url-safety.js", "/vendor/supabase-2.110.2.js"]) {
     const allowed = await workerModule.fetch(new Request(`https://dashboard.example${path}`), env);
     assert.equal(allowed.status, 200, path);
   }
-  assert.deepEqual(calls, ["/index.html", "/url-safety.js"]);
+  assert.deepEqual(calls, ["/index.html", "/url-safety.js", "/vendor/supabase-2.110.2.js"]);
 
   for (const path of ["/.env", "/dashboard_debug.log", "/logs/anything", "/tests/fixture.json", "/%2eenv"]) {
     const response = await workerModule.fetch(new Request(`https://dashboard.example${path}`), env);
     assert.equal(response.status, 404, path);
   }
-  assert.deepEqual(calls, ["/index.html", "/url-safety.js"]);
+  assert.deepEqual(calls, ["/index.html", "/url-safety.js", "/vendor/supabase-2.110.2.js"]);
 }
 
 async function testAnonymousOperatorProfilesAreRejected() {

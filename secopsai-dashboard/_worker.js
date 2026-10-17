@@ -17,6 +17,7 @@ const PUBLIC_ASSET_PATHS = new Set([
   "/",
   "/index.html",
   "/app.js",
+  "/vendor/supabase-2.110.2.js",
   "/url-safety.js",
   "/styles.css",
   "/favicon.svg",
@@ -84,8 +85,8 @@ const DASHBOARD_ROLE_GROUPS = {
   support: ["support/support-responder"],
 };
 const ALLOWED_DISCORD_CHANNELS = new Set(["ops-log", "kanban-updates"]);
-// With Cloudflare Access the browser never talks to Supabase, so the
-// Supabase origins and the CDN-hosted client drop out of the policy.
+// The Supabase client is served from the dashboard assets, so only Supabase
+// API connections are needed when hosted authentication is enabled.
 function contentSecurityPolicy(env = {}) {
   const access = accessConfigured(env);
   return [
@@ -98,7 +99,7 @@ function contentSecurityPolicy(env = {}) {
     "frame-src 'none'",
     "img-src 'self' data: https:",
     "object-src 'none'",
-    access ? "script-src 'self'" : "script-src 'self' https://cdn.jsdelivr.net",
+    "script-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "upgrade-insecure-requests",
   ].join("; ");

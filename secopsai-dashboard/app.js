@@ -1346,6 +1346,7 @@ function showAuthSurface({ recovery = false, locked = false, message = '', error
   const shell = el('app-shell');
   const loginForm = el('auth-login-form');
   const updateForm = el('auth-update-form');
+  const retryButton = el('auth-retry-btn');
   const lockedMessage = el('auth-locked-message');
   const title = el('auth-title');
   const summary = el('auth-summary');
@@ -1359,6 +1360,7 @@ function showAuthSurface({ recovery = false, locked = false, message = '', error
   shell?.setAttribute('aria-hidden', 'true');
   loginForm?.classList.toggle('hidden', recovery || locked || localTokenAuthMode());
   updateForm?.classList.toggle('hidden', !recovery || locked);
+  if (retryButton) retryButton.hidden = bootError !== 'Supabase client library failed to load.';
   if (lockedMessage) lockedMessage.hidden = !locked;
   if (title) title.textContent = locked ? 'Operator access is not activated' : (recovery ? 'Reset operator password' : 'Operator sign in');
   if (summary) {
@@ -13798,6 +13800,7 @@ async function boot() {
 
 function bindEvents() {
   el('auth-login-form')?.addEventListener('submit', signInOperator);
+  el('auth-retry-btn')?.addEventListener('click', () => window.location.reload());
   el('auth-reset-request-btn')?.addEventListener('click', requestPasswordReset);
   el('auth-update-form')?.addEventListener('submit', updateRecoveredPassword);
   el('auth-signout-btn')?.addEventListener('click', signOutOperator);
