@@ -949,6 +949,19 @@ function blogOpsPublicStatus(env) {
   };
 }
 
+// Behind Cloudflare Access every /api route has already verified the operator
+// (Access JWT + allowlist), so actions need no extra pasted token.  What remains
+// is cross-site request forgery: an action must come from this console, which
+// browsers prove with Sec-Fetch-Site / Origin.  Without Access (local helper or
+// legacy deployments) the shared action tokens below still apply.
+function requireSameOriginAction(request) {
+  const site = String(request.headers.get("sec-fetch-site") || "").toLowerCase();
+  const origin = request.headers.get("origin");
+  const sameOrigin = site ? site === "same-origin" : Boolean(origin && origin === new URL(request.url).origin);
+  if (sameOrigin) return null;
+  return jsonResponse({ ok: false, code: "cross_site_action", error: "Actions must come from the Mission Control console" }, { status: 403 });
+}
+
 function isBlogOpsAdmin(request, env) {
   const expected = blogOpsConfig(env).adminToken;
   if (!expected) return false;
@@ -959,6 +972,7 @@ function isBlogOpsAdmin(request, env) {
 }
 
 function requireBlogOpsAdmin(request, env) {
+  if (accessConfigured(env)) return requireSameOriginAction(request);
   const config = blogOpsConfig(env);
   if (!config.adminToken) {
     return jsonResponse(
@@ -981,6 +995,7 @@ function triageOpsExpectedAdminToken(env) {
 }
 
 function requireTriageOpsAdmin(request, env) {
+  if (accessConfigured(env)) return requireSameOriginAction(request);
   const expected = triageOpsExpectedAdminToken(env);
   if (!expected) {
     return jsonResponse(
@@ -1003,6 +1018,7 @@ function requireTriageOpsAdmin(request, env) {
 }
 
 function requireArtifactFleetAdmin(request, env) {
+  if (accessConfigured(env)) return requireSameOriginAction(request);
   const expected = String(
     env.INTELLIGENCE_ADMIN_TOKEN || env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || env.TRIAGE_OPS_ADMIN_TOKEN || env.BLOG_OPS_ADMIN_TOKEN || "",
   ).trim();
@@ -1696,7 +1712,16 @@ async function proxySecopsaiHelper(request, env) {
   if (authHeader && authToken) {
     headers.set(authHeader, authToken);
   }
-  const triageOpsToken = request.headers.get("x-triage-ops-admin-token") || "";
+  // Behind Access the Worker authorizes actions itself and supplies the
+  // helper's action tokens from its own secrets; browsers never hold them.
+  const access = accessConfigured(env);
+  // Only write routes (already authorized above) receive the server-side token;
+  // read routes stay token-free.
+  const helperWrite = isTriageOpsWriteRoute(request, incomingUrl.pathname)
+    || (request.method.toUpperCase() === "POST" && incomingUrl.pathname === "/api/secopsai/research-watchlist");
+  const triageOpsToken = access
+    ? (helperWrite ? triageOpsExpectedAdminToken(env) : "")
+    : request.headers.get("x-triage-ops-admin-token") || "";
   if (triageOpsToken && (
     incomingUrl.pathname.startsWith("/api/secopsai/triage-ops/")
     || incomingUrl.pathname.startsWith("/api/secopsai/research-cases/")
@@ -1706,7 +1731,9 @@ async function proxySecopsaiHelper(request, env) {
   )) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
-  const intelligenceToken = request.headers.get("x-secopsai-intelligence-token") || "";
+  const intelligenceToken = access
+    ? String(env.INTELLIGENCE_ADMIN_TOKEN || triageOpsExpectedAdminToken(env)).trim()
+    : request.headers.get("x-secopsai-intelligence-token") || "";
   if (intelligenceToken && ["/api/secopsai/enterprise-action", "/api/secopsai/artifact-fleet", "/api/secopsai/rust-package-research", "/api/secopsai/source-first-research"].includes(incomingUrl.pathname)) {
     headers.set("X-SecOpsAI-Intelligence-Token", intelligenceToken);
   }

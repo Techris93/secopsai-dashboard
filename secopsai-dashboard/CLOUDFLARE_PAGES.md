@@ -605,6 +605,15 @@ were removed. When an Access session expires, Access redirects requests to its
 login; the console detects that (missing config or a redirected API call) and
 offers "Sign in again" instead of any other login.
 
+Protected actions (Research, Triage, Blog Ops, Automation) need no pasted
+token: the Access-verified, allowlisted operator is authorized, and the Worker
+rejects any action whose browser `Sec-Fetch-Site`/`Origin` shows it did not
+come from the console (`403 cross_site_action`). When proxying to the helper,
+the Worker adds `TRIAGE_OPS_ADMIN_TOKEN` / `INTELLIGENCE_ADMIN_TOKEN` from its
+own secrets on write routes only. Locally, `DASHBOARD_LOCAL_AUTH_TOKEN`
+authorizes the console's actions; the separate action tokens remain for
+scripts and direct API use.
+
 1. Add a custom domain to the `secopsai-dashboard` Pages project (for example
    `console.secopsai.dev`). Some networks block `*.pages.dev`, and Access
    policies are applied to custom domains.

@@ -114,7 +114,28 @@ const ACCESS_CONFIG = { auth: { required: true, mode: 'access' }, dataEndpoint: 
   assert.equal(data.session.user.email, 'operator@example.com');
 }
 
-// 4. Supabase is retired: no shipped asset may reference it again.
+// 4. Behind Access the console sign-in authorizes actions: no token fields, and
+//    no pasted action token ever leaves the browser.
+{
+  const sent = [];
+  const fetch = async (input, init = {}) => {
+    sent.push(new Headers(init.headers));
+    return { type: 'basic', status: 200, ok: true, clone() { return this; }, json: async () => ({ ok: true }) };
+  };
+  const ui = loadConsole({ config: ACCESS_CONFIG, fetch });
+  vm.runInContext('adoptConsoleActionAuthorization()', ui.context);
+  for (const id of ['intelligence-token-field', 'research-access-section', 'blog-access-section', 'triage-access-section']) {
+    assert.equal(ui.el(id).hidden, true, `${id} must be hidden behind Access`);
+  }
+  assert.equal(vm.runInContext('Boolean(state.triageOps.adminToken && state.blogOps.adminToken && state.intelligence.adminToken)', ui.context), true);
+  await vm.runInContext(`dashboardApiFetch('/api/secopsai/triage-ops/close', { method: 'POST', headers: { 'X-Triage-Ops-Admin-Token': state.triageOps.adminToken, 'X-SecOpsAI-Intelligence-Token': 'x', 'X-Blog-Ops-Admin-Token': 'y' } })`, ui.context);
+  for (const name of ['X-Triage-Ops-Admin-Token', 'X-SecOpsAI-Intelligence-Token', 'X-Blog-Ops-Admin-Token']) {
+    assert.equal(sent[0].has(name), false, `${name} must not be sent`);
+  }
+  assert.match(vm.runInContext('triageOpsAdminTokenHint()', ui.context), /authorized by your console sign-in/);
+}
+
+// 5. Supabase is retired: no shipped asset may reference it again.
 for (const file of ['index.html', 'app.js', '_worker.js', 'data-api.js', 'url-safety.js', 'styles.css', 'view-run-output.html', 'view-run-output.js', 'config.template.js']) {
   const source = fs.readFileSync(path.join(root, file), 'utf8');
   assert.doesNotMatch(source, /supabase/i, `${file} must not reference Supabase`);

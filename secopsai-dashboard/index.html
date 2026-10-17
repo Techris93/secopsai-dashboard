@@ -1377,7 +1377,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
               </div>
               <div class="guide-card-grid">
                 <div class="guide-mini-card"><strong>Dashboard login</strong><span>The hosted console signs you in through Cloudflare Access (one-time PIN to an allowed operator email). The local console uses the local operator token. There is no public signup and no shared password.</span></div>
-                <div class="guide-mini-card"><strong>Research action token</strong><span><code>TRIAGE_OPS_ADMIN_TOKEN</code> protects Research Cases and Supply Chain Triage writes. <code>BLOG_OPS_ADMIN_TOKEN</code> is the documented fallback when configured.</span></div>
+                <div class="guide-mini-card"><strong>Protected actions</strong><span>Your console sign-in authorizes Research, Triage, Blog Ops and Automation actions: Cloudflare Access when hosted, <code>DASHBOARD_LOCAL_AUTH_TOKEN</code> locally. The separate action tokens remain only for scripts and the API.</span></div>
                 <div class="guide-mini-card"><strong>Edge API credentials</strong><span><code>SECOPSAI_ADMIN_TOKEN</code> is an API administrator secret for sensor enrollment and recovery. Sensor tokens are separate, scoped credentials.</span></div>
               </div>
               <div class="guide-steps">
@@ -1435,7 +1435,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <div class="guide-step"><span>2</span><p>Open <strong>Work</strong>. Confirm catalog version, selected model, fallback policy, automatic ceiling, reviewed roster, and recent runs in <strong>Specialist Orchestrator</strong>.</p></div>
                 <div class="guide-step"><span>3</span><p>Open a work item and select <strong>Open brief</strong>. Review the primary specialist, independent reviewer, routing reasons, confidence, risk, evidence gaps, allowed actions, stop conditions, and exact model snapshot.</p></div>
                 <div class="guide-step"><span>4</span><p>Keep <strong>Automatic recommendation</strong> unless a reviewed specialist override is supported by the task evidence. An override changes expertise only; it never changes permissions or model routing.</p></div>
-                <div class="guide-step"><span>5</span><p>Choose the smallest tier that can complete the job. Worktree and PR-ready tiers require an Automation action token, a saved run, explicit approval, and a separate execution confirmation.</p></div>
+                <div class="guide-step"><span>5</span><p>Choose the smallest tier that can complete the job. Worktree and PR-ready tiers require a signed-in operator, a saved run, explicit approval, and a separate execution confirmation.</p></div>
                 <div class="guide-step"><span>6</span><p>Review structured output, tests, limitations, audit history, local diff, and independent review. Failed worktrees are preserved for recovery and are never overwritten automatically.</p></div>
               </div>
               <div class="guide-callout guide-warning">Automatic routing never exceeds read-only analysis. Specialist runs cannot merge, push, open or approve pull requests, deploy, publish, disclose, mutate cloud or Kubernetes resources, change billing/access, read secrets, or delete evidence.</div>
@@ -1539,7 +1539,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <div class="guide-step"><span>2</span><p>Under <strong>Monitor</strong>, click <strong>Import events</strong>, choose the exact source, and paste one approved JSON event or a bounded JSON array. SecOpsAI normalizes it and redacts credential-shaped fields before storage.</p></div>
                 <div class="guide-step"><span>3</span><p>Use <strong>Assess</strong> for one bounded job at a time. Vulnerability prioritization is saved; Kubernetes review never mutates a cluster; DAST validates ownership and scope but does not launch a scanner.</p></div>
                 <div class="guide-step"><span>4</span><p>Use <strong>Govern</strong> to assign compliance control ownership or create a draft assurance workflow. External submissions and active penetration testing remain separate approved actions.</p></div>
-                <div class="guide-step"><span>5</span><p>Protected actions require the <strong>Automation action token</strong> under Administration. Hosted mode needs a configured helper; local mode uses the allowlisted local helper. The browser never runs a supplied shell command.</p></div>
+                <div class="guide-step"><span>5</span><p>Protected actions are authorized by your console sign-in. Hosted mode needs a configured helper; local mode uses the allowlisted local helper. The browser never runs a supplied shell command.</p></div>
               </div>
               <div class="guide-callout guide-good">The readiness rail and source table are operational evidence, not marketing claims. A source remains Implemented until a real cursor exists, and it becomes Active only after recent evidence arrives.</div>
             </section>
@@ -1816,7 +1816,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260914-local-research-recovery"></script>
-  <script src="./app.js?v=20261017-access-only"></script>
+  <script src="./app.js?v=20261017-console-actions"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">
