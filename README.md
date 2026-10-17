@@ -70,7 +70,7 @@ header. Keep the token out of browser configuration.
 
 | Capability | Local helper | Hosted Cloudflare Pages |
 | --- | --- | --- |
-| Supabase-backed dashboard data | Available when configured | Available when configured |
+| D1-backed dashboard data | Hosted only (behind Cloudflare Access) | Not available |
 | Core and Edge read APIs | Available | Available through server-side Worker credentials |
 | Native triage and local evidence | Available | Requires an intentionally configured private helper |
 | Campaign, Artifact Fleet, and exact package actions | Available | Returns safe setup guidance without a helper/Core action endpoint |

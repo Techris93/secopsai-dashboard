@@ -1,15 +1,14 @@
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=replace_me
 APP_NAME=SecOpsAI Mission Control
 DASHBOARD_AUTH_REQUIRED=true
-# Comma-separated operator allowlist. A Supabase session is not enough on its
-# own; users must be listed here or carry app_metadata.secopsai_role=operator.
-DASHBOARD_OPERATOR_EMAILS=
-DASHBOARD_OPERATOR_USER_IDS=
-# Cloudflare-native mode: Access authenticates operators, D1 (binding
-# DASHBOARD_DB) stores dashboard tables, and Supabase is not used.
+# Cloudflare Access is the only operator sign-in: Access authenticates at the
+# edge and D1 (binding DASHBOARD_DB) stores the dashboard tables. Without
+# CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD the console fails closed.
 CF_ACCESS_TEAM_DOMAIN=
 CF_ACCESS_AUD=
+# Comma-separated operator allowlist. An Access identity is not enough on its
+# own; its email or subject id must be listed here.
+DASHBOARD_OPERATOR_EMAILS=
+DASHBOARD_OPERATOR_USER_IDS=
 DISCORD_SERVER_ID=1484917962245668874
 
 # Optional notification webhooks used by /api/discord-notify

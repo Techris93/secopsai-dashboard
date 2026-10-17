@@ -1,6 +1,6 @@
 // Remove credential-like query parameters before the application or any
-// third-party resource can observe the URL. Authentication is handled by the
-// Supabase client through a POST-style API call, never through the address bar.
+// third-party resource can observe the URL. Operators sign in through
+// Cloudflare Access at the edge, never through the address bar.
 (() => {
   const sensitiveKeys = new Set([
     'email', 'password', 'pass', 'passwd', 'pwd', 'token', 'secret',

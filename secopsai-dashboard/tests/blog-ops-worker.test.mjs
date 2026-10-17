@@ -1,27 +1,18 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import workerModule from "../_worker.js";
+import { ACCESS_HEADER, ACCESS_TEST_ENV, accessJwt } from "./access-test-auth.mjs";
 
-const TEST_OPERATOR_TOKEN = "test-operator-session";
-const TEST_AUTH_FETCHER = {
-  async fetch() {
-    return new Response(JSON.stringify({ id: "operator-1", email: "operator@example.com", app_metadata: { secopsai_role: "operator" } }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  },
-};
+const TEST_OPERATOR_TOKEN = await accessJwt();
 const worker = {
   fetch(request, env = {}) {
     const headers = new Headers(request.headers);
-    if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${TEST_OPERATOR_TOKEN}`);
+    if (!headers.has(ACCESS_HEADER)) headers.set(ACCESS_HEADER, TEST_OPERATOR_TOKEN);
     return workerModule.fetch(
       new Request(request, { headers }),
       {
         DASHBOARD_AUTH_REQUIRED: "true",
-        SUPABASE_URL: "https://test-project.supabase.co",
-        SUPABASE_ANON_KEY: "test-anon-key",
-        SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+        ...ACCESS_TEST_ENV,
         SECOPSAI_HELPER_ALLOWED_ORIGINS: "https://helper.example,https://stale-tunnel.example",
         RUN_OUTPUT_ALLOWED_ORIGINS: "https://output.example",
         ...env,
@@ -96,9 +87,7 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
   };
   const env = {
     DASHBOARD_AUTH_REQUIRED: "true",
-    SUPABASE_URL: "https://test-project.supabase.co",
-    SUPABASE_ANON_KEY: "test-anon-key",
-    SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+    ...ACCESS_TEST_ENV,
     SECOPSAI_CORE_API_URL: "https://core.example",
     SECOPSAI_CORE_READ_TOKEN: "core-read-secret",
     SECOPSAI_CORE_INTELLIGENCE_TOKEN: "core-intelligence-secret",
@@ -106,7 +95,7 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
   };
   try {
     const status = await workerModule.fetch(
-      new Request("https://dashboard.example/api/secopsai/intelligence", { headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}` } }),
+      new Request("https://dashboard.example/api/secopsai/intelligence", { headers: { [ACCESS_HEADER]: TEST_OPERATOR_TOKEN } }),
       env,
     );
     assert.equal(status.status, 200);
@@ -121,7 +110,7 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     const queued = await workerModule.fetch(
       new Request("https://dashboard.example/api/secopsai/intelligence", {
         method: "POST",
-        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}`, "Content-Type": "application/json" },
+        headers: { [ACCESS_HEADER]: TEST_OPERATOR_TOKEN, "Content-Type": "application/json" },
         body: JSON.stringify({ action: "enqueue", intelligence_action: "prioritize_findings", target_id: "" }),
       }),
       env,
@@ -135,7 +124,7 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     const run = await workerModule.fetch(
       new Request("https://dashboard.example/api/secopsai/intelligence", {
         method: "POST",
-        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}`, "Content-Type": "application/json" },
+        headers: { [ACCESS_HEADER]: TEST_OPERATOR_TOKEN, "Content-Type": "application/json" },
         body: JSON.stringify({ action: "daily-run" }),
       }),
       env,
@@ -146,7 +135,7 @@ async function testHostedIntelligenceUsesScopedServerSideCredentials() {
     const configured = await workerModule.fetch(
       new Request("https://dashboard.example/api/secopsai/intelligence", {
         method: "POST",
-        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}`, "Content-Type": "application/json" },
+        headers: { [ACCESS_HEADER]: TEST_OPERATOR_TOKEN, "Content-Type": "application/json" },
         body: JSON.stringify({ action: "daily-configure", enabled: true, interval_seconds: 86400 }),
       }),
       env,
@@ -210,9 +199,7 @@ async function testProtectedWorkspaceRequiresOperatorSession() {
     new Request("https://dashboard.example/api/secopsai/edge-workspace"),
     {
       DASHBOARD_AUTH_REQUIRED: "true",
-      SUPABASE_URL: "https://test-project.supabase.co",
-      SUPABASE_ANON_KEY: "test-anon-key",
-      SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+      ...ACCESS_TEST_ENV,
     },
   );
   assert.equal(response.status, 401);
@@ -223,9 +210,7 @@ async function testProtectedWorkspaceRequiresOperatorSession() {
     new Request("https://dashboard.example/api/blog/status"),
     {
       DASHBOARD_AUTH_REQUIRED: "true",
-      SUPABASE_URL: "https://test-project.supabase.co",
-      SUPABASE_ANON_KEY: "test-anon-key",
-      SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+      ...ACCESS_TEST_ENV,
     },
   );
   assert.equal(blogResponse.status, 401);
@@ -285,13 +270,11 @@ async function testHostedCoreEdgeWorkspaceAggregatesServerSide() {
   try {
     const response = await workerModule.fetch(
       new Request("https://dashboard.example/api/secopsai/edge-workspace", {
-        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}` },
+        headers: { [ACCESS_HEADER]: TEST_OPERATOR_TOKEN },
       }),
       {
         DASHBOARD_AUTH_REQUIRED: "true",
-        SUPABASE_URL: "https://test-project.supabase.co",
-        SUPABASE_ANON_KEY: "test-anon-key",
-        SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+        ...ACCESS_TEST_ENV,
         SECOPSAI_CORE_API_URL: "https://core.example",
         SECOPSAI_CORE_READ_TOKEN: "core-read-secret",
         SECOPSAI_EDGE_API_URL: "https://edge.example",
@@ -329,13 +312,11 @@ async function testHostedCoreRedirectIsRejected() {
   try {
     const response = await workerModule.fetch(
       new Request("https://dashboard.example/api/secopsai/edge-workspace", {
-        headers: { Authorization: `Bearer ${TEST_OPERATOR_TOKEN}` },
+        headers: { [ACCESS_HEADER]: TEST_OPERATOR_TOKEN },
       }),
       {
         DASHBOARD_AUTH_REQUIRED: "true",
-        SUPABASE_URL: "https://test-project.supabase.co",
-        SUPABASE_ANON_KEY: "test-anon-key",
-        SUPABASE_AUTH_FETCHER: TEST_AUTH_FETCHER,
+        ...ACCESS_TEST_ENV,
         SECOPSAI_CORE_API_URL: "https://core.example",
         SECOPSAI_CORE_READ_TOKEN: "core-read-secret",
       },
@@ -1270,21 +1251,22 @@ function testDashboardAuthGateIsPresentAndBootIsSessionGated() {
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const urlSafety = readFileSync(new URL("../url-safety.js", import.meta.url), "utf8");
   assert.match(html, /id="auth-gate"/);
-  assert.match(html, /id="auth-login-form"/);
-  assert.match(html, /id="auth-update-form"/);
+  // Cloudflare Access is the only sign-in: no password form, no Supabase.
+  assert.match(html, /id="auth-reauth-btn"/);
   assert.match(html, /id="auth-signout-btn"/);
-  assert.match(app, /signInWithPassword/);
-  assert.match(app, /resetPasswordForEmail/);
-  assert.match(app, /PASSWORD_RECOVERY/);
+  assert.doesNotMatch(html, /id="auth-login-form"|id="auth-update-form"|type="password" autocomplete="current-password"/);
+  assert.doesNotMatch(app, /signInWithPassword|resetPasswordForEmail|PASSWORD_RECOVERY|window\.supabase/);
   assert.match(app, /initializeDashboardAuth\(\)/);
   assert.match(app, /if \(!dashboardAuthRequired\(\)\) \{\s*showAuthSurface\(\{\s*locked: true,/);
-  assert.ok(app.indexOf("if (!dashboardAuthRequired())") < app.indexOf("if (bootError || !supabaseClient)"));
+  assert.ok(app.indexOf("if (!dashboardAuthRequired())") < app.indexOf("if (bootError === 'access_session_expired')"));
   assert.match(app, /async function dashboardApiFetch/);
-  assert.match(app, /headers\.set\('Authorization', `Bearer \$\{accessToken\}`\)/);
+  // API calls never carry a bearer; an Access redirect means the session expired.
+  assert.doesNotMatch(app, /headers\.set\('Authorization', `Bearer/);
+  assert.match(app, /redirect: 'manual'/);
+  assert.match(app, /response\.type === 'opaqueredirect'/);
   assert.equal((app.match(/window\.fetch\(/g) || []).length, 1);
   assert.ok(app.indexOf("state.auth.session = session || null;") < app.indexOf("if (state.auth.activeUserId === userId)"));
-  assert.match(html, /@supabase\/supabase-js@2\.110\.2\/dist\/umd\/supabase\.js/);
-  assert.match(html, /integrity="sha384-yifgV8iFWyp5cgu\+V1G1rtlEHpEErPlL5fTrkUELIsWq0CIVDON2WP\/NlXVJT3vO"/);
+  assert.doesNotMatch(html, /supabase|cdn\.jsdelivr\.net/i);
   assert.match(html, /url-safety\.js\?v=20260803-credential-url-hardening/);
   assert.match(html, /name="referrer" content="no-referrer"/);
   assert.match(urlSafety, /replaceState/);
