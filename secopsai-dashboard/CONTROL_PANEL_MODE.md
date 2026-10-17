@@ -3,7 +3,7 @@
 The dashboard is a SecOpsAI control surface, not a messaging runtime.
 
 ## What it does
-- reads and writes Supabase state
+- reads and writes dashboard state through the Worker's D1 API
 - manages task workflow
 - shows findings and correlation context
 - shows run-request lifecycle state

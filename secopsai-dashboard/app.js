@@ -19,10 +19,10 @@ window.addEventListener('unhandledrejection', event => {
   const reason = event.reason && (event.reason.message || String(event.reason));
   const lowerReason = String(reason || '').toLowerCase();
   if (lowerReason.includes('metamask') || lowerReason.includes('wallet') || lowerReason.includes('ethereum')) return;
-  // Browser crypto/auth helpers can reject while the Supabase session is being
-  // restored. Do not expose an implementation detail such as "Key ring is
-  // empty" as if it were a SecOpsAI platform failure. The auth surface and
-  // API responses remain the source of truth for session state.
+  // Browser crypto helpers can reject while a session is being restored. Do not
+  // expose an implementation detail such as "Key ring is empty" as if it were
+  // a SecOpsAI platform failure. The auth surface and API responses remain the
+  // source of truth for session state.
   if (lowerReason.includes('key ring') || lowerReason.includes('keyring')) {
     if (status) status.textContent = 'Authentication session needs refresh.';
     return;
@@ -30,15 +30,17 @@ window.addEventListener('unhandledrejection', event => {
   if (status) status.textContent = `Promise error: ${reason || 'unknown rejection'}`;
 });
 
-const supabaseGlobal = window.supabase;
+// The Worker serves config.js. When the Cloudflare Access session has expired,
+// Access answers that request with a redirect to its login page, the script
+// never runs, and SECOPSAI_CONFIG is absent: treat that as an expired session.
+const configLoaded = Boolean(window.SECOPSAI_CONFIG && window.SECOPSAI_CONFIG.auth);
 const cfg = window.SECOPSAI_CONFIG || {};
-let supabaseClient = null;
+let dataClient = null;
 let bootError = null;
-let authSubscription = null;
 
 // Cloudflare Access deployments: identity comes from Access at the edge and
-// data from the Worker's D1 API.  This client implements the subset of the
-// Supabase client used below so the rest of the app is backend-agnostic.
+// data from the Worker's D1 API through a small query builder (from/select/
+// eq/order/insert/update/delete) used by the panels below.
 function createWorkerDataClient(config) {
   const dataEndpoint = config.dataEndpoint || '/api/data';
   const sessionEndpoint = config.sessionEndpoint || '/api/session';
@@ -80,7 +82,6 @@ function createWorkerDataClient(config) {
       return { data, error: null };
     }
   }
-  const unsupported = async () => ({ data: null, error: { message: 'Sign-in is handled by Cloudflare Access.' } });
   return {
     from: (table) => new WorkerQuery(table),
     auth: {
@@ -90,16 +91,12 @@ function createWorkerDataClient(config) {
         if (!response.ok || !payload.email) return { data: { session: null }, error: null };
         return { data: { session: { access_token: '', user: { id: payload.email, email: payload.email } } }, error: null };
       },
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
-      async signOut() { window.location.assign('/cdn-cgi/access/logout'); return { error: null }; },
-      signInWithPassword: unsupported,
-      resetPasswordForEmail: unsupported,
-      updateUser: unsupported
+      async signOut() { window.location.assign('/cdn-cgi/access/logout'); return { error: null }; }
     }
   };
 }
 
-// Local mode without Supabase: the operational tables (runs, work items,
+// Local mode: the operational tables (runs, work items,
 // events, findings) live in the hosted dashboard's D1 database, so reads are
 // empty here and writes explain where to go.  Helper-backed panels (research,
 // triage, ontology, intelligence) use their own local endpoints and still work.
@@ -121,20 +118,15 @@ function createLocalEmptyDataClient() {
       return Promise.resolve(result).then(resolve, reject);
     }
   }
-  const noAuth = async () => ({ data: null, error: { message: 'Local mode has no sign-in.' } });
   return {
     from: () => new EmptyQuery(),
     auth: {
       async getSession() { return { data: { session: null }, error: null }; },
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
       async signOut() {
         sessionStorage.removeItem('secopsai_dashboard_local_auth_token');
         window.location.reload();
         return { error: null };
-      },
-      signInWithPassword: noAuth,
-      resetPasswordForEmail: noAuth,
-      updateUser: noAuth
+      }
     }
   };
 }
@@ -142,30 +134,32 @@ function createLocalEmptyDataClient() {
 function dataBackendLabel() {
   if (accessAuthMode()) return 'Cloudflare D1 (hosted workspace)';
   if (localTokenAuthMode()) return 'Local helper (no hosted tables)';
-  return 'Supabase';
+  return 'Unavailable';
 }
 
 function accessAuthMode() {
   return cfg?.auth?.mode === 'access';
 }
 
-// Local console without Supabase: the operator proves possession of
+// Local console: the operator proves possession of
 // DASHBOARD_LOCAL_AUTH_TOKEN, which the local server already requires on
 // every /api route, and the console opens only after that check passes.
 function localTokenAuthMode() {
   return cfg?.auth?.mode === 'local';
 }
 
+// Cloudflare Access is the only sign-in.  There is no password fallback: a
+// missing or unknown config means the session must be renewed at the edge.
 if (accessAuthMode()) {
-  supabaseClient = createWorkerDataClient(cfg);
+  dataClient = createWorkerDataClient(cfg);
 } else if (localTokenAuthMode()) {
-  supabaseClient = createLocalEmptyDataClient();
-} else if (!supabaseGlobal || typeof supabaseGlobal.createClient !== 'function') {
-  bootError = 'Supabase client library failed to load.';
-} else if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) {
-  bootError = 'SecOpsAI dashboard config is missing Supabase credentials.';
-} else {
-  supabaseClient = supabaseGlobal.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  dataClient = createLocalEmptyDataClient();
+} else if (!configLoaded) {
+  bootError = 'access_session_expired';
+} else if (cfg?.auth?.mode === 'unconfigured') {
+  bootError = 'Cloudflare Access is not configured for this deployment. Ask an administrator to enable it.';
+} else if (cfg?.auth?.mode !== 'locked') {
+  bootError = 'Dashboard configuration is not recognized. Reload the page to sign in through Cloudflare Access.';
 }
 
 function getRoleLabelsFromConfig(config) {
@@ -254,7 +248,6 @@ const state = {
     session: null,
     user: null,
     activeUserId: null,
-    recoveryMode: false,
     localToken: sessionStorage.getItem('secopsai_dashboard_local_auth_token') || ''
   },
   runs: [],
@@ -1213,17 +1206,6 @@ function dashboardAuthRequired() {
   return cfg?.auth?.required !== false;
 }
 
-function isAnonymousOperatorSession(session) {
-  const user = session?.user || {};
-  return user.is_anonymous === true
-    || String(user.is_anonymous || '').trim().toLowerCase() === 'true'
-    || user.user_metadata?.is_anonymous === true
-    || String(user.user_metadata?.is_anonymous || '').trim().toLowerCase() === 'true'
-    || String(user.role || '').trim().toLowerCase() === 'anon'
-    || String(user.aud || '').trim().toLowerCase() === 'anon'
-    || String(user.app_metadata?.provider || '').trim().toLowerCase() === 'anonymous';
-}
-
 // Hosted Pages reports which local-helper capabilities exist.  Requests for
 // an unavailable capability are answered locally with the same 501 contract
 // the Worker would return, instead of ~20 failing network calls per load.
@@ -1291,22 +1273,24 @@ async function dashboardApiFetch(input, init = {}) {
     openLocalAuthModal(message);
     throw new Error(message);
   }
-  // Local helper auth is deliberately a separate header.  The Authorization
-  // bearer remains the Supabase operator session for hosted Worker requests;
-  // the Worker does not forward this local-only credential upstream.
+  // Local helper auth is deliberately a separate header; the Worker does not
+  // forward this local-only credential upstream.
   if (localToken) headers.set('X-SecOpsAI-Local-Token', localToken);
-  // Cloudflare Access authenticates same-origin requests with its cookie;
-  // only the Supabase mode forwards a bearer session token.
-  if (dashboardAuthRequired() && !accessAuthMode()) {
-    const accessToken = state.auth.session?.access_token || '';
-    if (!accessToken) throw new Error('Operator session required');
-    headers.set('Authorization', `Bearer ${accessToken}`);
+  // Cloudflare Access authenticates same-origin requests with its cookie.  When
+  // that session expires, Access answers with a redirect to its login page;
+  // following it cross-origin would fail opaquely, so same-origin API calls do
+  // not follow redirects and an intercepted one means "sign in again".
+  const sameOriginApi = Boolean(target && target.origin === window.location.origin && target.pathname.startsWith('/api/'));
+  const watchAccessRedirect = accessAuthMode() && sameOriginApi;
+  const response = await window.fetch(input, watchAccessRedirect ? { ...init, headers, redirect: 'manual' } : { ...init, headers });
+  if (watchAccessRedirect && (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400))) {
+    leaveAuthenticatedDashboard(ACCESS_EXPIRED_MESSAGE, { reauth: true });
+    throw new Error('Cloudflare Access session expired');
   }
-  const response = await window.fetch(input, { ...init, headers });
   if (response.status === 401 && dashboardAuthRequired()) {
     const authFailure = await response.clone().json().catch(() => ({}));
     if (['operator_session_required', 'operator_session_invalid'].includes(String(authFailure?.code || ''))) {
-      leaveAuthenticatedDashboard('Your operator session expired. Sign in again to continue.');
+      leaveAuthenticatedDashboard(accessAuthMode() ? ACCESS_EXPIRED_MESSAGE : 'Your operator session expired. Sign in again to continue.', { reauth: accessAuthMode() });
     } else if (authFailure?.code === 'local_auth_required' || authFailure?.code === 'local_auth_not_configured') {
       openLocalAuthModal(authFailure.error || 'Local helper authentication required.');
     }
@@ -1315,7 +1299,6 @@ async function dashboardApiFetch(input, init = {}) {
     if (authFailure?.code === 'operator_not_authorized') {
       // A valid account that is not an operator must not see a half-loaded
       // console.  End the session so its token is not reused.
-      if (!accessAuthMode()) await supabaseClient?.auth?.signOut().catch(() => {});
       leaveAuthenticatedDashboard('This account is not authorized for Mission Control. Ask an administrator to grant operator access.');
     }
   } else if (response.status === 503) {
@@ -1327,8 +1310,8 @@ async function dashboardApiFetch(input, init = {}) {
   return response;
 }
 
-function setAuthMessage(message, { error = false, update = false } = {}) {
-  const target = el(update ? 'auth-update-message' : 'auth-message');
+function setAuthMessage(message, { error = false } = {}) {
+  const target = el('auth-message');
   if (!target) return;
   target.textContent = message;
   target.classList.toggle('error', error);
@@ -1341,40 +1324,50 @@ function setAuthBusy(button, busy, busyLabel) {
   button.textContent = busy ? busyLabel : button.dataset.idleLabel;
 }
 
-function showAuthSurface({ recovery = false, locked = false, message = '', error = false } = {}) {
+const ACCESS_EXPIRED_MESSAGE = 'Your Cloudflare Access session has expired. Sign in again to continue.';
+
+// The console has no sign-in form of its own: Cloudflare Access signs operators
+// in at the edge.  This surface explains the state and, when the session has
+// expired, offers a full reload so Access can show its login page.
+function showAuthSurface({ locked = false, reauth = false, message = '', error = false } = {}) {
   const gate = el('auth-gate');
   const shell = el('app-shell');
-  const loginForm = el('auth-login-form');
-  const updateForm = el('auth-update-form');
   const lockedMessage = el('auth-locked-message');
+  const reauthButton = el('auth-reauth-btn');
   const title = el('auth-title');
   const summary = el('auth-summary');
   const boundary = el('auth-boundary');
   gate?.classList.remove('hidden');
   // The page starts in a neutral "Verifying access" state so a session that is
-  // already authenticated (Cloudflare Access) never flashes the sign-in form.
+  // already authenticated never flashes this surface.
   gate?.classList.remove('auth-checking');
   gate?.removeAttribute('aria-busy');
   shell?.classList.add('auth-pending');
   shell?.setAttribute('aria-hidden', 'true');
-  loginForm?.classList.toggle('hidden', recovery || locked || localTokenAuthMode());
-  updateForm?.classList.toggle('hidden', !recovery || locked);
   if (lockedMessage) lockedMessage.hidden = !locked;
-  if (title) title.textContent = locked ? 'Operator access is not activated' : (recovery ? 'Reset operator password' : 'Operator sign in');
+  reauthButton?.classList.toggle('hidden', locked || localTokenAuthMode());
+  if (title) title.textContent = locked ? 'Operator access is not activated' : (reauth ? 'Session expired' : 'Operator access');
   if (summary) {
     summary.textContent = locked
-      ? 'This deployment is locked until its database policies and invited operator account are verified.'
-      : (recovery ? 'Choose a new password to recover your invited operator account.' : 'Authenticate before accessing findings, assets, research cases, or response workflows.');
+      ? 'This deployment is locked until its operator access policy is verified.'
+      : (localTokenAuthMode()
+        ? 'Enter the local operator token to open the local console.'
+        : 'Mission Control sign-in is handled by Cloudflare Access.');
   }
   if (boundary) {
     boundary.textContent = locked
       ? 'No live workspace records are loaded while operator authentication is disabled.'
       : 'Access is invitation-only. Sensor and integration credentials cannot sign in to this console.';
   }
-  state.auth.recoveryMode = recovery;
   renderLocalAuthGate();
-  if (message) setAuthMessage(message, { error, update: recovery });
-  if (!locked) window.setTimeout(() => el(recovery ? 'auth-new-password' : 'auth-email')?.focus(), 0);
+  if (message) setAuthMessage(message, { error });
+  if (reauthButton && !reauthButton.classList.contains('hidden')) window.setTimeout(() => reauthButton.focus(), 0);
+}
+
+// A full page load passes through Cloudflare Access, which shows its login when
+// the session has expired and then returns the operator to the same page.
+function reauthenticateThroughAccess() {
+  window.location.reload();
 }
 
 function updateLocalTokenIndicator() {
@@ -1533,8 +1526,8 @@ function stopDashboardRuntime() {
 
 async function enterAuthenticatedDashboard(session) {
   const userId = session?.user?.id || (dashboardAuthRequired() ? null : 'local-auth-disabled');
-  if (dashboardAuthRequired() && (!userId || isAnonymousOperatorSession(session))) {
-    leaveAuthenticatedDashboard('Sign in with an invited operator account. Anonymous sessions cannot access Mission Control.');
+  if (dashboardAuthRequired() && !userId) {
+    leaveAuthenticatedDashboard('Sign in through Cloudflare Access with an invited operator identity.', { reauth: accessAuthMode() });
     return;
   }
   state.auth.session = session || null;
@@ -1552,12 +1545,12 @@ async function enterAuthenticatedDashboard(session) {
   await boot();
 }
 
-function leaveAuthenticatedDashboard(message = 'Your session ended. Sign in again to continue.') {
+function leaveAuthenticatedDashboard(message = 'Your session ended. Sign in again to continue.', { reauth = false } = {}) {
   stopDashboardRuntime();
   state.auth.session = null;
   state.auth.user = null;
   state.auth.activeUserId = null;
-  showAuthSurface({ message });
+  showAuthSurface({ message, reauth, error: reauth });
 }
 
 async function verifyLocalOperatorToken() {
@@ -1606,112 +1599,25 @@ async function initializeDashboardAuth() {
     return;
   }
 
-  if (bootError || !supabaseClient) {
-    showAuthSurface({ message: bootError || 'Dashboard authentication is unavailable.', error: true });
+  if (bootError === 'access_session_expired') {
+    showAuthSurface({ reauth: true, message: ACCESS_EXPIRED_MESSAGE, error: true });
+    return;
+  }
+  if (bootError || !dataClient) {
+    showAuthSurface({ reauth: true, message: bootError || 'Dashboard authentication is unavailable. Reload to sign in through Cloudflare Access.', error: true });
     return;
   }
 
-  const authListener = supabaseClient.auth.onAuthStateChange((event, session) => {
-    window.setTimeout(async () => {
-      if (event === 'PASSWORD_RECOVERY') {
-        state.auth.session = session || null;
-        state.auth.user = session?.user || null;
-        showAuthSurface({ recovery: true, message: 'Choose a new password for this operator account.' });
-        return;
-      }
-      if (session && !state.auth.recoveryMode) {
-        await enterAuthenticatedDashboard(session);
-      } else if (event === 'SIGNED_OUT') {
-        leaveAuthenticatedDashboard();
-      }
-    }, 0);
-  });
-  authSubscription = authListener?.data?.subscription || null;
-
-  const { data, error } = await supabaseClient.auth.getSession();
-  await new Promise(resolve => window.setTimeout(resolve, 0));
+  const { data, error } = await dataClient.auth.getSession().catch(() => ({ data: null, error: true }));
   if (error) {
-    showAuthSurface({ message: 'Unable to validate the browser session. Check the connection and retry.', error: true });
-  } else if (data?.session && !state.auth.recoveryMode) {
+    showAuthSurface({ reauth: true, message: 'Unable to confirm your Cloudflare Access session. Sign in again to continue.', error: true });
+  } else if (data?.session) {
     await enterAuthenticatedDashboard(data.session);
-  } else if (!state.auth.recoveryMode) {
+  } else {
     showAuthSurface({
-      message: accessAuthMode()
-        ? 'This account is not authorized for Mission Control. Sign in through Cloudflare Access with an operator identity.'
-        : 'Sign in with an invited operator account.',
-      error: accessAuthMode()
+      message: 'This account is not authorized for Mission Control. Sign in through Cloudflare Access with an operator identity.',
+      error: true
     });
-  }
-}
-
-async function signInOperator(event) {
-  event.preventDefault();
-  const email = el('auth-email')?.value?.trim() || '';
-  const password = el('auth-password')?.value || '';
-  const button = el('auth-signin-btn');
-  if (!email || !password) {
-    setAuthMessage('Enter your operator email and password.', { error: true });
-    return;
-  }
-  setAuthBusy(button, true, 'Signing in…');
-  setAuthMessage('Validating operator access…');
-  try {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if (error || !data?.session) throw error || new Error('No session returned');
-    if (el('auth-password')) el('auth-password').value = '';
-    await enterAuthenticatedDashboard(data.session);
-  } catch {
-    setAuthMessage('Sign-in failed. Check your credentials or reset the password.', { error: true });
-  } finally {
-    setAuthBusy(button, false, 'Signing in…');
-  }
-}
-
-async function requestPasswordReset() {
-  const email = el('auth-email')?.value?.trim() || '';
-  const button = el('auth-reset-request-btn');
-  if (!email) {
-    setAuthMessage('Enter your operator email before requesting a reset.', { error: true });
-    el('auth-email')?.focus();
-    return;
-  }
-  setAuthBusy(button, true, 'Requesting…');
-  try {
-    await supabaseClient.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}${window.location.pathname}`
-    });
-    setAuthMessage('If the account exists, a password reset link has been sent.');
-  } catch {
-    setAuthMessage('The reset request could not be completed. Check the connection and retry.', { error: true });
-  } finally {
-    setAuthBusy(button, false, 'Requesting…');
-  }
-}
-
-async function updateRecoveredPassword(event) {
-  event.preventDefault();
-  const password = el('auth-new-password')?.value || '';
-  const confirmation = el('auth-confirm-password')?.value || '';
-  const button = el('auth-update-password-btn');
-  if (password.length < 12) {
-    setAuthMessage('Use at least 12 characters.', { error: true, update: true });
-    return;
-  }
-  if (password !== confirmation) {
-    setAuthMessage('The password confirmation does not match.', { error: true, update: true });
-    return;
-  }
-  setAuthBusy(button, true, 'Updating…');
-  try {
-    const { data, error } = await supabaseClient.auth.updateUser({ password });
-    if (error) throw error;
-    setAuthMessage('Password updated. Loading Mission Control…', { update: true });
-    state.auth.recoveryMode = false;
-    await enterAuthenticatedDashboard(state.auth.session || { user: data?.user });
-  } catch {
-    setAuthMessage('The password could not be updated. Request a new reset link and retry.', { error: true, update: true });
-  } finally {
-    setAuthBusy(button, false, 'Updating…');
   }
 }
 
@@ -1719,7 +1625,7 @@ async function signOutOperator() {
   const button = el('auth-signout-btn');
   setAuthBusy(button, true, 'Signing out…');
   try {
-    await supabaseClient.auth.signOut();
+    await dataClient.auth.signOut();
   } finally {
     setAuthBusy(button, false, 'Signing out…');
     leaveAuthenticatedDashboard('Signed out safely.');
@@ -3155,7 +3061,7 @@ async function bestEffortLinkFindingToTask(finding, task) {
   for (const column of candidates) {
     for (const key of ['id', 'finding_id']) {
       try {
-        const { error } = await supabaseClient.from('findings').update({ [column]: task.id }).eq(key, normalizedId);
+        const { error } = await dataClient.from('findings').update({ [column]: task.id }).eq(key, normalizedId);
         if (!error) return true;
       } catch {}
     }
@@ -3239,7 +3145,7 @@ function inferTaskRepoContext(item = {}, roleLabel = null) {
     {
       repo: 'secopsai-dashboard',
       confidence: haystack.includes('dashboard') ? 'high' : 'medium',
-      when: /dashboard|ui|ux|kanban|supabase|modal|prompt|brief|mission control|control panel|index\.html|app\.js|styles\.css/.test(haystack),
+      when: /dashboard|ui|ux|kanban|modal|prompt|brief|mission control|control panel|index\.html|app\.js|styles\.css/.test(haystack),
       paths: ['secopsai-dashboard/app.js', 'secopsai-dashboard/index.html', 'secopsai-dashboard/styles.css', 'secopsai-dashboard/README.md'],
       reasons: ['task language points at dashboard UI/control-plane code']
     },
@@ -3600,7 +3506,7 @@ async function queueTaskExecutionDirect(item, promptOverride = null) {
   let movedItem = item;
   if (item?.id && String(item.status || '').toLowerCase() === 'inbox') {
     try {
-      const { data: moved, error: moveErr } = await supabaseClient
+      const { data: moved, error: moveErr } = await dataClient
         .from('work_items')
         .update({ status: 'planned', updated_at: new Date().toISOString() })
         .eq('id', item.id)
@@ -3616,7 +3522,7 @@ async function queueTaskExecutionDirect(item, promptOverride = null) {
     }
   }
 
-  const { data: runReq, error: rrErr } = await supabaseClient
+  const { data: runReq, error: rrErr } = await dataClient
     .from('run_requests')
     .insert({
       role_label: role,
@@ -3669,7 +3575,7 @@ async function runPromptNow() {
   // Move the task out of Inbox once execution is explicitly queued.
   if (item?.id && String(item.status || '').toLowerCase() === 'inbox') {
     try {
-      const { data: moved, error: moveErr } = await supabaseClient
+      const { data: moved, error: moveErr } = await dataClient
         .from('work_items')
         .update({ status: 'planned', updated_at: new Date().toISOString() })
         .eq('id', item.id)
@@ -3687,7 +3593,7 @@ async function runPromptNow() {
   // Insert a run_requests queue item for the active runtime to pick up.
   let runReq = null;
   try {
-    const { data, error } = await supabaseClient
+    const { data, error } = await dataClient
       .from('run_requests')
       .insert({
         role_label: role,
@@ -3726,7 +3632,7 @@ async function runPromptNow() {
   promptModalState.pollTimer = setInterval(async () => {
     try {
       if (!promptModalState.runRequestId) return;
-      const { data, error } = await supabaseClient
+      const { data, error } = await dataClient
         .from('run_requests')
         .select('*')
         .eq('id', promptModalState.runRequestId)
@@ -3815,7 +3721,7 @@ function currentTaskForAssignment() {
 
 async function applySuggestedTaskAssignment(item, fields = {}) {
   const updates = { ...fields, updated_at: new Date().toISOString() };
-  const { data, error } = await supabaseClient
+  const { data, error } = await dataClient
     .from('work_items')
     .update(updates)
     .eq('id', item.id)
@@ -9886,11 +9792,11 @@ function renderAll() {
   const triageBit = triageSummary
     ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending / ${openLocalSessionsCount()} sessions`
     : '';
-  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : (localTokenAuthMode() ? 'Local helper connected' : 'Supabase connected')} • ${state.channelRoutes.length} routes loaded${triageBit}`);
+  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : (localTokenAuthMode() ? 'Local helper connected' : 'Connected')} • ${state.channelRoutes.length} routes loaded${triageBit}`);
 }
 
 async function loadTable(table, options = {}) {
-  let query = supabaseClient.from(table).select(options.select || '*');
+  let query = dataClient.from(table).select(options.select || '*');
   if (options.orderBy) query = query.order(options.orderBy.column, { ascending: options.orderBy.ascending ?? false });
   if (options.limit) query = query.limit(options.limit);
   const { data, error } = await query;
@@ -9979,7 +9885,7 @@ async function advanceTaskAfterSuccessfulRun(itemId) {
   if (!task) return false;
   const nextStatus = task.reviewer_role ? 'review' : 'done';
   if (String(task.status || '').toLowerCase() === nextStatus) return false;
-  const { data, error } = await supabaseClient
+  const { data, error } = await dataClient
     .from('work_items')
     .update({ status: nextStatus, updated_at: new Date().toISOString() })
     .eq('id', itemId)
@@ -12027,7 +11933,7 @@ function renderResearchAutomationPanel(researchCase) {
       <button class="secondary-btn" id="research-intake-preview-btn" type="button">Collect Metadata Preview</button>
       <button class="primary-btn" id="research-intake-run-btn" type="button">Run Safe Package Intake</button>
     </div>
-    <details class="research-action-drawer"><summary>Local artifact evidence</summary><p class="small">Artifacts are sent only to the authenticated local helper, hashed, and stored in owner-only quarantine. They are never uploaded to Supabase, Render, Cloudflare, or an AI provider.</p><div class="research-form-grid"><label class="research-span-2"><span>Authorized package file</span><input id="research-artifact-file" type="file" accept=".nupkg,.zip,.vsix,.gem,.whl" /></label><label class="research-span-2"><span>Lawful source and authorization</span><input id="research-artifact-source" value="${escapeHtml(prefill.artifactSource || '')}" placeholder="e.g. Downloaded from nuget.org before removal; authorized research copy" /></label><label><span>Ecosystem</span><select id="research-artifact-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'nuget')).join('')}</select></label><label><span>Package</span><input id="research-artifact-package" value="${escapeHtml(packageSubject.name || '')}" /></label><label><span>Version</span><input id="research-artifact-version" value="${escapeHtml(packageSubject.version || '')}" /></label></div><div class="research-form-actions"><button class="primary-btn" id="research-artifact-import-btn" type="button">Import Authorized Artifact</button><button class="secondary-btn" id="research-artifact-ioc-btn" type="button" ${artifacts.length ? '' : 'disabled'}>Extract IOC Candidates</button></div>${artifacts.length ? `<div class="research-form-grid"><label><span>Compare left artifact</span><select id="research-artifact-left">${artifacts.map(item => `<option value="${escapeHtml(item.artifact_id)}">${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><label><span>Compare right artifact</span><select id="research-artifact-right">${artifacts.map((item, index) => `<option value="${escapeHtml(item.artifact_id)}" ${index === 1 ? 'selected' : ''}>${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><button class="secondary-btn" id="research-artifact-compare-btn" type="button" ${artifacts.length > 1 ? '' : 'disabled'}>Compare local artifacts</button></div><div class="table-wrap"><table><thead><tr><th>Artifact</th><th>Package</th><th>SHA-256</th><th>State</th><th>Actions</th></tr></thead><tbody>${artifacts.map(item => `<tr><td><strong>${escapeHtml(item.artifact_id)}</strong><div class="small">${escapeHtml(item.filename)}</div></td><td>${escapeHtml(item.ecosystem)}:${escapeHtml(item.package_name || '—')}@${escapeHtml(item.version || '—')}</td><td><code>${escapeHtml(item.sha256)}</code></td><td>${escapeHtml(statusLabel(item.state))}</td><td><button class="mini-btn research-artifact-analysis-btn" data-artifact-id="${escapeHtml(item.artifact_id)}" type="button">Inspect safely</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state compact">No local artifacts attached. Import an authorized package file to begin.</div>'}</details>
+    <details class="research-action-drawer"><summary>Local artifact evidence</summary><p class="small">Artifacts are sent only to the authenticated local helper, hashed, and stored in owner-only quarantine. They are never uploaded to Render, Cloudflare, or an AI provider.</p><div class="research-form-grid"><label class="research-span-2"><span>Authorized package file</span><input id="research-artifact-file" type="file" accept=".nupkg,.zip,.vsix,.gem,.whl" /></label><label class="research-span-2"><span>Lawful source and authorization</span><input id="research-artifact-source" value="${escapeHtml(prefill.artifactSource || '')}" placeholder="e.g. Downloaded from nuget.org before removal; authorized research copy" /></label><label><span>Ecosystem</span><select id="research-artifact-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'nuget')).join('')}</select></label><label><span>Package</span><input id="research-artifact-package" value="${escapeHtml(packageSubject.name || '')}" /></label><label><span>Version</span><input id="research-artifact-version" value="${escapeHtml(packageSubject.version || '')}" /></label></div><div class="research-form-actions"><button class="primary-btn" id="research-artifact-import-btn" type="button">Import Authorized Artifact</button><button class="secondary-btn" id="research-artifact-ioc-btn" type="button" ${artifacts.length ? '' : 'disabled'}>Extract IOC Candidates</button></div>${artifacts.length ? `<div class="research-form-grid"><label><span>Compare left artifact</span><select id="research-artifact-left">${artifacts.map(item => `<option value="${escapeHtml(item.artifact_id)}">${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><label><span>Compare right artifact</span><select id="research-artifact-right">${artifacts.map((item, index) => `<option value="${escapeHtml(item.artifact_id)}" ${index === 1 ? 'selected' : ''}>${escapeHtml(item.artifact_id)} · ${escapeHtml(item.version || 'unknown')}</option>`).join('')}</select></label><button class="secondary-btn" id="research-artifact-compare-btn" type="button" ${artifacts.length > 1 ? '' : 'disabled'}>Compare local artifacts</button></div><div class="table-wrap"><table><thead><tr><th>Artifact</th><th>Package</th><th>SHA-256</th><th>State</th><th>Actions</th></tr></thead><tbody>${artifacts.map(item => `<tr><td><strong>${escapeHtml(item.artifact_id)}</strong><div class="small">${escapeHtml(item.filename)}</div></td><td>${escapeHtml(item.ecosystem)}:${escapeHtml(item.package_name || '—')}@${escapeHtml(item.version || '—')}</td><td><code>${escapeHtml(item.sha256)}</code></td><td>${escapeHtml(statusLabel(item.state))}</td><td><button class="mini-btn research-artifact-analysis-btn" data-artifact-id="${escapeHtml(item.artifact_id)}" type="button">Inspect safely</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state compact">No local artifacts attached. Import an authorized package file to begin.</div>'}</details>
     <details class="research-action-drawer"><summary>Compare packages</summary><p class="small">Both exact targets are fetched from allowlisted registries, hashed, and inspected statically. Package code is never installed or executed. Left defaults to the trusted reference when known; right defaults to the investigated package.</p><div class="research-form-grid"><label><span>Left ecosystem</span><select id="research-compare-left-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Left package</span><input id="research-compare-left-package" value="${escapeHtml(prefill.referencePackage || packageSubject.name || '')}" placeholder="legitimate package" /></label><label><span>Left version</span><input id="research-compare-left-version" value="${escapeHtml(prefill.referenceVersion || '')}" placeholder="latest if empty" /></label><label><span>Right ecosystem</span><select id="research-compare-right-ecosystem">${ecosystems.map(value => researchOption(value, packageSubject.ecosystem || 'npm')).join('')}</select></label><label><span>Right package</span><input id="research-compare-right-package" value="${escapeHtml(packageSubject.name || '')}" placeholder="candidate package" /></label><label><span>Right version</span><input id="research-compare-right-version" value="${escapeHtml(packageSubject.version || '')}" placeholder="latest if empty" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-compare-packages-btn" type="button">Compare exact packages</button></div></details>
     <div class="research-form-grid">
       <label><span>Analyst verdict</span><select id="research-verdict-value">${['inconclusive','credible','likely','not_substantiated','benign','retracted'].map(value => researchOption(value, latestVerdict.verdict || 'inconclusive')).join('')}</select></label>
@@ -13366,7 +13272,7 @@ function startNativeEventStream() {
 
 async function createDashboardEvent(event_type, title, body, severity = 'info', related = {}) {
   const payload = { event_type, title, body, severity, ...related };
-  const { data, error } = await supabaseClient.from('dashboard_events').insert(payload).select().single();
+  const { data, error } = await dataClient.from('dashboard_events').insert(payload).select().single();
   if (error) {
     console.error('dashboard_events insert failed', error);
     return null;
@@ -13392,13 +13298,13 @@ async function createOrchestratorRun({ taskSummary, taskDetail = null, status = 
     started_at: now,
     completed_at: ['completed', 'failed', 'cancelled'].includes(status) ? now : null
   };
-  const { data, error } = await supabaseClient.from('agent_runs').insert(payload).select().single();
+  const { data, error } = await dataClient.from('agent_runs').insert(payload).select().single();
   if (error) {
     console.error('agent_runs insert failed', error);
     return null;
   }
   if (relatedWorkItemId) {
-    await supabaseClient.from('work_items').update({ linked_run_id: data.id }).eq('id', relatedWorkItemId);
+    await dataClient.from('work_items').update({ linked_run_id: data.id }).eq('id', relatedWorkItemId);
   }
   return data;
 }
@@ -13444,7 +13350,7 @@ async function saveTask(options = {}) {
   try {
     let item = null;
     if (taskModalState.editingId) {
-      const { data, error } = await supabaseClient.from('work_items').update(payload).eq('id', taskModalState.editingId).select().single();
+      const { data, error } = await dataClient.from('work_items').update(payload).eq('id', taskModalState.editingId).select().single();
       if (error) {
         notifyError(`Failed to update task: ${error.message}`);
         return;
@@ -13464,7 +13370,7 @@ async function saveTask(options = {}) {
         kanbanBody: `${payload.status} • ${payload.priority}`
       }, 'info')).then(backgroundRefreshOpsData).catch(e => console.warn('task_updated side effects failed', e));
     } else {
-      const { data, error } = await supabaseClient.from('work_items').insert(payload).select().single();
+      const { data, error } = await dataClient.from('work_items').insert(payload).select().single();
       if (error) {
         notifyError(`Failed to create task: ${error.message}`);
         return;
@@ -13510,7 +13416,7 @@ async function deleteTask() {
     confirmLabel: 'Delete task',
     danger: true
   }))) return;
-  const { error } = await supabaseClient.from('work_items').delete().eq('id', taskId);
+  const { error } = await dataClient.from('work_items').delete().eq('id', taskId);
   if (error) {
     notifyError(`Failed to delete task: ${error.message}`);
     return;
@@ -13535,7 +13441,7 @@ async function deleteTask() {
 async function moveTaskToStatus(taskId, nextStatus) {
   const item = state.workItems.find(w => w.id === taskId);
   if (!item || item.status === nextStatus) return;
-  const { data, error } = await supabaseClient.from('work_items').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', taskId).select().single();
+  const { data, error } = await dataClient.from('work_items').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', taskId).select().single();
   if (error) {
     notifyError(`Failed to move task: ${error.message}`);
     return;
@@ -13795,9 +13701,7 @@ async function boot() {
 }
 
 function bindEvents() {
-  el('auth-login-form')?.addEventListener('submit', signInOperator);
-  el('auth-reset-request-btn')?.addEventListener('click', requestPasswordReset);
-  el('auth-update-form')?.addEventListener('submit', updateRecoveredPassword);
+  el('auth-reauth-btn')?.addEventListener('click', reauthenticateThroughAccess);
   el('auth-signout-btn')?.addEventListener('click', signOutOperator);
   el('local-auth-gate-save')?.addEventListener('click', () => {
     saveLocalAuthToken(el('local-auth-gate-input')?.value || '');
@@ -14650,5 +14554,4 @@ window.addEventListener('DOMContentLoaded', () => {
 
 window.addEventListener('beforeunload', () => {
   stopDashboardRuntime();
-  authSubscription?.unsubscribe();
 });

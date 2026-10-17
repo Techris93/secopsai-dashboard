@@ -164,8 +164,6 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
                 return None
 
         public_config = {
-            'supabaseUrl': 'https://example.supabase.co',
-            'supabaseAnonKey': 'public-anon-key',
             'appName': 'Test dashboard',
             'integrationStatusEndpoint': '/api/integration-status',
             'runOutputEndpoint': '/api/run-output',
@@ -176,7 +174,7 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
             'ontologyEndpoint': '/api/secopsai/ontology',
             'edgeWorkspaceEndpoint': '/api/secopsai/edge-workspace',
             'edgeDashboardUrl': '',
-            'auth': {'required': True, 'mode': 'supabase'},
+            'auth': {'required': True, 'mode': 'local'},
             'aiGuard': {'hostedEnabled': False, 'defaultModel': 'gpt-5.4-mini', 'maxCostUsd': 3, 'allowMutations': False},
             'departments': {'exec': '#06B6D4', 'platform': '#3B82F6', 'security': '#8B5CF6', 'product': '#6366F1', 'revenue': '#F59E0B', 'support': '#10B981'},
             'roleGroups': {'exec': [], 'platform': [], 'security': [], 'product': [], 'revenue': [], 'support': []},
@@ -190,10 +188,17 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
                 good = FakeHandler()
                 dashboard_server.DashboardHandler._serve_local_bootstrap_config(good)
                 self.assertEqual(good.status, 200)
-                self.assertIn(b'public-anon-key', good.wfile.getvalue())
+                self.assertIn(b'Test dashboard', good.wfile.getvalue())
                 self.assertNotIn(b'DASHBOARD_LOCAL_AUTH_TOKEN', good.wfile.getvalue())
 
-                unknown_mode = dict(public_config, auth={'required': True, 'mode': 'disabled'})
+                # Supabase is retired: its config keys and mode are rejected.
+                retired = dict(public_config, supabaseUrl='https://example.supabase.co', supabaseAnonKey='public-anon-key')
+                config_path.write_text(f"window.SECOPSAI_CONFIG = {json.dumps(retired)};\n", encoding='utf-8')
+                stale = FakeHandler()
+                dashboard_server.DashboardHandler._serve_local_bootstrap_config(stale)
+                self.assertEqual(stale.status, 503)
+
+                unknown_mode = dict(public_config, auth={'required': True, 'mode': 'supabase'})
                 config_path.write_text(f"window.SECOPSAI_CONFIG = {json.dumps(unknown_mode)};\n", encoding='utf-8')
                 odd = FakeHandler()
                 dashboard_server.DashboardHandler._serve_local_bootstrap_config(odd)
@@ -221,14 +226,19 @@ class DashboardSecurityMigrationTests(unittest.TestCase):
         finally:
             dashboard_server.LOCAL_RUN_OUTPUT_MAX_BYTES = old_limit
 
-    def test_standalone_run_output_uses_existing_auth_and_same_origin_endpoint(self):
-        viewer = (ROOT / 'view-run-output.html').read_text(encoding='utf-8')
-        self.assertIn('getSession()', viewer)
-        self.assertIn('sessionStorage.getItem(\'secopsai_dashboard_local_auth_token\')', viewer)
+    def test_standalone_run_output_uses_access_cookie_and_same_origin_endpoint(self):
+        page = (ROOT / 'view-run-output.html').read_text(encoding='utf-8')
+        viewer = (ROOT / 'view-run-output.js').read_text(encoding='utf-8')
+        # CSP allows only same-origin scripts: no inline script, no CDN client.
+        self.assertIn('<script src="./view-run-output.js"></script>', page)
+        self.assertNotIn('<script>', page)
+        self.assertNotIn('supabase', (page + viewer).lower())
+        self.assertIn("sessionStorage.getItem('secopsai_dashboard_local_auth_token')", viewer)
         self.assertIn("headers['X-SecOpsAI-Local-Token']", viewer)
-        self.assertIn('headers.Authorization', viewer)
+        self.assertNotIn('Authorization', viewer)
         self.assertIn('url.origin !== window.location.origin', viewer)
-        self.assertNotIn('fetch(runOutputUrl(path))', viewer)
+        self.assertIn("redirect: 'manual'", viewer)
+        self.assertIn("response.type === 'opaqueredirect'", viewer)
 
     def test_ontology_quality_unknown_percentages_remain_unknown(self):
         app = (ROOT / 'app.js').read_text(encoding='utf-8')

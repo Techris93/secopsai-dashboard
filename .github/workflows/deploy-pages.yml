@@ -61,6 +61,9 @@ jobs:
             grep -Eiq 'SecOpsAI|app-shell|operator' "$work/body" || { echo "root page is not the console"; return 1; }
             curl --fail --silent --show-error --location --max-time 30 "$PAGES_SMOKE_URL/config.js" -o "$work/config" || { echo "config.js request failed"; return 1; }
             grep -q 'window.SECOPSAI_CONFIG' "$work/config" || { echo "config.js has no SECOPSAI_CONFIG"; return 1; }
+            # Cloudflare Access is the only sign-in; Supabase is retired.
+            grep -Eq '"mode":[[:space:]]*"access"' "$work/config" || { echo "config.js auth mode is not access"; return 1; }
+            if grep -qi 'supabase' "$work/config" "$work/body"; then echo "console still references Supabase"; return 1; fi
             if grep -Eiq 'DASHBOARD_LOCAL_AUTH_TOKEN|TRIAGE_OPS_ADMIN_TOKEN|BLOG_OPS_ADMIN_TOKEN|INTELLIGENCE_ADMIN_TOKEN|SECOPSAI_CORE_(READ|INTELLIGENCE)_TOKEN|SECOPSAI_HELPER_AUTH_TOKEN' "$work/config"; then
               echo "SECURITY: config.js exposes a server credential name"; return 2
             fi

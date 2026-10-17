@@ -49,16 +49,7 @@ def js_number(value, default: float = 0.0) -> str:
 def main():
     env = load_env(ENV_PATH)
     merged = {**os.environ, **env}
-    # Supabase is optional: local mode without it shows helper-backed panels
-    # and leaves the operational tables to the hosted dashboard.  A partial
-    # configuration is still an error.
-    supabase = [k for k in ('SUPABASE_URL', 'SUPABASE_ANON_KEY') if merged.get(k)]
-    if len(supabase) == 1:
-        raise SystemExit('Set both SUPABASE_URL and SUPABASE_ANON_KEY, or neither')
-
     values = {
-        '__SUPABASE_URL__': js_escape(merged.get('SUPABASE_URL', '')),
-        '__SUPABASE_ANON_KEY__': js_escape(merged.get('SUPABASE_ANON_KEY', '')),
         '__APP_NAME__': js_escape(merged.get('APP_NAME', 'SecOpsAI Console')),
         '__HOSTED_AI_ENABLED__': js_bool(merged.get('HOSTED_AI_ENABLED'), default=False),
         '__HOSTED_AI_MODEL__': js_escape(merged.get('HOSTED_AI_MODEL', 'gpt-5.4-mini')),
@@ -66,9 +57,9 @@ def main():
         '__HOSTED_AI_ALLOW_MUTATIONS__': js_bool(merged.get('HOSTED_AI_ALLOW_MUTATIONS'), default=False),
         '__SECOPSAI_EDGE_DASHBOARD_URL__': js_escape(merged.get('SECOPSAI_EDGE_DASHBOARD_URL', '')),
         '__DASHBOARD_AUTH_REQUIRED__': js_bool(merged.get('DASHBOARD_AUTH_REQUIRED'), default=True),
-        # "local": the local operator token (DASHBOARD_LOCAL_AUTH_TOKEN) signs
-        # the operator in; used when no Supabase project is configured.
-        '__DASHBOARD_AUTH_MODE__': js_escape('local' if not merged.get('SUPABASE_URL') else 'supabase'),
+        # The local operator token (DASHBOARD_LOCAL_AUTH_TOKEN) signs the
+        # operator in; the hosted console uses Cloudflare Access instead.
+        '__DASHBOARD_AUTH_MODE__': js_escape('local'),
     }
 
     text = TEMPLATE_PATH.read_text(encoding='utf-8')

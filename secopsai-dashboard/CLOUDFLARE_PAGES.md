@@ -24,8 +24,9 @@ The frontend uses an OKComputer_Sec-inspired dark command-plane skin documented 
   - **Recommended:** read output files from an R2 bucket binding.
   - **Fallback:** proxy to an upstream helper via `RUN_OUTPUT_BASE_URL`.
 - Hosted native triage/session/research actions and the native event stream can optionally proxy to a secured local or private SecOpsAI helper via `SECOPSAI_HELPER_BASE_URL`.
-- Authenticated hosted sessions must belong to an invited operator account;
-  anonymous Supabase sessions are rejected by both the browser and Worker.
+- Operators sign in only through Cloudflare Access. The console has no
+  password form; an expired Access session shows "Sign in again", which
+  reloads the page through the Access login.
 - The retired `/api/discord-send-message` route still returns `410 Gone` so the current UI behavior stays compatible.
 
 ## Recommended production architecture
@@ -33,15 +34,17 @@ The frontend uses an OKComputer_Sec-inspired dark command-plane skin documented 
 For `dashboard.secopsai.dev` or any other permanent hosted domain, use:
 
 1. Cloudflare Pages for the dashboard UI and edge endpoints.
-2. Supabase for dashboard data.
+2. Cloudflare Access for operator sign-in and D1 for dashboard data (see
+   **Cloudflare-native mode** below).
 3. Cloudflare R2 for run output files.
 4. Optional Discord webhooks for `ops-log` and `kanban-updates`, protected by `DISCORD_NOTIFY_TOKEN`.
 
 This keeps the browser talking only to same-origin dashboard endpoints while the worker reads config and private integrations server-side.
 
 The Worker applies the dashboard security-header baseline to every response.
-`@supabase/supabase-js` is exact-version pinned with SRI; a library upgrade must
-update both the URL and integrity digest and must pass browser CSP checks.
+The CSP allows only same-origin scripts and connections, and console HTML is
+served with `Cache-Control: no-store` so a stale page can never load outside
+Access.
 
 ## Required Cloudflare values
 
@@ -49,11 +52,10 @@ Set these in **Workers & Pages → your project → Settings → Variables and S
 
 ### Variables
 
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
+- `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` (required; without them the console fails closed)
 - `APP_NAME`
 - `DASHBOARD_AUTH_REQUIRED` (set to `true` for every hosted environment)
-- `DASHBOARD_OPERATOR_EMAILS` and/or `DASHBOARD_OPERATOR_USER_IDS` (comma-separated operator allowlist; required unless operators carry `app_metadata.secopsai_role`)
+- `DASHBOARD_OPERATOR_EMAILS` and/or `DASHBOARD_OPERATOR_USER_IDS` (comma-separated operator allowlist of Access emails or subject ids)
 - `DISCORD_SERVER_ID`
 - `DISCORD_NOTIFY_TOKEN`
 - `HOSTED_AI_ENABLED`
@@ -130,33 +132,25 @@ request and an authenticated search before inviting operators to use the page.
 
 Notes:
 
-- `SUPABASE_URL` and `SUPABASE_ANON_KEY` are required for the app to load.
-- Apply `supabase_migrations/2026-07-13_authenticated_pilot.sql` and create at
-  least one invited Supabase Auth operator before deploying the auth-gated UI.
-  The migration revokes `anon` table/view access. Do not set
-  `DASHBOARD_AUTH_REQUIRED=false` to work around a missing operator account.
-- A Supabase session alone is not authorization. Protected routes return
-  `403 operator_not_authorized` unless the user has a server-controlled
-  `app_metadata.secopsai_role` of `operator`/`admin`, a listed user id, or a
-  confirmed email in `DASHBOARD_OPERATOR_EMAILS`. With none configured the
-  Worker fails closed. Apply `supabase_migrations/2026-10-09_operator_role_rls.sql`
-  so table access enforces the same role, and disable public email sign-up.
+- Cloudflare Access (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`) is required for
+  the app to load. Do not set `DASHBOARD_AUTH_REQUIRED=false` to work around a
+  missing Access application.
+- An Access identity alone is not authorization. Protected routes return
+  `403 operator_not_authorized` unless its email is in
+  `DASHBOARD_OPERATOR_EMAILS` or its subject id is in
+  `DASHBOARD_OPERATOR_USER_IDS`. With none configured the Worker fails closed.
 - The current policy is single-tenant. Invite users from only one pilot
   organization until workspace membership policies are deployed.
-- Protected Worker routes validate the browser Supabase session before using
+- Protected Worker routes verify the Access JWT before using
   any server-side Core, Edge, helper, Blog Ops, or run-output credential. The
   Worker refuses protected backend configuration while
   `DASHBOARD_AUTH_REQUIRED=false`.
 - Authenticated workspace refreshes are read-only. A completed run changes a
   task only from the explicit operator initiated run flow, so opening or
   refreshing Mission Control cannot silently write task state.
-- An auth-disabled deployment is deliberately locked: its browser config omits
-  Supabase credentials and the app does not boot the live workspace. This is a
-  rollout safety state, not a public demo data mode.
-- With a direct database connection, run
-  `SECOPSAI_DASHBOARD_DATABASE_URL='postgresql://...' scripts/dashboard-security apply`.
-  Follow it with `scripts/dashboard-security verify`; deployment is blocked
-  until the verifier reports zero anonymous policies and grants.
+- An auth-disabled deployment is deliberately locked: the app does not boot
+  the live workspace. This is a rollout safety state, not a public demo data
+  mode.
 - `RUN_OUTPUT_R2_BINDING` defaults to `RUN_OUTPUTS`; only change it if you deliberately use a different binding name.
 - You only need **one** run-output mode:
   - R2 mode: configure an R2 binding and optionally `RUN_OUTPUT_R2_PREFIX`.
@@ -447,8 +441,8 @@ npx --yes wrangler@4.131.1 pages dev .
 
 That lets you test the worker, `config.js`, and `/api/*` routes locally before deploying.
 The Python local helper keeps `config.js` out of its generic static-file
-allowlist. Its dedicated bootstrap route accepts only the generated public
-Supabase client schema and rejects local/admin/server credential fields; all
+allowlist. Its dedicated bootstrap route accepts only the generated display
+schema in `local` auth mode and rejects local/admin/server credential fields; all
 local `/api/*` requests still require `DASHBOARD_LOCAL_AUTH_TOKEN` (health
 probes are the public exception).
 
@@ -499,8 +493,9 @@ Before or immediately after the first deploy, add the values listed in **Require
 
 Minimum viable set:
 
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
+- `CF_ACCESS_TEAM_DOMAIN`
+- `CF_ACCESS_AUD`
+- `DASHBOARD_OPERATOR_EMAILS`
 - `APP_NAME`
 - `DISCORD_SERVER_ID`
 
@@ -541,7 +536,7 @@ Select **Save and Deploy** in Cloudflare Pages.
 After deployment, verify:
 
 1. `/config.js` returns real config values.
-2. The dashboard loads and connects to Supabase.
+2. The dashboard loads after the Cloudflare Access login and `GET /api/session` returns your email.
 3. **Integrations** shows helper state for hosted Discord and native triage/session proxying.
 4. If `SECOPSAI_HELPER_BASE_URL` is configured, the Native Triage page shows real session/approval state.
 5. A run output link opens `view-run-output.html` on the same domain.
@@ -567,7 +562,7 @@ Keep preview deployments enabled so every branch or PR gets a Pages preview URL.
 
 That is especially useful for this dashboard because you can validate:
 
-- Supabase connectivity
+- Access sign-in and session expiry
 - run-output route behavior
 - worker config changes
 - visual changes
@@ -601,12 +596,14 @@ After the first live deployment:
 - Build configuration: https://developers.cloudflare.com/pages/configuration/build-configuration/
 - Custom domains: https://developers.cloudflare.com/pages/configuration/custom-domains/
 
-## Cloudflare-native mode (Access + D1, no Supabase)
+## Cloudflare-native mode (Access + D1)
 
-Supabase is optional. When `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` are
-set, the Worker authenticates operators with Cloudflare Access and serves
-dashboard tables from D1; the browser never contacts Supabase and the CSP
-drops the Supabase and CDN origins.
+This is the only hosted mode. The Worker authenticates operators with
+Cloudflare Access and serves dashboard tables from D1. Supabase was retired on
+2026-10-17: the browser client, password sign-in and `SUPABASE_*` variables
+were removed. When an Access session expires, Access redirects requests to its
+login; the console detects that (missing config or a redirected API call) and
+offers "Sign in again" instead of any other login.
 
 1. Add a custom domain to the `secopsai-dashboard` Pages project (for example
    `console.secopsai.dev`). Some networks block `*.pages.dev`, and Access
@@ -620,7 +617,6 @@ drops the Supabase and CDN origins.
 4. Pages project -> Settings -> Bindings: D1 database `DASHBOARD_DB`.
 5. Variables: `CF_ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com`,
    `CF_ACCESS_AUD=<aud tag>`, `DASHBOARD_OPERATOR_EMAILS=<operators>`.
-   Remove `SUPABASE_URL` / `SUPABASE_ANON_KEY` once verified.
 6. Deploy, sign in through Access, and confirm `GET /api/session` returns
    your email. The Worker still verifies every Access JWT (RS256 signature,
    audience, issuer, expiry) and the operator allowlist; Access alone is not

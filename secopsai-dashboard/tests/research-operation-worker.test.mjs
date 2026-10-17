@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import worker from '../_worker.js';
+import {ACCESS_HEADER, ACCESS_TEST_ENV, accessJwt} from './access-test-auth.mjs';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
-const env = {DASHBOARD_AUTH_REQUIRED: 'true', SUPABASE_URL: 'https://fixture.supabase.co', SUPABASE_ANON_KEY: 'fixture', DASHBOARD_OPERATOR_EMAILS: 'operator@example.com', SUPABASE_AUTH_FETCHER: {fetch: async () => Response.json({id: 'operator', email: 'operator@example.com', email_confirmed_at: '2026-10-13T09:00:00Z'})}, SECOPSAI_CORE_API_URL: 'https://core.example', SECOPSAI_CORE_READ_TOKEN: 'read-fixture', SECOPSAI_CORE_INTELLIGENCE_TOKEN: 'write-fixture', INTELLIGENCE_ADMIN_TOKEN: 'operator-fixture'};
-function request(url, init = {}) { const headers = new Headers(init.headers || {}); headers.set('Authorization', 'Bearer operator-session'); return new Request(url, {...init, headers}); }
+const operatorToken = await accessJwt();
+const env = {DASHBOARD_AUTH_REQUIRED: 'true', ...ACCESS_TEST_ENV, SECOPSAI_CORE_API_URL: 'https://core.example', SECOPSAI_CORE_READ_TOKEN: 'read-fixture', SECOPSAI_CORE_INTELLIGENCE_TOKEN: 'write-fixture', INTELLIGENCE_ADMIN_TOKEN: 'operator-fixture'};
+function request(url, init = {}) { const headers = new Headers(init.headers || {}); headers.set(ACCESS_HEADER, operatorToken); return new Request(url, {...init, headers}); }
 const original = globalThis.fetch;
 const calls = [];
 globalThis.fetch = async (url, init) => {
