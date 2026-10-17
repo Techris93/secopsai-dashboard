@@ -6278,11 +6278,13 @@ function intelligenceModels() {
 function intelligenceModelSupportsAction(model, action) {
   const entry = intelligenceModels().find(item => item.id === model);
   if (Array.isArray(entry?.supported_actions)) return entry.supported_actions.includes(action);
-  // Older catalogs still need a safe compatibility check during rollout.
+  // Older decision-provider catalogs still have a safe compatibility rule.
   if (/^(typesafe|typesafe-ai)\//.test(model) || /^cloudflare\/clef(?:-flash)?$/.test(model)) {
     return ['triage_finding', 'triage_artifact'].includes(action);
   }
-  return true;
+  // Unknown catalog entries are not selectable for bridge actions until the
+  // server advertises an explicit contract for them.
+  return false;
 }
 
 function isDurableIntelligenceTarget(target) {
