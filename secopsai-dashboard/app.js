@@ -10896,7 +10896,7 @@ function renderResearchOperation() {
     ${researchTable(['Assistant team', 'Case', 'Progress', 'Status', 'Control'], (operation.assistant_teams || []).map(t => `<tr><td>${escapeHtml(t.team_id)}</td><td>${escapeHtml(t.case_id)}</td><td>${(t.completed_stages || []).length}/6 roles</td><td>${escapeHtml(humanizeSnake(t.status))}${t.reason ? `<br>${escapeHtml(t.reason)}` : ''}</td><td>${!['awaiting_human_review', 'stale', 'failed', 'canceled'].includes(t.status) ? `<button type="button" class="secondary-btn research-team-cancel" data-team="${escapeHtml(t.team_id)}">Stop</button>` : 'Human review required'}</td></tr>`), 'No assistant teams have been started.')}
     ${(operation.editions || []).slice(0, 5).map(edition => {
       const update = edition.pending_update;
-      const correction = update && ['published', 'corrected', 'retracted'].includes(update.edition_state);
+      const correction = update && ['published', 'corrected', 'retracted'].includes(edition.state);
       return `<details class="research-action-drawer"><summary>${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}${update ? ' · verified updates waiting' : ''}</summary>
         ${edition.draft ? `<p>${escapeHtml(edition.draft.title)}</p>
           ${update ? `<section class="research-edition-update" aria-label="Verified source updates awaiting reconciliation"><h4>${correction ? 'Newly verified information needs a correction review' : 'Newly verified information needs editorial reconciliation'}</h4><p>This material is stored separately and has not been added to the edition. Read the sources, update the complete draft below, and save it through the review gate.</p>
@@ -10922,7 +10922,7 @@ function renderResearchOperation() {
       summary: card.querySelector('.research-edition-summary')?.value || '',
       body_markdown: card.querySelector('.research-edition-body')?.value || '' };
     if (button.dataset.mode === 'incorporate' && edition.pending_update) data.incorporate_update_fingerprint = edition.pending_update.fingerprint;
-    if (edition.pending_update && ['published', 'corrected', 'retracted'].includes(edition.pending_update.edition_state)) {
+    if (edition.pending_update && ['published', 'corrected', 'retracted'].includes(edition.state)) {
       data.action = 'correction'; data.reason = 'Reconcile newly verified source information';
       delete data.title; delete data.summary;
       runResearchOperation('brief-correct', data, { identity: edition.edition_id, button });
