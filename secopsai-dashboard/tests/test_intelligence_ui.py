@@ -362,7 +362,7 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "intelligencePipelineGroups" in app
     assert "latestIntelligenceJobs" in app
     assert "Recover transient failures" in html
-    assert "Re-run failed jobs" in html
+    assert "Re-run failed jobs" not in html
     assert "requeue-failed-jobs" in app
     assert "research-decision-card" in app
     assert "const artifacts = researchCase.artifacts || [];" in app

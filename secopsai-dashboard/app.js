@@ -737,7 +737,7 @@ const OPERATOR_GUIDANCE = Object.freeze({
     target: 'automation-learning-section'
   },
   'automation/jobs': {
-    title: 'Recover the oldest blocked pipeline before adding new model jobs.',
+    title: 'Inspect the oldest blocked pipeline and its recorded failure before recovery.',
     detail: 'Jobs are grouped by case so the current stage, model, age, and recovery action stay together.',
     automation: 'persist, retry, and group bounded analysis stages',
     approval: 'cancel, requeue, or accept the resulting analysis',
@@ -6288,7 +6288,13 @@ function intelligenceModelSupportsAction(model, action) {
 }
 
 function isDurableIntelligenceTarget(target) {
-  return /^(?:RSC|RSCF)-/.test(String(target || '').trim());
+  return /^(?:(?:RSC|RSCF)-|(?:npm|pypi|crates|nuget|go|maven|rubygems|packagist|open-vsx|vscode-marketplace|mcp-registry):)/.test(String(target || '').trim());
+}
+
+function intelligenceRecoveryView(job) {
+  const recovery = job?.recovery;
+  if (!recovery || typeof recovery !== 'object') return { eligible: false, action: 'Inspect failure before recovery', reason: 'classification_unavailable' };
+  return recovery;
 }
 
 function latestIntelligenceJobs(jobs) {
@@ -6854,7 +6860,8 @@ function renderIntelligence() {
     <div class="metric-card"><div class="metric">${counts.queued || 0}</div><div class="metric-label">Queued</div></div>
     <div class="metric-card"><div class="metric">${counts.awaiting_provider || 0}</div><div class="metric-label">Awaiting provider</div></div>
     <div class="metric-card"><div class="metric">${counts.running || 0}</div><div class="metric-label">Running</div></div>
-    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed history</div>${counts.failed ? '<button class="mini-btn" id="intelligence-requeue-failed-metric-btn" type="button" style="margin-top:0.35rem;">Re-run failed</button>' : ''}</div>
+    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed history</div>${counts.failed ? '<button class="mini-btn" id="intelligence-requeue-failed-metric-btn" type="button" style="margin-top:0.35rem;">Recover transient failures</button>' : ''}</div>
+    ${data?.jobs?.current_counts ? `<div class="metric-card"><div class="metric">${data.jobs.current_counts.failed || 0}</div><div class="metric-label">Currently blocked targets</div></div>` : ''}
     <div class="small" style="grid-column:1/-1;">Counts include durable attempts. Current pipeline rows below are deduplicated; transport failures can be recovered in a bounded pass, while ${parkedProviderJobs ? `${parkedProviderJobs} provider-wait job(s) captured for another model remain parked` : 'jobs captured for another model remain parked'} rather than being silently rerouted.</div>`;
 
   const bridgePill = el('intelligence-bridge-pill');
@@ -7235,10 +7242,11 @@ function renderIntelligence() {
           const resultView = intelligenceResultView(job);
           const hasResult = Boolean(job.result_available || resultView.summary || resultView.confirmedFacts.length || resultView.publicationRisks.length || job.error_message);
           const cancel = ['queued', 'awaiting_provider'].includes(String(job.status || '')) ? `<button class="mini-btn" data-intelligence-cancel="${escapeHtml(job.job_id)}" type="button">Cancel</button>` : '';
-          const requeue = String(job.status || '') === 'failed' ? `<button class="mini-btn" data-intelligence-requeue="${escapeHtml(job.job_id)}" type="button">Requeue</button>` : '';
+          const recovery = intelligenceRecoveryView(job);
+          const requeue = String(job.status || '') === 'failed' && (recovery.eligible === true || recovery.repair_version) ? `<button class="mini-btn" data-intelligence-requeue="${escapeHtml(job.job_id)}" ${recovery.repair_version ? `data-intelligence-repair="${escapeHtml(recovery.repair_version)}"` : ''} type="button">${recovery.repair_version ? 'Re-evaluate repaired contract' : 'Recover transient failure'}</button>` : '';
           return `<div class="intelligence-child-job"><span><strong>${escapeHtml(intelligenceStageLabel(job.action))}</strong> · <code>${escapeHtml(job.job_id || '')}</code> · ${escapeHtml(humanizeSnake(job.status || 'unknown'))}</span><span>${hasResult ? `<button class="secondary-btn mini-btn" data-intelligence-review="${escapeHtml(job.job_id)}" type="button">Open full analysis</button>` : '<span class="small">Pending</span>'}${cancel}${requeue}</span></div>`;
         }).join('');
-        const next = group.status === 'failed' ? 'Requeue failed stage' : group.status === 'completed' ? 'Review completed pipeline' : 'Monitor active stage';
+        const next = group.status === 'failed' ? intelligenceRecoveryView(current).action : group.status === 'completed' ? 'Review completed pipeline' : 'Monitor active stage';
         const retainedAttempts = group.jobs.reduce((total, job) => total + Math.max(1, Number(job.history_count || 1)), 0);
         const historyNote = retainedAttempts > group.total ? ` · ${retainedAttempts} attempts retained` : '';
         const pipelineReference = group.pipelineId || group.target;
@@ -7250,7 +7258,9 @@ function renderIntelligence() {
           <div class="intelligence-pipeline-card-grid">
             <div class="intelligence-pipeline-field intelligence-pipeline-stages"><span class="intelligence-pipeline-label">Stage progress</span><strong>${escapeHtml(String(group.completed))} of ${escapeHtml(String(group.total))} complete</strong><div class="intelligence-stage-list">${stageSummary}</div></div>
             <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Provider</span><code>${escapeHtml(current.provider || 'Not recorded')}</code></div>
+            <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Model</span><code>${escapeHtml(current.failure_details?.model || current.input?.selected_model || 'Not recorded for this legacy job')}</code></div>
             <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Assessment</span><strong>${currentResult.assessment ? escapeHtml(humanizeSnake(currentResult.assessment)) : 'Advisory run'}</strong></div>
+            ${current.status === 'failed' ? `<div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Recorded failure</span><strong>${escapeHtml(current.error_code || 'Unclassified')}</strong><span class="small">${escapeHtml(String(current.error_message || 'No failure detail was recorded.').slice(0, 400))}</span></div>` : ''}
             <div class="intelligence-pipeline-field"><span class="intelligence-pipeline-label">Updated</span><time>${escapeHtml(fmtDate(current.updated_at || current.queued_at))}</time></div>
           </div>
           <footer class="intelligence-pipeline-card-footer">
@@ -7320,12 +7330,15 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
     }
     state.intelligence.serviceOutput = ['service', 'run-once'].includes(action) ? JSON.stringify(result.result || result, null, 2) : state.intelligence.serviceOutput;
     const requeueCount = result?.result?.count;
-    const completionMsg = (action === 'requeue-failed-jobs' || (action === 'requeue' && !payload.job_id)) && requeueCount !== undefined
-      ? `Requeued ${requeueCount} failed job${requeueCount === 1 ? '' : 's'}`
+    const recoveryAction = ['requeue', 'recover-transient-jobs', 'requeue-failed-jobs'].includes(action);
+    const skippedRecovery = Array.isArray(result?.result?.skipped) ? result.result.skipped.length : 0;
+    const recoveryReasons = [...new Set((result?.result?.skipped || []).map(item => humanizeSnake(item.reason || 'Review required')))].slice(0, 3).join(', ');
+    const completionMsg = recoveryAction && requeueCount !== undefined
+      ? `Queued ${requeueCount} recovery job${requeueCount === 1 ? '' : 's'}; ${skippedRecovery} excluded by recovery policy.${recoveryReasons ? ` ${recoveryReasons}.` : ''}`
       : `Intelligence action completed: ${humanizeSnake(action)}`;
-    showToast(completionMsg, 'success');
+    showToast(completionMsg, recoveryAction && requeueCount === 0 ? 'warning' : 'success');
     const intelligenceJobId = String(
-      result?.result?.job_id || result?.result?.job?.job_id || result?.job_id || ''
+      result?.result?.job_id || result?.result?.job?.job_id || result?.result?.jobs?.[0]?.job_id || result?.job_id || ''
     ).trim();
     const coordinatorCommandId = String(result?.result?.command_id || result?.result?.command?.command_id || '').trim();
     const backgroundAction = ['enqueue', 'autopilot-run-now', 'daily-run', 'investigation-run-due', 'recover-transient-jobs', 'requeue-failed-jobs'].includes(action);
@@ -9888,7 +9901,7 @@ function renderAll() {
   const triageBit = triageSummary
     ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending / ${openLocalSessionsCount()} sessions`
     : '';
-  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : (localTokenAuthMode() ? 'Local helper connected' : 'Supabase connected')} • ${state.channelRoutes.length} routes loaded${triageBit}`);
+  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : (localTokenAuthMode() ? 'Local helper connected' : 'Supabase connected')} • ${state.channelRoutes.length} channel routes loaded${triageBit}`);
 }
 
 async function loadTable(table, options = {}) {
@@ -14261,20 +14274,24 @@ function bindEvents() {
     }
     const requeueButton = event.target.closest('[data-intelligence-requeue]');
     if (!requeueButton) return;
-    runIntelligenceAction('requeue', { job_id: requeueButton.dataset.intelligenceRequeue }, requeueButton);
+    const explicitModel = state.intelligence.pendingSelectedModel || '';
+    runIntelligenceAction('requeue', { job_id: requeueButton.dataset.intelligenceRequeue,
+      ...(requeueButton.dataset.intelligenceRepair ? { repair_version: requeueButton.dataset.intelligenceRepair } : {}),
+      ...(explicitModel ? { model: explicitModel, fallback_mode: 'disabled', fallback_models: [] } : {}) }, requeueButton);
   });
   el('intelligence-recover-transient-btn')?.addEventListener('click', event => {
-    runIntelligenceAction('recover-transient-jobs', { limit: 10, max_attempts: 3, min_age_seconds: 300 }, event.currentTarget);
+    runIntelligenceAction('recover-transient-jobs', { limit: 10, max_attempts: 3, min_age_seconds: 300,
+      ...(state.intelligence.pendingSelectedModel ? { model: state.intelligence.pendingSelectedModel, fallback_mode: 'disabled', fallback_models: [] } : {}) }, event.currentTarget);
   });
   ['intelligence-requeue-failed-btn', 'intelligence-requeue-failed-jobs-btn'].forEach(id => {
     el(id)?.addEventListener('click', event => {
-      runIntelligenceAction('requeue-failed-jobs', {}, event.currentTarget);
+      runIntelligenceAction('recover-transient-jobs', { limit: 10 }, event.currentTarget);
     });
   });
   el('intelligence-summary')?.addEventListener('click', event => {
     const btn = event.target.closest('#intelligence-requeue-failed-metric-btn');
     if (btn) {
-      runIntelligenceAction('requeue-failed-jobs', {}, btn);
+      runIntelligenceAction('recover-transient-jobs', { limit: 10 }, btn);
     }
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
