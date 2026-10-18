@@ -10613,7 +10613,7 @@ function renderResearchDiscovery() {
   syncResearchDiscoveryWatchlistOptions();
   const candidates = discovery.candidates || [];
   const candidateMarkup = candidates.length
-    ? `<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Ecosystem</th><th>Score</th><th>Why</th><th>Status</th></tr></thead><tbody>${candidates.slice(0, 25).map(item => `<tr><td><strong>${escapeHtml(item.package)}</strong><div class="small">${escapeHtml(item.version)} vs ${escapeHtml(item.reference_identifier)}</div></td><td>${escapeHtml(item.ecosystem)}</td><td>${escapeHtml(String(item.score))}</td><td>${escapeHtml(item.reason || 'Similarity requires analyst review')}</td><td>${escapeHtml(statusLabel(item.status))}</td></tr>`).join('')}</tbody></table></div>`
+    ? `<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Ecosystem</th><th>Discovery signal (not risk)</th><th>Route / review</th><th>Why</th><th>Status</th></tr></thead><tbody>${candidates.slice(0, 25).map(item => { const route = item.routing || {}; const signalLabel = item.score_kind === 'static_signal_score' ? 'Static signal' : 'Name similarity'; return `<tr><td><strong>${escapeHtml(item.package)}</strong><div class="small">${escapeHtml(item.version)} vs ${escapeHtml(item.reference_identifier)}</div></td><td>${escapeHtml(item.ecosystem)}</td><td><div>${escapeHtml(signalLabel)}: ${escapeHtml(String(item.score))}</div><div class="small">Not confidence or maliciousness probability</div></td><td>${renderStatusPill(route.route || 'validate')}<div class="small">${route.review_required ? 'Routine human review' : 'No human review triggered yet'}</div></td><td>${escapeHtml(item.reason || 'Discovery signal requires evidence-led validation')}</td><td>${escapeHtml(statusLabel(item.status))}</td></tr>`; }).join('')}</tbody></table></div>`
     : '<div class="empty-state compact">No candidates yet. Add a watchlist, run a monitor, and review the resulting scoped candidates.</div>';
   const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(humanizeMachineText(item.reason || 'Review candidate'))}</td><td>${escapeHtml(statusLabel(item.status))}</td><td><div style="display: flex; gap: 8px;"><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email</button>${item.status === 'open' ? `<button class="mini-btn research-alert-resolve-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Resolve</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>` : '';
   candidatesHost.innerHTML = candidateMarkup + alertMarkup;
@@ -10687,21 +10687,24 @@ function renderResearchStageQueues(candidates = []) {
   const inbox = el('research-inbox-candidates');
   if (inbox) {
     const ranked = [...candidates].sort((left, right) => {
-      const leftEvidence = Object.values(left.evidence || {}).filter(Boolean).length;
-      const rightEvidence = Object.values(right.evidence || {}).filter(Boolean).length;
-      return (Number(right.score || 0) + rightEvidence * 3) - (Number(left.score || 0) + leftEvidence * 3);
+      const leftRouting = left.routing || {};
+      const rightRouting = right.routing || {};
+      return Number(Boolean(rightRouting.review_required)) - Number(Boolean(leftRouting.review_required))
+        || Number(rightRouting.evidence_gaps?.length || 0) - Number(leftRouting.evidence_gaps?.length || 0)
+        || String(right.last_seen || '').localeCompare(String(left.last_seen || ''));
     });
     inbox.innerHTML = ranked.length ? ranked.slice(0, 30).map((item, index) => {
-      const evidenceCount = Object.values(item.evidence || {}).filter(Boolean).length;
-      const completeness = Math.min(100, Math.round((evidenceCount / 3) * 100));
+      const route = item.routing || {};
+      const exactHash = /^[a-f0-9]{64}$/i.test(String(item.evidence?.artifact_sha256 || ''));
       const novelty = String(item.status || 'new').toLowerCase() === 'new' ? 'New lead' : statusLabel(item.status || 'review');
-      const impact = Number(item.score || 0) >= 95 ? 'Critical review priority' : Number(item.score || 0) >= 85 ? 'High review priority' : 'Standard review priority';
+      const reviewState = route.review_priority === 'immediate' ? 'Urgent human review' : route.review_required ? 'Routine human review' : 'No human review triggered yet';
       return `
       <article class="research-inbox-card">
-        <div class="research-inbox-card-head"><strong>#${index + 1} · ${escapeHtml(item.package || item.identifier || 'Candidate')}</strong><span class="status-pill">Score ${escapeHtml(String(item.score ?? '—'))}</span></div>
+        <div class="research-inbox-card-head"><strong>#${index + 1} · ${escapeHtml(item.package || item.identifier || 'Candidate')}</strong><span class="status-pill">${escapeHtml(item.score_kind === 'static_signal_score' ? 'Static signal' : 'Similarity')} ${escapeHtml(String(item.score ?? '—'))} · not risk</span></div>
         <div class="small">${escapeHtml(item.ecosystem || 'unknown')} · ${escapeHtml(item.version || 'version unknown')} · reference ${escapeHtml(item.reference_identifier || 'not recorded')}</div>
         <p>${escapeHtml(item.reason || 'Explainable similarity requires analyst review.')}</p>
-        <div class="research-candidate-facts"><span>${escapeHtml(novelty)}</span><span>${escapeHtml(impact)}</span><span>Evidence ${completeness}%</span><span>Coverage ${escapeHtml(item.coverage || 'scoped')}</span></div>
+        <div class="research-candidate-facts"><span>${escapeHtml(novelty)}</span><span>${escapeHtml(reviewState)}</span><span>${exactHash ? 'Artifact hash recorded' : 'Artifact hash missing'}</span><span>${escapeHtml(humanizeSnake(route.route || 'validate'))}</span></div>
+        ${route.evidence_gaps?.length ? `<p class="small">Next evidence: ${escapeHtml(route.evidence_gaps.slice(0, 3).join('; '))}</p>` : ''}
       </article>`;
     }).join('') : '<div class="empty-state compact">No candidates are waiting for review. A scoped monitor with no candidates is not a global clean result.</div>';
   }
@@ -10998,8 +11001,9 @@ function renderResearchOperation() {
       const lines = name => value(name).split('\n').map(v => v.trim()).filter(Boolean);
       if (!value('confidence') || !value('start')) { setStatus('Provide explicit confidence and passage start values.', true); return; }
       const excerpt = value('excerpt'), start = Number(value('start'));
+      const impactIndicators = [...document.querySelectorAll('[data-impact-indicator]:checked')].map(input => input.dataset.impactIndicator).filter(Boolean);
       runResearchOperation('claim-assess', { statement: value('statement'), assessment: value('assessment'), confidence: Number(value('confidence')),
-        malicious_behavior: Boolean(el('research-claim-malicious')?.checked), references: [{ evidence_id: value('evidence'), selector: value('selector'), start, end: start + [...excerpt].length, excerpt }],
+        malicious_behavior: Boolean(el('research-claim-malicious')?.checked), impact_indicators: impactIndicators, references: [{ evidence_id: value('evidence'), selector: value('selector'), start, end: start + [...excerpt].length, excerpt }],
         scope: { versions: value('versions'), environment: value('environment'), sample_set: value('samples'), observation_period: value('period') },
         rationale: value('rationale'), quality: value('quality'), alternatives: lines('alternatives'), contradictions: lines('contradictions'),
         contradiction_resolution: value('resolution'), limitations: lines('limitations'),
@@ -11354,6 +11358,78 @@ async function generateContentPackForCase(caseId, btn) {
 
 function bindResearchCaseDetailActions(researchCase) {
   bindReliabilityCaseActions(researchCase);
+  const reviewRole = el('research-case-review-role');
+  const reviewRoot = el('research-case-detail');
+  const syncReviewChecks = () => {
+    const selectedRole = reviewRole?.value || 'technical_reviewer';
+    reviewRoot?.querySelectorAll('[data-case-review-check-group]').forEach(group => {
+      group.hidden = group.dataset.caseReviewCheckGroup !== selectedRole;
+    });
+  };
+  reviewRole?.addEventListener('change', syncReviewChecks);
+  syncReviewChecks();
+  el('research-case-review-submit-btn')?.addEventListener('click', async event => {
+    const role = reviewRole?.value || '';
+    const decision = el('research-case-review-decision')?.value || '';
+    const draft = el('research-case-review-draft')?.value || '';
+    const claimStatements = (el('research-case-review-claims')?.value || '').split('\n').map(value => value.trim()).filter(Boolean);
+    const rationale = el('research-case-review-rationale')?.value.trim() || '';
+    const checks = {};
+    reviewRoot?.querySelectorAll('[data-case-review-check][data-review-role="' + role + '"]').forEach(input => {
+      checks[input.dataset.caseReviewCheck] = input.checked ? 'passed' : 'blocked';
+    });
+    if (!draft.trim() || !claimStatements.length || rationale.length < 20 || !Object.keys(checks).length) {
+      setStatus('Provide the exact draft, material claims, a reasoned review, and every role-specific check.', true);
+      return;
+    }
+    if (decision === 'approved' && Object.values(checks).some(value => value !== 'passed')) {
+      setStatus('Approval is unavailable while any required review check is blocked.', true);
+      return;
+    }
+    if (!(await requestConfirmation('Record this ' + (role === 'editor' ? 'editorial' : 'technical') + ' review for ' + researchCase.case_id + '?', {
+      title: decision === 'approved' ? 'Approve this review gate' : 'Record review outcome',
+      context: 'The record is bound to this exact draft and current evidence. It does not publish or replace final release approval.',
+      confirmLabel: 'Record review',
+    }))) return;
+    await runResearchOperation('case-review', {
+      role,
+      target: el('research-case-review-target')?.value || 'technical_advisory',
+      decision,
+      draft,
+      claim_statements: claimStatements,
+      rationale,
+      checks,
+    }, { caseId: researchCase.case_id, button: event.currentTarget });
+  });
+  el('research-case-disposition-submit-btn')?.addEventListener('click', async event => {
+    const decision = el('research-disposition-decision')?.value || '';
+    const evidenceId = el('research-disposition-evidence')?.value || '';
+    const selector = el('research-disposition-selector')?.value.trim() || '';
+    const excerpt = el('research-disposition-excerpt')?.value || '';
+    const start = Number(el('research-disposition-start')?.value || 0);
+    const explanation = el('research-disposition-explanation')?.value.trim() || '';
+    const nodeid = el('research-disposition-test-node')?.value.trim() || '';
+    const runUrl = el('research-disposition-run-url')?.value.trim() || '';
+    const commit = el('research-disposition-commit')?.value.trim() || '';
+    const duplicateCaseId = el('research-disposition-duplicate')?.value.trim() || '';
+    if (!evidenceId || !selector || !excerpt.trim() || !nodeid || !runUrl || !commit || explanation.length < 40) {
+      setStatus('Provide the exact evidence passage, a 40-character explanation, a test node, passing CI run, and tested commit.', true);
+      return;
+    }
+    if (decision === 'duplicate' && !duplicateCaseId) { setStatus('A duplicate disposition needs the exact existing case ID.', true); return; }
+    if (!(await requestConfirmation(`Record ${decision} and close ${researchCase.case_id}?`, {
+      title: 'Close or suppress with evidence',
+      context: 'The action records cited evidence, the reviewer’s explanation, and the passing regression test. It does not change linked alert dispositions or publish a report.',
+      confirmLabel: 'Record disposition and close'
+    }))) return;
+    await runResearchOperation('case-disposition', {
+      decision,
+      explanation,
+      duplicate_case_id: duplicateCaseId,
+      references: [{ evidence_id: evidenceId, selector, start, end: start + [...excerpt].length, excerpt }],
+      regression_test: { nodeid, result: 'passed', run_url: runUrl, commit_sha: commit, checked_at: new Date().toISOString() }
+    }, { caseId: researchCase.case_id, button: event.currentTarget });
+  });
   el('research-reconcile-btn')?.addEventListener('click', async event => {
     if (!(await requestConfirmation('Reclassify legacy URL candidates for this case?', {
       title: 'Reconcile evidence provenance',
@@ -12399,6 +12475,55 @@ function renderResearchCaseDetail(researchCase) {
   const decisionContradictions = [];
   if ((researchCase.state_reconciliation?.changed || []).length) decisionContradictions.push('A subject state was reconciled from the artifact catalog; review the audit event.');
   if (!evidence.some(item => item.evidence_type === 'sandbox_analysis')) decisionContradictions.push('Runtime behavior is unobserved; static evidence must not be described as execution.');
+  const routing = researchCase.routing || {};
+  const routeLabel = ({ urgent_review: 'Urgent review', validate: 'Validate', publication_candidate: 'Publication candidate', close_or_suppress: 'Close or suppress' })[routing.route] || 'Validate';
+  const humanReviewLabel = routing.review_priority === 'immediate' ? 'Immediate reviewer attention' : routing.review_required ? 'Routine human review' : 'No human review triggered yet';
+  const reviewCheckLabels = {
+    technical_reviewer: {
+      claims: 'Material claims match linked evidence',
+      affected_versions: 'Affected versions are established',
+      reproduction: 'Behavior was reproduced or independently corroborated',
+      materiality: 'The finding is materially useful',
+      alternatives: 'Competing explanations were assessed',
+      detections: 'Detection guidance was tested',
+      mitigations: 'Mitigations were verified',
+      attribution: 'Attribution is appropriately scoped',
+      limitations: 'Limitations are stated',
+    },
+    editor: {
+      privacy: 'Privacy and personal data reviewed',
+      secrets: 'Secrets and credentials reviewed',
+      sharing_rights: 'Evidence sharing rights permit release',
+      licensing: 'Licensing reviewed',
+      embargo: 'Embargo and disclosure timing reviewed',
+      vendor_coordination: 'Vendor coordination recorded',
+      credits: 'Authors and sources credited',
+      conflicts: 'Conflicts of interest disclosed',
+      exposure_counts: 'Victim and exposure counts supported',
+    },
+  };
+  const reviewCheckMarkup = Object.entries(reviewCheckLabels).map(([role, checks]) =>
+    "<fieldset data-case-review-check-group='" + role + "'><legend>" + (role === 'technical_reviewer' ? 'Technical review checks' : 'Editorial review checks') + "</legend><div class='research-form-grid'>"
+      + Object.entries(checks).map(([key, label]) => "<label><input type='checkbox' data-case-review-check='" + key + "' data-review-role='" + role + "' /> " + escapeHtml(label) + "</label>").join('')
+      + "</div><p class='small'>Unchecked items are recorded as blocked; approval is rejected unless every required check passes.</p></fieldset>"
+  ).join('');
+  const reviewClaims = (researchCase.research_assurance?.assessed_claims || [])
+    .filter(item => item.current && ['observation', 'source_reported'].includes(item.assessment))
+    .map(item => item.statement).join('\n');
+  const reviewMarkup = researchCase.status !== 'closed'
+    ? "<details class='research-action-drawer research-independent-review'><summary>Record an independent technical or editorial review</summary>"
+      + "<p class='small'>Review decisions are bound to the exact draft and current case evidence. A technical review is separate from editorial approval; neither action publishes.</p>"
+      + "<div class='research-form-grid'>"
+      + "<label><span>Reviewer role</span><select id='research-case-review-role'><option value='technical_reviewer'>Independent technical reviewer</option><option value='editor'>Independent editor</option></select></label>"
+      + "<label><span>Publication format</span><select id='research-case-review-target'><option value='technical_advisory'>Technical advisory</option><option value='research_report'>Research report</option><option value='blog'>Blog</option><option value='osv'>OSV advisory</option></select></label>"
+      + "<label><span>Decision</span><select id='research-case-review-decision'><option value='changes_required'>Changes required</option><option value='approved'>Approve this review gate</option><option value='rejected'>Reject</option></select></label>"
+      + "<label class='research-span-2'><span>Exact complete draft under review</span><textarea id='research-case-review-draft' rows='8' maxlength='200000' placeholder='Paste the complete draft that was reviewed. Approval is tied to its exact contents.'></textarea></label>"
+      + "<label class='research-span-2'><span>Material claim statements, one exact statement per line</span><textarea id='research-case-review-claims' rows='5' placeholder='Use the exact claim text recorded in the evidence ledger.'>" + escapeHtml(reviewClaims) + "</textarea></label>"
+      + "<label class='research-span-2'><span>Review rationale and required changes</span><textarea id='research-case-review-rationale' rows='4' maxlength='4000'></textarea></label>"
+      + reviewCheckMarkup
+      + "</div><div class='research-form-actions'><button class='secondary-btn' id='research-case-review-submit-btn' type='button'>Record independent review</button></div></details>"
+    : '';
+  const routingMarkup = `<section class="research-routing-card route-${escapeHtml(routing.route || 'validate')}" aria-label="Evidence-based routing"><div class="research-routing-head"><div><span class="detail-eyebrow">EVIDENCE-BASED ROUTE</span><h4>${escapeHtml(routeLabel)}</h4></div><span class="status-pill">${escapeHtml(humanReviewLabel)}</span></div><div class="research-routing-columns"><div><h5>Human review</h5><p>${escapeHtml(humanReviewLabel)}. This decision is independent of whether the case is publishable.</p>${renderBulletList(routing.reasons || [], 'Route is based on current evidence and case state.')}</div><div><h5>Publication decision</h5><p>${routing.publication_candidate ? 'This case has passed its evidence and review gates and is a publication candidate.' : 'This is not currently a publication candidate.'}</p>${renderBulletList(routing.publication_blockers || [], routing.publication_candidate ? 'No publication blockers remain.' : 'No additional publication blockers recorded.')}</div><div><h5>Next evidence or action</h5>${renderBulletList([...(routing.evidence_gaps || []), ...(routing.next_actions || [])], 'No additional routing action is listed.')}</div></div>${routing.disposition ? `<p class="small">Recorded ${escapeHtml(statusLabel(routing.disposition.decision))} disposition · regression ${escapeHtml(routing.disposition.regression_test?.nodeid || '')} · <a href="${escapeHtml(routing.disposition.regression_test?.run_url || '')}" target="_blank" rel="noopener noreferrer">reviewer-attested test run</a></p>` : ''}${researchCase.status !== 'closed' ? `<details class="research-action-drawer"><summary>Record an evidence-backed benign or duplicate disposition</summary><p class="small">This action closes the case. It requires a qualified technical reviewer, exact evidence, an explanation, and a reviewer-attested regression test result with its run and commit recorded. It does not change linked alert dispositions.</p><div class="research-form-grid"><label><span>Disposition</span><select id="research-disposition-decision"><option value="benign">Documented benign</option><option value="duplicate">Duplicate of known case</option></select></label><label><span>Duplicate case ID, if applicable</span><input id="research-disposition-duplicate" placeholder="RSC-…" /></label><label class="research-span-2"><span>Documented explanation</span><textarea id="research-disposition-explanation" rows="3" minlength="40"></textarea></label><label><span>Evidence record</span><select id="research-disposition-evidence"><option value="">Select exact evidence</option>${evidence.filter(item => item.status === 'active').map(item => `<option value="${escapeHtml(item.evidence_id)}">${escapeHtml(item.title || item.evidence_id)} · ${escapeHtml(item.evidence_type)}</option>`).join('')}</select></label><label><span>Evidence passage location</span><input id="research-disposition-selector" placeholder="/metadata/file_contents/src/install.js" /></label><label><span>Passage start</span><input id="research-disposition-start" type="number" min="0" value="0" /></label><label class="research-span-2"><span>Exact evidence passage</span><textarea id="research-disposition-excerpt" rows="3"></textarea></label><label class="research-span-2"><span>Matching regression test node</span><input id="research-disposition-test-node" placeholder="tests/test_rule.py::test_documented_benign_pattern" /></label><label class="research-span-2"><span>Reviewer-attested test run URL</span><input id="research-disposition-run-url" type="url" placeholder="https://github.com/Techris93/secopsai/actions/runs/…" /></label><label><span>Tested commit SHA</span><input id="research-disposition-commit" maxlength="40" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-case-disposition-submit-btn" type="button">Record disposition and close case</button></div></details>` : ''}</section>`;
   host.innerHTML = `
     <div class="research-detail-head">
       <div><div class="detail-eyebrow"><code>${escapeHtml(researchCase.case_id)}</code></div><h3>${escapeHtml(researchCase.title)}</h3><p class="small">Updated ${escapeHtml(fmtDate(researchCase.updated_at))} · ${escapeHtml(statusLabel(researchCase.case_type))}</p></div>
@@ -12409,6 +12534,8 @@ function renderResearchCaseDetail(researchCase) {
       <div class="research-decision-metrics"><div><span>Detection confidence</span><b>${escapeHtml(String(researchCase.detection_confidence ?? calibration.detection_confidence ?? researchCase.confidence ?? 0))}%</b></div><div><span>Investigation priority</span><b>${escapeHtml(humanizeSnake(researchCase.investigation_priority || calibration.investigation_priority || 'normal'))}</b></div><div><span>Potential impact</span><b>${escapeHtml(humanizeSnake(researchCase.potential_impact || researchCase.severity || 'medium'))}</b></div><div><span>Local exposure</span><b>${escapeHtml(humanizeSnake(localExposure))}</b></div><div><span>Evidence quality</span><b>${escapeHtml(humanizeSnake(evidenceQuality))}</b></div><div><span>Observations</span><b>${escapeHtml(String(uniqueObservations))} unique · ${escapeHtml(String(repeatObservations))} repeated</b></div></div>
       <div class="research-decision-columns"><div><h5>Confirmed facts</h5>${renderBulletList(decisionFacts, 'No confirmed facts recorded.')}</div><div><h5>Contradictions and limits</h5>${renderBulletList(decisionContradictions, 'No contradictions recorded.')}</div><div><h5>Recommended next action</h5><p>${escapeHtml(nextAction.reason)}</p>${legacyIocCandidates.length ? '<button class="secondary-btn mini-btn" id="research-reconcile-btn" type="button">Reconcile legacy indicators</button><div class="small">Classifies older URL candidates as source references or attacker indicators without deleting history.</div>' : ''}</div></div>
     </section>
+    ${routingMarkup}
+    ${reviewMarkup}
     <div class="research-readiness ${readiness.ready ? 'ready' : 'blocked'}">
       <strong>${readiness.ready ? 'Publication ready' : `${(readiness.blockers || []).length} publication blocker(s)`}</strong>
       ${renderBulletList(readiness.ready ? (readiness.warnings || []) : (readiness.blockers || []), readiness.ready ? 'No readiness warnings.' : 'Run the readiness workflow before publication.')}
