@@ -255,6 +255,8 @@ const state = {
   findings: [],
   workItems: [],
   channelRoutes: [],
+  channelRoutesLoaded: false,
+  channelRoutesError: null,
   events: [],
   integrationStatus: null,
   intelligence: {
@@ -280,6 +282,7 @@ const state = {
     data: null,
     loading: false,
     error: null,
+    stale: false,
     selectedRunId: null,
     policyDirty: false,
     policySaving: false
@@ -333,6 +336,8 @@ const state = {
     events: [],
     windows: [],
     loading: false,
+    loaded: false,
+    stale: false,
     error: null
   },
   enterprise: {
@@ -1419,6 +1424,104 @@ function isLocalDashboardOrigin() {
   return hostname === 'localhost'
     || hostname === '::1'
     || /^(?:127\.)\d{1,3}(?:\.\d{1,3}){2}$/.test(hostname);
+}
+
+function helperCapabilityStatus(capability, { error = '', loaded = false } = {}) {
+  const integration = state.integrationStatus;
+  if (!integration) {
+    if (loaded) return { label: 'Available', detail: 'The direct capability request succeeded; integration inventory has not loaded yet.' };
+    return error
+      ? { label: 'Temporarily unavailable', detail: String(error) }
+      : { label: 'Checking', detail: 'Capability status has not loaded yet.' };
+  }
+  if (integration.ok === false) {
+    if (loaded) return { label: 'Available', detail: 'The direct capability request succeeded; integration inventory could not be refreshed.' };
+    if (error) return { label: 'Temporarily unavailable', detail: String(error) };
+    return { label: 'Status unavailable', detail: integration.error || 'The integration status request failed.' };
+  }
+  if (!isLocalDashboardOrigin()) {
+    const helper = integration.helper;
+    if (!helper || typeof helper !== 'object' || typeof helper[capability] !== 'boolean') {
+      return { label: 'Status unknown', detail: 'This deployment did not report the capability state.' };
+    }
+    if (helper[capability] === false) {
+      return { label: 'Local-only', detail: 'This capability is served by the local SecOpsAI helper and is not exposed by the hosted dashboard.' };
+    }
+  }
+  if (error) return { label: 'Temporarily unavailable', detail: String(error) };
+  if (loaded) return { label: 'Available', detail: '' };
+  return { label: 'Loading', detail: 'The capability is available; its data has not loaded yet.' };
+}
+
+function investigationAutopilotStatus(intelligenceData = state.intelligence.data) {
+  const investigations = intelligenceData?.investigations;
+  if (investigations?.availability === 'local_only' || investigations?.supported === false) {
+    return { label: 'Local-only', detail: investigations.message || 'Per-finding investigation automation is not exposed by the hosted dashboard.' };
+  }
+  const localMode = isLocalDashboardOrigin() || intelligenceData?.mode === 'local-helper';
+  if (!localMode) {
+    return { label: 'Local-only', detail: 'Per-finding investigation autopilot runs through the local research worker; hosted daily-workflow limits are a separate setting.' };
+  }
+  if (state.intelligence.error) return { label: 'Temporarily unavailable', detail: state.intelligence.error };
+  if (!intelligenceData) return { label: 'Checking', detail: 'Investigation autopilot status has not loaded yet.' };
+  if (investigations?.error || investigations?.degraded) {
+    return { label: 'Temporarily unavailable', detail: investigations.error || 'The investigation autopilot returned degraded data.' };
+  }
+  if (!investigations?.settings || !investigations.settings.mode) return { label: 'Status unavailable', detail: 'The intelligence response did not include valid investigation autopilot settings.' };
+  return { label: humanizeSnake(investigations.settings.mode || 'unknown'), detail: '' };
+}
+
+function channelRoutesStatus() {
+  if (state.channelRoutesError && state.channelRoutesLoaded) return { label: 'Channel routes stale', detail: state.channelRoutesError };
+  if (state.channelRoutesError) return { label: 'Channel routes unavailable', detail: state.channelRoutesError };
+  if (!state.channelRoutesLoaded) return { label: 'Channel routes loading', detail: '' };
+  const count = Array.isArray(state.channelRoutes) ? state.channelRoutes.length : 0;
+  return count
+    ? { label: `${count} channel route${count === 1 ? '' : 's'} loaded`, detail: '' }
+    : { label: '0 channel routes configured', detail: 'The workspace query succeeded and returned no channel routes.' };
+}
+
+function activeChannelRoutesPresentation() {
+  const active = Array.isArray(state.channelRoutes) ? state.channelRoutes.filter(route => route.active).length : 0;
+  if (state.channelRoutesError && state.channelRoutesLoaded) return { label: `${active} active · stale`, detail: state.channelRoutesError };
+  if (state.channelRoutesError) return { label: 'Unavailable', detail: state.channelRoutesError };
+  if (!state.channelRoutesLoaded) return { label: 'Loading', detail: '' };
+  return active
+    ? { label: `${active} active`, detail: '' }
+    : { label: '0 active · none configured', detail: 'The workspace query succeeded and returned no active channel routes.' };
+}
+
+function nativeTriagePresentation() {
+  const status = helperCapabilityStatus('secopsai_triage_api', {
+    error: state.localTriage?.ok === false ? state.localTriage?.error : '',
+    loaded: Boolean(state.localTriage && state.localTriage.ok !== false && !state.localTriage.stale)
+  });
+  if (status.label === 'Available' && state.localTriage?.summary) {
+    const summary = state.localTriage.summary;
+    return {
+      ...status,
+      value: `${summary.open_findings ?? 0} open · ${summary.pending_actions ?? localPendingActions().length} pending`
+    };
+  }
+  if (state.localTriage?.stale && state.localTriage?.summary && status.label !== 'Local-only') {
+    return { label: 'Stale', detail: state.localTriage.error || status.detail, value: 'Last successful snapshot' };
+  }
+  return { ...status, value: status.label };
+}
+
+function sourceCoveragePresentation() {
+  const status = helperCapabilityStatus('secopsai_research_api', {
+    error: state.coverage.error,
+    loaded: state.coverage.loaded && !state.coverage.stale
+  });
+  if (state.coverage.stale && state.coverage.loaded && status.label === 'Temporarily unavailable') {
+    return { label: 'Stale', detail: state.coverage.error || status.detail };
+  }
+  if (status.label !== 'Available') return status;
+  const collectors = Array.isArray(state.coverage.collectors) ? state.coverage.collectors : [];
+  if (!collectors.length) return { label: '0 collectors configured', detail: 'The coverage query succeeded and returned an empty collector list.' };
+  const healthy = collectors.filter(item => coverageCollectorHealth(item) === 'Healthy').length;
+  return { label: `${healthy}/${collectors.length} healthy`, detail: '' };
 }
 
 function renderLocalAuthGate() {
@@ -4273,7 +4376,8 @@ function renderMissionControl() {
     || bridge.selected_model_last_probe_ready === true;
   const modelStatusKnown = Boolean(state.intelligence.data) && !state.intelligence.error;
   const modelBlocked = modelStatusKnown && modelQueued > 0 && modelRunning === 0 && !selectedModelReady;
-  const collectorRows = Array.isArray(state.coverage.collectors) ? state.coverage.collectors : [];
+  const coverageFresh = state.coverage.loaded && !state.coverage.stale && !state.coverage.error;
+  const collectorRows = coverageFresh && Array.isArray(state.coverage.collectors) ? state.coverage.collectors : [];
   const degradedCollectors = collectorRows.filter(item => coverageCollectorHealth(item) !== 'Healthy');
   const healthyCollectors = collectorRows.length - degradedCollectors.length;
   const validationBlockers = researchQueue.filter(item => ['validation', 'awaiting_input', 'blocked'].includes(String(item.status || '').toLowerCase())).length;
@@ -4283,13 +4387,37 @@ function renderMissionControl() {
   const dailySummary = intelligenceData.daily_automation?.summary || {};
   const alertAutomation = intelligenceData.autopilot?.settings || {};
   const investigationAutomation = intelligenceData.investigations?.settings || {};
-  const specialistPolicy = specialistStatusResult()?.policy || {};
+  const investigationStatus = investigationAutopilotStatus(state.intelligence.data);
+  const specialistData = specialistStatusResult();
+  const specialistPolicy = specialistData?.policy || {};
+  const specialistCapability = helperCapabilityStatus('secopsai_specialists_api', {
+    error: state.specialists.error,
+    loaded: Boolean(state.specialists.data && !state.specialists.stale)
+  });
+  const specialistStatus = specialistCapability.label === 'Available' && specialistPolicy.mode
+    ? { ...specialistCapability, label: humanizeSnake(specialistPolicy.mode) }
+    : specialistCapability;
+  const investigationSettingsKnown = modelStatusKnown && Boolean(investigationAutomation.mode);
+  const specialistPolicyKnown = Boolean(state.specialists.data && !state.specialists.stale && !state.specialists.error && specialistPolicy.mode);
+  const dailySettingsKnown = modelStatusKnown && typeof dailySettings.enabled === 'boolean';
+  const alertPolicyKnown = modelStatusKnown && Boolean(alertAutomation.mode);
   const safeAutomationGaps = [
-    !dailySettings.enabled ? 'daily workflow is disabled' : '',
-    !['guarded'].includes(String(alertAutomation.mode || '').toLowerCase()) ? 'alert review is not guarded automatic' : '',
-    !['guarded'].includes(String(investigationAutomation.mode || '').toLowerCase()) || investigationAutomation.auto_start_pipeline === false ? 'investigation intake is not guarded automatic' : '',
-    String(specialistPolicy.mode || '').toLowerCase() !== 'guarded' || String(specialistPolicy.maximum_automatic_tier || '').toLowerCase() !== 'read_only' ? 'specialist read-only routing is not enabled' : ''
+    dailySettingsKnown && dailySettings.enabled === false ? 'daily workflow is disabled' : '',
+    alertPolicyKnown && String(alertAutomation.mode).toLowerCase() !== 'guarded' ? 'alert review is not guarded automatic' : '',
+    investigationStatus.label !== 'Local-only' && investigationSettingsKnown
+      && (String(investigationAutomation.mode).toLowerCase() !== 'guarded' || investigationAutomation.auto_start_pipeline === false)
+      ? 'investigation intake is not guarded automatic' : '',
+    specialistStatus.label !== 'Local-only' && specialistPolicyKnown
+      && (String(specialistPolicy.mode).toLowerCase() !== 'guarded' || String(specialistPolicy.maximum_automatic_tier || '').toLowerCase() !== 'read_only')
+      ? 'specialist read-only routing is not enabled' : ''
   ].filter(Boolean);
+  const localOnlyAutomation = [
+    investigationStatus.label === 'Local-only' ? 'per-finding investigation autopilot' : '',
+    specialistStatus.label === 'Local-only' ? 'specialist routing' : ''
+  ].filter(Boolean);
+  const automationPolicyIncomplete = !dailySettingsKnown || !alertPolicyKnown
+    || (investigationStatus.label !== 'Local-only' && !investigationSettingsKnown)
+    || (specialistStatus.label !== 'Local-only' && !specialistPolicyKnown);
 
   const decisions = [];
   if (modelBlocked) decisions.push({
@@ -4421,17 +4549,17 @@ function renderMissionControl() {
       <section class="mission-flow-card">
         <div class="mission-section-heading"><div><span class="eyebrow">Automatic workflow</span><h3>What SecOpsAI is doing now</h3></div><span>Human approval remains explicit</span></div>
         <div class="mission-flow">
-          <div class="mission-flow-step ${degradedCollectors.length ? 'needs-attention' : 'active'}"><span>1</span><strong>Discovery</strong><small>${collectorRows.length ? `${healthyCollectors}/${collectorRows.length} collectors healthy` : 'Waiting for coverage data'}</small></div>
+          <div class="mission-flow-step ${degradedCollectors.length ? 'needs-attention' : 'active'}"><span>1</span><strong>Discovery</strong><small>${coverageFresh ? (collectorRows.length ? `${healthyCollectors}/${collectorRows.length} collectors healthy` : '0 collectors configured') : escapeHtml(sourceCoveragePresentation().label)}</small></div>
           <div class="mission-flow-step active"><span>2</span><strong>Evidence</strong><small>${discoveryCandidates} candidate${discoveryCandidates === 1 ? '' : 's'} · static collection only</small></div>
           <div class="mission-flow-step ${modelBlocked ? 'needs-attention' : modelRunning ? 'active' : ''}"><span>3</span><strong>Model review</strong><small>${modelFlowStatus} · ${modelQueued} queued</small></div>
           <div class="mission-flow-step approval"><span>4</span><strong>Decision & publish</strong><small>${publicationReady} ready · operator approval required</small></div>
         </div>
         <div class="mission-automation-policy">
-          <div><span>Daily workflow</span><strong>${dailySettings.enabled ? `Enabled${nextDailyRun ? ` · next ${fmtDate(nextDailyRun)}` : ''}` : 'Disabled'}</strong></div>
-          <div><span>Alert review</span><strong>${escapeHtml(humanizeSnake(alertAutomation.mode || 'not configured'))}</strong></div>
-          <div><span>Investigations</span><strong>${escapeHtml(humanizeSnake(investigationAutomation.mode || 'not configured'))}${investigationAutomation.auto_start_pipeline ? ' · auto-start' : ''}</strong></div>
-          <div><span>Specialist routing</span><strong>${escapeHtml(humanizeSnake(specialistPolicy.mode || 'not configured'))}${specialistPolicy.maximum_automatic_tier ? ` · ${escapeHtml(humanizeSnake(specialistPolicy.maximum_automatic_tier))}` : ''}</strong></div>
-          <p><strong>${safeAutomationGaps.length ? 'Automation can be improved.' : 'Maximum safe routine automation is enabled.'}</strong> ${safeAutomationGaps.length ? escapeHtml(safeAutomationGaps.join('; ')) : 'Verdicts, containment, sandbox submission, disclosure, publication, deployment, and destructive changes still require a person.'}</p>
+          <div><span>Daily workflow</span><strong>${dailySettings.enabled === true ? `Enabled${nextDailyRun ? ` · next ${fmtDate(nextDailyRun)}` : ''}` : dailySettings.enabled === false ? 'Paused' : 'Status unavailable'}</strong></div>
+          <div><span>Alert review</span><strong>${escapeHtml(alertPolicyKnown ? humanizeSnake(alertAutomation.mode) : 'Status unavailable')}</strong></div>
+          <div><span>Investigation autopilot</span><strong title="${escapeHtml(investigationStatus.detail)}">${escapeHtml(investigationSettingsKnown ? `${investigationStatus.label}${investigationAutomation.auto_start_pipeline ? ' · auto-start' : ''}` : investigationStatus.label)}</strong></div>
+          <div><span>Specialist routing</span><strong title="${escapeHtml(specialistStatus.detail)}">${escapeHtml(specialistPolicyKnown && specialistStatus.label !== 'Local-only' ? `${specialistStatus.label}${specialistPolicy.maximum_automatic_tier ? ` · ${humanizeSnake(specialistPolicy.maximum_automatic_tier)}` : ''}` : specialistStatus.label)}</strong></div>
+          <p><strong>${safeAutomationGaps.length ? 'Automation can be improved.' : automationPolicyIncomplete ? 'Automation status is incomplete.' : localOnlyAutomation.length ? 'Some automation is local-only.' : 'Reported automation policies meet their safety gates.'}</strong> ${safeAutomationGaps.length ? escapeHtml(safeAutomationGaps.join('; ')) : localOnlyAutomation.length ? `${escapeHtml(localOnlyAutomation.join(' and '))} ${localOnlyAutomation.length === 1 ? 'is' : 'are'} not exposed by this hosted dashboard. Daily workflow limits are separate.` : automationPolicyIncomplete ? 'Refresh integration status before treating unavailable policies as configured.' : 'Verdicts, containment, sandbox submission, disclosure, publication, deployment, and destructive changes still require a person.'}</p>
         </div>
       </section>`;
   }
@@ -4442,9 +4570,9 @@ function renderMissionControl() {
     healthStripHost.innerHTML = `
       <section class="mission-health-card" aria-label="Workspace health summary">
         <div><span>Findings</span><strong>${openFindingsForCockpit.length} need review</strong></div>
-        <div><span>Native triage</span><strong>${triageSummary ? `${triageSummary.open_findings ?? 0} open · ${triageSummary.pending_actions ?? pendingActions.length} pending` : 'Unavailable'}</strong></div>
+        <div><span>Native triage</span><strong title="${escapeHtml(nativeTriagePresentation().detail)}">${escapeHtml(nativeTriagePresentation().value)}</strong></div>
         <div><span>Model queue</span><strong>${modelRunning} running · ${modelQueued} queued</strong></div>
-        <div><span>Source coverage</span><strong>${collectorRows.length ? `${healthyCollectors}/${collectorRows.length} healthy` : 'Not loaded'}</strong></div>
+        <div><span>Source coverage</span><strong title="${escapeHtml(sourceCoveragePresentation().detail)}">${escapeHtml(sourceCoveragePresentation().label)}</strong></div>
         <div class="mission-health-updated"><span>Updated</span><strong>${escapeHtml(fmtDate(generatedAt))}</strong></div>
       </section>`;
   }
@@ -4465,7 +4593,7 @@ function renderMissionControl() {
           <button class="cockpit-item tone-${escapeHtml(item.tone)}" type="button" data-cockpit-page="${escapeHtml(item.page)}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></span><span aria-hidden="true">›</span></button>
         `).join('') : '<div class="cockpit-clear"><strong>Workspace is clear</strong><span>Continue with scheduled scans, evidence review, or research intake.</span></div>'}</div>
       </section>
-      <section class="card cockpit-panel cockpit-summary"><span class="eyebrow">System context</span><h3>Current operating mode</h3><div class="cockpit-facts"><span><strong>${edgeWorkspaceReady ? 'Connected' : 'Degraded'}</strong><small>Asset context</small></span><span><strong>${triageSummary ? 'Available' : 'Unavailable'}</strong><small>Native triage</small></span><span><strong>${state.auth.user?.email ? 'Signed in' : 'Pilot'}</strong><small>Operator session</small></span></div></section>`;
+      <section class="card cockpit-panel cockpit-summary"><span class="eyebrow">System context</span><h3>Current operating mode</h3><div class="cockpit-facts"><span><strong>${edgeWorkspaceReady ? 'Connected' : 'Degraded'}</strong><small>Asset context</small></span><span><strong>${escapeHtml(nativeTriagePresentation().label)}</strong><small>Native triage</small></span><span><strong>${state.auth.user?.email ? 'Signed in' : 'Pilot'}</strong><small>Operator session</small></span></div></section>`;
     attentionHost.querySelectorAll('[data-cockpit-page]').forEach(button => button.addEventListener('click', () => setPage(button.dataset.cockpitPage)));
   }
 
@@ -4529,7 +4657,7 @@ function renderMissionControl() {
       <div class="card metric-card" id="mc-native-triage" style="cursor:pointer;">
         <h3>Native triage</h3>
         <div class="metric">${triageSummary ? `${triageSummary.open_findings ?? 0} / ${triageSummary.pending_actions ?? pendingActions.length}` : '—'}</div>
-        <div class="metric-label">${triageSummary ? `open findings / pending actions • ${openSessions} sessions • ${pendingApprovals} pending approvals` : 'local SecOpsAI triage helper unavailable'}</div>
+        <div class="metric-label">${triageSummary && !state.localTriage?.stale ? `open findings / pending actions • ${openSessions} sessions • ${pendingApprovals} pending approvals` : escapeHtml(nativeTriagePresentation().label)}</div>
       </div>
       <div class="card">
         <h3>Latest orchestrator run</h3>
@@ -4698,15 +4826,28 @@ function renderSpecialistOverview() {
   const policyStrip = el('specialist-policy-strip');
   const roster = el('specialist-roster');
   const runsEl = el('specialist-runs');
+  const policyModeControl = el('specialist-policy-mode');
+  const policyTierControl = el('specialist-policy-tier');
+  const policySaveControl = el('specialist-policy-save-btn');
   if (!summary || !policyStrip || !roster || !runsEl) return;
   const data = specialistStatusResult();
   if (state.specialists.loading && !state.specialists.data) {
+    if (policyModeControl) policyModeControl.disabled = true;
+    if (policyTierControl) policyTierControl.disabled = true;
+    if (policySaveControl) policySaveControl.disabled = true;
     summary.innerHTML = '<div class="empty-state compact">Loading specialist roster and OpenCodex routing…</div>';
     return;
   }
   if (state.specialists.error && !state.specialists.data) {
-    summary.innerHTML = `<div class="empty-state compact"><strong>Local Specialist Orchestrator unavailable</strong><div class="small">${escapeHtml(state.specialists.error)} Start the local helper to route or run repository work.</div></div>`;
-    policyStrip.innerHTML = '<strong>Hosted-safe behavior:</strong> no helper-backed execution is attempted when the local orchestrator is unavailable.';
+    const capability = helperCapabilityStatus('secopsai_specialists_api', { error: state.specialists.error });
+    const localOnly = capability.label === 'Local-only';
+    if (policyModeControl) policyModeControl.disabled = true;
+    if (policyTierControl) policyTierControl.disabled = true;
+    if (policySaveControl) policySaveControl.disabled = true;
+    summary.innerHTML = localOnly
+      ? `<div class="empty-state compact"><strong>Specialist routing is local-only.</strong><div class="small">${escapeHtml(capability.detail)} Use the local Mission Control dashboard to inspect or configure specialist routing.</div></div>`
+      : `<div class="empty-state compact"><strong>${escapeHtml(capability.label)}</strong><div class="small">${escapeHtml(state.specialists.error)}${!isLocalDashboardOrigin() ? ' Check the configured helper connection and refresh.' : ' Start the local SecOpsAI helper and refresh.'}</div></div>`;
+    policyStrip.innerHTML = '<strong>Execution stays disabled here:</strong> no specialist routing or repository work is attempted when its capability is unavailable.';
     roster.innerHTML = '';
     runsEl.innerHTML = '';
     return;
@@ -4715,21 +4856,32 @@ function renderSpecialistOverview() {
   const model = data.model_routing || {};
   const policy = data.policy || {};
   const runs = Array.isArray(data.runs) ? data.runs : [];
+  const capability = helperCapabilityStatus('secopsai_specialists_api', {
+    error: state.specialists.error,
+    loaded: Boolean(state.specialists.data && !state.specialists.stale)
+  });
+  const canManagePolicy = capability.label === 'Available' && !state.specialists.stale && !state.specialists.error;
+  if (policyModeControl) policyModeControl.disabled = !canManagePolicy;
+  if (policySaveControl) policySaveControl.disabled = !canManagePolicy;
   const activeRuns = runs.filter(run => !['completed', 'needs_review', 'failed', 'canceled'].includes(String(run.status || ''))).length;
+  const staleNotice = state.specialists.stale && state.specialists.error
+    ? `<div class="small text-warning" role="status">Showing the last successful specialist snapshot; refresh failed: ${escapeHtml(state.specialists.error)}</div>`
+    : '';
   summary.innerHTML = `
+    ${staleNotice}
     <div class="specialist-status-item"><span>Reviewed roster</span><strong>${escapeHtml(String(catalog.profile_count || 0))} specialists</strong><small>Catalog ${escapeHtml(String(catalog.version || 'unknown'))} · pinned and catalog-validated</small></div>
     <div class="specialist-status-item"><span>Selected OpenCodex model</span><strong>${escapeHtml(model.primary_model || 'Not selected')}</strong><small>${escapeHtml(model.source || 'runtime')} routing snapshot</small></div>
     <div class="specialist-status-item"><span>Fallback policy</span><strong>${escapeHtml(humanizeSnake(model.fallback_mode || 'disabled'))}</strong><small>${escapeHtml(specialistFallbackLabel(model))}</small></div>
     <div class="specialist-status-item"><span>Active work</span><strong>${escapeHtml(String(activeRuns))} active</strong><small>${escapeHtml(String(runs.length))} recent durable run${runs.length === 1 ? '' : 's'}</small></div>`;
   policyStrip.innerHTML = `<strong>Automation policy: ${escapeHtml(humanizeSnake(policy.mode || 'recommend'))}</strong><span>Automatic ceiling: ${escapeHtml(humanizeSnake(policy.maximum_automatic_tier || 'recommend'))}</span><span>Independent review: ${policy.independent_review === false ? 'off' : 'required'}</span><span>Worktrees, PR-ready delivery, merge, deploy, publish, disclosure, cloud mutation, secrets, and destructive actions are never automatic.</span>`;
-  const policyMode = el('specialist-policy-mode');
-  const policyTier = el('specialist-policy-tier');
+  const policyMode = policyModeControl;
+  const policyTier = policyTierControl;
   // Background status refreshes must not replace a policy the operator is editing.
   if (!state.specialists.policyDirty && !state.specialists.policySaving) {
     if (policyMode) policyMode.value = policy.mode || 'recommend';
     if (policyTier) policyTier.value = policy.maximum_automatic_tier || 'recommend';
   }
-  if (policyTier) policyTier.disabled = (policyMode?.value || policy.mode) !== 'guarded';
+  if (policyTier) policyTier.disabled = !canManagePolicy || (policyMode?.value || policy.mode) !== 'guarded';
   const catalogVersion = String(catalog.version || 'unknown');
   const upstreamCommit = String(catalog.upstream?.commit || '').slice(0, 12);
   roster.innerHTML = `<div class="specialist-roster-grid">${specialistProfiles().map(profile => `
@@ -4770,10 +4922,28 @@ async function loadSpecialists({ render = true } = {}) {
   try {
     const response = await dashboardApiFetch('/api/secopsai/specialists');
     const payload = await response.json().catch(() => ({}));
-    state.specialists.data = payload;
-    state.specialists.error = response.ok ? null : (payload.error || `Specialist status HTTP ${response.status}`);
+    const result = payload?.result && typeof payload.result === 'object' && !Array.isArray(payload.result)
+      ? payload.result
+      : null;
+    const validStatus = result
+      && result.ok !== false
+      && result.catalog && typeof result.catalog === 'object'
+      && result.policy && typeof result.policy === 'object'
+      && result.model_routing && typeof result.model_routing === 'object'
+      && Array.isArray(result.runs);
+    if (!response.ok || payload.ok === false || !validStatus) {
+      state.specialists.error = payload.error
+        || result?.error
+        || (!response.ok ? `Specialist status HTTP ${response.status}` : 'Specialist status response is incomplete or invalid.');
+      state.specialists.stale = Boolean(state.specialists.data);
+    } else {
+      state.specialists.data = payload;
+      state.specialists.error = null;
+      state.specialists.stale = false;
+    }
   } catch (error) {
     state.specialists.error = error?.message || String(error);
+    state.specialists.stale = Boolean(state.specialists.data);
   } finally {
     state.specialists.loading = false;
     if (render) renderSpecialistOverview();
@@ -5142,7 +5312,7 @@ function renderFindings() {
       <div class="card finding-summary-card"><div class="metric">${criticalCount}</div><div class="metric-label">Critical or urgent</div><div class="metric-scope">Priority is not a maliciousness verdict</div></div>
       <div class="card finding-summary-card"><div class="metric">${linkedCount}</div><div class="metric-label">Have accountable work</div><div class="metric-scope">Task or remediation linked</div></div>
       <div class="card finding-summary-card"><div class="metric">${aiGuardCount}</div><div class="metric-label">AI Dependency Guard risks</div><div class="metric-scope">Slopsquatting and dependency guard</div></div>
-      <div class="finding-summary-context"><strong>${total} shown</strong><span>${coreFindingCount} canonical Core · ${dashboardFindingCount} operational</span><span>${triageSummary ? `${triageSummary.open_findings ?? 0} native open · ${triageSummary.pending_actions ?? pendingActions.length} pending` : 'Native triage unavailable'}</span><span>${openSessions} sessions · ${pendingApprovals} approvals</span></div>
+      <div class="finding-summary-context"><strong>${total} shown</strong><span>${coreFindingCount} canonical Core · ${dashboardFindingCount} operational</span><span>${triageSummary && !state.localTriage?.stale ? `${triageSummary.open_findings ?? 0} native open · ${triageSummary.pending_actions ?? pendingActions.length} pending` : escapeHtml(nativeTriagePresentation().label)}</span><span>${openSessions} sessions · ${pendingApprovals} approvals</span></div>
     `;
   }
 
@@ -5999,6 +6169,19 @@ function renderIntegrations() {
   const queuedRequests = state.runRequests.filter(r => r.status === 'queued').length;
   const runningRequests = state.runRequests.filter(r => r.status === 'running').length;
   const triageSummary = localTriageSummary();
+  const triagePresentation = nativeTriagePresentation();
+  const triageFresh = Boolean(triageSummary && state.localTriage?.ok === true && !state.localTriage?.stale);
+  const triageSnapshotAvailable = Boolean(triageSummary);
+  const triageMetric = value => triageFresh
+    ? value
+    : triageSnapshotAvailable
+      ? `Stale · ${value}`
+      : triagePresentation.label;
+  const triageMetricScope = triageFresh
+    ? 'Local Core triage artifact'
+    : triageSnapshotAvailable
+      ? 'Last successful local snapshot'
+      : triagePresentation.detail || 'Native triage status';
   const pendingActions = localPendingActions();
   const recentRuns = Array.isArray(state.localTriage?.orchestrator?.recent) ? state.localTriage.orchestrator.recent : [];
   const recentSessions = recentLocalSessions();
@@ -6007,15 +6190,19 @@ function renderIntegrations() {
   const selectedSession = state.selectedSessionDetail;
   const currentAiGuard = state.integrationStatus?.ai_guard || aiGuardConfig();
   if (summary) {
+    const staleTriageNotice = state.localTriage?.stale
+      ? `<div class="text-warning" role="status" style="grid-column:1/-1;"><strong>Native triage snapshot is stale.</strong> Refresh failed: ${escapeHtml(state.localTriage.error || 'the local triage status request failed.')}</div>`
+      : '';
     summary.innerHTML = `
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.open_findings ?? 0 : '—'}</div><div class="metric-label">Open findings</div><div class="metric-scope">Local Core triage artifact</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.in_review_findings ?? 0 : '—'}</div><div class="metric-label">In review</div><div class="metric-scope">Local Core triage artifact</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.pending_actions ?? pendingActions.length : '—'}</div><div class="metric-label">Pending actions</div><div class="metric-scope">Local Core action queue</div></div>
-      <div class="card"><div class="metric">${triageSummary ? triageSummary.applied_actions ?? localAppliedActionsCount() : '—'}</div><div class="metric-label">Applied actions</div><div class="metric-scope">Local Core action queue</div></div>
-      <div class="card"><div class="metric">${openSessions}</div><div class="metric-label">Open sessions</div><div class="metric-scope">Local Core session store</div></div>
-      <div class="card"><div class="metric">${pendingApprovals}</div><div class="metric-label">Pending approvals</div><div class="metric-scope">Local Core session store</div></div>
-      <div class="card"><div class="metric">${localFindingsArtifact()?.total_findings ?? '—'}</div><div class="metric-label">Latest findings artifact total</div><div class="metric-scope">Most recent local artifact</div></div>
-      <div class="card"><div class="metric">${recentRuns.length}</div><div class="metric-label">Recent orchestrator runs</div><div class="metric-scope">Local Core retained history</div></div>
+      ${staleTriageNotice}
+      <div class="card"><div class="metric">${escapeHtml(String(triageMetric(triageSummary?.open_findings ?? '—')))}</div><div class="metric-label">Open findings</div><div class="metric-scope">${escapeHtml(triageMetricScope)}</div></div>
+      <div class="card"><div class="metric">${escapeHtml(String(triageMetric(triageSummary?.in_review_findings ?? '—')))}</div><div class="metric-label">In review</div><div class="metric-scope">${escapeHtml(triageMetricScope)}</div></div>
+      <div class="card"><div class="metric">${escapeHtml(String(triageMetric(triageSummary?.pending_actions ?? pendingActions.length)))}</div><div class="metric-label">Pending actions</div><div class="metric-scope">${escapeHtml(triageMetricScope)}</div></div>
+      <div class="card"><div class="metric">${escapeHtml(String(triageMetric(triageSummary?.applied_actions ?? localAppliedActionsCount())))}</div><div class="metric-label">Applied actions</div><div class="metric-scope">${escapeHtml(triageMetricScope)}</div></div>
+      <div class="card"><div class="metric">${escapeHtml(String(triageMetric(openSessions)))}</div><div class="metric-label">Open sessions</div><div class="metric-scope">${escapeHtml(triageMetricScope)}</div></div>
+      <div class="card"><div class="metric">${escapeHtml(String(triageMetric(pendingApprovals)))}</div><div class="metric-label">Pending approvals</div><div class="metric-scope">${escapeHtml(triageMetricScope)}</div></div>
+      <div class="card"><div class="metric">${escapeHtml(String(triageMetric(localFindingsArtifact()?.total_findings ?? '—')))}</div><div class="metric-label">Latest findings artifact total</div><div class="metric-scope">${escapeHtml(triageMetricScope)}</div></div>
+      <div class="card"><div class="metric">${escapeHtml(String(triageMetric(recentRuns.length)))}</div><div class="metric-label">Recent orchestrator runs</div><div class="metric-scope">${escapeHtml(triageMetricScope)}</div></div>
       <div class="card"><div class="metric">${escapeHtml(currentAiGuard.hostedEnabled ? 'Guarded enabled' : 'Local-first only')}</div><div class="metric-label">Hosted AI guardrail mode</div><div class="metric-scope">Current workspace policy</div></div>`;
   }
 
@@ -6027,9 +6214,9 @@ function renderIntegrations() {
         <div class="kv-list">
           <div class="kv-row"><div class="kv-key">Mode</div><div class="kv-val">${escapeHtml(state.integrationStatus?.helper?.mode || 'local-control-panel')}</div></div>
           <div class="kv-row"><div class="kv-key">Run output API</div><div class="kv-val">${state.integrationStatus?.helper?.run_output_api ? 'Ready' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">Native triage API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_triage_api ? 'Ready' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Native triage API</div><div class="kv-val">${escapeHtml(helperCapabilityStatus('secopsai_triage_api').label)}</div></div>
           <div class="kv-row"><div class="kv-key">Sessions API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_sessions_api ? 'Ready' : 'Missing'}</div></div>
-          <div class="kv-row"><div class="kv-key">Research API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_research_api ? 'Ready' : 'Missing'}</div></div>
+          <div class="kv-row"><div class="kv-key">Research API</div><div class="kv-val">${escapeHtml(helperCapabilityStatus('secopsai_research_api').label)}</div></div>
           <div class="kv-row"><div class="kv-key">Campaign API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_campaign_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Intelligence API</div><div class="kv-val">${state.integrationStatus?.helper?.secopsai_intelligence_api ? 'Ready' : 'Missing'}</div></div>
           <div class="kv-row"><div class="kv-key">Event stream</div><div class="kv-val">${escapeHtml(humanizeSnake(state.nativeStreamStatus || 'disconnected'))}${state.nativeStreamLastEventAt ? ` • ${escapeHtml(fmtDate(state.nativeStreamLastEventAt))}` : ''}</div></div>
@@ -6066,7 +6253,7 @@ function renderIntegrations() {
           <div class="kv-row"><div class="kv-key">Data backend</div><div class="kv-val">${escapeHtml(dataBackendLabel())}</div></div>
           <div class="kv-row"><div class="kv-key">Queued run requests</div><div class="kv-val">${queuedRequests}</div></div>
           <div class="kv-row"><div class="kv-key">Running run requests</div><div class="kv-val">${runningRequests}</div></div>
-          <div class="kv-row"><div class="kv-key">Active routes</div><div class="kv-val">${state.channelRoutes.filter(r => r.active).length}</div></div>
+          <div class="kv-row"><div class="kv-key">Active routes</div><div class="kv-val" title="${escapeHtml(activeChannelRoutesPresentation().detail)}">${escapeHtml(activeChannelRoutesPresentation().label)}</div></div>
         </div>
         <div class="small" style="margin-top:12px;">Tasks and run requests come from the workspace data store; native triage queue state sits above it in the dashboard.</div>
       </div>`;
@@ -6974,6 +7161,29 @@ function renderIntelligence() {
   }
 
   const investigationSummaryEl = el('investigation-autopilot-summary');
+  const investigationRunsEl = el('investigation-autopilot-runs');
+  const investigationStatus = investigationAutopilotStatus(data);
+  const investigationUnsupported = investigations.availability === 'local_only'
+    || investigations.supported === false
+    || (!isLocalDashboardOrigin() && data?.mode !== 'local-helper');
+  const investigationDataUnavailable = !investigations.settings
+    || ['Temporarily unavailable', 'Status unavailable', 'Status unknown'].includes(investigationStatus.label);
+  const investigationUnavailable = investigationUnsupported || investigationDataUnavailable;
+  const investigationRunButton = el('investigation-run-due');
+  if (investigationRunButton) {
+    investigationRunButton.disabled = investigationUnavailable;
+    investigationRunButton.title = investigationUnavailable
+      ? investigations.message || investigationStatus.detail || 'Investigation autopilot status must be available before running it.'
+      : '';
+  }
+  if (investigationUnsupported) {
+    if (investigationSummaryEl) investigationSummaryEl.innerHTML = '<div class="empty-state compact"><strong>Per-finding investigation autopilot is local-only.</strong><div class="small">Daily workflow investigation limits remain available above, but this separate run queue and policy are managed by the local research worker.</div></div>';
+    if (investigationRunsEl) investigationRunsEl.innerHTML = `<div class="empty-state compact">${escapeHtml(investigations.message || 'Open the local Mission Control dashboard to inspect and manage per-finding investigation runs.')}</div>`;
+  } else if (investigationDataUnavailable) {
+    const label = investigationStatus.label === 'Checking' ? 'Investigation status is loading.' : 'Investigation status is unavailable.';
+    if (investigationSummaryEl) investigationSummaryEl.innerHTML = `<div class="empty-state compact"><strong>${escapeHtml(label)}</strong><div class="small">${escapeHtml(investigationStatus.detail || 'The response did not contain the required investigation settings.')}</div></div>`;
+    if (investigationRunsEl) investigationRunsEl.innerHTML = '<div class="empty-state compact">The investigation queue is not shown until a valid status response is available.</div>';
+  } else {
   if (investigationSummaryEl) investigationSummaryEl.innerHTML = `
     <div class="metric-card"><div class="metric">${escapeHtml(String((investigationSummary.collecting || 0) + (investigationSummary.analyzing || 0) + (investigationSummary.running || 0)))}</div><div class="metric-label">Running investigations</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String(investigationSummary.queued || 0))}</div><div class="metric-label">Queued backlog</div></div>
@@ -6981,7 +7191,6 @@ function renderIntelligence() {
     <div class="metric-card"><div class="metric">${escapeHtml(String(investigationSummary.escalated || 0))}</div><div class="metric-label">Threats escalated</div></div>
     <div class="metric-card"><div class="metric">${escapeHtml(String((investigationSummary.evidence_gap || 0) + (investigationSummary.failed || 0)))}</div><div class="metric-label">Needs recovery</div></div>
     <div class="small" style="grid-column:1/-1;">Counts are one current run per finding. ${escapeHtml(String(investigationSummary.history_total || investigationSummary.total || 0))} historical attempts remain available in the audit trail.</div>`;
-  const investigationRunsEl = el('investigation-autopilot-runs');
   if (investigationRunsEl) {
     investigationRunsEl.innerHTML = !investigationRuns.length
       ? '<div class="empty-state compact">No high-priority evidence investigations yet. Eligible high and critical package findings enter this queue automatically.</div>'
@@ -7000,6 +7209,7 @@ function renderIntelligence() {
           const history = Number(run.history_count || 1) > 1 ? `<div class="small">${escapeHtml(String(run.history_count))} attempts retained</div>` : '';
           return `<tr><td><strong>${escapeHtml(run.finding_id || 'Unknown')}</strong><div class="small mono">${escapeHtml(run.run_id || '')}</div>${history}</td><td><span class="status-pill">${escapeHtml(humanizeSnake(run.status || 'unknown'))}</span><div class="small">${escapeHtml(humanizeSnake(run.current_stage || 'queued'))}</div></td><td>${run.pipeline_id ? `<span class="mono small">${escapeHtml(run.pipeline_id)}</span>` : '<span class="small">Not started</span>'}${blocker}</td><td>${escapeHtml(humanizeSnake(decision.verdict || 'pending'))}${decision.confidence != null ? `<div class="small">${escapeHtml(String(decision.confidence))}% confidence</div>` : ''}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${openCase}${retry}${cancel}</td></tr>`;
         }).join('')}</tbody></table></div>`;
+  }
   }
   const dailyPill = el('daily-automation-pill');
   if (dailyPill) dailyPill.textContent = humanizeSnake(dailySettings.enabled === false ? 'paused' : (dailySummary.last_status || 'ready'));
@@ -9850,11 +10060,17 @@ function renderAll() {
   renderResearchCases();
   renderBlogOps();
   renderSidebarSubnav(currentPageFromLocation());
+  renderGlobalStatus();
+}
+
+function renderGlobalStatus() {
   const triageSummary = localTriageSummary();
-  const triageBit = triageSummary
+  const triageStatus = nativeTriagePresentation();
+  const triageBit = triageSummary && !state.localTriage?.stale
     ? ` • local triage ${triageSummary.open_findings ?? 0} open / ${triageSummary.pending_actions ?? 0} pending / ${openLocalSessionsCount()} sessions`
-    : '';
-  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : (localTokenAuthMode() ? 'Local helper connected' : 'Connected')} • ${state.channelRoutes.length} channel routes loaded${triageBit}`);
+    : ` • Native triage: ${escapeHtml(triageStatus.label)}`;
+  const routeStatus = channelRoutesStatus();
+  setStatus(`<span class="dot"></span> ${accessAuthMode() ? 'Workspace data connected' : (localTokenAuthMode() ? 'Local helper connected' : 'Connected')} • <span title="${escapeHtml(routeStatus.detail)}">${escapeHtml(routeStatus.label)}</span>${triageBit}`);
 }
 
 async function loadTable(table, options = {}) {
@@ -9864,6 +10080,19 @@ async function loadTable(table, options = {}) {
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
+}
+
+async function loadChannelRoutes() {
+  try {
+    state.channelRoutes = await loadTable('channel_routes', { orderBy: { column: 'channel_name', ascending: true } });
+    state.channelRoutesLoaded = true;
+    state.channelRoutesError = null;
+    return true;
+  } catch (error) {
+    state.channelRoutesError = error?.message || String(error);
+    if (!state.channelRoutesLoaded) state.channelRoutes = [];
+    return false;
+  }
 }
 
 function resetTaskForm() {
@@ -10748,17 +10977,30 @@ async function loadCoverage({ render = true } = {}) {
   coverage.error = null;
   if (render) renderCoverage();
   try {
+    const loadView = async query => {
+      const response = await dashboardApiFetch(`${researchDiscoveryEndpoint()}?${query}`, { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok !== true) throw new Error(payload.error || `Coverage request returned an invalid response (HTTP ${response.status}).`);
+      return payload;
+    };
     const [collectors, events, windows] = await Promise.all([
-      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=collectors`, { cache: 'no-store' }).then(response => response.json()),
-      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=feed-events&limit=50`, { cache: 'no-store' }).then(response => response.json()),
-      dashboardApiFetch(`${researchDiscoveryEndpoint()}?view=coverage-windows&days=7`, { cache: 'no-store' }).then(response => response.json())
+      loadView('view=collectors'),
+      loadView('view=feed-events&limit=50'),
+      loadView('view=coverage-windows&days=7')
     ]);
-    if (collectors.ok === false || events.ok === false || windows.ok === false) throw new Error(collectors.error || events.error || windows.error || 'Coverage data unavailable');
+    if (!Array.isArray(collectors.result?.collectors)
+        || !Array.isArray(events.result?.events)
+        || !Array.isArray(windows.result?.windows)) {
+      throw new Error('Coverage response omitted a required collector, event, or window list.');
+    }
     coverage.collectors = collectors.result?.collectors || [];
     coverage.events = events.result?.events || [];
     coverage.windows = windows.result?.windows || [];
+    coverage.loaded = true;
+    coverage.stale = false;
   } catch (error) {
     coverage.error = error?.message || String(error);
+    coverage.stale = Boolean(coverage.loaded);
   } finally {
     coverage.loading = false;
     if (render) renderCoverage();
@@ -10787,11 +11029,17 @@ function renderCoverage() {
     return;
   }
   if (coverage.error) {
-    statsHost.innerHTML = '';
-    collectorsHost.innerHTML = `<div class="error">${escapeHtml(coverage.error)}</div>`;
-    eventsHost.innerHTML = '<div class="small">Coverage data is unavailable. Check the local Core helper and refresh.</div>';
-    windowsHost.innerHTML = '';
-    return;
+    const capability = helperCapabilityStatus('secopsai_research_api', { error: coverage.error, loaded: coverage.loaded });
+    const localOnly = capability.label === 'Local-only';
+    if (localOnly || !coverage.loaded) {
+      statsHost.innerHTML = '';
+      collectorsHost.innerHTML = localOnly
+        ? `<div class="empty-state compact"><strong>Source coverage is local-only in this hosted workspace.</strong><div class="small">${escapeHtml(capability.detail)}</div></div>`
+        : `<div class="error"><strong>${escapeHtml(capability.label)}</strong><div>${escapeHtml(coverage.error)}</div></div>`;
+      eventsHost.innerHTML = '<div class="small">Coverage data is unavailable. The hosted dashboard does not report collector state from this endpoint.</div>';
+      windowsHost.innerHTML = '';
+      return;
+    }
   }
   const collectors = coverage.collectors || [];
   const totalEvents = collectors.reduce((sum, item) => sum + (Number(item.events_stored) || 0), 0);
@@ -10800,7 +11048,10 @@ function renderCoverage() {
   const historicalGaps = collectors.reduce((sum, item) => sum + (Number(item.historical_gaps) || 0), 0);
   const paused = collectors.filter(item => !item.enabled).length;
   const risks = collectors.filter(item => item.retention?.retention_risk).length;
-  statsHost.innerHTML = [
+  const staleNotice = coverage.error && coverage.stale
+    ? `<div class="text-warning" role="status"><strong>Showing the last successful coverage snapshot.</strong> Refresh failed: ${escapeHtml(coverage.error)}</div>`
+    : '';
+  statsHost.innerHTML = staleNotice + [
     edgeMetric('Collectors', collectors.length, paused ? `${paused} paused` : 'Defined global feeds'),
     edgeMetric('Events stored', totalEvents, 'Append-only ledger'),
     edgeMetric('Dead letters', deadLetters, deadLetters ? 'Awaiting retry' : 'Queue clear'),
@@ -10830,7 +11081,7 @@ function renderCoverage() {
           <button class="mini-btn coverage-toggle-btn" data-ecosystem="${escapeHtml(collector.ecosystem)}" data-enabled="${collector.enabled ? '1' : '0'}" type="button">${collector.enabled ? 'Pause' : 'Resume'}</button>
         </div>
       </div>`;
-  }).join('') : '<div class="empty-state compact">No collectors defined yet.</div>';
+  }).join('') : '<div class="empty-state compact"><strong>Coverage query succeeded: no collectors are configured.</strong><div class="small">This empty result does not establish source health or complete surveillance.</div></div>';
 
   eventsHost.innerHTML = coverage.events.length
     ? `<div class="table-wrap"><table><thead><tr><th>Registry time</th><th>Ecosystem</th><th>Package</th><th>Version</th><th>Event</th><th>State</th></tr></thead><tbody>${coverage.events.map(event => `<tr><td>${escapeHtml(event.registry_timestamp || '')}</td><td>${escapeHtml(event.ecosystem)}</td><td><strong>${escapeHtml(event.package)}</strong></td><td>${escapeHtml(event.version || '—')}</td><td>${escapeHtml(statusLabel(event.event_type))}</td><td>${escapeHtml(statusLabel(event.processing_state))}</td></tr>`).join('')}</tbody></table></div>`
@@ -12784,6 +13035,7 @@ async function loadIntegrationStatus() {
     console.error('integration status load failed', error);
     state.integrationStatus = {
       ok: false,
+      error: error?.message || String(error),
       helper: {
         mode: 'local-control-panel',
         run_output_api: false,
@@ -13462,7 +13714,11 @@ async function loadLocalTriageState() {
   try {
     const res = await dashboardApiFetch('/api/secopsai/triage-state');
     if (!res.ok) throw new Error(`Local triage HTTP ${res.status}`);
-    state.localTriage = await res.json();
+    const payload = await res.json();
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.ok !== true || !payload.summary || typeof payload.summary !== 'object') {
+      throw new Error(payload?.error || 'Native triage returned an invalid status response.');
+    }
+    state.localTriage = payload;
     if (state.localTriage && typeof state.localTriage === 'object') state.localTriage.stale = false;
     applyNativeFindingStatuses(state.localTriage);
     await refreshSelectedSessionDetail();
@@ -13747,6 +14003,7 @@ async function backgroundRefreshLiveExecutionState() {
 }
 
 async function refreshOperationalWorkspace() {
+  const routeRefresh = loadChannelRoutes();
   const [runs, workItems, events, runRequests, findings] = await Promise.all([
     loadTable('agent_runs', { orderBy: { column: 'created_at', ascending: false }, limit: 200 }),
     loadTable('work_items', { orderBy: { column: 'updated_at', ascending: false }, limit: 200 }),
@@ -13754,6 +14011,7 @@ async function refreshOperationalWorkspace() {
     optionalLoadTable('run_requests', { orderBy: { column: 'created_at', ascending: false }, limit: 100 }),
     optionalLoadTable('findings', { orderBy: { column: 'created_at', ascending: false }, limit: 100 })
   ]);
+  await routeRefresh;
   state.runs = runs;
   state.workItems = workItems;
   state.events = events;
@@ -13765,6 +14023,7 @@ async function refreshOperationalWorkspace() {
   renderMissionControl();
   renderFindings();
   renderIntegrations();
+  renderGlobalStatus();
   return true;
 }
 
@@ -13851,9 +14110,17 @@ async function boot() {
   for (const [stateKey, table, options] of requiredLoads) {
     try {
       state[stateKey] = await loadTable(table, options);
+      if (stateKey === 'channelRoutes') {
+        state.channelRoutesLoaded = true;
+        state.channelRoutesError = null;
+      }
     } catch (err) {
       console.error(`failed loading ${table}`, err);
       state[stateKey] = [];
+      if (stateKey === 'channelRoutes') {
+        state.channelRoutesLoaded = false;
+        state.channelRoutesError = err.message || String(err);
+      }
       errors.push(`${table}: ${err.message || String(err)}`);
     }
   }

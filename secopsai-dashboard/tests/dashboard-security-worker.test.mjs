@@ -396,7 +396,41 @@ async function testDecisionCapabilitiesAndCapturedRouting() {
   } finally { globalThis.fetch = originalFetch; }
 }
 
+async function testHostedIntelligenceStatesLocalInvestigationAutopilotExplicitly() {
+  const env = hostedEnv({
+    SECOPSAI_CORE_API_URL: "https://core.example",
+    SECOPSAI_CORE_READ_TOKEN: "read-token",
+    SECOPSAI_CORE_INTELLIGENCE_TOKEN: "intelligence-token",
+  });
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes("/api/v1/intelligence/actions")) return Response.json({ actions: [] });
+    if (url.includes("/api/v1/mcp/sessions")) return Response.json({ summary: {} });
+    if (url.includes("/api/v1/intelligence/jobs")) return Response.json({ jobs: [], counts: {} });
+    if (url.includes("/api/v1/intelligence/autopilot")) return Response.json({ settings: { mode: "advisory" } });
+    if (url.includes("/api/v1/intelligence/daily")) return Response.json({ settings: { enabled: true, max_investigations: 5 } });
+    throw new Error(`unexpected Core request: ${url}`);
+  };
+  try {
+    const response = await workerModule.fetch(operatorRequest("https://dashboard.example/api/secopsai/intelligence"), env);
+    assert.equal(response.status, 200);
+    const payload = await jsonFrom(response);
+    assert.equal(payload.daily_automation.settings.enabled, true);
+    assert.equal(payload.investigations.availability, "local_only");
+    assert.equal(payload.investigations.supported, false);
+    assert.match(payload.investigations.message, /local research worker/);
+    assert.deepEqual(payload.investigations.settings, null);
+    assert.ok(!calls.some(url => url.includes("/api/v1/intelligence/investigations")), "hosted Core does not claim a local investigation API exists");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 await testDecisionCapabilitiesAndCapturedRouting();
+await testHostedIntelligenceStatesLocalInvestigationAutopilotExplicitly();
 await testStaticAssetsAreAllowlisted();
 await testConsolePageIsNeverCached();
 await testUnverifiedAccessTokensAreRejected();
