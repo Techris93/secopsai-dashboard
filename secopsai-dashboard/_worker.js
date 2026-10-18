@@ -644,9 +644,18 @@ async function handleHostedIntelligence(request, env) {
   if (["requeue", "recover-transient-jobs", "requeue-failed-jobs"].includes(action)) {
     const jobId = String(body.job_id || "").trim();
     if (action === "requeue" && !INTELLIGENCE_JOB_ID_RE.test(jobId)) return jsonResponse({ ok: false, error: "An explicit failed job is required" }, { status: 400 });
+    const recoveryNumber = (value, fallback, minimum, maximum) => {
+      const parsed = Number(value);
+      if (!Number.isInteger(parsed)) return fallback;
+      return Math.max(minimum, Math.min(parsed, maximum));
+    };
     const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/jobs/recover", intelligenceToken, "Recover classified intelligence jobs", {
       method: "POST", body: {
-        ...(jobId ? { job_ids: [jobId] } : {}), limit: 10, dry_run: body.dry_run === true,
+        ...(jobId ? { job_ids: [jobId] } : {}),
+        limit: recoveryNumber(body.limit, 10, 1, 10),
+        max_attempts: recoveryNumber(body.max_attempts, 3, 1, 10),
+        min_age_seconds: recoveryNumber(body.min_age_seconds, 300, 0, 86400),
+        dry_run: body.dry_run === true,
         ...(jobId && body.repair_version ? { repair_version: String(body.repair_version) } : {}),
         ...(body.model ? { selected_model: String(body.model).trim(), fallback_models: Array.isArray(body.fallback_models) ? body.fallback_models : [], fallback_mode: body.fallback_mode || "disabled" } : {}),
       },

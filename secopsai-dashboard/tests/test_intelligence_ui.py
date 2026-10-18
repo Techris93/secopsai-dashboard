@@ -342,8 +342,6 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
         "investigation-autopilot-runs",
         "investigation-run-due",
         "intelligence-recover-transient-btn",
-        "intelligence-requeue-failed-btn",
-        "intelligence-requeue-failed-jobs-btn",
         "detection-learning-summary",
         "detection-learning-current",
         "detection-learning-adjudication",
@@ -361,9 +359,17 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "intelligence-decision-card" in app
     assert "intelligencePipelineGroups" in app
     assert "latestIntelligenceJobs" in app
-    assert "Recover transient failures" in html
+    assert html.count('id="intelligence-recover-transient-btn"') == 1
+    assert html.count("Recover eligible transient failures") == 1
+    assert "intelligence-requeue-failed-btn" not in html
+    assert "intelligence-requeue-failed-jobs-btn" not in html
+    assert "intelligence-requeue-failed-metric-btn" not in app
     assert "Re-run failed jobs" not in html
     assert "requeue-failed-jobs" in app
+    assert "const selectedModel = intelligenceSelectedModel();" in app
+    assert "Queued ${requeueCount} new recovery job" in app
+    assert "recoveryAction && requeueCount === 0" in app
+    assert "const backgroundAction = ['enqueue', 'autopilot-run-now', 'daily-run', 'investigation-run-due'].includes(action);" in app
     assert "research-decision-card" in app
     assert "const artifacts = researchCase.artifacts || [];" in app
     assert "publication_readiness_state" in app

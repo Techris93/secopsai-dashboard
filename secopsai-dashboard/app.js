@@ -6797,7 +6797,7 @@ function renderIntelligence() {
     <div class="metric-card"><div class="metric">${counts.queued || 0}</div><div class="metric-label">Queued</div></div>
     <div class="metric-card"><div class="metric">${counts.awaiting_provider || 0}</div><div class="metric-label">Awaiting provider</div></div>
     <div class="metric-card"><div class="metric">${counts.running || 0}</div><div class="metric-label">Running</div></div>
-    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed history</div>${counts.failed ? '<button class="mini-btn" id="intelligence-requeue-failed-metric-btn" type="button" style="margin-top:0.35rem;">Recover transient failures</button>' : ''}</div>
+    <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed history</div></div>
     ${data?.jobs?.current_counts ? `<div class="metric-card"><div class="metric">${data.jobs.current_counts.failed || 0}</div><div class="metric-label">Currently blocked targets</div></div>` : ''}
     <div class="small" style="grid-column:1/-1;">Counts include durable attempts. Current pipeline rows below are deduplicated; transport failures can be recovered in a bounded pass, while ${parkedProviderJobs ? `${parkedProviderJobs} provider-wait job(s) captured for another model remain parked` : 'jobs captured for another model remain parked'} rather than being silently rerouted.</div>`;
 
@@ -7268,17 +7268,20 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
     state.intelligence.serviceOutput = ['service', 'run-once'].includes(action) ? JSON.stringify(result.result || result, null, 2) : state.intelligence.serviceOutput;
     const requeueCount = result?.result?.count;
     const recoveryAction = ['requeue', 'recover-transient-jobs', 'requeue-failed-jobs'].includes(action);
+    const existingRecovery = Array.isArray(result?.result?.existing) ? result.result.existing.length : 0;
     const skippedRecovery = Array.isArray(result?.result?.skipped) ? result.result.skipped.length : 0;
     const recoveryReasons = [...new Set((result?.result?.skipped || []).map(item => humanizeSnake(item.reason || 'Review required')))].slice(0, 3).join(', ');
     const completionMsg = recoveryAction && requeueCount !== undefined
-      ? `Queued ${requeueCount} recovery job${requeueCount === 1 ? '' : 's'}; ${skippedRecovery} excluded by recovery policy.${recoveryReasons ? ` ${recoveryReasons}.` : ''}`
+      ? (requeueCount || existingRecovery || skippedRecovery
+        ? `Queued ${requeueCount} new recovery job${requeueCount === 1 ? '' : 's'}; ${existingRecovery} already queued; ${skippedRecovery} not queued.${recoveryReasons ? ` ${recoveryReasons}.` : ''}`
+        : 'No eligible transient failures were found. Safety, contract, and unknown-cause failures require their cause-specific review action.')
       : `Intelligence action completed: ${humanizeSnake(action)}`;
     showToast(completionMsg, recoveryAction && requeueCount === 0 ? 'warning' : 'success');
     const intelligenceJobId = String(
       result?.result?.job_id || result?.result?.job?.job_id || result?.result?.jobs?.[0]?.job_id || result?.job_id || ''
     ).trim();
     const coordinatorCommandId = String(result?.result?.command_id || result?.result?.command?.command_id || '').trim();
-    const backgroundAction = ['enqueue', 'autopilot-run-now', 'daily-run', 'investigation-run-due', 'recover-transient-jobs', 'requeue-failed-jobs'].includes(action);
+    const backgroundAction = ['enqueue', 'autopilot-run-now', 'daily-run', 'investigation-run-due'].includes(action);
     await refreshAfterAction({
       key: `intelligence:${action}:${intelligenceJobId || coordinatorCommandId || 'workspace'}`,
       poll: backgroundAction,
@@ -14293,19 +14296,9 @@ function bindEvents() {
       ...(explicitModel ? { model: explicitModel, fallback_mode: 'disabled', fallback_models: [] } : {}) }, requeueButton);
   });
   el('intelligence-recover-transient-btn')?.addEventListener('click', event => {
+    const selectedModel = intelligenceSelectedModel();
     runIntelligenceAction('recover-transient-jobs', { limit: 10, max_attempts: 3, min_age_seconds: 300,
-      ...(state.intelligence.pendingSelectedModel ? { model: state.intelligence.pendingSelectedModel, fallback_mode: 'disabled', fallback_models: [] } : {}) }, event.currentTarget);
-  });
-  ['intelligence-requeue-failed-btn', 'intelligence-requeue-failed-jobs-btn'].forEach(id => {
-    el(id)?.addEventListener('click', event => {
-      runIntelligenceAction('recover-transient-jobs', { limit: 10 }, event.currentTarget);
-    });
-  });
-  el('intelligence-summary')?.addEventListener('click', event => {
-    const btn = event.target.closest('#intelligence-requeue-failed-metric-btn');
-    if (btn) {
-      runIntelligenceAction('recover-transient-jobs', { limit: 10 }, btn);
-    }
+      ...(selectedModel ? { model: selectedModel, fallback_mode: 'disabled', fallback_models: [] } : {}) }, event.currentTarget);
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);

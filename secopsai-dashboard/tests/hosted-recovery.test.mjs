@@ -53,5 +53,13 @@ try {
   assert.equal(calls[1].body.selected_model,'gpt-6-luna');
   assert.equal(JSON.stringify(calls[1].body).includes('synthetic-core-secret'),false);
   assert.equal((await send({action:'requeue'})).status,400);
+  const transient = await send({action:'recover-transient-jobs',limit:10,max_attempts:3,min_age_seconds:300,model:'gpt-6-luna',fallback_mode:'disabled',fallback_models:[]});
+  assert.equal(transient.status,200);
+  assert.equal(calls[2].body.limit,10);
+  assert.equal(calls[2].body.max_attempts,3);
+  assert.equal(calls[2].body.min_age_seconds,300);
+  assert.equal(calls[2].body.selected_model,'gpt-6-luna');
+  assert.deepEqual(calls[2].body.fallback_models,[]);
+  assert.equal(calls[2].body.fallback_mode,'disabled');
 } finally { globalThis.fetch = originalFetch; }
 console.log('Hosted recovery routing and failure-aware UI tests passed.');
