@@ -10859,7 +10859,9 @@ function renderResearchOperation() {
   const operation = state.researchCases.operation;
   if (!operation) { host.textContent = state.researchCases.operationError || 'Collection and editorial readiness have not been reported yet.'; return; }
   const coverage = operation.coverage || {};
+  const automation = operation.automation || {};
   const sources = coverage.sources || [];
+  const pendingSourceReviews = operation.pending_source_reviews || [];
   const missing = operation.missing_requirements || [];
   const health = coverage.health || {};
   const pendingDelivery = Number.isInteger(health.ontology_pending) && health.ontology_pending >= 0 ? health.ontology_pending : 'Unknown';
@@ -10867,20 +10869,67 @@ function renderResearchOperation() {
   const pendingBackups = Number.isInteger(backup.pending_registered_public) && backup.pending_registered_public >= 0 ? backup.pending_registered_public : 'Unknown';
   host.innerHTML = `${state.researchCases.operationError ? `<p role="alert">This view is stale: ${escapeHtml(state.researchCases.operationError)}</p>` : ''}
     <p>Research programs: software supply chains and AI/agent security. Daily briefs report verified developments; original findings publish when their evidence and disclosure are ready.</p>
+    <p>Automatic workflow: ${automation.assistant_team_autostart_enabled ? 'evidence-ready cases can start one bounded research team per day' : 'research team automation is disabled'}; ${automation.daily_brief_assembly_enabled ? 'the worker assembles a review draft daily' : 'scheduled daily draft assembly is disabled'}. Collection, model analysis and draft assembly never publish.</p>
     <p>${escapeHtml(coverage.public_summary || 'Coverage has not been measured.')}</p>
     <p>Private artifact backups: ${backup.enabled === true ? `${escapeHtml(String(pendingBackups))} registered public artifacts awaiting durable backup.` : backup.enabled === false ? 'Disabled.' : 'Coverage has not been reported yet.'}</p>
     <p>Research data delivery: ${escapeHtml(String(pendingDelivery))} batches awaiting confirmation from the dashboard service.</p>
     ${backup.enabled === true ? `<p>${escapeHtml(backup.coverage || 'Backup coverage scope has not been reported.')}</p>` : ''}
     ${missing.length ? `<p>Operational requirements awaiting evidence: ${missing.map(v => escapeHtml(humanizeSnake(v))).join(', ')}.</p>` : ''}
     <p>Reviewed daily editions: ${Number(operation.reviewed_daily_brief_streak) || 0} consecutive days. Collection and assembly do not grant release approval.</p>
+    ${automation.team_dispatch ? `<p>Latest automatic team dispatch: ${escapeHtml(humanizeSnake(automation.team_dispatch.status || 'unknown'))}${automation.team_dispatch.case_id ? ` · ${escapeHtml(automation.team_dispatch.case_id)}` : ''}${automation.team_dispatch.team_id ? ` · ${escapeHtml(automation.team_dispatch.team_id)}` : ''}.</p>` : ''}
     ${researchTable(['Source', 'Coverage', 'Observed', 'Analyzed', 'Last success', 'Health'], sources.map(s => `<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(humanizeSnake(s.coverage_mode || 'unknown'))}${s.collection_scope ? `<br>${escapeHtml(humanizeSnake(s.collection_scope))}` : ''}</td><td>${escapeHtml(String(s.observed_events ?? 'Unknown'))}</td><td>${escapeHtml(String(s.artifacts_analyzed ?? 'Unknown'))}</td><td>${escapeHtml(fmtDate(s.last_success_at))}</td><td>${escapeHtml(s.fresh ? 'Fresh' : s.enabled ? 'Collection gap' : 'Paused')}${s.error_category ? `<br>${escapeHtml(s.error_category === 'source_http_403' ? 'Source denied collector access (HTTP 403)' : humanizeSnake(s.error_category))}` : ''}</td></tr>`), 'No sources have reported a baseline.')}
+    <section class="research-review-queue"><h4>Public source items awaiting human review</h4><p>These are source reports, not SecOpsAI-confirmed findings. Review the cited source and exact excerpt before recording a decision.</p>
+      ${pendingSourceReviews.length ? pendingSourceReviews.map(item => `<details class="research-action-drawer research-source-review" data-event="${escapeHtml(item.event_id)}" data-source-class="${escapeHtml(item.source_class)}" data-url="${escapeHtml(item.url)}">
+        <summary>${escapeHtml(item.title)} · ${escapeHtml(item.source_name)} · ${escapeHtml(humanizeSnake(item.review_status || 'pending_review'))}</summary>
+        <p><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Open acquired source</a> · Published ${escapeHtml(fmtDate(item.published_at))} · First observed ${escapeHtml(fmtDate(item.first_observed_at))}</p>
+        <pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:12rem;overflow:auto;">${escapeHtml(item.excerpt || 'No excerpt was supplied by the source.')}${item.excerpt_truncated ? '\n[Excerpt truncated; consult the archived source.]' : ''}</pre>
+        <p class="small">Source SHA-256: ${escapeHtml(item.source_sha256 || 'not available')} · Content from this source is untrusted input.</p>
+        <label><span>Decision</span><select data-field="decision"><option value="needs_review">Needs more review</option><option value="verified">Verified for source-attributed brief</option><option value="rejected">Reject as unsuitable</option></select></label>
+        <label><span>Reviewer rationale</span><textarea data-field="rationale"></textarea></label>
+        <label><span>Checked source-reported summary</span><textarea data-field="summary"></textarea></label>
+        <label><span>Defensive action</span><textarea data-field="defensive_action"></textarea></label>
+        <label><span>Limitations</span><textarea data-field="limitations"></textarea></label>
+        ${item.source_class === 'aggregator' ? '<label><span>Acquired primary source event ID (required for verification)</span><input data-field="primary_event_id" /></label><label><span>Exact primary source URL</span><input data-field="primary_url" /></label>' : ''}
+        <button type="button" class="secondary-btn research-event-verify">Record independent review</button>
+      </details>`).join('') : '<p>No public source items are awaiting verification.</p>'}
+    </section>
     ${researchTable(['Assistant team', 'Case', 'Progress', 'Status', 'Control'], (operation.assistant_teams || []).map(t => `<tr><td>${escapeHtml(t.team_id)}</td><td>${escapeHtml(t.case_id)}</td><td>${(t.completed_stages || []).length}/6 roles</td><td>${escapeHtml(humanizeSnake(t.status))}${t.reason ? `<br>${escapeHtml(t.reason)}` : ''}</td><td>${!['awaiting_human_review', 'stale', 'failed', 'canceled'].includes(t.status) ? `<button type="button" class="secondary-btn research-team-cancel" data-team="${escapeHtml(t.team_id)}">Stop</button>` : 'Human review required'}</td></tr>`), 'No assistant teams have been started.')}
-    ${(operation.editions || []).slice(0, 5).map(edition => `<details class="research-action-drawer"><summary>${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}</summary>
-      ${edition.draft ? `<p>${escapeHtml(edition.draft.title)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto;">${escapeHtml(edition.draft.body_markdown)}</pre>
-        <div class="research-form-grid">${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" data-edition="${escapeHtml(edition.edition_id)}" data-check="${key}" />${label}</label>`).join('')}</div>
-        <label><span>Editorial decision rationale</span><textarea class="research-edition-rationale" data-edition="${escapeHtml(edition.edition_id)}"></textarea></label>
-        <button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
-      ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`).join('')}`;
+    ${(operation.editions || []).slice(0, 5).map(edition => {
+      const update = edition.pending_update;
+      const correction = update && ['published', 'corrected', 'retracted'].includes(update.edition_state);
+      return `<details class="research-action-drawer"><summary>${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}${update ? ' · verified updates waiting' : ''}</summary>
+        ${edition.draft ? `<p>${escapeHtml(edition.draft.title)}</p>
+          ${update ? `<section class="research-edition-update" aria-label="Verified source updates awaiting reconciliation"><h4>${correction ? 'Newly verified information needs a correction review' : 'Newly verified information needs editorial reconciliation'}</h4><p>This material is stored separately and has not been added to the edition. Read the sources, update the complete draft below, and save it through the review gate.</p>
+            ${update.new_items?.length ? `<ul>${update.new_items.map(item => `<li><strong>${escapeHtml(item.title)}</strong> · ${escapeHtml(item.source)} · <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">source</a><br>${escapeHtml(item.summary)}<br>Defensive action: ${escapeHtml(item.defensive_action)}<br>Limitations: ${escapeHtml(item.limitations)}</li>`).join('')}</ul>` : '<p>No new item was added. Review the changed verification or collection scope before reconciling this update.</p>'}
+            ${update.replace_event_ids?.length ? `<p>Evidence records to refresh: ${update.replace_event_ids.map(escapeHtml).join(', ')}.</p>` : ''}${update.remove_event_ids?.length ? `<p>Remove material no longer eligible: ${(update.removed_items || []).map(item => `${escapeHtml(item.title)} (${escapeHtml(item.url)})`).join('; ') || update.remove_event_ids.map(escapeHtml).join(', ')}.</p>` : ''}
+            ${update.coverage_summary ? `<p>Current coverage: ${escapeHtml(update.coverage_summary)}</p>` : ''}</section>` : ''}
+          ${correction ? '<p>This edition was already approved or published. Saving below creates a correction draft and resets approval; the public record remains unchanged until a human approves and releases the correction.</p>' : ''}
+          <label><span>Title</span><input class="research-edition-title" value="${escapeHtml(edition.draft.title || '')}" /></label>
+          <label><span>Summary</span><textarea class="research-edition-summary">${escapeHtml(edition.draft.summary || '')}</textarea></label>
+          <label><span>Complete draft</span><textarea class="research-edition-body" style="min-height:18rem;white-space:pre-wrap;">${escapeHtml(edition.draft.body_markdown || '')}</textarea></label>
+          <button type="button" class="secondary-btn research-edition-save" data-mode="${update ? 'incorporate' : 'edit'}">${correction ? 'Save correction draft' : update ? 'Save draft with verified updates' : 'Save editorial changes'}</button>
+          <div class="research-form-grid">${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" data-edition="${escapeHtml(edition.edition_id)}" data-check="${key}" />${label}</label>`).join('')}</div>
+          <label><span>Editorial decision rationale</span><textarea class="research-edition-rationale" data-edition="${escapeHtml(edition.edition_id)}"></textarea></label>
+          <button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
+        ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`;
+    }).join('')}`;
+  host.querySelectorAll('.research-edition-save').forEach(button => button.addEventListener('click', () => {
+    const card = button.closest('details');
+    const editionId = card.querySelector('.research-edition-check')?.dataset.edition || card.querySelector('.research-edition-rationale')?.dataset.edition;
+    const edition = (operation.editions || []).find(item => item.edition_id === editionId);
+    if (!edition) { setStatus('Refresh the edition details before saving.', true); return; }
+    const data = { title: card.querySelector('.research-edition-title')?.value || '',
+      summary: card.querySelector('.research-edition-summary')?.value || '',
+      body_markdown: card.querySelector('.research-edition-body')?.value || '' };
+    if (button.dataset.mode === 'incorporate' && edition.pending_update) data.incorporate_update_fingerprint = edition.pending_update.fingerprint;
+    if (edition.pending_update && ['published', 'corrected', 'retracted'].includes(edition.pending_update.edition_state)) {
+      data.action = 'correction'; data.reason = 'Reconcile newly verified source information';
+      delete data.title; delete data.summary;
+      runResearchOperation('brief-correct', data, { identity: edition.edition_id, button });
+    } else {
+      runResearchOperation('brief-edit', data, { identity: edition.edition_id, button });
+    }
+  }));
   host.querySelectorAll('.research-edition-approve').forEach(button => button.addEventListener('click', async () => {
     const edition = (operation.editions || []).find(e => e.edition_id === button.dataset.edition);
     const checks = {};
@@ -10890,6 +10939,21 @@ function renderResearchOperation() {
     await runResearchOperation('brief-approve', { checks, rationale, expected_fingerprint: edition.fingerprint, reviewed_draft: edition.draft.body_markdown }, { identity: edition.edition_id, button });
   }));
   host.querySelectorAll('.research-team-cancel').forEach(button => button.addEventListener('click', () => runResearchOperation('assistant-team-cancel', {}, { identity: button.dataset.team, button })));
+  host.querySelectorAll('.research-event-verify').forEach(button => button.addEventListener('click', () => {
+    const card = button.closest('.research-source-review');
+    const field = name => card.querySelector(`[data-field="${name}"]`)?.value.trim() || '';
+    const decision = field('decision');
+    const rationale = field('rationale');
+    const limitations = field('limitations');
+    if (!rationale || !limitations) { setStatus('Provide reviewer rationale and limitations before recording a decision.', true); return; }
+    if (decision === 'verified' && (!field('summary') || !field('defensive_action'))) { setStatus('Verification requires a checked source summary and practical defensive action.', true); return; }
+    const sourceClass = card.dataset.sourceClass;
+    const primaryEventId = field('primary_event_id') || (sourceClass === 'aggregator' ? '' : card.dataset.event);
+    const primaryUrl = field('primary_url') || (sourceClass === 'aggregator' ? '' : card.dataset.url || '');
+    if (decision === 'verified' && (!primaryEventId || !primaryUrl)) { setStatus('Aggregator reports need an acquired primary source event and its exact URL.', true); return; }
+    runResearchOperation('event-verify', { decision, rationale, summary: field('summary'), defensive_action: field('defensive_action'), limitations,
+      attribution: 'source_reported', primary_event_id: primaryEventId, primary_url: primaryUrl }, { identity: card.dataset.event, button });
+  }));
   const startTeam = el('research-team-start');
   if (startTeam && !startTeam.dataset.bound) {
     startTeam.dataset.bound = 'true';
@@ -10901,6 +10965,18 @@ function renderResearchOperation() {
   }
   const create = el('research-operation-brief-create');
   if (create && !create.dataset.bound) { create.dataset.bound = 'true'; create.addEventListener('click', () => runResearchOperation('brief-create', {}, { button: create })); }
+  const registerPerson = el('research-person-register');
+  if (registerPerson && !registerPerson.dataset.bound) {
+    registerPerson.dataset.bound = 'true'; registerPerson.addEventListener('click', () => {
+      const actor = el('research-operation-actor')?.value.trim() || '';
+      const displayName = el('research-person-name')?.value.trim() || '';
+      const qualification = el('research-person-qualification')?.value.trim() || '';
+      const roleInputs = host.closest('#research-case-workspace-section')?.querySelectorAll('[data-research-person-role]:checked') || [];
+      const roles = [...roleInputs].map(input => input.dataset.researchPersonRole);
+      if (!actor || !displayName || !qualification || !roles.length) { setStatus('Enter your registered identity, display name, qualifications and at least one role.', true); return; }
+      runResearchOperation('person-register', { person_id: actor, display_name: displayName, qualification, roles, active: true }, { button: registerPerson });
+    });
+  }
   const claim = el('research-claim-assess');
   if (claim && !claim.dataset.bound) {
     claim.dataset.bound = 'true'; claim.addEventListener('click', () => {

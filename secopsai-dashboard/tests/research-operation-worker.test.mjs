@@ -29,5 +29,10 @@ try {
   assert.deepEqual(JSON.parse(calls[1].init.body).payload, payload);
   assert.equal(JSON.parse(calls[1].init.body).idempotency_key, 'retry-fixture');
   assert.equal(calls[1].init.redirect, 'manual');
+  const sourceReview = {action: 'event-verify', actor: 'qualified.human', id: 'INTEL-fixture', request_id: 'source-review-fixture', data: {decision: 'verified', attribution: 'source_reported', summary: 'The vendor reports a patch.', defensive_action: 'Check and apply the vendor patch.', limitations: 'No exploitation observed.'}};
+  response = await worker.fetch(request(endpoint, {method: 'POST', headers: {'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin'}, body: JSON.stringify(sourceReview)}), env);
+  assert.equal(response.status, 202);
+  assert.deepEqual(JSON.parse(calls[2].init.body).payload, sourceReview);
+  assert.equal(JSON.parse(calls[2].init.body).idempotency_key, 'source-review-fixture');
 } finally { globalThis.fetch = original; }
 console.log('research operation authorization and exact review delivery: ok');
