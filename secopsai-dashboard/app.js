@@ -6225,7 +6225,7 @@ function intelligenceModelSupportsAction(model, action) {
 }
 
 function isDurableIntelligenceTarget(target) {
-  return /^(?:(?:RSC|RSCF)-|(?:npm|pypi|crates|nuget|go|maven|rubygems|packagist|open-vsx|vscode-marketplace|mcp-registry):)/.test(String(target || '').trim());
+  return /^(?:(?:RSC|RSCF)-|(?:FASTLANE-)?(?:npm|pypi|crates|nuget|go|maven|rubygems|packagist|open-vsx|vscode-marketplace|mcp-registry):)/.test(String(target || '').trim());
 }
 
 function intelligenceRecoveryView(job) {

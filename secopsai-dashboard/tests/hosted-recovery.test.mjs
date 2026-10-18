@@ -21,6 +21,13 @@ const latest = context.latestIntelligenceJobs([
 assert.equal(latest.length,2);
 assert.equal(latest.find(job=>job.target_id==='npm:fixture@1').status,'succeeded');
 assert.equal(latest.find(job=>job.target_id==='npm:fixture@1').history_count,2);
+const legacy = context.latestIntelligenceJobs([
+  {job_id:'legacy-failed',action:'triage_artifact',target_id:'FASTLANE-npm:fixture@1',status:'failed',updated_at:'2026-10-17'},
+  {job_id:'legacy-repaired',action:'triage_artifact',target_id:'FASTLANE-npm:fixture@1',status:'succeeded',updated_at:'2026-10-18'},
+]);
+assert.equal(legacy.length,1);
+assert.equal(legacy[0].status,'succeeded');
+assert.equal(legacy[0].history_count,2);
 
 const originalFetch = globalThis.fetch;
 const calls = [];
