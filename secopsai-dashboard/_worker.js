@@ -547,6 +547,14 @@ async function handleHostedIntelligence(request, env) {
       jobs: { jobs: [] },
       autopilot: null,
       daily_automation: null,
+      investigations: {
+        availability: "local_only",
+        supported: false,
+        message: "Per-finding investigation autopilot settings and runs are owned by the local research worker. Hosted Mission Control exposes daily workflow limits, but not this separate local policy.",
+        settings: null,
+        summary: {},
+        runs: [],
+      },
       bridge: { status: "remote", queue_mode: "hosted_core", message: "A local Codex bridge processes this hosted queue." },
       service: { status: "managed_on_sensor", manager: "local" },
       mcp_gateway: {
