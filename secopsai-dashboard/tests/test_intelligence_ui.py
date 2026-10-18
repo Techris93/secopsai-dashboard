@@ -498,3 +498,22 @@ def test_intelligence_rejects_local_read_token_with_actionable_scope_hint(monkey
     assert '"code": "local_token_used_for_intelligence_action"' in payload
     assert "INTELLIGENCE_ADMIN_TOKEN" in payload
     assert "local-read-token" not in payload
+
+
+def test_local_console_credential_authorizes_actions_without_separate_tokens(monkeypatch):
+    monkeypatch.setenv("INTELLIGENCE_ADMIN_TOKEN", "expected-action-token")
+    monkeypatch.setenv("TRIAGE_OPS_ADMIN_TOKEN", "triage-token")
+    monkeypatch.setenv("BLOG_OPS_ADMIN_TOKEN", "blog-token")
+    monkeypatch.setattr(dashboard_server, "DASHBOARD_LOCAL_AUTH_TOKEN", "local-console-token")
+
+    def handler(headers):
+        return SimpleNamespace(headers=headers, send_response=Mock(), send_header=Mock(), end_headers=Mock(), wfile=io.BytesIO())
+
+    console = {"X-SecOpsAI-Local-Token": "local-console-token"}
+    assert dashboard_server.require_intelligence_admin(handler(console)) is False
+    assert dashboard_server.require_triage_ops_admin(handler(console)) is False
+    assert dashboard_server.require_blog_ops_admin(handler(console)) is False
+    # A wrong console credential grants nothing.
+    assert dashboard_server.require_intelligence_admin(handler({"X-SecOpsAI-Local-Token": "guess"})) is True
+    monkeypatch.setattr(dashboard_server, "DASHBOARD_LOCAL_AUTH_TOKEN", "")
+    assert dashboard_server.require_triage_ops_admin(handler({"X-SecOpsAI-Local-Token": ""})) is True

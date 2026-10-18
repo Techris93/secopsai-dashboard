@@ -8,8 +8,8 @@ const ROOT_ASSET_PATHS = new Set([
   "/url-safety.js",
   "/styles.css",
   "/radar-texture.png",
-  "/log-agent-run.html",
   "/view-run-output.html",
+  "/view-run-output.js",
 ]);
 
 function rewriteAssetRequest(request, pathname) {

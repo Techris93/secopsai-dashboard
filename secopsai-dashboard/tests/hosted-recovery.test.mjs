@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import worker from '../_worker.js';
+import { accessJwt, ACCESS_HEADER, ACCESS_TEST_ENV } from './access-test-auth.mjs';
 
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const context = vm.createContext({});
@@ -27,11 +28,10 @@ globalThis.fetch = async (url, init) => {
   calls.push({path:new URL(url).pathname,body:JSON.parse(init.body)});
   return Response.json({count:0,eligible:[],skipped:[{job_id:'AIJ-AAAAAAAAAAAAAAAA',reason:'historical_cause_not_recorded'}]});
 };
-const env = {DASHBOARD_AUTH_REQUIRED:'true',SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_ANON_KEY:'fixture',
-  SUPABASE_AUTH_FETCHER:{fetch:async()=>Response.json({id:'operator',email:'operator@example.com',app_metadata:{secopsai_role:'operator'}})},
-  SECOPSAI_CORE_API_URL:'https://core.example',SECOPSAI_CORE_INTELLIGENCE_TOKEN:'synthetic-core-secret'};
+const env = {...ACCESS_TEST_ENV, SECOPSAI_CORE_API_URL:'https://core.example',SECOPSAI_CORE_INTELLIGENCE_TOKEN:'synthetic-core-secret'};
+const jwt = await accessJwt();
 const send = body => worker.fetch(new Request('https://dashboard.example/api/secopsai/intelligence',{
-  method:'POST',headers:{authorization:'Bearer operator-fixture','content-type':'application/json'},body:JSON.stringify(body)}),env);
+  method:'POST',headers:{[ACCESS_HEADER]:jwt,'content-type':'application/json'},body:JSON.stringify(body)}),env);
 try {
   const bulk = await send({action:'requeue-failed-jobs',repair_version:'artifact-choices-v3'});
   assert.equal(bulk.status,200);

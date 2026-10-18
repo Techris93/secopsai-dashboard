@@ -89,7 +89,7 @@ paths remain CLI-only.
 
 | Capability | Local helper | Hosted Cloudflare Pages |
 | --- | --- | --- |
-| Supabase-backed dashboard data | Available when configured | Available when configured |
+| D1-backed dashboard data | Hosted only (behind Cloudflare Access) | Not available |
 | Core and Edge read APIs | Available | Available through server-side Worker credentials |
 | Native triage and local evidence | Available | Requires an intentionally configured private helper |
 | Campaign, Artifact Fleet, and exact package actions | Available | Safe `not_configured` response without a helper/Core action endpoint |
@@ -109,8 +109,8 @@ be listed in `SECOPSAI_HELPER_ALLOWED_ORIGINS` or `RUN_OUTPUT_ALLOWED_ORIGINS`.
 ## Safety Model
 
 - Operator sign-in and action authorization are separate controls.
-- Hosted protected routes validate the Supabase operator session before using server-side Core, Edge, helper, Blog Ops, or run-output credentials.
-- Anonymous Supabase sessions are rejected; content-pack generation carries the protected Triage Ops action token.
+- Hosted protected routes verify the Cloudflare Access JWT and the operator allowlist before using server-side Core, Edge, helper, Blog Ops, or run-output credentials.
+- Cloudflare Access is the only sign-in: there is no password form, and an expired session offers "Sign in again". Content-pack generation carries the protected Triage Ops action token.
 - Action tokens are retained only for the current browser session and are never written into URLs.
 - Authenticated refreshes read current run and task state; task transitions occur only in the explicit run-completion flow.
 - Artifact analysis does not install packages, run lifecycle scripts, activate extensions, execute binaries, or accept browser-selected filesystem paths.
@@ -119,7 +119,7 @@ be listed in `SECOPSAI_HELPER_ALLOWED_ORIGINS` or `RUN_OUTPUT_ALLOWED_ORIGINS`.
 - Publishing approved content stages the reviewed archive; deployment is a distinct action and changes state only after deployment succeeds.
 
 Read [Cloudflare Pages Deployment](CLOUDFLARE_PAGES.md) for the complete Worker,
-R2, Supabase, Blog Ops, helper, and credential configuration.
+R2, Cloudflare Access, D1, Blog Ops, helper, and credential configuration.
 
 ## Intelligence And Research Contracts
 
@@ -174,9 +174,9 @@ The local template is [`.env.example`](.env.example). Important settings:
 
 | Setting | Purpose |
 | --- | --- |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Authenticated dashboard data access |
+| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | Cloudflare Access operator sign-in (hosted; required) |
 | `DASHBOARD_AUTH_REQUIRED` | Must remain `true` for hosted and pilot environments |
-| `DASHBOARD_OPERATOR_EMAILS`, `DASHBOARD_OPERATOR_USER_IDS` | Hosted operator allowlist; a valid Supabase session without it (or `app_metadata.secopsai_role`) receives `403` |
+| `DASHBOARD_OPERATOR_EMAILS`, `DASHBOARD_OPERATOR_USER_IDS` | Hosted operator allowlist; a valid Access identity not listed here receives `403` |
 | `SECOPSAI_ROOT` | Absolute path to the local SecOpsAI Core checkout |
 | `INTELLIGENCE_ADMIN_TOKEN` | Model, investigation, learning, and service controls |
 | `TRIAGE_OPS_ADMIN_TOKEN` | Protected triage and research write actions |
@@ -215,8 +215,8 @@ npx --yes wrangler@4.131.1 pages deploy . \
   --branch main
 ```
 
-Do not deploy until the Supabase migration, invited operator account, RLS
-verification, Cloudflare secrets, and capability-specific integration checks
+Do not deploy until the Cloudflare Access application, operator allowlist,
+D1 binding, Cloudflare secrets, and capability-specific integration checks
 in [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md) are complete.
 
 ## License

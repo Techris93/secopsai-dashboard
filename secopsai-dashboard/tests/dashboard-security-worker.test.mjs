@@ -1,31 +1,14 @@
 import assert from "node:assert/strict";
 import workerModule from "../_worker.js";
 
-const OPERATOR_TOKEN = "operator-session";
-const authProfile = {
-  id: "operator-1",
-  email: "operator@example.com",
-  email_confirmed_at: "2026-01-01T00:00:00Z",
-  role: "authenticated",
-};
+import { ACCESS_HEADER, ACCESS_TEST_ENV, accessJwt } from "./access-test-auth.mjs";
 
-function authFetcher(profile = authProfile) {
-  return {
-    async fetch() {
-      return new Response(JSON.stringify(profile), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    },
-  };
-}
+const OPERATOR_TOKEN = await accessJwt();
 
 function hostedEnv(overrides = {}) {
   return {
     DASHBOARD_AUTH_REQUIRED: "true",
-    SUPABASE_URL: "https://test-project.supabase.co",
-    SUPABASE_ANON_KEY: "test-anon-key",
-    SUPABASE_AUTH_FETCHER: authFetcher(),
+    ...ACCESS_TEST_ENV,
     DASHBOARD_OPERATOR_EMAILS: "Operator@Example.com",
     SECOPSAI_HELPER_ALLOWED_ORIGINS: "https://helper.example",
     RUN_OUTPUT_ALLOWED_ORIGINS: "https://output.example",
@@ -33,9 +16,9 @@ function hostedEnv(overrides = {}) {
   };
 }
 
-function operatorRequest(url, init = {}) {
+function operatorRequest(url, init = {}, token = OPERATOR_TOKEN) {
   const headers = new Headers(init.headers || {});
-  headers.set("Authorization", `Bearer ${OPERATOR_TOKEN}`);
+  headers.set(ACCESS_HEADER, token);
   return new Request(url, { ...init, headers });
 }
 
@@ -68,63 +51,90 @@ async function testStaticAssetsAreAllowlisted() {
   assert.deepEqual(calls, ["/index.html", "/url-safety.js"]);
 }
 
-async function testAnonymousOperatorProfilesAreRejected() {
-  const response = await workerModule.fetch(
-    operatorRequest("https://dashboard.example/api/integration-status"),
-    hostedEnv({ SUPABASE_AUTH_FETCHER: authFetcher({ id: "anonymous-1", is_anonymous: true }) }),
-  );
-  assert.equal(response.status, 401);
-  const payload = await jsonFrom(response);
-  assert.equal(payload.code, "operator_session_invalid");
+async function testConsolePageIsNeverCached() {
+  // A cached console page could load without passing Cloudflare Access; its
+  // config.js request would then be redirected to the Access login.
+  const env = {
+    DASHBOARD_AUTH_REQUIRED: "false",
+    ASSETS: {
+      async fetch(request) {
+        const html = new URL(request.url).pathname.endsWith(".html");
+        return new Response("x", { status: 200, headers: { "Content-Type": html ? "text/html; charset=utf-8" : "text/css", "Cache-Control": "public, max-age=3600" } });
+      },
+    },
+  };
+  const page = await workerModule.fetch(new Request("https://dashboard.example/index.html"), env);
+  assert.equal(page.headers.get("Cache-Control"), "no-store");
+  const style = await workerModule.fetch(new Request("https://dashboard.example/styles.css"), env);
+  assert.equal(style.headers.get("Cache-Control"), "public, max-age=3600");
 }
 
-async function operatorStatus(profile, overrides = {}) {
+async function testUnverifiedAccessTokensAreRejected() {
+  // A token not signed by the Access team key is not a session.
+  const [header, payload] = OPERATOR_TOKEN.split(".");
   const response = await workerModule.fetch(
-    operatorRequest("https://dashboard.example/api/integration-status"),
-    hostedEnv({ SUPABASE_AUTH_FETCHER: authFetcher(profile), ...overrides }),
+    operatorRequest("https://dashboard.example/api/integration-status", {}, `${header}.${payload}.forged-signature`),
+    hostedEnv(),
+  );
+  assert.equal(response.status, 401);
+  assert.equal((await jsonFrom(response)).code, "operator_session_required");
+}
+
+async function testAccessIsTheOnlySignIn() {
+  // Without Cloudflare Access configured the hosted console fails closed: no
+  // bearer token or other sign-in is accepted in its place.
+  const env = hostedEnv({ CF_ACCESS_TEAM_DOMAIN: "", CF_ACCESS_AUD: "" });
+  const response = await workerModule.fetch(
+    new Request("https://dashboard.example/api/integration-status", { headers: { Authorization: "Bearer anything" } }),
+    env,
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await jsonFrom(response)).code, "operator_auth_unavailable");
+  const config = await (await workerModule.fetch(new Request("https://dashboard.example/config.js"), env)).text();
+  assert.match(config, /"mode":\s*"unconfigured"/);
+  assert.doesNotMatch(config, /supabase/i);
+}
+
+async function operatorStatus(claims, overrides = {}) {
+  const response = await workerModule.fetch(
+    operatorRequest("https://dashboard.example/api/integration-status", {}, await accessJwt(claims)),
+    hostedEnv(overrides),
   );
   return { status: response.status, payload: await jsonFrom(response) };
 }
 
 async function testSessionsRequireExplicitOperatorAuthorization() {
-  // A self-registered Supabase user holds a valid session but is not an operator.
-  const stranger = { id: "user-9", email: "stranger@example.net", email_confirmed_at: "2026-01-01T00:00:00Z" };
+  // A valid Access identity is not enough: it must be an authorized operator.
+  const stranger = { sub: "user-9", email: "stranger@example.net" };
   let result = await operatorStatus(stranger);
   assert.equal(result.status, 403);
   assert.equal(result.payload.code, "operator_not_authorized");
 
-  // user_metadata is writable by the user and must never grant access.
-  result = await operatorStatus({ ...stranger, user_metadata: { secopsai_role: "admin" } });
-  assert.equal(result.status, 403);
-
   // Fails closed when no allowlist is configured.
-  result = await operatorStatus(authProfile, { DASHBOARD_OPERATOR_EMAILS: "" });
+  result = await operatorStatus({}, { DASHBOARD_OPERATOR_EMAILS: "" });
   assert.equal(result.status, 403);
 
-  // An allowlisted email must be confirmed.
-  result = await operatorStatus({ ...authProfile, email_confirmed_at: null });
-  assert.equal(result.status, 403);
-
-  // Server-controlled app_metadata role and explicit user ids are accepted.
-  result = await operatorStatus({ ...stranger, app_metadata: { secopsai_role: "operator" } });
+  // An allowlisted email (case-insensitive) or Access subject id is accepted.
+  result = await operatorStatus({});
   assert.notEqual(result.status, 403);
   assert.notEqual(result.status, 401);
   result = await operatorStatus(stranger, { DASHBOARD_OPERATOR_USER_IDS: "user-1, user-9" });
   assert.notEqual(result.status, 403);
-  result = await operatorStatus(authProfile);
-  assert.notEqual(result.status, 403);
 }
 
 async function testContentPackWritesRequireAndForwardActionToken() {
+  // A signed-in operator needs no pasted token, but another site cannot drive
+  // their browser into the action.
   const unauthorised = await workerModule.fetch(
     operatorRequest("https://dashboard.example/api/secopsai/content-packs/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
       body: JSON.stringify({ case_id: "RSC-ABCDEF123456" }),
     }),
     hostedEnv({ SECOPSAI_HELPER_BASE_URL: "https://helper.example", TRIAGE_OPS_ADMIN_TOKEN: "research-admin" }),
   );
-  assert.equal(unauthorised.status, 401);
+  assert.equal(unauthorised.status, 403);
+  assert.equal((await jsonFrom(unauthorised)).code, "cross_site_action");
 
   const calls = [];
   const originalFetch = globalThis.fetch;
@@ -141,7 +151,7 @@ async function testContentPackWritesRequireAndForwardActionToken() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Triage-Ops-Admin-Token": "research-admin",
+          "Sec-Fetch-Site": "same-origin",
         },
         body: JSON.stringify({ case_id: "RSC-ABCDEF123456" }),
       }),
@@ -150,6 +160,7 @@ async function testContentPackWritesRequireAndForwardActionToken() {
     assert.equal(response.status, 200);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].url, "https://helper.example/api/secopsai/content-packs/generate");
+    // The Worker supplies the helper's action token from its own secret.
     assert.equal(calls[0].init.headers.get("X-Triage-Ops-Admin-Token"), "research-admin");
   } finally {
     globalThis.fetch = originalFetch;
@@ -387,7 +398,9 @@ async function testDecisionCapabilitiesAndCapturedRouting() {
 
 await testDecisionCapabilitiesAndCapturedRouting();
 await testStaticAssetsAreAllowlisted();
-await testAnonymousOperatorProfilesAreRejected();
+await testConsolePageIsNeverCached();
+await testUnverifiedAccessTokensAreRejected();
+await testAccessIsTheOnlySignIn();
 await testSessionsRequireExplicitOperatorAuthorization();
 await testContentPackWritesRequireAndForwardActionToken();
 await testHostedHelperProxyRequiresAnHttpsOriginAndRejectsRedirects();

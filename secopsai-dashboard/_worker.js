@@ -21,15 +21,14 @@ const PUBLIC_ASSET_PATHS = new Set([
   "/styles.css",
   "/favicon.svg",
   "/radar-texture.png",
-  "/log-agent-run.html",
   "/view-run-output.html",
+  "/view-run-output.js",
 ]);
 const SENSITIVE_QUERY_KEYS = new Set([
   "email", "password", "pass", "passwd", "pwd", "token", "secret",
   "api_key", "apikey", "access_token", "refresh_token", "id_token",
   "client_secret",
 ]);
-const MAX_OPERATOR_PROFILE_BYTES = 64 * 1024;
 const OPERATOR_ROLES = new Set(["operator", "admin"]);
 const MAX_SECOPSAI_WORKSPACE_BYTES = 5 * 1024 * 1024;
 const HOSTED_ONTOLOGY_PREFIX = "/api/secopsai/ontology";
@@ -84,21 +83,20 @@ const DASHBOARD_ROLE_GROUPS = {
   support: ["support/support-responder"],
 };
 const ALLOWED_DISCORD_CHANNELS = new Set(["ops-log", "kanban-updates"]);
-// With Cloudflare Access the browser never talks to Supabase, so the
-// Supabase origins and the CDN-hosted client drop out of the policy.
-function contentSecurityPolicy(env = {}) {
-  const access = accessConfigured(env);
+// Operators sign in through Cloudflare Access at the edge; the browser only
+// talks to this origin and loads no third-party script.
+function contentSecurityPolicy() {
   return [
     "default-src 'self'",
     "base-uri 'self'",
-    access ? "connect-src 'self'" : "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    "connect-src 'self'",
     "font-src 'self' https://fonts.gstatic.com",
     "form-action 'self'",
     "frame-ancestors 'none'",
     "frame-src 'none'",
     "img-src 'self' data: https:",
     "object-src 'none'",
-    access ? "script-src 'self'" : "script-src 'self' https://cdn.jsdelivr.net",
+    "script-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "upgrade-insecure-requests",
   ].join("; ");
@@ -176,12 +174,8 @@ function buildBrowserConfig(env) {
   const authRequired = truthyEnv(env.DASHBOARD_AUTH_REQUIRED, true);
   const access = authRequired && accessConfigured(env);
   return {
-    // Never hand browser-readable database credentials to an auth-disabled
-    // deployment. The static app renders a locked rollout state instead.
-    // Cloudflare Access deployments use the Worker data API instead.
-    supabaseUrl: authRequired && !access ? env.SUPABASE_URL || "" : "",
-    supabaseAnonKey: authRequired && !access ? env.SUPABASE_ANON_KEY || "" : "",
-    dataBackend: access ? "worker" : "supabase",
+    // Data always comes from this Worker's D1 API behind Cloudflare Access.
+    dataBackend: "worker",
     dataEndpoint: "/api/data",
     sessionEndpoint: "/api/session",
     appName: env.APP_NAME || DEFAULT_APP_NAME,
@@ -200,7 +194,9 @@ function buildBrowserConfig(env) {
     edgeDashboardUrl: String(env.SECOPSAI_EDGE_DASHBOARD_URL || "").trim(),
     auth: {
       required: authRequired,
-      mode: access ? "access" : authRequired ? "operator" : "locked",
+      // "unconfigured": auth is required but Access is not set up; the app
+      // shows that state and never falls back to another sign-in.
+      mode: access ? "access" : authRequired ? "unconfigured" : "locked",
     },
     aiGuard: buildAiGuard(env),
     departments: DASHBOARD_DEPARTMENTS,
@@ -258,14 +254,7 @@ function hasProtectedDashboardBackend(env) {
   ].some(value => String(value || "").trim()));
 }
 
-function bearerToken(request) {
-  const authorization = request.headers.get("authorization") || "";
-  if (!authorization.toLowerCase().startsWith("bearer ")) return "";
-  const token = authorization.slice(7).trim();
-  return token.length <= 4096 ? token : "";
-}
-
-function serviceBaseUrl(value, label, { requireSupabaseHost = false } = {}) {
+function serviceBaseUrl(value, label) {
   let url;
   try {
     url = new URL(String(value || "").trim());
@@ -274,9 +263,6 @@ function serviceBaseUrl(value, label, { requireSupabaseHost = false } = {}) {
   }
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
     throw new Error(`${label} must be an HTTPS origin without credentials, query parameters, or fragments`);
-  }
-  if (requireSupabaseHost && !url.hostname.endsWith(".supabase.co")) {
-    throw new Error(`${label} must use a Supabase project origin`);
   }
   url.pathname = url.pathname.replace(/\/+$/, "") || "/";
   return url;
@@ -433,69 +419,9 @@ async function requireDashboardOperator(request, env) {
     return null;
   }
 
-  const token = bearerToken(request);
-  if (!token) {
-    return jsonResponse({ ok: false, code: "operator_session_required", error: "Operator session required" }, { status: 401 });
-  }
-
-  const anonKey = String(env.SUPABASE_ANON_KEY || "").trim();
-  let supabaseUrl;
-  try {
-    supabaseUrl = serviceBaseUrl(env.SUPABASE_URL, "SUPABASE_URL", { requireSupabaseHost: true });
-  } catch {
-    return jsonResponse({ ok: false, code: "operator_auth_unavailable", error: "Operator authentication is unavailable" }, { status: 503 });
-  }
-  if (!anonKey) {
-    return jsonResponse({ ok: false, code: "operator_auth_unavailable", error: "Operator authentication is unavailable" }, { status: 503 });
-  }
-
-  const userUrl = new URL("/auth/v1/user", supabaseUrl);
-  const authRequest = new Request(userUrl.toString(), {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      apikey: anonKey,
-      Authorization: `Bearer ${token}`,
-    },
-    redirect: "manual",
-  });
-  let response;
-  try {
-    const authFetcher = env.SUPABASE_AUTH_FETCHER;
-    const fetcher = authFetcher && typeof authFetcher.fetch === "function"
-      ? (input, init) => authFetcher.fetch(input, init)
-      : (input, init) => fetch(input, init);
-    response = await timedFetch(fetcher, authRequest, {}, 8000);
-  } catch {
-    return jsonResponse({ ok: false, code: "operator_auth_unavailable", error: "Operator authentication is unavailable" }, { status: 503 });
-  }
-  if (!response.ok) {
-    return jsonResponse({ ok: false, code: "operator_session_invalid", error: "Operator session is invalid or expired" }, { status: 401 });
-  }
-  let operatorProfile;
-  try {
-    const profile = await boundedJson(response, MAX_OPERATOR_PROFILE_BYTES, "Operator profile");
-    const anonymous = profile?.is_anonymous === true
-      || String(profile?.is_anonymous || "").trim().toLowerCase() === "true"
-      || profile?.user_metadata?.is_anonymous === true
-      || String(profile?.user_metadata?.is_anonymous || "").trim().toLowerCase() === "true"
-      || String(profile?.role || "").trim().toLowerCase() === "anon"
-      || String(profile?.aud || "").trim().toLowerCase() === "anon"
-      || String(profile?.app_metadata?.provider || "").trim().toLowerCase() === "anonymous";
-    if (!profile || typeof profile !== "object" || !String(profile.id || "").trim() || anonymous) {
-      throw new Error("Operator profile is incomplete");
-    }
-    operatorProfile = profile;
-  } catch {
-    return jsonResponse({ ok: false, code: "operator_session_invalid", error: "Operator session is invalid or expired" }, { status: 401 });
-  }
-  // Authentication only proves that Supabase issued the session.  Public
-  // sign-up can be enabled on the project, so a valid session is not enough:
-  // the user must also be explicitly authorized as an operator.
-  if (!isAuthorizedOperator(operatorProfile, env)) {
-    return jsonResponse({ ok: false, code: "operator_not_authorized", error: "This account is not authorized for Mission Control" }, { status: 403 });
-  }
-  return null;
+  // Cloudflare Access is the only operator sign-in. Without it configured
+  // the hosted console fails closed instead of offering another login.
+  return jsonResponse({ ok: false, code: "operator_auth_unavailable", error: "Cloudflare Access is not configured for this deployment" }, { status: 503 });
 }
 
 function accessCertsFetcher(env) {
@@ -527,7 +453,7 @@ function csvSet(value, normalize = (item) => item) {
 // An operator is authorized by one of:
 // - a server-controlled `app_metadata.secopsai_role` of operator/admin
 //   (app_metadata is writable only with the service role, never by the user);
-// - the Supabase user id in DASHBOARD_OPERATOR_USER_IDS;
+// - the Access subject id in DASHBOARD_OPERATOR_USER_IDS;
 // - a confirmed email address in DASHBOARD_OPERATOR_EMAILS.
 // With none configured the deployment fails closed.
 function isAuthorizedOperator(profile, env) {
@@ -1035,6 +961,19 @@ function blogOpsPublicStatus(env) {
   };
 }
 
+// Behind Cloudflare Access every /api route has already verified the operator
+// (Access JWT + allowlist), so actions need no extra pasted token.  What remains
+// is cross-site request forgery: an action must come from this console, which
+// browsers prove with Sec-Fetch-Site / Origin.  Without Access (local helper or
+// legacy deployments) the shared action tokens below still apply.
+function requireSameOriginAction(request) {
+  const site = String(request.headers.get("sec-fetch-site") || "").toLowerCase();
+  const origin = request.headers.get("origin");
+  const sameOrigin = site ? site === "same-origin" : Boolean(origin && origin === new URL(request.url).origin);
+  if (sameOrigin) return null;
+  return jsonResponse({ ok: false, code: "cross_site_action", error: "Actions must come from the Mission Control console" }, { status: 403 });
+}
+
 function isBlogOpsAdmin(request, env) {
   const expected = blogOpsConfig(env).adminToken;
   if (!expected) return false;
@@ -1045,6 +984,7 @@ function isBlogOpsAdmin(request, env) {
 }
 
 function requireBlogOpsAdmin(request, env) {
+  if (accessConfigured(env)) return requireSameOriginAction(request);
   const config = blogOpsConfig(env);
   if (!config.adminToken) {
     return jsonResponse(
@@ -1067,6 +1007,7 @@ function triageOpsExpectedAdminToken(env) {
 }
 
 function requireTriageOpsAdmin(request, env) {
+  if (accessConfigured(env)) return requireSameOriginAction(request);
   const expected = triageOpsExpectedAdminToken(env);
   if (!expected) {
     return jsonResponse(
@@ -1089,6 +1030,7 @@ function requireTriageOpsAdmin(request, env) {
 }
 
 function requireArtifactFleetAdmin(request, env) {
+  if (accessConfigured(env)) return requireSameOriginAction(request);
   const expected = String(
     env.INTELLIGENCE_ADMIN_TOKEN || env.SECOPSAI_CORE_INTELLIGENCE_TOKEN || env.TRIAGE_OPS_ADMIN_TOKEN || env.BLOG_OPS_ADMIN_TOKEN || "",
   ).trim();
@@ -1782,7 +1724,16 @@ async function proxySecopsaiHelper(request, env) {
   if (authHeader && authToken) {
     headers.set(authHeader, authToken);
   }
-  const triageOpsToken = request.headers.get("x-triage-ops-admin-token") || "";
+  // Behind Access the Worker authorizes actions itself and supplies the
+  // helper's action tokens from its own secrets; browsers never hold them.
+  const access = accessConfigured(env);
+  // Only write routes (already authorized above) receive the server-side token;
+  // read routes stay token-free.
+  const helperWrite = isTriageOpsWriteRoute(request, incomingUrl.pathname)
+    || (request.method.toUpperCase() === "POST" && incomingUrl.pathname === "/api/secopsai/research-watchlist");
+  const triageOpsToken = access
+    ? (helperWrite ? triageOpsExpectedAdminToken(env) : "")
+    : request.headers.get("x-triage-ops-admin-token") || "";
   if (triageOpsToken && (
     incomingUrl.pathname.startsWith("/api/secopsai/triage-ops/")
     || incomingUrl.pathname.startsWith("/api/secopsai/research-cases/")
@@ -1792,7 +1743,9 @@ async function proxySecopsaiHelper(request, env) {
   )) {
     headers.set("X-Triage-Ops-Admin-Token", triageOpsToken);
   }
-  const intelligenceToken = request.headers.get("x-secopsai-intelligence-token") || "";
+  const intelligenceToken = access
+    ? String(env.INTELLIGENCE_ADMIN_TOKEN || triageOpsExpectedAdminToken(env)).trim()
+    : request.headers.get("x-secopsai-intelligence-token") || "";
   if (intelligenceToken && ["/api/secopsai/enterprise-action", "/api/secopsai/artifact-fleet", "/api/secopsai/rust-package-research", "/api/secopsai/source-first-research"].includes(incomingUrl.pathname)) {
     headers.set("X-SecOpsAI-Intelligence-Token", intelligenceToken);
   }
@@ -2010,7 +1963,7 @@ async function routeRequest(request, env) {
       const authResponse = await requireDashboardOperator(request, env);
       if (authResponse) return authResponse;
       const identity = accessConfigured(env) ? await verifyAccessRequest(request, env, accessCertsFetcher(env)) : null;
-      return jsonResponse({ ok: true, mode: accessConfigured(env) ? "access" : "operator", email: identity?.email || null });
+      return jsonResponse({ ok: true, mode: "access", email: identity?.email || null });
     }
 
     const dataMatch = url.pathname.match(/^\/api\/data\/([a-z_]{1,40})$/);
@@ -2130,7 +2083,16 @@ async function routeRequest(request, env) {
     if (!isPublicAssetPath(url.pathname) || !["GET", "HEAD"].includes(request.method.toUpperCase())) {
       return staticAssetNotFound();
     }
-    return env.ASSETS.fetch(request);
+    const asset = await env.ASSETS.fetch(request);
+    // The console page must never be served from a browser or proxy cache: a
+    // stale copy could load without passing through Cloudflare Access, and its
+    // config.js request would then be redirected to the Access login instead.
+    if (String(asset.headers.get("content-type") || "").toLowerCase().includes("text/html")) {
+      const headers = new Headers(asset.headers);
+      headers.set("Cache-Control", "no-store");
+      return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
+    }
+    return asset;
 }
 
 export default {
