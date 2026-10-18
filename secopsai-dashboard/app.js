@@ -6325,10 +6325,16 @@ function intelligenceSelectedModel() {
   const persisted = String(state.intelligence.data?.bridge?.selected_model || '');
   if (persisted && (ids.includes(persisted) || !models.length)) return persisted;
   const stored = String(state.intelligence.selectedModel || '');
-  if (stored && ids.includes(stored)) return stored;
+  if (stored && (ids.includes(stored) || !models.length)) return stored;
   const defaultModel = String(state.intelligence.data?.models?.default_model || '');
   if (defaultModel && (ids.includes(defaultModel) || !models.length)) return defaultModel;
   return ids[0] || '';
+}
+
+function intelligenceRecoveryRouting(model) {
+  const selectedModel = String(model || '').trim();
+  if (!selectedModel) return null;
+  return { model: selectedModel, fallback_mode: 'disabled', fallback_models: [] };
 }
 
 function intelligenceResultList(value) {
@@ -7268,12 +7274,17 @@ async function runIntelligenceAction(action, payload = {}, button = null) {
     state.intelligence.serviceOutput = ['service', 'run-once'].includes(action) ? JSON.stringify(result.result || result, null, 2) : state.intelligence.serviceOutput;
     const requeueCount = result?.result?.count;
     const recoveryAction = ['requeue', 'recover-transient-jobs', 'requeue-failed-jobs'].includes(action);
-    const existingRecovery = Array.isArray(result?.result?.existing) ? result.result.existing.length : 0;
+    const existingRecoveryJobs = Array.isArray(result?.result?.existing) ? result.result.existing : [];
+    const existingRecovery = existingRecoveryJobs.length;
+    const existingRecoveryStatuses = [...new Set(existingRecoveryJobs.map(item => String(item?.status || '').trim()).filter(Boolean))]
+      .map(humanizeSnake).join(', ');
     const skippedRecovery = Array.isArray(result?.result?.skipped) ? result.result.skipped.length : 0;
-    const recoveryReasons = [...new Set((result?.result?.skipped || []).map(item => humanizeSnake(item.reason || 'Review required')))].slice(0, 3).join(', ');
+    const recoveryReasons = [...new Set((result?.result?.skipped || []).map(item => item.reason === 'legacy_job_requires_explicit_routing'
+      ? 'Select a model for legacy jobs'
+      : humanizeSnake(item.reason || 'Review required')))].slice(0, 3).join(', ');
     const completionMsg = recoveryAction && requeueCount !== undefined
       ? (requeueCount || existingRecovery || skippedRecovery
-        ? `Queued ${requeueCount} new recovery job${requeueCount === 1 ? '' : 's'}; ${existingRecovery} already queued; ${skippedRecovery} not queued.${recoveryReasons ? ` ${recoveryReasons}.` : ''}`
+        ? `Queued ${requeueCount} new recovery job${requeueCount === 1 ? '' : 's'}; ${existingRecovery} existing${existingRecoveryStatuses ? ` (${existingRecoveryStatuses})` : ''}; ${skippedRecovery} not queued.${recoveryReasons ? ` ${recoveryReasons}.` : ''}`
         : 'No eligible transient failures were found. Safety, contract, and unknown-cause failures require their cause-specific review action.')
       : `Intelligence action completed: ${humanizeSnake(action)}`;
     showToast(completionMsg, recoveryAction && requeueCount === 0 ? 'warning' : 'success');
@@ -14296,9 +14307,14 @@ function bindEvents() {
       ...(explicitModel ? { model: explicitModel, fallback_mode: 'disabled', fallback_models: [] } : {}) }, requeueButton);
   });
   el('intelligence-recover-transient-btn')?.addEventListener('click', event => {
-    const selectedModel = intelligenceSelectedModel();
+    const selectedModel = String(el('intelligence-model-select')?.value || intelligenceSelectedModel()).trim();
+    const routing = intelligenceRecoveryRouting(selectedModel);
+    if (!routing) {
+      showToast('No model is selected. Open Automation → Models, select a model, then try recovery again. No jobs were changed.', 'error');
+      return;
+    }
     runIntelligenceAction('recover-transient-jobs', { limit: 10, max_attempts: 3, min_age_seconds: 300,
-      ...(selectedModel ? { model: selectedModel, fallback_mode: 'disabled', fallback_models: [] } : {}) }, event.currentTarget);
+      ...routing }, event.currentTarget);
   });
   el('task-modal-close')?.addEventListener('click', closeTaskModal);
   el('task-cancel-btn')?.addEventListener('click', closeTaskModal);

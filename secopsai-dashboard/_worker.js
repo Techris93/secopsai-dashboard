@@ -644,6 +644,8 @@ async function handleHostedIntelligence(request, env) {
   if (["requeue", "recover-transient-jobs", "requeue-failed-jobs"].includes(action)) {
     const jobId = String(body.job_id || "").trim();
     if (action === "requeue" && !INTELLIGENCE_JOB_ID_RE.test(jobId)) return jsonResponse({ ok: false, error: "An explicit failed job is required" }, { status: 400 });
+    const selectedModel = String(body.model || "").trim();
+    if (action === "recover-transient-jobs" && !selectedModel) return jsonResponse({ ok: false, error: "Select a model before recovering legacy analysis jobs" }, { status: 422 });
     const recoveryNumber = (value, fallback, minimum, maximum) => {
       const parsed = Number(value);
       if (!Number.isInteger(parsed)) return fallback;
@@ -657,7 +659,7 @@ async function handleHostedIntelligence(request, env) {
         min_age_seconds: recoveryNumber(body.min_age_seconds, 300, 0, 86400),
         dry_run: body.dry_run === true,
         ...(jobId && body.repair_version ? { repair_version: String(body.repair_version) } : {}),
-        ...(body.model ? { selected_model: String(body.model).trim(), fallback_models: Array.isArray(body.fallback_models) ? body.fallback_models : [], fallback_mode: body.fallback_mode || "disabled" } : {}),
+        ...(selectedModel ? { selected_model: selectedModel, fallback_models: Array.isArray(body.fallback_models) ? body.fallback_models : [], fallback_mode: body.fallback_mode || "disabled" } : {}),
       },
     });
     return jsonResponse({ ok: true, action, result: payload });

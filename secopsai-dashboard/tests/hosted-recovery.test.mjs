@@ -5,12 +5,18 @@ import worker from '../_worker.js';
 import { accessJwt, ACCESS_HEADER, ACCESS_TEST_ENV } from './access-test-auth.mjs';
 
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-const context = vm.createContext({});
-for (const name of ['isDurableIntelligenceTarget', 'latestIntelligenceJobs', 'intelligenceRecoveryView']) {
+const context = vm.createContext({ state: { intelligence: {} }, intelligenceModels: () => [] });
+for (const name of ['isDurableIntelligenceTarget', 'latestIntelligenceJobs', 'intelligenceRecoveryView', 'intelligenceSelectedModel', 'intelligenceRecoveryRouting']) {
   const start = app.indexOf(`function ${name}(`);
   const end = app.indexOf('\nfunction ', start + 1);
   vm.runInContext(app.slice(start, end), context);
 }
+context.state.intelligence.selectedModel = 'gpt-6-luna';
+assert.equal(context.intelligenceSelectedModel(), 'gpt-6-luna', 'stored model remains usable while the catalog is temporarily empty');
+context.state.intelligence.selectedModel = '';
+assert.equal(context.intelligenceSelectedModel(), '', 'recovery does not invent a model when none is available');
+assert.equal(JSON.stringify(context.intelligenceRecoveryRouting(' gpt-6-luna ')), JSON.stringify({model:'gpt-6-luna',fallback_mode:'disabled',fallback_models:[]}));
+assert.equal(context.intelligenceRecoveryRouting(''), null, 'recovery routing is unavailable without a selected model');
 assert.equal(context.intelligenceRecoveryView({status:'failed'}).eligible, false);
 assert.equal(context.intelligenceRecoveryView({status:'failed',recovery:{eligible:false,action:'Inspect missing diagnostic'}}).action,'Inspect missing diagnostic');
 const latest = context.latestIntelligenceJobs([
@@ -40,12 +46,16 @@ const jwt = await accessJwt();
 const send = body => worker.fetch(new Request('https://dashboard.example/api/secopsai/intelligence',{
   method:'POST',headers:{[ACCESS_HEADER]:jwt,'content-type':'application/json'},body:JSON.stringify(body)}),env);
 try {
-  const bulk = await send({action:'requeue-failed-jobs',repair_version:'artifact-choices-v3'});
+  const missingRoute = await send({action:'recover-transient-jobs',limit:10,max_attempts:3,min_age_seconds:300});
+  assert.equal(missingRoute.status,422);
+  assert.equal(calls.length,0,'missing routing fails locally rather than returning per-target legacy routing skips');
+  const bulk = await send({action:'requeue-failed-jobs',repair_version:'artifact-choices-v3',model:'gpt-6-luna',fallback_mode:'disabled',fallback_models:[]});
   assert.equal(bulk.status,200);
   assert.equal((await bulk.json()).result.count,0);
   assert.equal(calls[0].path,'/api/v1/intelligence/jobs/recover');
   assert.equal(calls[0].body.limit,10);
   assert.equal(calls[0].body.repair_version,undefined,'bulk action cannot re-evaluate safety failures');
+  assert.equal(calls[0].body.selected_model,'gpt-6-luna');
   const repaired = await send({action:'requeue',job_id:'AIJ-AAAAAAAAAAAAAAAA',repair_version:'artifact-choices-v3',model:'gpt-6-luna',fallback_mode:'disabled',fallback_models:[]});
   assert.equal(repaired.status,200);
   assert.deepEqual(calls[1].body.job_ids,['AIJ-AAAAAAAAAAAAAAAA']);
