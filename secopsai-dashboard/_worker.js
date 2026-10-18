@@ -641,6 +641,18 @@ async function handleHostedIntelligence(request, env) {
     const payload = await secopsaiCoreRequest(baseUrl, `/api/v1/intelligence/jobs/${encodeURIComponent(jobId)}/cancel`, intelligenceToken, "Cancel intelligence job", { method: "POST" });
     return jsonResponse({ ok: true, action, result: payload.job });
   }
+  if (["requeue", "recover-transient-jobs", "requeue-failed-jobs"].includes(action)) {
+    const jobId = String(body.job_id || "").trim();
+    if (action === "requeue" && !INTELLIGENCE_JOB_ID_RE.test(jobId)) return jsonResponse({ ok: false, error: "An explicit failed job is required" }, { status: 400 });
+    const payload = await secopsaiCoreRequest(baseUrl, "/api/v1/intelligence/jobs/recover", intelligenceToken, "Recover classified intelligence jobs", {
+      method: "POST", body: {
+        ...(jobId ? { job_ids: [jobId] } : {}), limit: 10, dry_run: body.dry_run === true,
+        ...(jobId && body.repair_version ? { repair_version: String(body.repair_version) } : {}),
+        ...(body.model ? { selected_model: String(body.model).trim(), fallback_models: Array.isArray(body.fallback_models) ? body.fallback_models : [], fallback_mode: body.fallback_mode || "disabled" } : {}),
+      },
+    });
+    return jsonResponse({ ok: true, action, result: payload });
+  }
   if (action === "autopilot-configure") {
     const mode = String(body.mode || "").trim().toLowerCase();
     if (!["off", "advisory", "guarded"].includes(mode)) return jsonResponse({ ok: false, error: "Invalid autopilot mode" }, { status: 400 });

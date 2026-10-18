@@ -386,7 +386,10 @@ assert.equal(vm.runInContext("intelligenceModelSupportsAction('typesafe/jev-late
 assert.equal(vm.runInContext("intelligenceModelSupportsAction('typesafe/jev-latest', 'analyze_research_case')", runtime.context), false);
 assert.equal(vm.runInContext("intelligenceModelSupportsAction('cloudflare/clef', 'review_publication_safety')", runtime.context), false);
 assert.equal(vm.runInContext("intelligenceModelSupportsAction('cloudflare/clef-flash', 'triage_finding')", runtime.context), true);
+runtime.context.genericModelFixture = { models: [{ id: 'native', supported_actions: ['analyze_research_case'] }] };
+vm.runInContext('state.intelligence.data.models = genericModelFixture;', runtime.context);
 assert.equal(vm.runInContext("intelligenceModelSupportsAction('native', 'analyze_research_case')", runtime.context), true);
+assert.equal(vm.runInContext("intelligenceModelSupportsAction('uncatalogued/model', 'analyze_research_case')", runtime.context), false);
 console.log('research case, decision capability, and detection learning runtime rendering checks passed');
 
 const operationFixture = {
