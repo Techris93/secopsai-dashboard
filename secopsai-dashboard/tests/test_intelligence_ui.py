@@ -366,8 +366,15 @@ def test_intelligence_operator_surface_is_present_and_not_prompt_driven():
     assert "intelligence-requeue-failed-metric-btn" not in app
     assert "Re-run failed jobs" not in html
     assert "requeue-failed-jobs" in app
-    assert "const selectedModel = intelligenceSelectedModel();" in app
+    assert "function intelligenceRecoveryRouting(model)" in app
+    assert "const selectedModel = String(el('intelligence-model-select')?.value || intelligenceSelectedModel()).trim();" in app
+    assert "const routing = intelligenceRecoveryRouting(selectedModel);" in app
+    assert "if (!routing)" in app
+    assert "No jobs were changed." in app
+    assert "...routing }, event.currentTarget);" in app
     assert "Queued ${requeueCount} new recovery job" in app
+    assert "existing${existingRecoveryStatuses ? ` (${existingRecoveryStatuses})` : ''}" in app
+    assert "Select a model for legacy jobs" in app
     assert "recoveryAction && requeueCount === 0" in app
     assert "const backgroundAction = ['enqueue', 'autopilot-run-now', 'daily-run', 'investigation-run-due'].includes(action);" in app
     assert "research-decision-card" in app
