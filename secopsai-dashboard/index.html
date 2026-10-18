@@ -995,7 +995,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         </section>
 
         <section class="card research-stage-panel" id="research-inbox-section" data-research-section="inbox" aria-labelledby="research-inbox-title">
-          <div class="page-header compact-header"><div><h3 id="research-inbox-title" style="margin:0;">Discovery inbox</h3><p class="small" style="margin:6px 0 0;">Candidates are ranked by explainable similarity and evidence completeness. Review the reason before creating a case.</p></div><button class="secondary-btn" id="research-inbox-refresh-btn" type="button">Refresh candidates</button></div>
+          <div class="page-header compact-header"><div><h3 id="research-inbox-title" style="margin:0;">Discovery inbox</h3><p class="small" style="margin:6px 0 0;">Similarity is a discovery signal, not a risk score. Review routing is based on evidence; publication requires separate substantiation and independent review.</p></div><button class="secondary-btn" id="research-inbox-refresh-btn" type="button">Refresh candidates</button></div>
           <div id="research-inbox-candidates" class="research-inbox-grid" role="status" aria-live="polite"></div>
         </section>
 
@@ -1070,6 +1070,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                   <label class="research-span-2"><span>Resolution of contrary evidence</span><textarea id="research-claim-resolution"></textarea></label>
                   <label class="research-span-2"><span>Limitations (one per line)</span><textarea id="research-claim-limitations"></textarea></label>
                   <label><input id="research-claim-malicious" type="checkbox" />This observation demonstrates malicious behavior within the stated scope</label>
+                  <fieldset class="research-span-2"><legend>Urgent impact indicators, only when supported by the cited evidence</legend><div class="research-form-grid"><label><input type="checkbox" data-impact-indicator="active_exploitation" />Active exploitation</label><label><input type="checkbox" data-impact-indicator="credential_theft" />Credential theft</label><label><input type="checkbox" data-impact-indicator="harmful_install_time_behavior" />Harmful install-time behavior</label><label><input type="checkbox" data-impact-indicator="victim_exposure" />Exposed victims</label></div><p class="small">These labels create an immediate reviewer alert only when a qualified reviewer records a current evidence-linked claim. A rule match or model score alone cannot trigger it.</p></fieldset>
                 </div><button class="secondary-btn" id="research-claim-assess" type="button">Record qualified independent assessment</button>
               </details>
             </details>

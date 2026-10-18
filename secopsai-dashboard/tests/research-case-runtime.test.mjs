@@ -148,6 +148,8 @@ const blockedHtml = runtime.elements.get('research-case-detail').innerHTML;
 assert.match(blockedHtml, /Case assessment/);
 assert.match(blockedHtml, /Potential impact/);
 assert.match(blockedHtml, /Independent review is pending/);
+assert.match(blockedHtml, /EVIDENCE-BASED ROUTE/);
+assert.match(blockedHtml, /Record an independent technical or editorial review/);
 assert.match(blockedHtml, /Evidence reliability workspace/);
 for (const label of [
   'Generate Hypotheses', 'Rank Hypotheses', 'Run Scaffold Research', 'Verify Transition',
@@ -157,6 +159,35 @@ for (const label of [
 ]) assert.match(blockedHtml, new RegExp(label));
 assert.equal((blockedHtml.match(/id="research-draft-blog-btn"/g) || []).length, 1);
 assert.doesNotMatch(blockedHtml, /\[object Object\]/i);
+
+runtime.context.renderResearchCaseDetail(sampleCase({
+  routing: {
+    route: 'validate',
+    review_required: true,
+    review_priority: 'routine',
+    publication_candidate: false,
+    publication_blockers: ['Prior-art research is incomplete.'],
+    evidence_gaps: ['Compare the adjacent release.'],
+    reasons: ['The evidence is incomplete.'],
+    next_actions: ['Record the release comparison.'],
+  },
+  research_assurance: {
+    assessed_claims: [{
+      current: true,
+      assessment: 'observation',
+      statement: 'The archived source contains a hard-coded tracking endpoint.',
+    }],
+  },
+}));
+const evidenceRouteHtml = runtime.elements.get('research-case-detail').innerHTML;
+assert.match(evidenceRouteHtml, /route-validate/);
+assert.match(evidenceRouteHtml, /Publication decision/);
+assert.match(evidenceRouteHtml, /Prior-art research is incomplete/);
+assert.match(evidenceRouteHtml, /Compare the adjacent release/);
+assert.match(evidenceRouteHtml, /The archived source contains a hard-coded tracking endpoint/);
+assert.match(evidenceRouteHtml, /data-case-review-check-group='technical_reviewer'/);
+assert.match(evidenceRouteHtml, /data-case-review-check-group='editor'/);
+assert.match(evidenceRouteHtml, /reviewer.*does not publish|neither action publishes/i);
 
 runtime.context.renderResearchCaseDetail(sampleCase({
   publication_readiness: 'ready',
