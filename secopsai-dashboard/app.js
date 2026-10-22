@@ -11105,11 +11105,13 @@ const RESEARCH_BRIEF_CHECK_LABELS = {
 async function runResearchOperation(action, data, { identity = '', caseId = '', button = null } = {}) {
   const actor = el('research-operation-actor')?.value.trim() || '';
   const token = el('research-operation-token')?.value || '';
-  if (!actor || !token) { setStatus('Enter your registered human identity and protected operation token.', true); return null; }
+  // The hosted console authorizes with the Cloudflare Access sign-in and its
+  // own server-side Core token; only the local helper needs a typed token.
+  if (!actor || (!token && isLocalDashboardOrigin())) { setStatus(isLocalDashboardOrigin() ? 'Enter your registered human identity and protected operation token.' : 'Enter your registered human identity.', true); return null; }
   setButtonBusy(button, true, 'Recording…');
   try {
     const response = await dashboardApiFetch('/api/secopsai/research-operation', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-SecOpsAI-Intelligence-Token': token },
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'X-SecOpsAI-Intelligence-Token': token } : {}) },
       body: JSON.stringify({ action, actor, data, id: identity, case_id: caseId, request_id: crypto.randomUUID() }),
     });
     const payload = await response.json();
