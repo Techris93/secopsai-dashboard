@@ -11070,3 +11070,19 @@ body.professional-ui .icon-btn:hover {
 .research-case-tab.active { color: var(--text); border-bottom-color: var(--blue); font-weight: 600; }
 .research-case-tab-count { font-size: 0.8em; color: var(--muted); }
 .research-tab-panel[hidden] { display: none; }
+
+/* Tablet and narrow desktop windows (721-1024px) use the same off-canvas
+   navigation as phones. Stacking the sidebar above the page made it taller
+   than the window, so the page content was never visible. */
+@media (min-width: 721px) and (max-width: 1024px) {
+  body.professional-ui .app-shell { display: block; }
+  body.professional-ui .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: 280px; height: 100vh; overflow-y: auto; transform: translateX(-100%); transition: transform 160ms ease; }
+  body.professional-ui.mobile-nav-open .sidebar { transform: translateX(0); }
+  body.professional-ui .nav-list { max-height: 0; overflow-y: hidden; }
+  body.professional-ui.mobile-nav-open .nav-list { max-height: calc(100vh - 88px); overflow-y: auto; opacity: 1; transform: none; margin-top: 14px; }
+  body.professional-ui .main { min-height: 100vh; }
+  body.professional-ui .topbar-primary { display: flex; align-items: center; }
+  body.professional-ui .topbar-menu-btn { display: inline-flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; width: 40px; height: 40px; margin-right: 8px; flex: 0 0 auto; border: 1px solid var(--contrast-border, #dce7e1); border-radius: 10px; background: var(--contrast-surface, #fff); cursor: pointer; }
+  body.professional-ui .topbar-menu-btn span { display: block; width: 18px; height: 2px; border-radius: 2px; background: var(--contrast-text, #17211e); }
+  body.professional-ui.mobile-nav-open .mobile-nav-backdrop { display: block; position: fixed; inset: 0; z-index: 39; background: rgba(15, 23, 42, 0.45); }
+}

@@ -4403,8 +4403,8 @@ function renderMissionControl() {
     tone: 'info',
     label: 'Automation active',
     title: `${modelQueued} model job${modelQueued === 1 ? '' : 's'} queued; ${modelRunning} running`,
-    summary: `The selected model ${selectedModel} is actively processing durable jobs. Avoid creating duplicate runs.`,
-    evidence: [`${modelFailed} historical failure${modelFailed === 1 ? '' : 's'}`, `Selected model: ${selectedModel}`],
+    summary: 'Avoid starting duplicate runs.',
+    evidence: [`${modelFailed} historical failure${modelFailed === 1 ? '' : 's'}`, ...(bridge.selected_model ? [`Model: ${selectedModel}`] : [])],
     action: 'Monitor model jobs',
     route: 'automation/jobs'
   });
