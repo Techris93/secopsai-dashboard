@@ -66,7 +66,7 @@ async function testConsolePageIsNeverCached() {
   const page = await workerModule.fetch(new Request("https://dashboard.example/index.html"), env);
   assert.equal(page.headers.get("Cache-Control"), "no-store");
   const style = await workerModule.fetch(new Request("https://dashboard.example/styles.css"), env);
-  assert.equal(style.headers.get("Cache-Control"), "public, max-age=3600");
+  assert.equal(style.headers.get("Cache-Control"), "no-cache", "scripts and styles revalidate so a deploy is never hidden behind a cached copy");
 }
 
 async function testUnverifiedAccessTokensAreRejected() {

@@ -11053,3 +11053,13 @@ body.professional-ui .icon-btn:hover {
 .auth-gate.auth-checking .auth-locked-message,
 .auth-gate.auth-checking .local-auth-gate-panel,
 .auth-gate.auth-checking .auth-boundary { display: none !important; }
+
+/* Research publishing checklist */
+.research-checklist { border: 1px solid var(--border-strong); border-radius: 10px; padding: 12px 16px; margin: 8px 0 16px; background: var(--card); }
+.research-checklist h4 { margin: 0 0 4px; }
+.research-steps { margin: 8px 0 0; padding-left: 0; list-style: none; display: grid; gap: 8px; }
+.research-steps li { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); }
+.research-steps li.done { color: var(--muted); }
+.research-steps li.done strong { color: var(--green); }
+.research-steps li.next { border-color: var(--blue); background: var(--bg-soft); }
+.research-steps .research-goto { margin-left: 8px; padding: 2px 10px; }
