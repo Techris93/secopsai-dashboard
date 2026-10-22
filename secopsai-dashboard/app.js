@@ -10273,7 +10273,7 @@ async function backgroundRefreshOpsData() {
 }
 
 function edgeMetric(label, value, detail) {
-  return `<div class="card metric-card"><div class="metric-label">${escapeHtml(label)}</div><div class="metric">${escapeHtml(String(value))}</div><div class="metric-label">${escapeHtml(detail)}</div></div>`;
+  return `<div class="card metric-card"><div class="metric-label">${escapeHtml(label)}</div><div class="metric">${escapeHtml(String(value))}</div>${detail ? `<div class="metric-label">${escapeHtml(detail)}</div>` : ''}</div>`;
 }
 
 function flattenCoreGraphNode(node) {
@@ -13030,17 +13030,17 @@ function renderResearchCases() {
   if (tokenInput && tokenInput.value !== state.researchCases.adminToken) tokenInput.value = state.researchCases.adminToken;
   const cases = state.researchCases.cases || [];
   const researchView = state.researchCases.view || 'cases';
-  const researchViewCopy = {
-    inbox: ['Discovery inbox', 'Review ranked candidates and decide which leads should become durable investigations.'],
-    cases: ['Research cases', 'Track evidence, analysis, disclosure, publication, and monitoring for each investigation.'],
-    campaigns: ['Campaigns', 'Review related packages, publishers, dependencies, infrastructure, and timelines without inferring attribution.'],
-    watchlists: ['Watchlists', 'Manage monitored packages, brands, publishers, and namespaces across supported ecosystems.'],
-    disclosure: ['Disclosure', 'Review disclosure state, deadlines, and external communication gates for selected cases.'],
-    sandbox: ['Sandbox jobs', 'Review approval-gated dynamic analysis requests and imported results.'],
-    resolved: ['Resolved by agents', 'Review reversible case resolutions and reopen any decision that needs human investigation.']
-  }[researchView] || ['Research cases', 'Track evidence, analysis, disclosure, publication, and monitoring for each investigation.'];
+  const researchViewTitle = {
+    inbox: 'Discovery inbox',
+    cases: 'Research cases',
+    campaigns: 'Campaigns',
+    watchlists: 'Watchlists',
+    disclosure: 'Disclosure',
+    sandbox: 'Sandbox jobs',
+    resolved: 'Resolved by agents'
+  }[researchView] || 'Research cases';
   const viewSummary = el('research-view-summary');
-  if (viewSummary) viewSummary.innerHTML = `<span class="eyebrow">Research workspace</span><strong>${escapeHtml(researchViewCopy[0])}</strong><span>${escapeHtml(researchViewCopy[1])}</span>`;
+  if (viewSummary) viewSummary.innerHTML = `<strong>${escapeHtml(researchViewTitle)}</strong>`;
   const page = el('page-research-cases');
   if (page) page.dataset.researchView = researchView;
   document.querySelectorAll('#page-research-cases [data-research-section]').forEach(section => {
@@ -13055,12 +13055,12 @@ function renderResearchCases() {
   const ruleProposals = cases.reduce((sum, item) => sum + Number(item.rule_proposal_count || 0), 0);
   const stats = el('research-cases-stats');
   if (stats) stats.innerHTML = [
-    edgeMetric('Active cases', active, `${cases.length} total`),
-    edgeMetric('Ready to publish', ready, 'Disclosure checks passed'),
-    edgeMetric('Coordinating', disclosure, 'Disclosure in progress'),
-    edgeMetric('Evidence records', evidence, 'Structured provenance'),
-    edgeMetric('IOC records', cases.reduce((sum, item) => sum + Number(item.ioc_count || 0), 0), 'Normalized indicators'),
-    edgeMetric('Case-linked rules', rules, `${ruleProposals} awaiting review · YARA, Sigma, Semgrep`)
+    edgeMetric('Active cases', active, active === cases.length ? '' : `of ${cases.length}`),
+    edgeMetric('Ready to publish', ready, ''),
+    edgeMetric('Disclosing', disclosure, ''),
+    edgeMetric('Evidence records', evidence, ''),
+    edgeMetric('IOCs', cases.reduce((sum, item) => sum + Number(item.ioc_count || 0), 0), ''),
+    edgeMetric('Case-linked rules', rules, ruleProposals ? `${ruleProposals} awaiting review` : '')
   ].join('');
   renderResearchWatchlist();
   renderResearchDiscovery();
