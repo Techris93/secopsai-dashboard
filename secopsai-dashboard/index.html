@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="./url-safety.js?v=20260803-credential-url-hardening"></script>
-  <link rel="stylesheet" href="./styles.css?v=20261023-research-cuts" />
+  <link rel="stylesheet" href="./styles.css?v=20261023-console-cuts" />
 </head>
 <body class="okcomputer-skin professional-ui">
   <section class="auth-gate auth-checking" id="auth-gate" aria-labelledby="auth-title" aria-busy="true">
@@ -159,7 +159,7 @@
         <div class="page-header mission-today-header">
           <div>
             <h2>Today</h2>
-            <p>The decisions that need you, and the work SecOpsAI is handling automatically.</p>
+            
           </div>
           <div class="status-pill" id="refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh data</div>
         </div>
@@ -171,12 +171,12 @@
         <section id="mission-health-strip" aria-live="polite"></section>
         <details class="mission-secondary-details" id="mission-secondary-details">
           <summary>More operational detail</summary>
-          <p class="small">Workload distribution, run totals, native triage, and research queues. These support a decision; they are not verdicts.</p>
+          
           <div class="operations-cockpit" id="mission-attention"></div>
           <div class="grid cols-5" id="mission-stats"></div>
           <div class="grid cols-3" style="margin-top:18px;" id="mission-overview"></div>
           <div class="card mission-queues-card" id="mission-queues-section" style="margin-top:18px;">
-            <div class="page-header compact-header"><div><h3 style="margin:0;">Research operations queues</h3><p class="small" style="margin:6px 0 0;">Discovery, validation, disclosure, publication, and coverage queues.</p></div></div>
+            <div class="page-header compact-header"><div><h3 style="margin:0;">Research operations queues</h3></div></div>
             <div class="mission-queues" id="mission-research-queues" role="status" aria-live="polite"></div>
           </div>
         </details>
@@ -185,9 +185,9 @@
       <section class="page" id="page-ontology">
         <div class="page-header">
           <div>
-            <span class="eyebrow">Connected security context</span>
+            <span class="sr-only">Connected security context</span>
             <h2>Operating picture</h2>
-            <p>Start with any canonical object, follow its evidence-backed relationships, and see what is known, stale, or missing.</p>
+            
           </div>
           <div class="page-actions">
             <span class="status-pill" id="ontology-data-mode"><span class="dot"></span> Waiting for data</span>
@@ -198,9 +198,9 @@
         <section class="card" id="ontology-search-section" aria-labelledby="ontology-search-title">
           <div class="module-head compact-header">
             <div>
-              <span class="eyebrow">Find a canonical object</span>
+              <span class="sr-only">Find a canonical object</span>
               <h3 id="ontology-search-title">Universal entity search</h3>
-              <p>Search packages, versions, advisories, findings, assets, cases, evidence, runs, or owners.</p>
+              
             </div>
             <span class="small" id="ontology-search-summary" role="status" aria-live="polite">No search performed.</span>
           </div>
@@ -242,7 +242,7 @@
         <section class="card" id="ontology-entity-section" aria-labelledby="ontology-entity-title">
           <div class="module-head compact-header">
             <div>
-              <span class="eyebrow">What it is</span>
+              <span class="sr-only">What it is</span>
               <h3 id="ontology-entity-title">Selected entity</h3>
             </div>
           </div>
@@ -252,13 +252,13 @@
         <section class="grid cols-2" id="ontology-neighbors-section">
           <article class="card" aria-labelledby="ontology-neighbors-title">
             <div class="module-head compact-header">
-              <div><span class="eyebrow">What it connects to</span><h3 id="ontology-neighbors-title">Relationships</h3></div>
+              <div><span class="sr-only">What it connects to</span><h3 id="ontology-neighbors-title">Relationships</h3></div>
             </div>
             <div id="ontology-neighbors" aria-live="polite"></div>
           </article>
           <article class="card" id="ontology-timeline-section" aria-labelledby="ontology-timeline-title">
             <div class="module-head compact-header">
-              <div><span class="eyebrow">What changed</span><h3 id="ontology-timeline-title">Timeline</h3></div>
+              <div><span class="sr-only">What changed</span><h3 id="ontology-timeline-title">Timeline</h3></div>
             </div>
             <div id="ontology-timeline" aria-live="polite"></div>
           </article>
@@ -267,13 +267,13 @@
         <section class="grid cols-2" id="ontology-risk-section">
           <article class="card" aria-labelledby="ontology-risk-title">
             <div class="module-head compact-header">
-              <div><span class="eyebrow">Why it matters</span><h3 id="ontology-risk-title">Risk context</h3></div>
+              <div><span class="sr-only">Why it matters</span><h3 id="ontology-risk-title">Risk context</h3></div>
             </div>
             <div id="ontology-risk" aria-live="polite"></div>
           </article>
           <article class="card" id="ontology-quality-section" aria-labelledby="ontology-quality-title">
             <div class="module-head compact-header">
-              <div><span class="eyebrow">What is missing</span><h3 id="ontology-quality-title">Data quality</h3></div>
+              <div><span class="sr-only">What is missing</span><h3 id="ontology-quality-title">Data quality</h3></div>
             </div>
             <div id="ontology-quality" aria-live="polite"></div>
           </article>
@@ -284,7 +284,7 @@
         <div class="page-header">
           <div>
             <h2>Work</h2>
-            <p>Own remediation, approvals, investigations, and execution runs in one operational queue.</p>
+            
           </div>
         <div class="page-actions">
             <div class="view-switcher" role="group" aria-label="Work view">
@@ -298,9 +298,9 @@
         <section class="card specialist-orchestrator-card" aria-labelledby="specialist-orchestrator-title">
           <div class="module-head compact-header">
             <div>
-              <span class="eyebrow">OpenCodex execution</span>
+              <span class="sr-only">OpenCodex execution</span>
               <h3 id="specialist-orchestrator-title">Specialist Orchestrator</h3>
-              <p>Routes each work item to one reviewed specialist profile, captures your persisted OpenCodex model and explicit fallback policy, then enforces evidence, approval, and independent-review gates.</p>
+              
             </div>
             <button class="secondary-btn" id="specialist-refresh-btn" type="button">Refresh orchestrator</button>
           </div>
@@ -342,7 +342,7 @@
         <div class="page-header">
           <div>
             <h2>Findings</h2>
-            <p>One triage queue for canonical SecOpsAI Core findings and dashboard operational records, with task and run correlation.</p>
+            
           </div>
           <div class="status-pill" id="new-finding-task-btn" style="cursor:pointer;"><span class="dot"></span> New investigation task</div>
         </div>
@@ -361,7 +361,7 @@
             <div id="findings-table"></div>
           </div>
           <aside class="finding-review-drawer" id="finding-review-drawer" aria-hidden="true" aria-labelledby="finding-review-title">
-            <div class="finding-review-drawer-head"><div><span class="eyebrow">Finding review</span><h3 id="finding-review-title">Evidence and decision</h3></div><button class="icon-btn" id="finding-review-close-btn" type="button" aria-label="Close finding review">×</button></div>
+            <div class="finding-review-drawer-head"><div><span class="sr-only">Finding review</span><h3 id="finding-review-title">Evidence and decision</h3></div><button class="icon-btn" id="finding-review-close-btn" type="button" aria-label="Close finding review">×</button></div>
             <div id="intel-summary"></div>
           </aside>
         </div>
@@ -371,7 +371,7 @@
         <div class="page-header">
           <div>
             <h2>Assets</h2>
-            <p>Understand what is connected, what changed, and whether each sensor and service is healthy.</p>
+            
           </div>
           <div class="page-actions">
             <a class="secondary-btn" id="edge-admin-link" href="#" target="_blank" rel="noopener" hidden>Open sensor admin</a>
@@ -411,7 +411,7 @@
         </div>
         <div class="card" id="edge-change-timeline-section" data-edge-section="changes" style="margin-top:18px;">
           <h3>Change timeline</h3>
-          <p class="small">A chronological view of new, missing, and changed network observations.</p>
+          
           <div id="edge-change-timeline"></div>
         </div>
         <div class="card" id="edge-wifi-section" data-edge-section="wifi" style="margin-top:18px;">
@@ -425,7 +425,7 @@
         <div class="page-header">
           <div>
             <h2>Automation</h2>
-            <p>Configure model assistance, guarded decision policies, investigation pipelines, and detection learning.</p>
+            
           </div>
         </div>
         <div class="system-view-summary" id="automation-view-summary" role="status" aria-live="polite"></div>
@@ -442,7 +442,7 @@
             <div>
               <div class="section-kicker">MODEL ASSISTANCE</div>
               <h3 id="intelligence-title">SecOpsAI Intelligence</h3>
-              <p>Use approved model assistance through the local OpenCodex bridge or connect compatible assistants through the provider-neutral SecOpsAI MCP Gateway.</p>
+              
             </div>
             <button class="secondary-btn" id="intelligence-refresh-btn" type="button">Refresh status</button>
           </div>
@@ -450,7 +450,7 @@
           <div class="intelligence-grid">
             <section class="intelligence-module" id="automation-bridge-section" data-automation-view="models" aria-labelledby="local-bridge-title">
               <div class="module-head">
-                <div><h4 id="local-bridge-title">Local model bridge</h4><p>Runs approved analysis actions through your local OpenCodex catalog or ChatGPT sign-in.</p></div>
+                <div><h4 id="local-bridge-title">Local model bridge</h4></div>
                 <span class="status-pill" id="intelligence-bridge-pill">Checking</span>
               </div>
               <div id="intelligence-bridge-detail" class="kv-list"></div>
@@ -499,7 +499,7 @@
 
             <section class="intelligence-module" id="automation-mcp-section" data-automation-view="models" aria-labelledby="mcp-gateway-title">
               <div class="module-head">
-                <div><h4 id="mcp-gateway-title">MCP integrations</h4><p>Connect ChatGPT, Codex, Claude-compatible clients, VS Code, Cursor-compatible clients, and other MCP hosts to one audited SecOpsAI gateway.</p></div>
+                <div><h4 id="mcp-gateway-title">MCP integrations</h4></div>
                 <span class="status-pill" id="intelligence-mcp-pill">Checking</span>
               </div>
               <div id="intelligence-mcp-detail" class="kv-list"></div>
@@ -525,7 +525,7 @@
 
           <section class="intelligence-module intelligence-autopilot" id="automation-alert-review-section" data-automation-view="review" aria-labelledby="intelligence-autopilot-title">
             <div class="module-head">
-              <div><h4 id="intelligence-autopilot-title">Agent finding and alert review</h4><p>Continuously reviews host, Edge, supply-chain, and registry-research alerts with the selected model. Only evidence-corroborated, reversible decisions can be applied.</p></div>
+              <div><h4 id="intelligence-autopilot-title">Agent finding and alert review</h4></div>
               <span class="status-pill" id="intelligence-autopilot-pill">Checking</span>
             </div>
             <div id="intelligence-autopilot-summary" class="metrics-grid compact-metrics"></div>
@@ -549,7 +549,7 @@
 
           <section class="intelligence-module investigation-autopilot" id="automation-investigations-section" data-automation-view="investigations" aria-labelledby="investigation-autopilot-title">
             <div class="module-head">
-              <div><h4 id="investigation-autopilot-title">High-priority investigations</h4><p>Collects exact package evidence, performs bounded static analysis, compares verified releases, extracts IOC candidates, and requests an evidence-complete model verdict.</p></div>
+              <div><h4 id="investigation-autopilot-title">High-priority investigations</h4></div>
               <button class="secondary-btn" id="investigation-run-due" type="button">Recover and run due investigations</button>
             </div>
             <div id="investigation-autopilot-summary" class="metrics-grid compact-metrics"></div>
@@ -559,7 +559,7 @@
 
           <section class="intelligence-module daily-automation" id="automation-daily-section" data-automation-view="investigations" aria-labelledby="daily-automation-title">
             <div class="module-head">
-              <div><h4 id="daily-automation-title">Daily workflow automation</h4><p>Runs surveillance, candidate promotion, evidence investigations, model review queues, and guarded learning as one durable workflow.</p></div>
+              <div><h4 id="daily-automation-title">Daily workflow automation</h4></div>
               <span class="status-pill" id="daily-automation-pill">Checking</span>
             </div>
             <div id="daily-automation-summary" class="metrics-grid compact-metrics"></div>
@@ -585,7 +585,7 @@
               <div>
                 <div class="section-kicker">SAFE ARTIFACT RESEARCH</div>
                 <h4 id="automation-research-title">Investigation to publication</h4>
-                <p>Collect exact registry evidence, run deterministic static and YARA checks, send only minimized evidence to your selected model, escalate to an analyst, and prepare a review-only publication.</p>
+                
               </div>
               <button class="secondary-btn" id="artifact-fleet-refresh-btn" type="button">Refresh pipeline</button>
             </div>
@@ -601,7 +601,7 @@
             <div class="research-pipeline-layout">
               <section class="research-intake-card" id="source-first-research-panel">
                 <div class="research-card-head"><div><span class="section-kicker">SOURCE-FIRST ARTIFACT RESEARCH</span><h4>Research a package or artifact</h4></div><span class="status-pill">Static only</span></div>
-                <p class="small">Use one safe, adapter-driven workflow for npm, PyPI, crates.io, Packagist, Go, Maven, NuGet, RubyGems, Open VSX, Hugging Face, GitHub sources, containers, and approved local artifacts. Nothing is installed, activated, or executed.</p>
+                
                 <div class="research-form-grid compact">
                   <label><span>Research type</span><select id="source-research-type"><option value="package_artifact">Package or artifact</option><option value="malicious_package">Malicious package</option><option value="package_compromise">Package compromise</option><option value="vulnerability_advisory">Vulnerability advisory</option><option value="extension_compromise">Extension compromise</option><option value="github_token_breach">GitHub/token breach</option><option value="malware_apt_c2">Malware/APT/C2</option><option value="cross_ecosystem_campaign">Cross-ecosystem campaign</option><option value="slopsquatting">AI/slopsquatting dependency</option></select></label>
                   <label><span>Ecosystem</span><select id="source-research-ecosystem"><option value="npm">npm</option><option value="pypi">PyPI</option><option value="crates">crates.io</option><option value="packagist">Packagist / Composer</option><option value="go">Go modules</option><option value="maven">Maven</option><option value="nuget">NuGet</option><option value="rubygems">RubyGems</option><option value="open-vsx">Open VSX / VS Code</option><option value="huggingface">Hugging Face</option><option value="github">GitHub repository</option><option value="container">Container image</option><option value="chrome-web-store">Chrome extension</option></select></label>
@@ -659,7 +659,7 @@
 
           <section class="intelligence-module" id="automation-jobs-section" data-automation-view="jobs" aria-labelledby="intelligence-jobs-title">
             <div class="module-head">
-              <div><h4 id="intelligence-jobs-title">Analysis jobs</h4><p>Every request and result is durable, bounded, and reviewable. Recovery queues up to ten eligible transient provider failures; safety, contract, and unknown-cause failures stay available for review.</p></div>
+              <div><h4 id="intelligence-jobs-title">Analysis jobs</h4></div>
               <div class="intelligence-actions">
                 <button class="secondary-btn" id="intelligence-recover-transient-btn" type="button">Recover eligible transient failures</button>
               </div>
@@ -673,7 +673,7 @@
         <div class="page-header enterprise-workspace-header">
           <div>
             <h2>Enterprise Security</h2>
-            <p>Connect enterprise telemetry, assess exposure, and govern security work from one evidence-led workspace.</p>
+            
             <div class="enterprise-refreshed" id="enterprise-refreshed">Status not loaded</div>
           </div>
           <button class="secondary-btn" id="enterprise-refresh-btn" type="button">Refresh status</button>
@@ -693,7 +693,7 @@
             <div class="enterprise-setup-mark" aria-hidden="true"></div>
             <div class="enterprise-setup-copy">
               <h3 id="enterprise-setup-title">Your workspace foundation is ready</h3>
-              <p id="enterprise-setup-summary">Connect or import an approved telemetry source to begin monitoring enterprise activity.</p>
+              
             </div>
             <div class="enterprise-setup-actions">
               <button class="primary-btn" id="enterprise-configure-source-btn" type="button">Import first source</button>
@@ -705,7 +705,7 @@
             <div class="enterprise-monitor-main">
               <section class="enterprise-surface" id="enterprise-connectors">
                 <div class="enterprise-section-head">
-                  <div><h3>Telemetry sources</h3><p>Implemented, configured, and actively sending data are shown as separate states.</p></div>
+                  <div><h3>Telemetry sources</h3></div>
                   <button class="secondary-btn" id="enterprise-import-toggle-btn" type="button">Import events</button>
                 </div>
                 <div id="enterprise-connector-list"></div>
@@ -722,14 +722,14 @@
               </section>
 
               <section class="enterprise-surface enterprise-next-actions">
-                <div class="enterprise-section-head"><div><h3>Next recommended actions</h3><p>Complete the highest-value setup steps in order.</p></div></div>
+                <div class="enterprise-section-head"><div><h3>Next recommended actions</h3></div></div>
                 <div id="enterprise-next-actions"></div>
               </section>
             </div>
 
             <aside class="enterprise-surface enterprise-activity" aria-label="Recent enterprise activity">
               <div class="enterprise-section-head">
-                <div><h3>Activity</h3><p>Newest normalized events.</p></div>
+                <div><h3>Activity</h3></div>
                 <select id="enterprise-event-filter" aria-label="Filter enterprise activity"><option value="all">All sources</option><option value="aws">AWS</option><option value="gcp">GCP</option><option value="kubernetes">Kubernetes</option></select>
               </div>
               <div id="enterprise-activity-list"></div>
@@ -749,7 +749,7 @@
 
             <div class="enterprise-assess-content">
               <section class="enterprise-assessment active" data-enterprise-assessment-view="vulnerability">
-                <div class="enterprise-section-head"><div><h3>Prioritize a vulnerability</h3><p>Combine CVSS, exploitability, asset context, exposure, and active exploitation into one explainable priority.</p></div></div>
+                <div class="enterprise-section-head"><div><h3>Prioritize a vulnerability</h3></div></div>
                 <div class="enterprise-form-grid">
                   <label><span>Advisory ID</span><input id="enterprise-vuln-advisory" placeholder="CVE-2026-1234" /></label>
                   <label><span>Package or product</span><input id="enterprise-vuln-package" placeholder="example/package" /></label>
@@ -766,7 +766,7 @@
               </section>
 
               <section class="enterprise-assessment" data-enterprise-assessment-view="kubernetes" hidden>
-                <div class="enterprise-section-head"><div><h3>Check Kubernetes posture</h3><p>Perform a non-mutating manifest review for privileged workloads, risky host access, missing boundaries, and unsafe images.</p></div></div>
+                <div class="enterprise-section-head"><div><h3>Check Kubernetes posture</h3></div></div>
                 <label class="enterprise-block-label"><span>Kubernetes YAML</span><textarea id="enterprise-kubernetes-manifest" rows="18" spellcheck="false" placeholder="apiVersion: apps/v1&#10;kind: Deployment&#10;metadata:&#10;  name: app"></textarea></label>
                 <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-kubernetes-run-btn" type="button">Check manifest safely</button></div>
                 <div class="enterprise-result" id="enterprise-kubernetes-output" aria-live="polite"></div>
@@ -788,7 +788,7 @@
 
               <section class="enterprise-assessment" data-enterprise-assessment-view="artifact" hidden>
                 <div class="enterprise-surface enterprise-handoff">
-                  <div class="enterprise-section-head"><div><h3>Artifact research moved to Automation</h3><p>The Artifact Fleet and Source-First Artifact Research workflow share one canonical pipeline, avoiding duplicate controls and conflicting status.</p></div></div>
+                  <div class="enterprise-section-head"><div><h3>Artifact research moved to Automation</h3></div></div>
                   <div class="enterprise-safety compact">Enterprise exposure records remain here. Registry artifact intake, model triage, analyst escalation, and review-only drafting live in Automation.</div>
                   <div class="enterprise-form-actions"><button class="primary-btn" id="enterprise-open-research-pipeline-btn" type="button">Open Research Pipeline</button></div>
                 </div>
@@ -801,7 +801,7 @@
           <div class="enterprise-readiness governance-readiness" id="enterprise-governance-summary"></div>
           <div class="enterprise-govern-grid">
             <section class="enterprise-surface">
-              <div class="enterprise-section-head"><div><h3>Create a compliance control</h3><p>Track ownership and implementation state against a supported framework.</p></div></div>
+              <div class="enterprise-section-head"><div><h3>Create a compliance control</h3></div></div>
               <div class="enterprise-form-grid">
                 <label><span>Control ID</span><input id="enterprise-control-id" placeholder="AC-1" /></label>
                 <label><span>Framework</span><select id="enterprise-control-framework"><option value="soc2">SOC 2</option><option value="iso27001">ISO 27001</option><option value="iso42001">ISO 42001</option><option value="hipaa">HIPAA</option><option value="nist-csf">NIST CSF</option><option value="cis">CIS</option><option value="nis2">NIS2</option></select></label>
@@ -814,7 +814,7 @@
             </section>
 
             <section class="enterprise-surface">
-              <div class="enterprise-section-head"><div><h3>Create an assurance workflow</h3><p>Start an evidence-linked questionnaire, threat model, or authorized penetration test.</p></div></div>
+              <div class="enterprise-section-head"><div><h3>Create an assurance workflow</h3></div></div>
               <div class="enterprise-form-grid">
                 <label><span>Workflow type</span><select id="enterprise-workflow-kind"><option value="questionnaire">Security questionnaire</option><option value="threat-model">Threat model</option><option value="pentest">Penetration test</option></select></label>
                 <label><span>Record ID</span><input id="enterprise-workflow-id" placeholder="Q-2026-001" /></label>
@@ -835,8 +835,8 @@
           </div>
 
           <div class="enterprise-govern-grid enterprise-records-grid">
-            <section class="enterprise-surface"><div class="enterprise-section-head"><div><h3>Compliance controls</h3><p>Latest saved records.</p></div></div><div class="enterprise-record-list" id="enterprise-control-list"></div></section>
-            <section class="enterprise-surface"><div class="enterprise-section-head"><div><h3>Assurance workflows</h3><p>Questionnaires, threat models, and penetration tests.</p></div></div><div class="enterprise-record-list" id="enterprise-workflow-list"></div></section>
+            <section class="enterprise-surface"><div class="enterprise-section-head"><div><h3>Compliance controls</h3></div></div><div class="enterprise-record-list" id="enterprise-control-list"></div></section>
+            <section class="enterprise-surface"><div class="enterprise-section-head"><div><h3>Assurance workflows</h3></div></div><div class="enterprise-record-list" id="enterprise-workflow-list"></div></section>
           </div>
         </section>
 
@@ -854,7 +854,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         <div class="page-header">
           <div>
             <h2>System</h2>
-            <p>Review platform health, runtime integrations, access boundaries, credentials, and action history.</p>
+            
           </div>
         </div>
         <div class="system-view-summary" id="system-view-summary" role="status" aria-live="polite"></div>
@@ -865,7 +865,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Native action queue</h3>
-              <p class="small" style="margin:6px 0 0;">Pending and recently applied local SecOpsAI triage actions.</p>
+              
             </div>
           </div>
           <div id="run-requests-table"></div>
@@ -874,7 +874,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Investigation sessions</h3>
-              <p class="small" style="margin:6px 0 0;">Recent SecOpsAI investigation sessions, progress, artifacts, and approval state.</p>
+              
             </div>
           </div>
           <div id="native-sessions-table"></div>
@@ -883,7 +883,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <div class="page-header compact-header">
             <div>
               <h3 style="margin:0;">Selected session</h3>
-              <p class="small" style="margin:6px 0 0;">Live session plan, approvals, event feed, and artifacts for the investigation you are reviewing now.</p>
+              
             </div>
           </div>
           <div id="native-session-detail"></div>
@@ -1086,7 +1086,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         <div class="page-header">
           <div>
             <h2>Publications</h2>
-            <p>Review source-backed news and original research, then approve, stage, and deploy public security content.</p>
+            
           </div>
           <div class="status-pill" id="blog-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh Blog Ops</div>
         </div>
@@ -1125,7 +1125,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         </div>
 
         <div class="card" id="blog-queues-section" data-blog-section="review" style="margin-top:18px;">
-          <div class="page-header compact-header"><div><h3 style="margin:0;">Choose an editorial queue</h3><p class="small" style="margin:6px 0 0;">Original research, advisories, and external news have separate review queues and never share an approval list.</p></div></div>
+          <div class="page-header compact-header"><div><h3 style="margin:0;">Choose an editorial queue</h3></div></div>
           <div class="publication-lane-grid"><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/research"><span><strong>Original research</strong><small>Evidence-led SecOpsAI investigations</small></span></button><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/advisories"><span><strong>Advisories</strong><small>Confirmed mitigations and indicators</small></span></button><button class="mission-queue publication-lane-btn" type="button" data-publication-route="publications/news"><span><strong>External news</strong><small>Source-backed third-party reporting</small></span></button></div>
         </div>
 
@@ -1134,7 +1134,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             <div class="page-header compact-header">
               <div>
                 <h3 style="margin:0;">Draft review queue</h3>
-                <p class="small" style="margin:6px 0 0;">Select a draft to preview source-backed content and approve or reject it.</p>
+                
               </div>
               <div class="blog-filter-group">
                 <label class="blog-filter-label"><span class="small">Content stream</span>
@@ -1175,7 +1175,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         <div class="page-header">
           <div>
             <h2>Supply Chain Triage</h2>
-            <p>Operational control plane for incoming supply-chain alerts: evidence checks, local impact, mitigation, response, and handoff into Research Cases or Blog Ops.</p>
+            
           </div>
           <div class="status-pill" id="triage-ops-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh evidence</div>
         </div>
@@ -1199,7 +1199,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             <div class="page-header compact-header">
               <div>
                 <h3 style="margin:0;">Supply Chain Alerts</h3>
-                <p class="small" style="margin:6px 0 0;">Open SCM findings loaded from the native SecOpsAI helper or hosted helper proxy.</p>
+                
               </div>
             </div>
             <details class="triage-filter-drawer" open>
@@ -1235,7 +1235,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         <div class="page-header">
           <div>
             <h2>Global Registry Coverage</h2>
-            <p>Continuous package-registry surveillance: collector health, cursor lag, coverage gaps, dead letters, and the candidate inbox produced by the detection pipeline.</p>
+            
           </div>
           <div class="status-pill" id="coverage-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh coverage</div>
         </div>
@@ -1265,7 +1265,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             <div class="page-header compact-header">
               <div>
                 <h3 style="margin:0;">Latest feed events</h3>
-                <p class="small" style="margin:6px 0 0;">Newest registry events across all collectors. Candidate events link into Research.</p>
+                
               </div>
             </div>
             <div id="coverage-events"></div>
@@ -1274,7 +1274,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             <div class="page-header compact-header">
               <div>
                 <h3 style="margin:0;">Coverage windows</h3>
-                <p class="small" style="margin:6px 0 0;">Gaps first. A gap means the cursor stopped before the window ended and replay is pending.</p>
+                
               </div>
             </div>
             <div id="coverage-windows"></div>
@@ -1816,7 +1816,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260914-local-research-recovery"></script>
-  <script src="./app.js?v=20261023-research-cuts"></script>
+  <script src="./app.js?v=20261023-console-cuts"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">
