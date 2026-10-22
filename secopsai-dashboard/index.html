@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="./url-safety.js?v=20260803-credential-url-hardening"></script>
-  <link rel="stylesheet" href="./styles.css?v=20261023-brand" />
+  <link rel="stylesheet" href="./styles.css?v=20261023-hosted-actions" />
 </head>
 <body class="okcomputer-skin professional-ui">
   <section class="auth-gate auth-checking" id="auth-gate" aria-labelledby="auth-title" aria-busy="true">
@@ -479,12 +479,12 @@
                   <button class="secondary-btn" id="intelligence-routing-clear-btn" type="button">Primary model only</button>
                 </div>
               </div>
-              <label class="intelligence-credential-field" id="intelligence-token-field">
+              <label class="intelligence-credential-field local-only" id="intelligence-token-field">
                 <span>Automation action token</span>
                 <input id="intelligence-admin-token" name="secopsai-automation-token" type="password" autocomplete="one-time-code" data-1p-ignore="true" data-lpignore="true" aria-describedby="intelligence-token-hint" placeholder="Paste the INTELLIGENCE_ADMIN_TOKEN here" />
               </label>
-              <p class="small" id="intelligence-token-hint">Required for <strong>Run learning cycle</strong>, model review, investigation controls, and service controls. Paste the value configured as <code>INTELLIGENCE_ADMIN_TOKEN</code> in the local helper <code>.env</code>. This is separate from <code>DASHBOARD_LOCAL_AUTH_TOKEN</code> (read-only), <code>TRIAGE_OPS_ADMIN_TOKEN</code>, and <code>BLOG_OPS_ADMIN_TOKEN</code> unless your installation deliberately shares the same value. It is retained only in this browser tab.</p>
-              <button class="mini-btn" id="intelligence-clear-token-btn" type="button">Clear saved token</button>
+              <p class="small local-only" id="intelligence-token-hint">Required for <strong>Run learning cycle</strong>, model review, investigation controls, and service controls. Paste the value configured as <code>INTELLIGENCE_ADMIN_TOKEN</code> in the local helper <code>.env</code>. This is separate from <code>DASHBOARD_LOCAL_AUTH_TOKEN</code> (read-only), <code>TRIAGE_OPS_ADMIN_TOKEN</code>, and <code>BLOG_OPS_ADMIN_TOKEN</code> unless your installation deliberately shares the same value. It is retained only in this browser tab.</p>
+              <button class="mini-btn local-only" id="intelligence-clear-token-btn" type="button">Clear saved token</button>
               <div class="intelligence-actions" id="intelligence-service-actions">
                 <button class="secondary-btn" data-intelligence-service="install" type="button">Install service</button>
                 <button class="secondary-btn" data-intelligence-service="start" type="button">Start</button>
@@ -906,7 +906,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         </div>
         <div class="research-view-summary" id="research-view-summary" role="status" aria-live="polite"></div>
 
-        <form class="card research-auth-card" id="research-access-section" onsubmit="return false;">
+        <form class="card research-auth-card local-only" id="research-access-section" onsubmit="return false;">
           <div>
             <h3>Protected research actions</h3>
             
@@ -1042,7 +1042,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
               <summary>Daily research operation</summary>
               <div class="research-form-grid">
                 <label><span>Your registered human identity</span><input id="research-operation-actor" autocomplete="username" /></label>
-                <label><span>Protected operation token (local helper only)</span><input id="research-operation-token" type="password" autocomplete="off" /></label>
+                <label class="local-only"><span>Protected operation token</span><input id="research-operation-token" type="password" autocomplete="off" /></label>
               </div>
               <div id="research-operation-status" aria-live="polite">Loading collection and editorial readiness…</div>
               <details class="research-action-drawer" id="research-register-drawer"><summary>Register your human role</summary><label><span>Display name</span><input id="research-person-name" autocomplete="name" /></label><label><span>Qualifications (self-declared)</span><textarea id="research-person-qualification"></textarea></label><div class="research-form-grid"><label><input type="checkbox" data-research-person-role="operator" checked />Operator</label><label><input type="checkbox" data-research-person-role="author" />Author</label><label><input type="checkbox" data-research-person-role="researcher" />Researcher</label><label><input type="checkbox" data-research-person-role="technical_reviewer" />Technical reviewer</label><label><input type="checkbox" data-research-person-role="editor" />Editor</label></div><button class="secondary-btn" id="research-person-register" type="button">Record my human roles</button></details>
@@ -1090,7 +1090,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         </div>
         <div class="publication-view-summary" id="publication-view-summary" role="status" aria-live="polite"></div>
 
-        <div class="card blog-auth-card" id="blog-access-section">
+        <div class="card blog-auth-card local-only" id="blog-access-section">
           <div>
             <h3>Admin action token</h3>
             <p class="small">Read-only status can load without this token. Write actions require the dashboard secret value from `BLOG_OPS_ADMIN_TOKEN`; it is stored only in this browser session.</p>
@@ -1178,7 +1178,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <div class="status-pill" id="triage-ops-refresh-btn" style="cursor:pointer;"><span class="dot"></span> Refresh evidence</div>
         </div>
 
-        <div class="card triage-ops-auth-card" id="triage-access-section">
+        <div class="card triage-ops-auth-card local-only" id="triage-access-section">
           <div>
             <h3>Admin action token</h3>
             <p class="small">Read actions can run without this token. Closing, escalation, and blog draft creation require the helper-side `TRIAGE_OPS_ADMIN_TOKEN` or `BLOG_OPS_ADMIN_TOKEN`.</p>
@@ -1814,7 +1814,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260914-local-research-recovery"></script>
-  <script src="./app.js?v=20261023-brand"></script>
+  <script src="./app.js?v=20261023-hosted-actions"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

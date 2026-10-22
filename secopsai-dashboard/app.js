@@ -1341,6 +1341,12 @@ function updateLocalTokenIndicator() {
   }
 }
 
+// Behind Cloudflare Access the hosted Worker authorizes every action from the
+// sign-in and supplies helper tokens itself; only the local helper needs one.
+function actionTokenRequired() {
+  return isLocalDashboardOrigin();
+}
+
 function isLocalDashboardOrigin() {
   const hostname = String(window.location?.hostname || '').trim().toLowerCase();
   return hostname === 'localhost'
@@ -4861,7 +4867,7 @@ async function loadSpecialists({ render = true } = {}) {
 async function specialistApiAction(action, payload = {}, button = null, { write = true } = {}) {
   const tokenInput = el('intelligence-admin-token');
   state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
-  if (write && !state.intelligence.adminToken) {
+  if (write && !state.intelligence.adminToken && actionTokenRequired()) {
     showToast('Enter the Automation action token in Administration → Automation before using this protected action.', 'error');
     tokenInput?.focus();
     return null;
@@ -6168,7 +6174,7 @@ function renderIntegrations() {
   if (credentialsEl) {
     const sessionReady = Boolean(state.auth?.user?.email || state.auth?.session || state.auth?.activeUserId);
     const localTokenReady = Boolean(state.auth?.localToken);
-    const researchTokenReady = Boolean(state.researchCases?.adminToken || state.triageOps?.adminToken);
+    const researchTokenReady = (Boolean(state.researchCases?.adminToken || state.triageOps?.adminToken) || !actionTokenRequired());
     const blogTokenReady = Boolean(state.blogOps?.adminToken);
     credentialsEl.innerHTML = `
       <div class="page-header compact-header">
@@ -7364,7 +7370,7 @@ async function loadIntelligence({ render = true } = {}) {
 async function runIntelligenceAction(action, payload = {}, button = null) {
   const tokenInput = el('intelligence-admin-token');
   state.intelligence.adminToken = tokenInput?.value?.trim() || state.intelligence.adminToken;
-  if (!state.intelligence.adminToken) {
+  if (!state.intelligence.adminToken && actionTokenRequired()) {
     showToast('Enter the Automation action token in Administration → Automation before using this action.', 'error');
     tokenInput?.focus();
     return null;
@@ -7624,7 +7630,7 @@ async function runBlogOpsAction(action, { draft = null, note = '', button = null
     notifyError(message);
     return;
   }
-  if (!state.blogOps.adminToken) {
+  if (!state.blogOps.adminToken && actionTokenRequired()) {
     const message = 'Paste your Blog Ops admin token, then click Use token before running write actions.';
     setStatus(message, true);
     notifyError(message);
@@ -7987,7 +7993,7 @@ function renderBlogOps() {
     } else if (action === 'deploy' && !canDeployFromBlogOps()) {
       button.disabled = true;
       button.title = 'Deploy is unavailable in this helper mode. Use hosted Blog Ops or the Cloudflare deployment workflow.';
-    } else if ((action || draftWriteAction || mediaWriteAction) && !state.blogOps.adminToken) {
+    } else if ((action || draftWriteAction || mediaWriteAction) && !state.blogOps.adminToken && actionTokenRequired()) {
       button.disabled = true;
       button.title = 'Paste the Blog Ops admin token and click Use token before running this protected action.';
     } else if (action === 'publish-approved' && approvedCount <= 0) {
@@ -8130,7 +8136,7 @@ async function runTriageOpsAction(action, { button = null, payload = {}, write =
     setStatus('Select a supply-chain alert first.', true);
     return;
   }
-  if (write && !state.triageOps.adminToken) {
+  if (write && !state.triageOps.adminToken && actionTokenRequired()) {
     const message = 'Paste your Triage Ops admin token, then click Use token before write actions.';
     setStatus(message, true);
     notifyError(message);
@@ -8601,7 +8607,7 @@ function campaignCliFallback() {
 }
 
 async function runCampaignEndpoint(action, { button = null, write = false, confirmMessage = '' } = {}) {
-  if (write && !state.triageOps.adminToken) {
+  if (write && !state.triageOps.adminToken && actionTokenRequired()) {
     const message = 'Paste your Triage Ops admin token, then click Use token before campaign write actions.';
     setStatus(message, true);
     notifyError(message);
@@ -8706,7 +8712,7 @@ function campaignActionErrorMessage(action, error) {
 }
 
 async function runCampaignDiscoveryAction(action, { button = null, write = false, confirmMessage = '', body = null } = {}) {
-  if (write && !state.triageOps.adminToken) {
+  if (write && !state.triageOps.adminToken && actionTokenRequired()) {
     const message = 'Paste your Triage Ops admin token, then click Use token before campaign discovery write actions.';
     setStatus(message, true);
     notifyError(message);
@@ -9056,7 +9062,7 @@ function renderResearchCaseRecommendation() {
   const hasInput = researchRecommendationHasInput();
   const route = String(recommendation?.route || '');
   const canCreate = route === 'create_draft_case';
-  const tokenReady = Boolean(state.researchCases.adminToken || state.triageOps.adminToken);
+  const tokenReady = (Boolean(state.researchCases.adminToken || state.triageOps.adminToken) || !actionTokenRequired());
   const canLink = Boolean(selectedAlert?.finding_id && cases.length);
   const recommendationClass = route ? route.replace(/[^a-z0-9_-]/gi, '-').toLowerCase() : 'pending';
   return `
@@ -9143,7 +9149,7 @@ async function createDraftResearchCaseFromRecommendation(button = null) {
     setStatus('Resolve the research recommendation blockers before creating a draft case.', true);
     return;
   }
-  if (!token) {
+  if (!token && actionTokenRequired()) {
     setStatus('Set the protected research action token before creating a draft case.', true);
     el('research-cases-admin-token')?.focus();
     return;
@@ -10662,7 +10668,7 @@ async function runResearchDiscoveryAction(action, payload = {}, button = null) {
 
 async function runResearchDiscoveryActionNow(action, payload = {}, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
-  if (!token) {
+  if (!token && actionTokenRequired()) {
     setStatus('Use the protected research action token before changing discovery state.', true);
     el('research-cases-admin-token')?.focus();
     return null;
@@ -11280,7 +11286,7 @@ async function runResearchCaseAction(action, payload = {}, button = null) {
 
 async function runResearchCaseActionNow(action, payload = {}, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
-  if (!token) {
+  if (!token && actionTokenRequired()) {
     setStatus('Use the protected research action token before changing a case.', true);
     el('research-cases-admin-token')?.focus();
     return null;
@@ -11342,7 +11348,7 @@ async function runResearchCaseActionNow(action, payload = {}, button = null) {
 
 async function runArtifactCaseAction(action, payload = {}, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
-  if (!token) { setStatus('Use the protected research action token first.', true); return null; }
+  if (!token && actionTokenRequired()) { setStatus('Use the protected research action token first.', true); return null; }
   setButtonBusy(button, true, 'Working…');
   try {
     const endpoint = action === 'extract' ? '/api/secopsai/research-artifacts/ioc-candidates' : '/api/secopsai/research-artifacts/analysis';
@@ -11361,7 +11367,7 @@ async function runArtifactCaseAction(action, payload = {}, button = null) {
 
 async function downloadApprovedSandboxArtifact(requestId, button = null) {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
-  if (!token) {
+  if (!token && actionTokenRequired()) {
     setStatus('Use the protected research action token before preparing a sandbox sample.', true);
     return;
   }
@@ -11411,7 +11417,7 @@ async function runResearchWatchlistAction(action, payload = {}, button = null) {
   const headers = { 'Content-Type': 'application/json' };
   if (action === 'create') {
     const token = state.researchCases.adminToken || state.triageOps.adminToken;
-    if (!token) {
+    if (!token && actionTokenRequired()) {
       setStatus('Use the protected research action token before creating draft cases.', true);
       el('research-cases-admin-token')?.focus();
       return null;
@@ -11483,9 +11489,8 @@ async function loadContentPacks() {
 
 function contentPackWriteHeaders() {
   const token = state.researchCases.adminToken || state.triageOps.adminToken;
-  return token
-    ? { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }
-    : null;
+  if (token) return { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token };
+  return actionTokenRequired() ? null : { 'Content-Type': 'application/json' };
 }
 
 function renderContentPacks(packs) {
@@ -11703,7 +11708,7 @@ function bindResearchCaseDetailActions(researchCase) {
     const file = el('research-artifact-file')?.files?.[0];
     const token = state.researchCases.adminToken || state.triageOps.adminToken;
     if (!file) { setStatus('Choose an authorized package file first.', true); return; }
-    if (!token) { setStatus('Use the protected research action token before importing an artifact.', true); return; }
+    if (!token && actionTokenRequired()) { setStatus('Use the protected research action token before importing an artifact.', true); return; }
     const source = el('research-artifact-source')?.value?.trim() || '';
     if (!source) { setStatus('Describe the lawful source and authorization for this artifact first.', true); return; }
     setButtonBusy(event.currentTarget, true, 'Quarantining…');
@@ -11727,7 +11732,7 @@ function bindResearchCaseDetailActions(researchCase) {
   document.querySelectorAll('#research-case-detail .research-artifact-analysis-btn').forEach(button => button.addEventListener('click', event => runArtifactCaseAction('analysis', { artifact_id: button.dataset.artifactId }, event.currentTarget)));
   document.querySelectorAll('#research-case-detail .research-subject-state-btn').forEach(button => button.addEventListener('click', async event => {
     const token = state.researchCases.adminToken || state.triageOps.adminToken;
-    if (!token) { setStatus('Use the protected research action token first.', true); return; }
+    if (!token && actionTokenRequired()) { setStatus('Use the protected research action token first.', true); return; }
     const subjectId = button.dataset.subjectId;
     const response = await dashboardApiFetch('/api/secopsai/research-subjects/state', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }, body: JSON.stringify({ subject_id: subjectId, registry_state: el(`research-subject-registry-${subjectId}`)?.value, artifact_state: el(`research-subject-artifact-${subjectId}`)?.value, validation_state: el(`research-subject-validation-${subjectId}`)?.value, reason: el(`research-subject-reason-${subjectId}`)?.value || '' }) });
     if (!response.ok) { const payload = await response.json().catch(() => ({})); setStatus(`Subject state update failed: ${payload.error || response.status}`, true); return; }
@@ -11969,7 +11974,7 @@ function bindResearchCaseDetailActions(researchCase) {
   });
   el('research-partner-request-btn')?.addEventListener('click', async event => {
     const token = state.researchCases.adminToken || state.triageOps.adminToken;
-    if (!token) { setStatus('Use the protected research action token first.', true); return; }
+    if (!token && actionTokenRequired()) { setStatus('Use the protected research action token first.', true); return; }
     setButtonBusy(event.currentTarget, true, 'Creating…');
     try {
       const response = await dashboardApiFetch('/api/secopsai/research-partner-requests', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Triage-Ops-Admin-Token': token }, body: JSON.stringify({ action: 'create', case_id: researchCase.case_id, recipient: el('research-partner-recipient')?.value, reason: el('research-partner-reason')?.value }) });
@@ -14261,6 +14266,7 @@ function startLiveExecutionRefreshLoop() {
 
 async function boot() {
   installUiMemory();
+  document.body.classList.toggle('local-console', isLocalDashboardOrigin());
   const errors = [];
   const requiredLoads = [
     ['channelRoutes', 'channel_routes', { orderBy: { column: 'channel_name', ascending: true } }],

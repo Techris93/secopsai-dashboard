@@ -185,8 +185,8 @@ assert.equal((index.match(/id="intelligence-clear-token-btn"/g) || []).length, 1
 assert.ok(index.indexOf('id="intelligence-admin-token"') < index.indexOf('id="intelligence-service-actions"'));
 assert.ok(index.indexOf('id="intelligence-service-actions"') < index.indexOf('id="intelligence-request-title"'));
 
-assert.match(index, /styles\.css\?v=20261023-brand/);
-assert.match(index, /app\.js\?v=20261023-brand/);
+assert.match(index, /styles\.css\?v=20261023-hosted-actions/);
+assert.match(index, /app\.js\?v=20261023-hosted-actions/);
 assert.doesNotMatch(index, /styles\.css\?v=20260803-subsection-navigation/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function humanizeMachineText/);
