@@ -584,209 +584,131 @@ const PAGE_CONTEXT = {
 const OPERATOR_GUIDANCE = Object.freeze({
   ontology: {
     title: 'Start with one canonical object and follow its evidence-backed relationships.',
-    detail: 'Use freshness, provenance, ownership, and contradictions to decide whether the connected picture is complete enough to act.',
-    automation: 'normalize identities, traverse bounded relationships, calculate deterministic risk, and surface missing context',
-    approval: 'confirm ownership, scope, and any consequential remediation before execution',
     action: 'Open entity search',
     target: 'ontology-search-section'
   },
   findings: {
     title: 'Review the highest-priority finding that still needs a decision.',
-    detail: 'Separate detection priority, confidence, maliciousness, and local exposure before choosing an action.',
-    automation: 'collect evidence, correlate work, and start guarded investigations',
-    approval: 'decide maliciousness, business impact, closure, and escalation',
     action: 'Open decision queue',
     target: 'finding-queue-section'
   },
   'findings/supply-chain': {
     title: 'Start with evidence, then decide package risk and local impact separately.',
-    detail: 'A suspicious package can be absent locally; no local usage does not make the package benign.',
-    automation: 'check advisories, local usage, artifacts, and evidence bundles',
-    approval: 'choose disposition, mitigation, escalation, and research handoff',
     action: 'Open supply-chain review',
     target: 'triage-review-section'
   },
   work: {
     title: 'Resolve blocked ownership before creating more work.',
-    detail: 'Open the oldest blocked or review item, confirm the next owner, then route a specialist only when a bounded brief exists.',
-    automation: 'recommend a reviewed specialist and create a guarded execution contract',
-    approval: 'accept ownership, scope, write access, and independent review',
     action: 'Open work queue',
     target: 'work-table'
   },
   'research/inbox': {
     title: 'Promote only candidates with a real package, artifact, advisory, or source-backed subject.',
-    detail: 'Candidate scores prioritize review; they are not maliciousness verdicts.',
-    automation: 'rank leads, validate identifiers, and explain promotion eligibility',
-    approval: 'decide whether the lead deserves a durable case',
     action: 'Review candidates',
     target: 'research-inbox-candidates'
   },
   'research/cases': {
     title: 'Resolve the selected case’s first evidence blocker.',
-    detail: 'Move in order: evidence, matrix, specialist review, human verdict, publication safety.',
-    automation: 'collect metadata, compare artifacts, build evidence, and queue bounded review',
-    approval: 'record the verdict, disclosure decision, and publication readiness',
     action: 'Open case workflow',
     target: 'research-case-workspace-section'
   },
   'research/campaigns': {
     title: 'Confirm relationships without turning shared infrastructure into attribution.',
-    detail: 'Packages, publishers, timelines, and infrastructure need independent supporting evidence.',
-    automation: 'correlate deterministic relationships and surface contradictions',
-    approval: 'decide campaign scope and attribution confidence',
     action: 'Review campaigns',
     target: 'research-campaigns-list'
   },
   'research/watchlists': {
     title: 'Run due monitors, then review each lead before promotion.',
-    detail: 'A scoped watchlist is coverage for that subject, not proof the wider ecosystem is clean.',
-    automation: 'monitor approved sources and rank explainable leads',
-    approval: 'create cases, change watchlists, and accept campaign links',
     action: 'Review monitors',
     target: 'research-discovery-section'
   },
   'research/coverage': {
     title: 'Repair gaps and dead letters before trusting a quiet feed.',
-    detail: 'A degraded or paused collector means surveillance is incomplete, not clean.',
-    automation: 'track cursors, lag, coverage windows, and failed events',
-    approval: 'pause sources, retry failures, and accept known coverage gaps',
     action: 'Inspect collectors',
     target: 'coverage-collectors-section'
   },
   'research/disclosure': {
     title: 'Review deadlines and prepare evidence-linked communication.',
-    detail: 'Drafting and sending remain separate so unsupported claims cannot leave the workspace.',
-    automation: 'prepare source-backed disclosure drafts and track deadlines',
-    approval: 'choose recipient, wording, timing, and final send',
     action: 'Review disclosure queue',
     target: 'research-disclosure-queue'
   },
   'research/sandbox': {
     title: 'Submit only an exact, hash-verified artifact when static evidence justifies it.',
-    detail: 'Public sandbox submissions may expose the sample; verify provider state and confidentiality first.',
-    automation: 'recommend sandboxing, submit approved hashes, poll, and link sanitized results',
-    approval: 'authorize public upload and accept the runtime interpretation',
     action: 'Review sandbox jobs',
     target: 'research-sandbox-queue'
   },
   'research/resolved': {
     title: 'Audit agent-resolved cases before accepting closure at scale.',
-    detail: 'Only evidence-complete, reversible benign outcomes qualify for automatic resolution.',
-    automation: 'apply guarded benign decisions and preserve a reversible audit record',
-    approval: 'accept, reopen, or change the resolution policy',
     action: 'Review resolutions',
     target: 'research-resolved-section'
   },
   publications: {
     title: 'Choose the editorial queue that matches the evidence source.',
-    detail: 'Original research, advisories, and external news have different review obligations.',
-    automation: 'prepare drafts, validate structure, rebuild feeds, and retain workflow history',
-    approval: 'approve claims, publish staged content, and deploy separately',
     action: 'Choose a queue',
     target: 'blog-queues-section'
   },
   'publications/published': {
     title: 'Confirm the last publish and deployment completed successfully.',
-    detail: 'Publishing writes the archive; deployment makes it public and only then marks drafts Deployed.',
-    automation: 'retain the post archive, rebuild feeds, and record deployment runs',
-    approval: 'approve content and start the Cloudflare deployment',
     action: 'Review workflow runs',
     target: 'blog-published-section'
   },
   'automation/models': {
     title: 'Restore a healthy selected model before processing more queued work.',
-    detail: 'The persisted primary and fallback policy are the effective route; provider recommendations are informational.',
-    automation: 'probe the selected route and process durable bounded jobs',
-    approval: 'choose the primary model, fallback scope, and service controls',
     action: 'Review model health',
     target: 'automation-bridge-section'
   },
   'automation/review': {
     title: 'Review new alerts under the saved guarded policy.',
-    detail: 'Model proposals remain advisory until deterministic evidence supports a reversible action.',
-    automation: 'triage normalized alerts and propose bounded tuning',
-    approval: 'apply dispositions and promote validated tuning',
     action: 'Open alert review',
     target: 'automation-alert-review-section'
   },
   'automation/investigations': {
     title: 'Recover failed investigations before starting duplicate cycles.',
-    detail: 'Check active and failed runs, then run only work that is due.',
-    automation: 'collect evidence, run static checks, queue model review, and retry safe stages',
-    approval: 'authorize protected actions and accept final decisions',
     action: 'Review investigations',
     target: 'automation-investigations-section'
   },
   'automation/research': {
     title: 'Preview exact metadata before collecting or analyzing an artifact.',
-    detail: 'The universal pipeline never installs, activates, or executes package code.',
-    automation: 'quarantine, hash, scan, compare, and build a reviewable case',
-    approval: 'persist findings, accept model review, and create a publication draft',
     action: 'Open safe research',
     target: 'automation-research-section'
   },
   'automation/learning': {
     title: 'Promote learning only when replay proves it will not increase false negatives.',
-    detail: 'Insufficient data and shadow results must remain visibly non-production.',
-    automation: 'retain feedback, replay proposals, and measure holdout performance',
-    approval: 'promote, canary, activate, or roll back a rule change',
     action: 'Review learning',
     target: 'automation-learning-section'
   },
   'automation/jobs': {
     title: 'Inspect the oldest blocked pipeline and its recorded failure before recovery.',
-    detail: 'Jobs are grouped by case so the current stage, model, age, and recovery action stay together.',
-    automation: 'persist, retry, and group bounded analysis stages',
-    approval: 'cancel, requeue, or accept the resulting analysis',
     action: 'Review job pipelines',
     target: 'automation-jobs-section'
   },
   'system/health': {
     title: 'Resolve degraded dependencies before relying on their data.',
-    detail: 'Blank or stale status is unknown coverage, not a healthy result.',
-    automation: 'poll Core, Edge, helper, database, event stream, and queue health',
-    approval: 'restart services or change runtime configuration',
     action: 'Review health',
     target: 'integration-summary'
   },
   'system/integrations': {
     title: 'Confirm the helper APIs and event stream are ready.',
-    detail: 'Capability, configuration, and recent activity are separate states.',
-    automation: 'report route readiness and recent source-of-truth evidence',
-    approval: 'connect, rotate, or reconfigure integrations',
     action: 'Review integrations',
     target: 'integration-config'
   },
   'system/credentials': {
     title: 'Resolve missing credential readiness without exposing secret values.',
-    detail: 'This page reports status only; credentials belong in the owning server or session-scoped action field.',
-    automation: 'report whether each protected workflow is ready',
-    approval: 'enter, rotate, or revoke credentials',
     action: 'Review readiness',
     target: 'system-credentials'
   },
   'system/audit': {
     title: 'Review pending actions and incomplete sessions before applying anything.',
-    detail: 'Every mutation must have evidence, an owner, and an auditable recovery path.',
-    automation: 'record actions, sessions, approvals, and orchestrator history',
-    approval: 'apply queued actions and resolve investigation approvals',
     action: 'Review audit queue',
     target: 'system-action-queue-section'
   },
   enterprise: {
     title: 'Connect one approved read-only source before expanding governance workflows.',
-    detail: 'Implemented, configured, and actively sending evidence are deliberately separate states.',
-    automation: 'normalize telemetry, prioritize exposures, and preserve control evidence',
-    approval: 'connect sources, authorize DAST, and create governance records',
     action: 'Review setup steps',
     target: 'enterprise-next-actions'
   },
   assets: {
     title: 'Inspect the newest asset change or degraded sensor first.',
-    detail: 'Inventory observations provide context; they do not independently prove compromise.',
-    automation: 'collect inventory, service, sensor, schedule, and change evidence',
-    approval: 'accept asset ownership and remediation work',
     action: 'Review inventory',
     target: 'edge-inventory-section'
   }
@@ -4419,7 +4341,6 @@ function renderMissionControl() {
     label: 'Automation blocked',
     title: `${modelQueued} model job${modelQueued === 1 ? '' : 's'} cannot start`,
     summary: `The selected model ${selectedModel} is not ready and no model job is running. SecOpsAI will preserve the queue instead of silently changing models.`,
-    why: 'Evidence collection can continue, but analyst briefs and publication reviews will not advance.',
     evidence: [`Selected model: ${selectedModel}`, `${modelQueued} queued · ${modelRunning} running`, `Fallback: ${bridge.fallback_mode === 'disabled' ? 'disabled' : humanizeSnake(bridge.fallback_mode || 'not recorded')}`],
     action: 'Fix model routing',
     route: 'automation/models'
@@ -4429,7 +4350,6 @@ function renderMissionControl() {
     label: 'Safe automation available',
     title: `${safeAutomationGaps.length} repeatable workflow${safeAutomationGaps.length === 1 ? '' : 's'} still need configuration`,
     summary: 'These workflows can collect, correlate, triage, and route read-only work without crossing a protected decision boundary.',
-    why: 'One scheduled policy is safer and easier to audit than repeatedly clicking overlapping manual controls.',
     evidence: safeAutomationGaps.slice(0, 3),
     action: 'Review safe automation',
     route: 'automation/investigations'
@@ -4439,7 +4359,6 @@ function renderMissionControl() {
     label: 'Coverage incomplete',
     title: `${degradedCollectors.length} collector${degradedCollectors.length === 1 ? '' : 's'} need attention`,
     summary: 'A quiet source cannot be treated as clean while its cursor, coverage window, or dead-letter queue is degraded.',
-    why: 'Repairing source coverage protects every later finding and research decision from missing evidence.',
     evidence: degradedCollectors.slice(0, 3).map(item => item.source || item.ecosystem || item.name || 'Collector needs review'),
     action: 'Review source coverage',
     route: 'research/coverage'
@@ -4449,7 +4368,6 @@ function renderMissionControl() {
     label: 'Human approval required',
     title: `${pendingApprovals} protected action${pendingApprovals === 1 ? '' : 's'} waiting`,
     summary: 'SecOpsAI has stopped at an approval boundary and will not apply the action on your behalf.',
-    why: 'Review the evidence, scope, and recovery path before approving or rejecting the request.',
     evidence: [`${openSessions} open investigation session${openSessions === 1 ? '' : 's'}`, `${pendingActions.length} pending native action${pendingActions.length === 1 ? '' : 's'}`],
     action: 'Review approvals',
     route: 'system/audit'
@@ -4459,7 +4377,6 @@ function renderMissionControl() {
     label: 'Ownership blocked',
     title: `${blocked} work item${blocked === 1 ? '' : 's'} need an owner decision`,
     summary: 'Resolve the oldest blocker before adding more work or specialist runs.',
-    why: 'Clear ownership and one explicit next step prevent duplicate investigations and stale remediation.',
     evidence: [`${inReview} in review`, `${activeRuns} active operational run${activeRuns === 1 ? '' : 's'}`],
     action: 'Open blocked work',
     route: 'work'
@@ -4469,7 +4386,6 @@ function renderMissionControl() {
     label: 'Evidence decision',
     title: `${validationBlockers} research case${validationBlockers === 1 ? '' : 's'} need validation`,
     summary: 'Resolve the first missing or contradictory evidence item before asking a model or preparing publication.',
-    why: 'Models can review evidence, but they cannot turn missing evidence into proof.',
     evidence: [`${researchQueue.length} total cases`, `${publicationReady} publication ready`],
     action: 'Review research blockers',
     route: 'research/cases'
@@ -4479,7 +4395,6 @@ function renderMissionControl() {
     label: 'Analyst decision',
     title: `${openFindingsForCockpit.length} finding${openFindingsForCockpit.length === 1 ? '' : 's'} need triage`,
     summary: 'Review priority, confidence, maliciousness, and local exposure as separate facts before choosing a disposition.',
-    why: 'A high-priority static signal is a reason to investigate, not proof that the artifact is malicious or locally present.',
     evidence: openFindingsForCockpit.slice(0, 2).map(item => `${findingSeverity(item)} · ${findingTitle(item)}`),
     action: 'Open decision queue',
     route: 'findings'
@@ -4489,7 +4404,6 @@ function renderMissionControl() {
     label: 'Automation active',
     title: `${modelQueued} model job${modelQueued === 1 ? '' : 's'} queued; ${modelRunning} running`,
     summary: `The selected model ${selectedModel} is actively processing durable jobs. Avoid creating duplicate runs.`,
-    why: 'Monitor age and failures; intervene only if throughput stops or a specific pipeline fails.',
     evidence: [`${modelFailed} historical failure${modelFailed === 1 ? '' : 's'}`, `Selected model: ${selectedModel}`],
     action: 'Monitor model jobs',
     route: 'automation/jobs'
@@ -4499,7 +4413,6 @@ function renderMissionControl() {
     label: 'Workspace clear',
     title: 'No urgent operator decision is waiting',
     summary: 'Continue the scheduled workflow and review new evidence as it arrives.',
-    why: 'SecOpsAI is preserving approval boundaries while automation handles repeatable collection and analysis.',
     evidence: [`${activeRuns} active run${activeRuns === 1 ? '' : 's'}`, `${discoveryCandidates} discovery candidate${discoveryCandidates === 1 ? '' : 's'}`],
     action: 'Review automation schedule',
     route: 'automation/investigations'
@@ -4511,12 +4424,11 @@ function renderMissionControl() {
   if (primaryDecisionHost) {
     primaryDecisionHost.innerHTML = `
       <article class="mission-primary-card tone-${escapeHtml(primaryDecision.tone)}">
-        <div class="mission-decision-heading"><span class="eyebrow">Do this first · ${escapeHtml(primaryDecision.label)}</span><span class="mission-decision-rank">1</span></div>
+        <div class="mission-decision-heading"><span class="sr-only">Do this first · ${escapeHtml(primaryDecision.label)}</span><span class="mission-decision-rank">1</span></div>
         <h3>${escapeHtml(primaryDecision.title)}</h3>
         <p class="mission-decision-summary">${escapeHtml(primaryDecision.summary)}</p>
-        <div class="mission-decision-reason"><strong>Why this is first</strong><span>${escapeHtml(primaryDecision.why)}</span></div>
         <div class="mission-decision-evidence"><strong>Current evidence</strong>${primaryDecision.evidence.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
-        <div class="mission-decision-actions"><button class="primary-btn" type="button" data-decision-route="${escapeHtml(primaryDecision.route)}">${escapeHtml(primaryDecision.action)}</button><span>SecOpsAI will keep protected decisions approval-gated.</span></div>
+        <div class="mission-decision-actions"><button class="primary-btn" type="button" data-decision-route="${escapeHtml(primaryDecision.route)}">${escapeHtml(primaryDecision.action)}</button></div>
       </article>`;
     primaryDecisionHost.querySelector('[data-decision-route]')?.addEventListener('click', event => openDecisionRoute(event.currentTarget.dataset.decisionRoute));
   }
@@ -4526,11 +4438,11 @@ function renderMissionControl() {
     const next = decisions.slice(1, 4);
     nextDecisionHost.innerHTML = `
       <section class="mission-next-card">
-        <div class="mission-section-heading"><div><span class="eyebrow">After that</span><h3>Next decisions</h3></div><span>${Math.max(0, decisions.length - 1)} remaining</span></div>
+        <div class="mission-section-heading"><div><span class="sr-only">After that</span><h3>Next decisions</h3></div><span>${Math.max(0, decisions.length - 1)} remaining</span></div>
         <div class="mission-next-list">${next.length ? next.map((item, index) => `
           <button class="mission-decision-row tone-${escapeHtml(item.tone)}" type="button" data-decision-route="${escapeHtml(item.route)}">
             <span class="mission-decision-rank">${index + 2}</span><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.summary)}</small></span><span aria-hidden="true">›</span>
-          </button>`).join('') : '<div class="mission-clear-state"><strong>You are caught up.</strong><span>No second decision is waiting.</span></div>'}</div>
+          </button>`).join('') : '<div class="mission-clear-state"><strong>You are caught up.</strong></div>'}</div>
       </section>`;
     nextDecisionHost.querySelectorAll('[data-decision-route]').forEach(button => button.addEventListener('click', () => openDecisionRoute(button.dataset.decisionRoute)));
   }
@@ -4541,12 +4453,12 @@ function renderMissionControl() {
     const nextDailyRun = dailySettings.next_run_at || dailySummary.next_run_at;
     automationFlowHost.innerHTML = `
       <section class="mission-flow-card">
-        <div class="mission-section-heading"><div><span class="eyebrow">Automatic workflow</span><h3>What SecOpsAI is doing now</h3></div><span>Human approval remains explicit</span></div>
+        <div class="mission-section-heading"><div><span class="sr-only">Automatic workflow</span><h3>What SecOpsAI is doing now</h3></div></div>
         <div class="mission-flow">
           <div class="mission-flow-step ${degradedCollectors.length ? 'needs-attention' : 'active'}"><span>1</span><strong>Discovery</strong><small>${coverageFresh ? (collectorRows.length ? `${healthyCollectors}/${collectorRows.length} collectors healthy` : '0 collectors configured') : escapeHtml(sourceCoveragePresentation().label)}</small></div>
-          <div class="mission-flow-step active"><span>2</span><strong>Evidence</strong><small>${discoveryCandidates} candidate${discoveryCandidates === 1 ? '' : 's'} · static collection only</small></div>
+          <div class="mission-flow-step active"><span>2</span><strong>Evidence</strong><small>${discoveryCandidates} candidate${discoveryCandidates === 1 ? '' : 's'}</small></div>
           <div class="mission-flow-step ${modelBlocked ? 'needs-attention' : modelRunning ? 'active' : ''}"><span>3</span><strong>Model review</strong><small>${modelFlowStatus} · ${modelQueued} queued</small></div>
-          <div class="mission-flow-step approval"><span>4</span><strong>Decision & publish</strong><small>${publicationReady} ready · operator approval required</small></div>
+          <div class="mission-flow-step approval"><span>4</span><strong>Decision & publish</strong><small>${publicationReady} ready</small></div>
         </div>
         <div class="mission-automation-policy">
           <div><span>Daily workflow</span><strong>${dailySettings.enabled === true ? `Enabled${nextDailyRun ? ` · next ${fmtDate(nextDailyRun)}` : ''}` : dailySettings.enabled === false ? 'Paused' : 'Status unavailable'}</strong></div>
@@ -4582,12 +4494,12 @@ function renderMissionControl() {
   if (attentionHost) {
     attentionHost.innerHTML = `
       <section class="card cockpit-panel">
-        <div class="cockpit-panel-head"><div><span class="eyebrow">Operator cockpit</span><h3>Needs attention</h3></div><span class="small">${cockpitItems.length ? `${cockpitItems.length} priority item${cockpitItems.length === 1 ? '' : 's'}` : 'Nothing urgent'}</span></div>
+        <div class="cockpit-panel-head"><div><span class="sr-only">Operator cockpit</span><h3>Needs attention</h3></div><span class="small">${cockpitItems.length ? `${cockpitItems.length} priority item${cockpitItems.length === 1 ? '' : 's'}` : 'Nothing urgent'}</span></div>
         <div class="cockpit-items">${cockpitItems.length ? cockpitItems.slice(0, 5).map(item => `
           <button class="cockpit-item tone-${escapeHtml(item.tone)}" type="button" data-cockpit-page="${escapeHtml(item.page)}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></span><span aria-hidden="true">›</span></button>
         `).join('') : '<div class="cockpit-clear"><strong>Workspace is clear</strong><span>Continue with scheduled scans, evidence review, or research intake.</span></div>'}</div>
       </section>
-      <section class="card cockpit-panel cockpit-summary"><span class="eyebrow">System context</span><h3>Current operating mode</h3><div class="cockpit-facts"><span><strong>${edgeWorkspaceReady ? 'Connected' : 'Degraded'}</strong><small>Asset context</small></span><span><strong>${escapeHtml(nativeTriagePresentation().label)}</strong><small>Native triage</small></span><span><strong>${state.auth.user?.email ? 'Signed in' : 'Pilot'}</strong><small>Operator session</small></span></div></section>`;
+      <section class="card cockpit-panel cockpit-summary"><span class="sr-only">System context</span><h3>Current operating mode</h3><div class="cockpit-facts"><span><strong>${edgeWorkspaceReady ? 'Connected' : 'Degraded'}</strong><small>Asset context</small></span><span><strong>${escapeHtml(nativeTriagePresentation().label)}</strong><small>Native triage</small></span><span><strong>${state.auth.user?.email ? 'Signed in' : 'Pilot'}</strong><small>Operator session</small></span></div></section>`;
     attentionHost.querySelectorAll('[data-cockpit-page]').forEach(button => button.addEventListener('click', () => setPage(button.dataset.cockpitPage)));
   }
 
@@ -5445,7 +5357,7 @@ function renderFindings() {
     intel.innerHTML = `
       <div class="finding-detail-header">
         <div>
-          <div class="detail-eyebrow">Finding detail</div>
+          <div class="sr-only">Finding detail</div>
           <h4>${escapeHtml(findingTitle(selected))}</h4>
           <div class="finding-meta-line">
             <span>${escapeHtml(displayFindingSource(selected))}</span>
@@ -5460,7 +5372,7 @@ function renderFindings() {
       </div>
       <section class="finding-decision-summary" aria-label="Finding decision summary">
         <div class="finding-decision-head">
-          <div><span class="eyebrow">Current assessment</span><h4>${escapeHtml(humanizeSnake(assessment))}</h4><p>${escapeHtml(findingBody(selected) || 'A finding was recorded, but no additional narrative is available.')}</p></div>
+          <div><span class="sr-only">Current assessment</span><h4>${escapeHtml(humanizeSnake(assessment))}</h4><p>${escapeHtml(findingBody(selected) || 'A finding was recorded, but no additional narrative is available.')}</p></div>
           <span class="decision-card-badge">${escapeHtml(humanizeSnake(effectiveFindingStatus(selected)))}</span>
         </div>
         <div class="finding-assessment-grid">
@@ -6046,7 +5958,7 @@ function renderSessionDetail(session) {
     <div class="finding-detail-card">
       <div class="finding-detail-header">
         <div>
-          <div class="detail-eyebrow">Selected session</div>
+          <div class="sr-only">Selected session</div>
           <h4>${escapeHtml(session.title || session.session_id || 'Session')}</h4>
           <div class="finding-meta-line">
             <span>${escapeHtml(session.session_id || '—')}</span>
@@ -6127,7 +6039,7 @@ function renderAutomation() {
   }[view] || ['Model routing', 'Choose and persist an approved analysis model.'];
   const summary = el('automation-view-summary');
   if (summary) {
-    summary.innerHTML = `<span class="eyebrow">Automation workspace</span><strong>${escapeHtml(viewCopy[0])}</strong><span>${escapeHtml(viewCopy[1])}</span>`;
+    summary.innerHTML = `<span class="sr-only">Automation workspace</span><strong>${escapeHtml(viewCopy[0])}</strong><span>${escapeHtml(viewCopy[1])}</span>`;
   }
   const page = el('page-automation');
   if (page) page.dataset.automationView = view;
@@ -6152,7 +6064,7 @@ function renderIntegrations() {
     audit: ['Audit and jobs', 'Trace queued analysis, native actions, investigation sessions, and orchestrator history.']
   }[systemView] || ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'];
   const systemSummary = el('system-view-summary');
-  if (systemSummary) systemSummary.innerHTML = `<span class="eyebrow">System workspace</span><strong>${escapeHtml(systemViewCopy[0])}</strong><span>${escapeHtml(systemViewCopy[1])}</span>`;
+  if (systemSummary) systemSummary.innerHTML = `<span class="sr-only">System workspace</span><strong>${escapeHtml(systemViewCopy[0])}</strong><span>${escapeHtml(systemViewCopy[1])}</span>`;
   const systemPage = el('page-integrations');
   if (systemPage) systemPage.dataset.systemView = systemView;
   document.querySelectorAll('#page-integrations [data-system-section]').forEach(section => {
@@ -6672,7 +6584,7 @@ function renderIntelligenceResultModal() {
   const decisionFacts = view.confirmedFacts.slice(0, 3);
   const decisionContradictions = view.contradictions.slice(0, 2);
   const decisionCard = `<section class="intelligence-decision-card" aria-label="Decision card">
-    <div class="intelligence-decision-card-head"><div><span class="eyebrow">Assessment</span><strong>${escapeHtml(humanizeSnake(decisionAssessment))}</strong><p>${escapeHtml(view.summary || 'Evidence is available for analyst review; no automatic maliciousness verdict was established.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(view.publicationReadiness))}</span></div>
+    <div class="intelligence-decision-card-head"><div><span class="sr-only">Assessment</span><strong>${escapeHtml(humanizeSnake(decisionAssessment))}</strong><p>${escapeHtml(view.summary || 'Evidence is available for analyst review; no automatic maliciousness verdict was established.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(view.publicationReadiness))}</span></div>
     <div class="intelligence-decision-metrics">${view.maliciousProbability !== null ? `<div><span>Malicious probability</span><b>${escapeHtml(String(view.maliciousProbability))}%</b></div><div><span>Model confidence</span><b>${escapeHtml(String(view.assessmentConfidence))}%</b></div>` : `<div><span>Detection confidence</span><b>${escapeHtml(String(view.assessmentConfidence))}%</b></div>`}<div><span>Investigation priority</span><b>${escapeHtml(humanizeSnake(view.investigationPriority))}</b></div><div><span>Potential impact</span><b>${escapeHtml(humanizeSnake(view.potentialImpact))}</b></div><div><span>Local exposure</span><b>${escapeHtml(humanizeSnake(view.localExposure))}</b></div><div><span>Evidence quality</span><b>${escapeHtml(humanizeSnake(view.evidenceQuality))}</b></div><div><span>Observations</span><b>${escapeHtml(String(view.uniqueObservations))} unique · ${escapeHtml(String(view.repeatObservations))} repeated</b></div></div>
     <div class="intelligence-decision-columns"><div class="intelligence-decision-facts"><h4>Confirmed facts</h4>${renderIntelligenceResultList(decisionFacts, 'No confirmed facts returned.')}</div><div class="intelligence-decision-contradictions"><h4>Contradictions</h4>${renderIntelligenceResultList(decisionContradictions, 'None identified.')}</div><div class="intelligence-decision-next"><h4>Next action</h4><p>${escapeHtml(view.recommendedActions[0] || 'Review the evidence and record a human decision.')}</p></div></div>
   </section>`;
@@ -7298,7 +7210,7 @@ function renderIntelligence() {
           : 'Resolve the listed evidence or quality gap, then rerun the learning cycle. Do not promote this proposal manually.')
         : (nextStage ? `Review the holdout evidence, then explicitly promote this candidate to ${nextStage} if the result remains acceptable.` : 'Continue monitoring reviewed observations and retain the audit trail.');
       currentLearningEl.innerHTML = `<section class="intelligence-decision-card detection-learning-decision" aria-label="Current learning assessment">
-        <div class="intelligence-decision-card-head"><div><span class="eyebrow">Current assessment</span><strong>${escapeHtml(blocked ? 'Rejected by safety guardrails' : humanizeSnake(currentLearningProposal.status || 'unknown'))}</strong><p>${escapeHtml(blocked ? 'No production detector changed. This candidate remains inert because its measured quality is not safe enough.' : 'This candidate is evidence-backed and remains subject to explicit replay, shadow, canary, and activation controls.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(currentLearningProposal.status || 'unknown'))}</span></div>
+        <div class="intelligence-decision-card-head"><div><span class="sr-only">Current assessment</span><strong>${escapeHtml(blocked ? 'Rejected by safety guardrails' : humanizeSnake(currentLearningProposal.status || 'unknown'))}</strong><p>${escapeHtml(blocked ? 'No production detector changed. This candidate remains inert because its measured quality is not safe enough.' : 'This candidate is evidence-backed and remains subject to explicit replay, shadow, canary, and activation controls.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(currentLearningProposal.status || 'unknown'))}</span></div>
         <div class="metrics-grid compact-metrics learning-decision-metrics">
           <div class="metric-card"><div class="metric">${escapeHtml(formatLearningRate(currentHoldout.precision))}</div><div class="metric-label">Detection precision</div></div>
           <div class="metric-card"><div class="metric">${escapeHtml(formatLearningRate(currentHoldout.recall))}</div><div class="metric-label">Detection recall</div></div>
@@ -7888,7 +7800,7 @@ function renderBlogDraftPreview() {
   host.innerHTML = `
     <div class="finding-detail-header">
       <div>
-        <div class="detail-eyebrow">Blog draft</div>
+        <div class="sr-only">Blog draft</div>
         <h4>${escapeHtml(draft.title || 'Untitled draft')}</h4>
         <p class="small">${escapeHtml(draft.summary || '')}</p>
       </div>
@@ -8037,7 +7949,7 @@ function renderBlogOps() {
     published: ['Published output', 'Review delivery state and deployment history for approved public content.']
   }[publicationView] || ['Editorial review', 'Approve, reject, or return public content after checking claims, references, disclosure, and safety.'];
   const publicationSummary = el('publication-view-summary');
-  if (publicationSummary) publicationSummary.innerHTML = `<span class="eyebrow">Publication workspace</span><strong>${escapeHtml(publicationViewCopy[0])}</strong><span>${escapeHtml(publicationViewCopy[1])}</span>`;
+  if (publicationSummary) publicationSummary.innerHTML = `<span class="sr-only">Publication workspace</span><strong>${escapeHtml(publicationViewCopy[0])}</strong><span>${escapeHtml(publicationViewCopy[1])}</span>`;
   const publicationPage = el('page-blog-ops');
   if (publicationPage) publicationPage.dataset.publicationView = publicationView;
   const contentFilter = el('blog-content-filter');
@@ -9151,9 +9063,9 @@ function renderResearchCaseRecommendation() {
     <section class="research-recommendation ${recommendationClass}">
       <div class="research-recommendation-header">
         <div>
-          <div class="detail-eyebrow">Research handoff</div>
+          <div class="sr-only">Research handoff</div>
           <h4>Research case recommendation</h4>
-          <p class="small">Use the evaluator after discovery or Campaign Research. It recommends a durable draft when normalized package evidence is present, but it never decides maliciousness, disclosure, or publication.</p>
+          
         </div>
         <button class="primary-btn" id="research-recommendation-btn" type="button" ${hasInput && !recommendationState.loading ? '' : 'disabled'}>${recommendationState.loading ? 'Evaluating…' : 'Suggest Research Case'}</button>
       </div>
@@ -9359,7 +9271,7 @@ function renderCampaignResearchPanel() {
       <div class="campaign-package-header">
         <div>
           <h4>Packages</h4>
-          <p class="small">Add packages from npm, PyPI, crates, Packagist, Go, Hugging Face, Maven, NuGet, Open VSX, RubyGems, or Chrome Web Store local artifact mode.</p>
+          
         </div>
         <div class="campaign-package-actions">
           <button class="secondary-btn" id="campaign-clean-noise-btn" type="button">Clean Obvious Package Noise</button>
@@ -9912,7 +9824,7 @@ function renderTriageOpsDetail() {
   host.innerHTML = `
     <div class="finding-detail-header">
       <div>
-        <div class="detail-eyebrow">Supply-chain alert</div>
+        <div class="sr-only">Supply-chain alert</div>
         <h4>${escapeHtml(alert.finding_id || '')}</h4>
         <p class="small">${escapeHtml(alert.package || 'unknown')}@${escapeHtml(alert.version || 'unknown')} • ${escapeHtml(alert.source || 'secopsai')}</p>
       </div>
@@ -10297,7 +10209,7 @@ function renderEdgeAssetDetail(assets = [], findings = [], changes = {}) {
   const relatedFindings = findings.filter(item => String(item.asset_id || item.ip_address || item.asset || '') === key || String(item.summary || '').includes(key));
   const assetChanges = [...(Array.isArray(changes.nodes) ? changes.nodes : []), ...(Array.isArray(changes.edges) ? changes.edges : [])].filter(item => String(item.asset_id || item.node_id || item.source_id || item.label || '').includes(key));
   const services = Array.isArray(selected.services) ? selected.services : (Array.isArray(selected.open_ports) ? selected.open_ports : []);
-  host.innerHTML = `<div class="finding-detail-header"><div><div class="detail-eyebrow">Network asset</div><h4>${escapeHtml(selected.hostname || selected.ip_address || selected.label || key)}</h4><p class="small"><code>${escapeHtml(selected.ip_address || key)}</code> · ${escapeHtml(selected.vendor || 'Unknown vendor')} · ${escapeHtml(selected.device_type || selected.os_guess || 'Unknown type')}</p></div>${renderStatusPill(selected.status || 'active')}</div>
+  host.innerHTML = `<div class="finding-detail-header"><div><div class="sr-only">Network asset</div><h4>${escapeHtml(selected.hostname || selected.ip_address || selected.label || key)}</h4><p class="small"><code>${escapeHtml(selected.ip_address || key)}</code> · ${escapeHtml(selected.vendor || 'Unknown vendor')} · ${escapeHtml(selected.device_type || selected.os_guess || 'Unknown type')}</p></div>${renderStatusPill(selected.status || 'active')}</div>
     <div class="kv-list"><div class="kv-row"><span class="kv-key">Last seen</span><span class="kv-val">${escapeHtml(fmtDate(selected.last_seen || selected.last_seen_at))}</span></div><div class="kv-row"><span class="kv-key">Services</span><span class="kv-val">${escapeHtml(String(services.length || selected.port_count || 0))}</span></div><div class="kv-row"><span class="kv-key">Related findings</span><span class="kv-val">${escapeHtml(String(relatedFindings.length))}</span></div></div>
     <div class="asset-detail-columns"><div><h5>Services</h5>${services.length ? `<ul class="compact-list">${services.slice(0, 30).map(item => `<li>${escapeHtml(typeof item === 'object' ? `${item.protocol || 'tcp'}/${item.port || item.service || 'unknown'}` : String(item))}</li>`).join('')}</ul>` : '<div class="small">No service observations recorded.</div>'}</div><div><h5>History</h5>${assetChanges.length ? `<ul class="compact-list">${assetChanges.slice(0, 20).map(item => `<li>${escapeHtml(item.type || item.edge_type || 'Observation')} · ${escapeHtml(fmtDate(item.updated_at || item.observed_at || item.created_at))}</li>`).join('')}</ul>` : '<div class="small">No asset-specific changes recorded.</div>'}</div></div>
     ${relatedFindings.length ? `<h5>Related findings</h5>${relatedFindings.slice(0, 10).map(item => `<div class="feed-item compact-feed-item"><strong>${escapeHtml(item.title || item.rule_name || item.finding_id || 'Finding')}</strong><div class="small">${escapeHtml(statusLabel(item.status || 'open'))} · ${escapeHtml(item.summary || '')}</div></div>`).join('')}` : ''}`;
@@ -10314,7 +10226,7 @@ function renderEdgeWorkspace() {
     wifi: ['Wi-Fi observations', 'Review reported wireless networks, BSSIDs, channels, and encryption state.']
   }[assetView] || ['Asset inventory', 'Review the current device inventory and its related Core findings.'];
   const assetSummary = el('asset-view-summary');
-  if (assetSummary) assetSummary.innerHTML = `<span class="eyebrow">Asset workspace</span><strong>${escapeHtml(assetViewCopy[0])}</strong><span>${escapeHtml(assetViewCopy[1])}</span>`;
+  if (assetSummary) assetSummary.innerHTML = `<span class="sr-only">Asset workspace</span><strong>${escapeHtml(assetViewCopy[0])}</strong><span>${escapeHtml(assetViewCopy[1])}</span>`;
   const assetPage = el('page-edge');
   if (assetPage) assetPage.dataset.assetView = assetView;
   document.querySelectorAll('#page-edge [data-edge-section]').forEach(section => {
