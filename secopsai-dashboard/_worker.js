@@ -2111,6 +2111,13 @@ async function routeRequest(request, env) {
       headers.set("Cache-Control", "no-store");
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
+    // Scripts and styles revalidate on every load (ETag), so a deploy is never
+    // hidden behind a cached copy whose ?v= tag did not change.
+    if (/\.(?:js|css)$/i.test(url.pathname)) {
+      const headers = new Headers(asset.headers);
+      headers.set("Cache-Control", "no-cache");
+      return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
+    }
     return asset;
 }
 

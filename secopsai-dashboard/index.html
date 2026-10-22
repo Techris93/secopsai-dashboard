@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <script src="./url-safety.js?v=20260803-credential-url-hardening"></script>
-  <link rel="stylesheet" href="./styles.css?v=20261009-auth-check" />
+  <link rel="stylesheet" href="./styles.css?v=20261022-research-checklist" />
 </head>
 <body class="okcomputer-skin professional-ui">
   <section class="auth-gate auth-checking" id="auth-gate" aria-labelledby="auth-title" aria-busy="true">
@@ -1042,12 +1042,12 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
             </div>
             <details class="research-action-drawer" open>
               <summary>Daily research operation</summary>
-              <div id="research-operation-status" aria-live="polite">Loading collection and editorial readiness…</div>
               <div class="research-form-grid">
                 <label><span>Your registered human identity</span><input id="research-operation-actor" autocomplete="username" /></label>
                 <label><span>Protected operation token (local helper only)</span><input id="research-operation-token" type="password" autocomplete="off" /></label>
               </div>
-              <details class="research-action-drawer"><summary>Register your human role</summary><p>Record your real identity and qualifications before submitting a source review or approving a release. Qualifications are self-declared here; the system does not independently verify them.</p><label><span>Display name</span><input id="research-person-name" autocomplete="name" /></label><label><span>Qualifications and relevant experience</span><textarea id="research-person-qualification"></textarea></label><div class="research-form-grid"><label><input type="checkbox" data-research-person-role="operator" checked />Operator</label><label><input type="checkbox" data-research-person-role="author" />Author</label><label><input type="checkbox" data-research-person-role="researcher" />Researcher</label><label><input type="checkbox" data-research-person-role="technical_reviewer" />Technical reviewer</label><label><input type="checkbox" data-research-person-role="editor" />Editor</label></div><button class="secondary-btn" id="research-person-register" type="button">Record my human roles</button></details>
+              <div id="research-operation-status" aria-live="polite">Loading collection and editorial readiness…</div>
+              <details class="research-action-drawer" id="research-register-drawer"><summary>Register your human role</summary><p>Record your real identity and qualifications before submitting a source review or approving a release. Qualifications are self-declared here; the system does not independently verify them.</p><label><span>Display name</span><input id="research-person-name" autocomplete="name" /></label><label><span>Qualifications and relevant experience</span><textarea id="research-person-qualification"></textarea></label><div class="research-form-grid"><label><input type="checkbox" data-research-person-role="operator" checked />Operator</label><label><input type="checkbox" data-research-person-role="author" />Author</label><label><input type="checkbox" data-research-person-role="researcher" />Researcher</label><label><input type="checkbox" data-research-person-role="technical_reviewer" />Technical reviewer</label><label><input type="checkbox" data-research-person-role="editor" />Editor</label></div><button class="secondary-btn" id="research-person-register" type="button">Record my human roles</button></details>
               <details class="research-action-drawer"><summary>Research assistant team</summary><p>SecOpsAI now starts one bounded six-role team per day when a case has complete original evidence. Teams produce proposals only; a qualified human review and your release approval remain required. Manual start is available for an explicitly selected case.</p><label><span>Case identity for a manual start</span><input id="research-team-case" placeholder="RSC-…" /></label><button class="secondary-btn" id="research-team-start" type="button">Start bounded research assistance</button></details><div class="research-form-actions"><button class="secondary-btn" id="research-operation-brief-create" type="button">Assemble today's review draft now</button></div>
               <details><summary>Record an independent claim assessment</summary>
                 <div class="research-form-grid">
@@ -1816,7 +1816,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260914-local-research-recovery"></script>
-  <script src="./app.js?v=20261018-recovery-routing"></script>
+  <script src="./app.js?v=20261022-research-checklist"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">

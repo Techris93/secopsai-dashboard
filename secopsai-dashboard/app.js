@@ -11123,13 +11123,68 @@ async function runResearchOperation(action, data, { identity = '', caseId = '', 
   finally { setButtonBusy(button, false); }
 }
 
+const RESEARCH_ACTOR_STORAGE_KEY = 'secopsai.research.actor';
+
+function researchActorId() {
+  const input = el('research-operation-actor');
+  if (input && !input.value) {
+    try { input.value = localStorage.getItem(RESEARCH_ACTOR_STORAGE_KEY) || ''; } catch { /* storage unavailable */ }
+  }
+  if (input && !input.dataset.remember) {
+    input.dataset.remember = 'true';
+    input.addEventListener('change', () => { try { localStorage.setItem(RESEARCH_ACTOR_STORAGE_KEY, input.value.trim()); } catch { /* storage unavailable */ } renderResearchOperation(); });
+  }
+  return input?.value.trim() || '';
+}
+
+function renderResearchChecklist(operation) {
+  const desk = operation.research_desk || {};
+  const actor = researchActorId();
+  const me = (desk.people || []).find(person => person.person_id === actor);
+  const needed = ['operator', 'author', 'editor', 'technical_reviewer'];
+  const missingRoles = me ? needed.filter(role => !(me.roles || []).includes(role)) : needed;
+  const requirements = operation.requirements || {};
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(new Date());
+  const edition = (operation.editions || []).find(item => item.edition_date === today);
+  const itemCount = ((edition?.draft?.body_markdown || '').match(/^## (?!Collection scope|Credits and corrections)/gm) || []).length;
+  const reviews = (operation.pending_source_reviews || []).length;
+  const steps = [
+    { done: Boolean(actor), label: 'Enter your identity in the field above', detail: actor ? `Using ${actor}` : 'Use the same ID every time; it is remembered on this browser.', target: 'research-operation-actor' },
+    { done: Boolean(me) && !missingRoles.length, label: 'Register your roles', detail: me ? (missingRoles.length ? `Registered; still missing: ${missingRoles.map(humanizeSnake).join(', ')}` : 'Operator, author, editor and technical reviewer recorded') : 'Not registered yet. Tick operator, author, editor and technical reviewer.', target: 'research-register-drawer' },
+    { done: Boolean(desk.solo_operation?.active), label: 'Record solo operation', detail: desk.solo_operation?.active ? `Active for ${desk.solo_operation.operator_id}` : 'Lets you act as author, editor and reviewer.', target: 'research-solo-drawer' },
+    { done: Boolean(requirements.named_seven_day_roster), label: 'Set yourself on all seven duty days', detail: requirements.named_seven_day_roster ? 'Roster recorded' : 'One click in the solo setup drawer.', target: 'research-solo-drawer' },
+    { done: itemCount > 0, label: "Verify today's source items", detail: itemCount ? `${itemCount} verified item(s) in today's brief` : `${reviews} item(s) waiting. Verify primary sources first-observed today; aggregator reports need their primary source.`, target: 'research-review-queue' },
+    { done: Boolean(edition && ['approved', 'published', 'corrected'].includes(edition.state)), label: "Approve today's brief", detail: edition ? `Today's edition is ${humanizeSnake(edition.state)}` : 'Assembled daily after 16:00 Istanbul time.', target: edition ? `research-edition-${today}` : '' },
+    { done: Boolean(edition?.published_url), label: 'Published automatically', detail: edition?.published_url ? edition.published_url : 'After approval the worker publishes and confirms the live page; no action needed.', target: '' },
+  ];
+  const next = steps.find(step => !step.done);
+  const actions = (desk.recent_actions || []).filter(row => !actor || row.actor === actor).slice(0, 5);
+  return `<section class="research-checklist" aria-label="Publishing checklist"><h4>Your next step${next ? `: ${escapeHtml(next.label)}` : ': nothing; today is done'}</h4>
+    <p class="small">Each action is recorded by the research worker on its next run (about every 30 minutes). Do one step, wait for it to show as done, then continue.</p>
+    <ol class="research-steps">${steps.map(step => `<li class="${step.done ? 'done' : step === next ? 'next' : 'todo'}"><strong>${step.done ? '✓' : step === next ? '→' : '○'} ${escapeHtml(step.label)}</strong><br><small>${escapeHtml(step.detail)}</small>${!step.done && step.target ? ` <button type="button" class="secondary-btn research-goto" data-target="${escapeHtml(step.target)}">Go</button>` : ''}</li>`).join('')}</ol>
+    ${actions.length ? `<p class="small"><strong>Your recent actions:</strong> ${actions.map(row => `${escapeHtml(humanizeSnake(row.action))} ${row.status === 'refused' ? `<span class="text-warning">refused: ${escapeHtml(row.error)}</span>` : 'recorded'} (${escapeHtml(fmtDate(row.at))})`).join(' · ')}</p>` : ''}
+  </section>`;
+}
+
+function bindResearchGoto(host) {
+  host.querySelectorAll('.research-goto').forEach(button => button.addEventListener('click', () => {
+    const target = el(button.dataset.target);
+    if (!target) return;
+    if (target.tagName === 'DETAILS') target.open = true;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    (target.matches('input, textarea') ? target : target.querySelector('input, textarea, button'))?.focus({ preventScroll: true });
+  }));
+}
+
 function renderResearchDesk(desk) {
   const items = desk.items || [];
   const solo = desk.solo_operation || {};
   const claimText = claim => `${escapeHtml(claim.claim)}: ${escapeHtml(humanizeSnake(claim.status))}`;
-  return `<section class="research-desk"><h4>Vulnerability research desk</h4><p>Advisories ranked by severity, exploitation and relevance to what SecOpsAI users run. Claims are checked against cve.org and NVD; a ranking is not a verification.</p>
-    ${researchTable(['Item', 'Score', 'Why', 'Claim checks', 'Exposure'], items.map(item => `<tr><td><strong>${escapeHtml(item.label)}</strong>${item.cves?.length ? `<br>${item.cves.map(escapeHtml).join(', ')}` : ''}<br><small>${escapeHtml((item.sources || []).join(', '))}</small></td><td>${escapeHtml(String(item.score))}</td><td>${(item.score_reasons || []).map(escapeHtml).join('<br>')}</td><td>${(item.claims || []).length ? item.claims.map(claimText).join('<br>') : 'Not checked yet'}${(item.needs_attention || []).length ? '<br><strong>Needs attention</strong>' : ''}</td><td>${(item.deployment_exposure || []).length ? item.deployment_exposure.map(escapeHtml).join('<br>') : 'None found'}</td></tr>`), 'No ranked advisories in the current window.')}
-    <details class="research-action-drawer"><summary>Solo operation setup${solo.active ? ` · active for ${escapeHtml(solo.operator_id || '')}` : ''}</summary>
+  const top = items[0];
+  return `<details class="research-action-drawer research-desk" id="research-desk-drawer"><summary>Vulnerability research desk · ${items.length} ranked${top ? ` · top: ${escapeHtml(top.label)} (${escapeHtml(String(top.score))})` : ''}</summary><p>Advisories ranked by severity, exploitation and relevance to what SecOpsAI users run. Claims are checked against cve.org and NVD; a ranking is not a verification.</p>
+    ${researchTable(['Item', 'Score', 'Why', 'Claim checks', 'Exposure'], items.map(item => `<tr><td><strong>${escapeHtml(item.label)}</strong>${item.cves?.length && item.cves.join(', ') !== item.label ? `<br>${item.cves.map(escapeHtml).join(', ')}` : ''}<br><small>${escapeHtml((item.sources || []).join(', '))}</small></td><td>${escapeHtml(String(item.score))}</td><td>${(item.score_reasons || []).map(escapeHtml).join('<br>')}</td><td>${(item.claims || []).length ? item.claims.map(claimText).join('<br>') : 'Not checked yet'}${(item.needs_attention || []).length ? '<br><strong>Needs attention</strong>' : ''}</td><td>${(item.deployment_exposure || []).length ? item.deployment_exposure.map(escapeHtml).join('<br>') : 'None found'}</td></tr>`), 'No ranked advisories in the current window.')}
+    </details>
+    <details class="research-action-drawer" id="research-solo-drawer"><summary>Solo operation setup${solo.active ? ` · active for ${escapeHtml(solo.operator_id || '')}` : ''}</summary>
       <p>Solo operation lets one named person act as author, editor and technical reviewer. Register your roles first (operator, author, editor, technical reviewer). Each record below is your own attestation, made under your identity.</p>
       <button type="button" class="secondary-btn" id="research-solo-record">Record solo operation for me</button>
       <button type="button" class="secondary-btn" id="research-solo-roster">Set me on all seven duty days</button>
@@ -11139,7 +11194,7 @@ function renderResearchDesk(desk) {
       <label><span>Scope</span><input id="research-legal-scope" value="Publication of SecOpsAI daily briefs and vulnerability research notes" /></label>
       <label><span>Limitations</span><input id="research-legal-limitations" /></label>
       <button type="button" class="secondary-btn" id="research-legal-record">Record legal sign-off</button>
-    </details></section>`;
+    </details>`;
 }
 
 function bindResearchSoloSetup(host) {
@@ -11183,6 +11238,8 @@ function renderResearchOperation() {
   const backup = coverage.artifact_backup || {};
   const pendingBackups = Number.isInteger(backup.pending_registered_public) && backup.pending_registered_public >= 0 ? backup.pending_registered_public : 'Unknown';
   host.innerHTML = `${state.researchCases.operationError ? `<p role="alert">This view is stale: ${escapeHtml(state.researchCases.operationError)}</p>` : ''}
+    ${renderResearchChecklist(operation)}
+    <details class="research-action-drawer" id="research-health-drawer"><summary>How it works and collection health · ${sources.filter(s => s.fresh).length}/${sources.length} sources fresh</summary>
     <p>Research programs: software supply chains and AI/agent security. Daily briefs report verified developments; original findings publish when their evidence and disclosure are ready.</p>
     <p>Automatic workflow: ${automation.assistant_team_autostart_enabled ? 'evidence-ready cases can start one bounded research team per day' : 'research team automation is disabled'}; ${automation.daily_brief_assembly_enabled ? 'the worker assembles a review draft daily' : 'scheduled daily draft assembly is disabled'}. Collection, model analysis and draft assembly never publish.</p>
     <p>${escapeHtml(coverage.public_summary || 'Coverage has not been measured.')}</p>
@@ -11193,8 +11250,9 @@ function renderResearchOperation() {
     <p>Reviewed daily editions: ${Number(operation.reviewed_daily_brief_streak) || 0} consecutive days. Collection and assembly do not grant release approval.</p>
     ${automation.team_dispatch ? `<p>Latest automatic team dispatch: ${escapeHtml(humanizeSnake(automation.team_dispatch.status || 'unknown'))}${automation.team_dispatch.case_id ? ` · ${escapeHtml(automation.team_dispatch.case_id)}` : ''}${automation.team_dispatch.team_id ? ` · ${escapeHtml(automation.team_dispatch.team_id)}` : ''}.</p>` : ''}
     ${researchTable(['Source', 'Coverage', 'Observed', 'Analyzed', 'Last success', 'Health'], sources.map(s => `<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(humanizeSnake(s.coverage_mode || 'unknown'))}${s.collection_scope ? `<br>${escapeHtml(humanizeSnake(s.collection_scope))}` : ''}</td><td>${escapeHtml(String(s.observed_events ?? 'Unknown'))}</td><td>${escapeHtml(String(s.artifacts_analyzed ?? 'Unknown'))}</td><td>${escapeHtml(fmtDate(s.last_success_at))}</td><td>${escapeHtml(s.fresh ? 'Fresh' : s.enabled ? 'Collection gap' : 'Paused')}${s.error_category ? `<br>${escapeHtml(s.error_category === 'source_http_403' ? 'Source denied collector access (HTTP 403)' : humanizeSnake(s.error_category))}` : ''}</td></tr>`), 'No sources have reported a baseline.')}
+    </details>
     ${renderResearchDesk(operation.research_desk || {})}
-    <section class="research-review-queue"><h4>Public source items awaiting human review</h4><p>These are source reports, not SecOpsAI-confirmed findings. Review the cited source and exact excerpt before recording a decision.</p>
+    <section class="research-review-queue" id="research-review-queue"><h4>Public source items awaiting human review</h4><p>These are source reports, not SecOpsAI-confirmed findings. Review the cited source and exact excerpt before recording a decision.</p>
       ${pendingSourceReviews.length ? pendingSourceReviews.map(item => `<details class="research-action-drawer research-source-review" data-event="${escapeHtml(item.event_id)}" data-source-class="${escapeHtml(item.source_class)}" data-url="${escapeHtml(item.url)}">
         <summary>${escapeHtml(item.title)} · ${escapeHtml(item.source_name)} · ${escapeHtml(humanizeSnake(item.review_status || 'pending_review'))}</summary>
         <p><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Open acquired source</a> · Published ${escapeHtml(fmtDate(item.published_at))} · First observed ${escapeHtml(fmtDate(item.first_observed_at))}</p>
@@ -11213,7 +11271,7 @@ function renderResearchOperation() {
     ${(operation.editions || []).slice(0, 5).map(edition => {
       const update = edition.pending_update;
       const correction = update && ['published', 'corrected', 'retracted'].includes(edition.state);
-      return `<details class="research-action-drawer"><summary>${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}${update ? ' · verified updates waiting' : ''}</summary>
+      return `<details class="research-action-drawer" id="research-edition-${escapeHtml(edition.edition_date)}"><summary>Daily brief ${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}${update ? ' · verified updates waiting' : ''}</summary>
         ${edition.draft ? `<p>${escapeHtml(edition.draft.title)}</p>
           ${update ? `<section class="research-edition-update" aria-label="Verified source updates awaiting reconciliation"><h4>${correction ? 'Newly verified information needs a correction review' : 'Newly verified information needs editorial reconciliation'}</h4><p>This material is stored separately and has not been added to the edition. Read the sources, update the complete draft below, and save it through the review gate.</p>
             ${update.new_items?.length ? `<ul>${update.new_items.map(item => `<li><strong>${escapeHtml(item.title)}</strong> · ${escapeHtml(item.source)} · <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">source</a><br>${escapeHtml(item.summary)}<br>Defensive action: ${escapeHtml(item.defensive_action)}<br>Limitations: ${escapeHtml(item.limitations)}</li>`).join('')}</ul>` : '<p>No new item was added. Review the changed verification or collection scope before reconciling this update.</p>'}
@@ -11230,6 +11288,7 @@ function renderResearchOperation() {
         ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`;
     }).join('')}`;
   bindResearchSoloSetup(host);
+  bindResearchGoto(host);
   host.querySelectorAll('.research-edition-save').forEach(button => button.addEventListener('click', () => {
     const card = button.closest('details');
     const editionId = card.querySelector('.research-edition-check')?.dataset.edition || card.querySelector('.research-edition-rationale')?.dataset.edition;
@@ -14076,6 +14135,102 @@ async function refreshOperationalWorkspace() {
   return true;
 }
 
+// Re-rendering replaces markup; keep what the person opened, typed and
+// focused so periodic refreshes do not close drawers or erase drafts.
+function uiStateKey(node) {
+  const parts = [];
+  for (let current = node; current && current !== document.body; current = current.parentElement) {
+    if (current.id) { parts.unshift('#' + current.id); break; }
+    if (current.tagName === 'DETAILS') {
+      const data = Object.entries(current.dataset).map(([k, v]) => `${k}=${v}`).join(',');
+      parts.unshift('details:' + (data || (current.querySelector(':scope > summary')?.textContent || '').trim().slice(0, 60)));
+    }
+  }
+  if (node.tagName !== 'DETAILS' && !node.id) {
+    parts.push([node.tagName, node.name, node.className, ...Object.entries(node.dataset).map(([k, v]) => `${k}=${v}`)].join('|'));
+  }
+  return parts.join('>');
+}
+
+const uiMemory = { open: {}, values: {}, focused: null, focusedKey: '' };
+
+function uiStateKeys(root) {
+  const counts = {};
+  const keys = new Map();
+  root.querySelectorAll('details, input, textarea, select').forEach(node => {
+    const base = uiStateKey(node);
+    counts[base] = (counts[base] || 0) + 1;
+    keys.set(node, `${base}#${counts[base]}`);
+  });
+  return keys;
+}
+
+function uiRoot() {
+  return document.querySelector('main') || document.body;
+}
+
+function rememberUiEvent(event) {
+  const node = event.target;
+  if (!(node instanceof Element) || !uiRoot().contains(node)) return;
+  if (node.tagName === 'DETAILS') {
+    uiMemory.open[uiStateKeys(uiRoot()).get(node)] = node.open;
+  } else if (node.matches('input, textarea, select') && node.type !== 'password' && node.type !== 'file') {
+    uiMemory.values[uiStateKeys(uiRoot()).get(node)] = node.type === 'checkbox' || node.type === 'radio' ? { checked: node.checked } : { value: node.value };
+  }
+}
+
+function restoreUiMemory() {
+  const root = uiRoot();
+  const keys = uiStateKeys(root);
+  keys.forEach((key, node) => {
+    if (node.tagName === 'DETAILS') {
+      if (key in uiMemory.open && node.open !== uiMemory.open[key]) node.open = uiMemory.open[key];
+      return;
+    }
+    const saved = uiMemory.values[key];
+    if (!saved) return;
+    if ('checked' in saved) node.checked = saved.checked;
+    else if (node.value !== saved.value) node.value = saved.value;
+  });
+  // A redraw replaced the field being typed in: put the cursor back.
+  if (uiMemory.focused && !uiMemory.focused.isConnected && (!document.activeElement || document.activeElement === document.body)) {
+    const replacement = [...keys].find(([, key]) => key === uiMemory.focusedKey)?.[0];
+    if (replacement) {
+      const selection = uiMemory.selection;
+      replacement.focus({ preventScroll: true });
+      if (selection && 'setSelectionRange' in replacement) { try { replacement.setSelectionRange(...selection); } catch { /* not a text field */ } }
+      uiMemory.focused = replacement;
+    }
+  }
+}
+
+function installUiMemory() {
+  if (installUiMemory.done) return;
+  installUiMemory.done = true;
+  document.addEventListener('toggle', rememberUiEvent, true);
+  document.addEventListener('input', rememberUiEvent, true);
+  document.addEventListener('change', rememberUiEvent, true);
+  document.addEventListener('focusin', event => {
+    const node = event.target;
+    if (node instanceof Element && node.matches('input, textarea, select')) {
+      uiMemory.focused = node;
+      uiMemory.focusedKey = uiStateKeys(uiRoot()).get(node) || '';
+    }
+  });
+  document.addEventListener('selectionchange', () => {
+    const node = document.activeElement;
+    if (node && node === uiMemory.focused && 'selectionStart' in node) {
+      try { uiMemory.selection = [node.selectionStart, node.selectionEnd]; } catch { /* not a text field */ }
+    }
+  });
+  let pending = false;
+  new MutationObserver(() => {
+    if (pending) return;
+    pending = true;
+    queueMicrotask(() => { pending = false; restoreUiMemory(); });
+  }).observe(uiRoot(), { childList: true, subtree: true });
+}
+
 async function refreshActiveSurface({ force = false } = {}) {
   const now = Date.now();
   if (state.surfaceRefreshInFlight || document.hidden) return false;
@@ -14148,6 +14303,7 @@ function startLiveExecutionRefreshLoop() {
 }
 
 async function boot() {
+  installUiMemory();
   const errors = [];
   const requiredLoads = [
     ['channelRoutes', 'channel_routes', { orderBy: { column: 'channel_name', ascending: true } }],
