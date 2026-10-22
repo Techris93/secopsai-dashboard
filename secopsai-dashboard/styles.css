@@ -11086,3 +11086,7 @@ body.professional-ui .icon-btn:hover {
   body.professional-ui .topbar-menu-btn span { display: block; width: 18px; height: 2px; border-radius: 2px; background: var(--contrast-text, #17211e); }
   body.professional-ui.mobile-nav-open .mobile-nav-backdrop { display: block; position: fixed; inset: 0; z-index: 39; background: rgba(15, 23, 42, 0.45); }
 }
+
+/* Token fields exist for the local helper only; the hosted console
+   authorizes actions from the Cloudflare Access sign-in. */
+body:not(.local-console) .local-only { display: none !important; }
