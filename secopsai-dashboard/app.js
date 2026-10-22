@@ -12888,23 +12888,29 @@ function renderResearchCaseDetail(researchCase) {
       <div><div class="detail-eyebrow"><code>${escapeHtml(researchCase.case_id)}</code></div><h3>${escapeHtml(researchCase.title)}</h3><p class="small">Updated ${escapeHtml(fmtDate(researchCase.updated_at))} · ${escapeHtml(statusLabel(researchCase.case_type))}</p></div>
       <div class="research-detail-badges">${renderSeverityPill(researchCase.potential_impact || researchCase.severity)}${renderStatusPill(researchCase.status)}</div>
     </div>
+    ${researchCaseTabBar(researchCase)}
+    <div class="research-tab-panel" data-case-tab="overview">
+    <div class="research-next-action" role="region" aria-labelledby="research-next-action-title">
+      <div><span class="detail-eyebrow">NEXT ACTION</span><h4 id="research-next-action-title">${escapeHtml(nextAction.title)}</h4><p>${escapeHtml(nextAction.reason)}</p></div>
+      ${nextAction.buttonId ? `<button class="primary-btn" id="research-next-action-btn" data-target="${escapeHtml(nextAction.buttonId)}" type="button">${escapeHtml(nextAction.label)}</button>` : ''}
+    </div>
     <section class="research-decision-card" aria-label="Case assessment">
       <div class="research-decision-head"><div><span class="detail-eyebrow">CURRENT ASSESSMENT</span><h4>${escapeHtml(humanizeSnake(assessment))}</h4><p>${escapeHtml(researchCase.summary || 'The case is an evidence-led investigation; no automatic maliciousness verdict is implied.')}</p></div><span class="decision-card-badge">${escapeHtml(humanizeSnake(readinessState))}</span></div>
       <div class="research-decision-metrics"><div><span>Detection confidence</span><b>${escapeHtml(String(researchCase.detection_confidence ?? calibration.detection_confidence ?? researchCase.confidence ?? 0))}%</b></div><div><span>Investigation priority</span><b>${escapeHtml(humanizeSnake(researchCase.investigation_priority || calibration.investigation_priority || 'normal'))}</b></div><div><span>Potential impact</span><b>${escapeHtml(humanizeSnake(researchCase.potential_impact || researchCase.severity || 'medium'))}</b></div><div><span>Local exposure</span><b>${escapeHtml(humanizeSnake(localExposure))}</b></div><div><span>Evidence quality</span><b>${escapeHtml(humanizeSnake(evidenceQuality))}</b></div><div><span>Observations</span><b>${escapeHtml(String(uniqueObservations))} unique · ${escapeHtml(String(repeatObservations))} repeated</b></div></div>
       <div class="research-decision-columns"><div><h5>Confirmed facts</h5>${renderBulletList(decisionFacts, 'No confirmed facts recorded.')}</div><div><h5>Contradictions and limits</h5>${renderBulletList(decisionContradictions, 'No contradictions recorded.')}</div><div><h5>Recommended next action</h5><p>${escapeHtml(nextAction.reason)}</p>${legacyIocCandidates.length ? '<button class="secondary-btn mini-btn" id="research-reconcile-btn" type="button">Reconcile legacy indicators</button><div class="small">Classifies older URL candidates as source references or attacker indicators without deleting history.</div>' : ''}</div></div>
     </section>
-    ${routingMarkup}
-    ${reviewMarkup}
     <div class="research-readiness ${readiness.ready ? 'ready' : 'blocked'}">
       <strong>${readiness.ready ? 'Publication ready' : `${(readiness.blockers || []).length} publication blocker(s)`}</strong>
       ${renderBulletList(readiness.ready ? (readiness.warnings || []) : (readiness.blockers || []), readiness.ready ? 'No readiness warnings.' : 'Run the readiness workflow before publication.')}
     </div>
-    <div class="research-next-action" role="region" aria-labelledby="research-next-action-title">
-      <div><span class="detail-eyebrow">NEXT ACTION</span><h4 id="research-next-action-title">${escapeHtml(nextAction.title)}</h4><p>${escapeHtml(nextAction.reason)}</p></div>
-      ${nextAction.buttonId ? `<button class="primary-btn" id="research-next-action-btn" data-target="${escapeHtml(nextAction.buttonId)}" type="button">${escapeHtml(nextAction.label)}</button>` : ''}
+    ${routingMarkup}
     </div>
+    <div class="research-tab-panel" data-case-tab="analysis">
     ${renderExecutionGroundedResearch(researchCase)}
     ${renderResearchAutomationPanel(researchCase)}
+    </div>
+    <div class="research-tab-panel" data-case-tab="review">
+    ${reviewMarkup}
     ${researchDetailSection('Case workflow', `
       <div class="research-form-grid">
         <label><span>Status</span><select id="research-detail-status">${['draft','investigating','validation','disclosure_pending','ready_to_publish','published','closed'].map(value => researchOption(value, researchCase.status)).join('')}</select></label>
@@ -12915,6 +12921,8 @@ function renderResearchCaseDetail(researchCase) {
         <label class="research-span-2"><span>Owner</span><input id="research-detail-owner" value="${escapeHtml(researchCase.owner || '')}" maxlength="160" /></label>
         <label class="research-span-2"><span>Executive summary</span><textarea id="research-detail-summary" rows="5" maxlength="8000">${escapeHtml(researchCase.summary || '')}</textarea></label>
       </div><div class="research-form-actions"><button class="primary-btn" id="research-save-case-btn" type="button">Save workflow</button><button class="secondary-btn" id="research-export-btn" type="button">Download case report</button><button class="secondary-btn" id="research-case-gen-pack-btn" data-case-id="${escapeHtml(researchCase.case_id)}" type="button">Generate Social Pack</button></div>`)}
+    </div>
+    <div class="research-tab-panel" data-case-tab="evidence">
     ${researchDetailSection('Subjects', researchTable(['Type','Subject','Version','Publisher','Lifecycle state'], subjects.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(statusLabel(item.subject_type))}</td><td><strong>${escapeHtml(item.ecosystem ? `${item.ecosystem}:${item.name}` : item.name)}</strong></td><td>${escapeHtml(item.version || '—')}</td><td>${escapeHtml(item.publisher || '—')}</td><td><div class="small">Case: ${escapeHtml(statusLabel(item.status))} · Registry: ${escapeHtml(statusLabel(item.registry_state || 'unknown'))} · Artifact: ${escapeHtml(statusLabel(item.artifact_state || 'missing'))} · Validation: ${escapeHtml(statusLabel(item.validation_state || 'unverified'))}</div><details class="research-inline-state"><summary>Update lifecycle state</summary><div class="research-form-grid"><select id="research-subject-registry-${escapeHtml(item.subject_id)}">${['available','unlisted','removed','unavailable','unknown'].map(value => researchOption(value, item.registry_state || 'unknown')).join('')}</select><select id="research-subject-artifact-${escapeHtml(item.subject_id)}">${['collected','missing','externally_supplied'].map(value => researchOption(value, item.artifact_state || 'missing')).join('')}</select><select id="research-subject-validation-${escapeHtml(item.subject_id)}">${['unverified','static_confirmed','sandbox_confirmed'].map(value => researchOption(value, item.validation_state || 'unverified')).join('')}</select><input id="research-subject-reason-${escapeHtml(item.subject_id)}" placeholder="Evidence or reason" /><button class="mini-btn research-subject-state-btn" data-subject-id="${escapeHtml(item.subject_id)}" type="button">Save state</button></div></details> ${researchRetractControl('subject', item)}</td></tr>`), 'No affected subjects recorded.'))}
     ${researchDetailSection('Evidence', researchTable(['Evidence','Type','Provenance','Collected','State'], evidence.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td><strong>${escapeHtml(item.title)}</strong><div class="small">${escapeHtml(item.locator || item.sha256 || 'No locator')}</div></td><td>${escapeHtml(statusLabel(item.evidence_type))}</td><td>${escapeHtml(item.provenance || '—')}</td><td>${escapeHtml(fmtDate(item.collected_at))}</td><td>${researchRetractControl('evidence', item)}</td></tr>`), 'No evidence recorded.'))}
     ${researchDetailSection('Indicators', researchTable(['Type','Value','Confidence','Evidence','State'], iocs.map(item => `<tr class="${item.status === 'retracted' ? 'research-row-retracted' : ''}"><td>${escapeHtml(item.ioc_type)}</td><td><code>${escapeHtml(item.value)}</code></td><td>${escapeHtml(String(item.confidence))}</td><td><code>${escapeHtml(item.source_evidence_id || '—')}</code></td><td>${researchRetractControl('ioc', item)}</td></tr>`), 'No indicators recorded; explicitly state when none were found.'))}
@@ -12932,15 +12940,62 @@ function renderResearchCaseDetail(researchCase) {
     <details class="research-action-drawer"><summary>Add IOC</summary><div class="research-form-grid"><label><span>Type</span><select id="research-ioc-type">${['domain','url','ipv4','ipv6','sha256','sha1','md5','email','wallet','file_path','other'].map(value => researchOption(value, 'domain')).join('')}</select></label><label><span>Confidence</span><input id="research-ioc-confidence" type="number" min="0" max="100" value="50" /></label><label class="research-span-2"><span>Value</span><input id="research-ioc-value" /></label><label><span>Source evidence</span><select id="research-ioc-evidence"><option value="">Not linked</option>${evidence.map(item => `<option value="${escapeHtml(item.evidence_id)}">${escapeHtml(item.title)}</option>`).join('')}</select></label><label><span>Tags</span><input id="research-ioc-tags" placeholder="credential-theft, skimmer" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-ioc-btn" type="button">Add IOC</button></div></details>
     <details class="research-action-drawer"><summary>Advanced: add a rule manually</summary><p class="small">Use this only for an independently reviewed rule. Rules are stored as research artifacts and structurally checked. SecOpsAI never executes submitted rule content.</p><div class="research-form-grid"><label><span>Type</span><select id="research-rule-type">${['yara','sigma','semgrep'].map(value => researchOption(value, 'sigma')).join('')}</select></label><label><span>Name</span><input id="research-rule-name" maxlength="240" placeholder="suspicious-package-execution" /></label><label><span>Source evidence</span><select id="research-rule-evidence"><option value="">Not linked</option>${evidence.map(item => `<option value="${escapeHtml(item.evidence_id)}">${escapeHtml(item.title)}</option>`).join('')}</select></label><label class="research-span-2"><span>Purpose</span><input id="research-rule-purpose" maxlength="2000" placeholder="What defensive behavior does this rule detect?" /></label><label class="research-span-2"><span>Rule content</span><textarea id="research-rule-content" rows="12" maxlength="524288" spellcheck="false" placeholder="Paste a YARA, Sigma, or Semgrep rule"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-add-rule-btn" type="button">Add reviewed rule</button></div></details>
     <details class="research-action-drawer"><summary>Link finding or add note</summary><div class="research-form-grid"><label><span>Finding ID</span><input id="research-link-finding-id" placeholder="SCM-... or EDGE-..." /></label><label><span>Relationship</span><select id="research-link-relationship">${['supports','related','derived_from','impacts'].map(value => researchOption(value, 'supports')).join('')}</select></label><label class="research-span-2"><span>Analyst note</span><textarea id="research-note-text" rows="3"></textarea></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-link-finding-btn" type="button">Link finding</button><button class="secondary-btn" id="research-add-note-btn" type="button">Add note</button></div></details>
-    ${researchDetailSection('Timeline', timeline.length ? `<div class="feed">${timeline.slice().reverse().slice(0, 50).map(item => `<div class="feed-item"><strong>${escapeHtml(statusLabel(item.event_type))}</strong><div>${escapeHtml(item.message)}</div><div class="meta">${escapeHtml(item.actor)} · ${escapeHtml(fmtDate(item.created_at))}</div></div>`).join('')}</div>` : '<div class="empty-state compact">No case activity recorded.</div>')}
+    </div>
+    <div class="research-tab-panel" data-case-tab="timeline">
+    ${researchDetailSection('Timeline', renderResearchTimeline(timeline))}
+    </div>
     ${state.researchCases.lastAction?.error ? `<div class="error">${escapeHtml(state.researchCases.lastAction.error)}</div>` : ''}
   `;
   bindResearchCaseDetailActions(researchCase);
+  bindResearchCaseTabs();
   el('research-next-action-btn')?.addEventListener('click', () => {
     const target = el(el('research-next-action-btn').dataset.target);
+    const panel = target?.closest('[data-case-tab]');
+    if (panel) showResearchCaseTab(panel.dataset.caseTab);
     target?.click();
     target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
+}
+
+const RESEARCH_CASE_TABS = [['overview', 'Overview'], ['analysis', 'Analysis'], ['evidence', 'Evidence'], ['review', 'Review & workflow'], ['timeline', 'Timeline']];
+
+function researchCaseTabBar(researchCase) {
+  const active = state.researchCases.caseTab || 'overview';
+  const counts = {
+    evidence: (researchCase.evidence || []).filter(item => item.status !== 'retracted').length,
+    timeline: (researchCase.timeline || []).length,
+  };
+  return `<div class="research-case-tabs" role="tablist" aria-label="Case sections">${RESEARCH_CASE_TABS.map(([key, label]) => `<button type="button" role="tab" class="research-case-tab${key === active ? ' active' : ''}" aria-selected="${key === active}" data-case-tab-button="${key}">${escapeHtml(label)}${counts[key] ? ` <span class="research-case-tab-count">${counts[key]}</span>` : ''}</button>`).join('')}</div>`;
+}
+
+function showResearchCaseTab(key) {
+  state.researchCases.caseTab = key;
+  document.querySelectorAll('[data-case-tab]').forEach(panel => { panel.hidden = panel.dataset.caseTab !== key; });
+  document.querySelectorAll('[data-case-tab-button]').forEach(button => {
+    const active = button.dataset.caseTabButton === key;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+}
+
+function bindResearchCaseTabs() {
+  document.querySelectorAll('[data-case-tab-button]').forEach(button => button.addEventListener('click', () => showResearchCaseTab(button.dataset.caseTabButton)));
+  showResearchCaseTab(state.researchCases.caseTab || 'overview');
+}
+
+// Automation logs the same step many times; show each run of repeats once.
+function renderResearchTimeline(timeline) {
+  if (!timeline.length) return '<div class="empty-state compact">No case activity recorded.</div>';
+  const groups = [];
+  timeline.slice().reverse().forEach(item => {
+    const last = groups[groups.length - 1];
+    if (last && last.item.event_type === item.event_type && last.item.message === item.message) last.count += 1;
+    else groups.push({ item, count: 1 });
+  });
+  const row = ({ item, count }) => `<div class="feed-item"><strong>${escapeHtml(statusLabel(item.event_type))}${count > 1 ? ` ×${count}` : ''}</strong><div>${escapeHtml(item.message)}</div><div class="meta">${escapeHtml(item.actor)} · ${escapeHtml(fmtDate(item.created_at))}</div></div>`;
+  const recent = groups.slice(0, 10).map(row).join('');
+  const older = groups.slice(10, 60);
+  return `<div class="feed">${recent}</div>${older.length ? `<details class="research-action-drawer"><summary>Older activity (${older.length})</summary><div class="feed">${older.map(row).join('')}</div></details>` : ''}`;
 }
 
 function researchNextActionForCase(researchCase, pipeline, review) {
