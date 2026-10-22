@@ -898,7 +898,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         <div class="page-header">
           <div>
             <h2>Research</h2>
-            <p>Turn credible leads into durable, evidence-led investigations with explicit disclosure and publication gates.</p>
+            
           </div>
           <div class="research-page-actions" data-research-section="cases">
             <button class="secondary-btn" id="research-cases-new-btn" type="button">New case</button>
@@ -911,7 +911,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         <form class="card research-auth-card" id="research-access-section" onsubmit="return false;">
           <div>
             <h3>Protected research actions</h3>
-            <p class="small">Case review is read-only. Creation, evidence changes, disclosure updates, exports, and blog handoff require the protected research action token configured for this workspace.</p>
+            
           </div>
           <div class="research-auth-controls">
             <input id="research-cases-admin-token" type="password" placeholder="Use the research action token for this session" autocomplete="current-password" />
@@ -925,7 +925,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         <details class="card research-create-panel" id="research-content-packs-panel">
           <summary>📦 Social & Community Content Packs (X / Twitter, Reddit r/netsec, LinkedIn, AST Diffs)</summary>
           <div style="padding: 14px 0;">
-            <p class="small">Pre-formatted, reviewable content bundles generated automatically from research cases for 1-click publishing.</p>
+            
             <div class="research-form-actions" style="margin-top: 10px; margin-bottom: 16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
               <input id="research-content-pack-case-id" placeholder="Enter Case ID (e.g. RSC-8008479A8645)" style="max-width: 320px;" />
               <button class="primary-btn" id="research-generate-content-pack-btn" type="button">Generate Content Pack</button>
@@ -953,7 +953,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-watchlist-title">Promote from package watchlist</h3>
-              <p class="small">Preview selected npm leads first. Creating draft cases is a separate protected action and never fetches or executes package code.</p>
+              
             </div>
             <button class="secondary-btn" id="research-watchlist-refresh-btn" type="button">Refresh watchlist</button>
           </div>
@@ -972,7 +972,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <div class="research-watchlist-head">
             <div>
               <h3 id="research-discovery-title">Research discovery</h3>
-              <p class="small">Monitor approved registry sources and review explainable candidates before creating a case. Coverage is shown per ecosystem; a scoped monitor is not a global clean result.</p>
+              
             </div>
             <button class="secondary-btn" id="research-discovery-refresh-btn" type="button">Refresh discovery</button>
           </div>
@@ -995,12 +995,12 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         </section>
 
         <section class="card research-stage-panel" id="research-inbox-section" data-research-section="inbox" aria-labelledby="research-inbox-title">
-          <div class="page-header compact-header"><div><h3 id="research-inbox-title" style="margin:0;">Discovery inbox</h3><p class="small" style="margin:6px 0 0;">Similarity is a discovery signal, not a risk score. Review routing is based on evidence; publication requires separate substantiation and independent review.</p></div><button class="secondary-btn" id="research-inbox-refresh-btn" type="button">Refresh candidates</button></div>
+          <div class="page-header compact-header"><div><h3 id="research-inbox-title" style="margin:0;">Discovery inbox</h3></div><button class="secondary-btn" id="research-inbox-refresh-btn" type="button">Refresh candidates</button></div>
           <div id="research-inbox-candidates" class="research-inbox-grid" role="status" aria-live="polite"></div>
         </section>
 
         <section class="card research-stage-panel" id="research-promotion-section" data-research-section="inbox" aria-labelledby="research-promotion-title">
-          <div class="page-header compact-header"><div><h3 id="research-promotion-title" style="margin:0;">Candidate promotion policy</h3><p class="small" style="margin:6px 0 0;">Deterministic gates may create draft investigations. They never declare a package malicious or publish content.</p></div><span class="status-pill" id="research-promotion-state">Disabled</span></div>
+          <div class="page-header compact-header"><div><h3 id="research-promotion-title" style="margin:0;">Candidate promotion policy</h3></div><span class="status-pill" id="research-promotion-state">Disabled</span></div>
           <div class="research-form-grid">
             <label><span>Policy ecosystem</span><select id="research-promotion-ecosystem"><option value="all">All ecosystems</option><option value="npm">npm</option><option value="pypi">PyPI</option><option value="nuget">NuGet</option><option value="maven">Maven</option><option value="rubygems">RubyGems</option><option value="packagist">Packagist</option><option value="go">Go</option><option value="open-vsx">Open VSX</option></select></label>
             <label><span>Promotion mode</span><select id="research-promotion-mode"><option value="draft_case">Create draft research case</option><option value="review_only">Review only</option></select></label>
@@ -1014,17 +1014,17 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
         </section>
 
         <section class="card research-stage-panel" id="research-campaigns-section" data-research-section="campaigns" aria-labelledby="research-campaigns-title">
-          <div class="page-header compact-header"><div><h3 id="research-campaigns-title" style="margin:0;">Campaigns</h3><p class="small" style="margin:6px 0 0;">Review deterministic package, publisher, dependency, infrastructure, and timeline relationships. Shared infrastructure alone is not attribution.</p></div><button class="secondary-btn" id="research-campaigns-refresh-btn" type="button">Refresh campaigns</button></div>
+          <div class="page-header compact-header"><div><h3 id="research-campaigns-title" style="margin:0;">Campaigns</h3></div><button class="secondary-btn" id="research-campaigns-refresh-btn" type="button">Refresh campaigns</button></div>
           <div id="research-campaigns-list"></div>
         </section>
 
         <section class="card research-stage-panel" id="research-disclosure-section" data-research-section="disclosure" aria-labelledby="research-disclosure-title">
-          <div class="page-header compact-header"><div><h3 id="research-disclosure-title" style="margin:0;">Disclosure queue</h3><p class="small" style="margin:6px 0 0;">Prepare and track external communication. Sending remains approval-gated.</p></div></div>
+          <div class="page-header compact-header"><div><h3 id="research-disclosure-title" style="margin:0;">Disclosure queue</h3></div></div>
           <div id="research-disclosure-queue"></div>
         </section>
 
         <section class="card research-stage-panel" id="research-sandbox-section" data-research-section="sandbox" aria-labelledby="research-sandbox-title">
-          <div class="page-header compact-header"><div><h3 id="research-sandbox-title" style="margin:0;">Sandbox jobs</h3><p class="small" style="margin:6px 0 0;">Review automatic dynamic-analysis recommendations, approvals, provider state, and imported results.</p></div><button class="secondary-btn" id="research-sandbox-provider-verify-btn" type="button">Verify Tria.ge API</button></div>
+          <div class="page-header compact-header"><div><h3 id="research-sandbox-title" style="margin:0;">Sandbox jobs</h3></div><button class="secondary-btn" id="research-sandbox-provider-verify-btn" type="button">Verify Tria.ge API</button></div>
           <div id="research-sandbox-provider-status" class="research-sandbox-provider-status" role="status" aria-live="polite"></div>
           <div id="research-sandbox-queue"></div>
         </section>
@@ -1035,7 +1035,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
 
         <div class="grid cols-2 research-case-layout" id="research-case-workspace-section" data-research-section="cases">
           <div class="card research-case-list-panel">
-            <div class="research-list-head"><div><h3>Case queue</h3><p class="small">Select a case to review its evidence and workflow.</p></div></div>
+            <div class="research-list-head"><div><h3>Case queue</h3></div></div>
             <div class="research-case-filters">
               <select id="research-filter-status"><option value="all">All statuses</option><option value="draft">Draft</option><option value="investigating">Investigating</option><option value="validation">Validation</option><option value="disclosure_pending">Disclosure pending</option><option value="ready_to_publish">Ready to publish</option><option value="published">Published</option><option value="closed">Closed</option></select>
               <input id="research-filter-search" type="search" placeholder="Search case, subject, owner" />
@@ -1047,8 +1047,8 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                 <label><span>Protected operation token (local helper only)</span><input id="research-operation-token" type="password" autocomplete="off" /></label>
               </div>
               <div id="research-operation-status" aria-live="polite">Loading collection and editorial readiness…</div>
-              <details class="research-action-drawer" id="research-register-drawer"><summary>Register your human role</summary><p>Record your real identity and qualifications before submitting a source review or approving a release. Qualifications are self-declared here; the system does not independently verify them.</p><label><span>Display name</span><input id="research-person-name" autocomplete="name" /></label><label><span>Qualifications and relevant experience</span><textarea id="research-person-qualification"></textarea></label><div class="research-form-grid"><label><input type="checkbox" data-research-person-role="operator" checked />Operator</label><label><input type="checkbox" data-research-person-role="author" />Author</label><label><input type="checkbox" data-research-person-role="researcher" />Researcher</label><label><input type="checkbox" data-research-person-role="technical_reviewer" />Technical reviewer</label><label><input type="checkbox" data-research-person-role="editor" />Editor</label></div><button class="secondary-btn" id="research-person-register" type="button">Record my human roles</button></details>
-              <details class="research-action-drawer"><summary>Research assistant team</summary><p>SecOpsAI now starts one bounded six-role team per day when a case has complete original evidence. Teams produce proposals only; a qualified human review and your release approval remain required. Manual start is available for an explicitly selected case.</p><label><span>Case identity for a manual start</span><input id="research-team-case" placeholder="RSC-…" /></label><button class="secondary-btn" id="research-team-start" type="button">Start bounded research assistance</button></details><div class="research-form-actions"><button class="secondary-btn" id="research-operation-brief-create" type="button">Assemble today's review draft now</button></div>
+              <details class="research-action-drawer" id="research-register-drawer"><summary>Register your human role</summary><label><span>Display name</span><input id="research-person-name" autocomplete="name" /></label><label><span>Qualifications (self-declared)</span><textarea id="research-person-qualification"></textarea></label><div class="research-form-grid"><label><input type="checkbox" data-research-person-role="operator" checked />Operator</label><label><input type="checkbox" data-research-person-role="author" />Author</label><label><input type="checkbox" data-research-person-role="researcher" />Researcher</label><label><input type="checkbox" data-research-person-role="technical_reviewer" />Technical reviewer</label><label><input type="checkbox" data-research-person-role="editor" />Editor</label></div><button class="secondary-btn" id="research-person-register" type="button">Record my human roles</button></details>
+              <details class="research-action-drawer"><summary>Research assistant team</summary><label><span>Case identity for a manual start</span><input id="research-team-case" placeholder="RSC-…" /></label><button class="secondary-btn" id="research-team-start" type="button">Start bounded research assistance</button></details><div class="research-form-actions"><button class="secondary-btn" id="research-operation-brief-create" type="button">Assemble today's review draft now</button></div>
               <details><summary>Record an independent claim assessment</summary>
                 <div class="research-form-grid">
                   <label><span>Case</span><input id="research-claim-case" /></label>
@@ -1070,7 +1070,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
                   <label class="research-span-2"><span>Resolution of contrary evidence</span><textarea id="research-claim-resolution"></textarea></label>
                   <label class="research-span-2"><span>Limitations (one per line)</span><textarea id="research-claim-limitations"></textarea></label>
                   <label><input id="research-claim-malicious" type="checkbox" />This observation demonstrates malicious behavior within the stated scope</label>
-                  <fieldset class="research-span-2"><legend>Urgent impact indicators, only when supported by the cited evidence</legend><div class="research-form-grid"><label><input type="checkbox" data-impact-indicator="active_exploitation" />Active exploitation</label><label><input type="checkbox" data-impact-indicator="credential_theft" />Credential theft</label><label><input type="checkbox" data-impact-indicator="harmful_install_time_behavior" />Harmful install-time behavior</label><label><input type="checkbox" data-impact-indicator="victim_exposure" />Exposed victims</label></div><p class="small">These labels create an immediate reviewer alert only when a qualified reviewer records a current evidence-linked claim. A rule match or model score alone cannot trigger it.</p></fieldset>
+                  <fieldset class="research-span-2"><legend>Urgent impact indicators, only when supported by the cited evidence</legend><div class="research-form-grid"><label><input type="checkbox" data-impact-indicator="active_exploitation" />Active exploitation</label><label><input type="checkbox" data-impact-indicator="credential_theft" />Credential theft</label><label><input type="checkbox" data-impact-indicator="harmful_install_time_behavior" />Harmful install-time behavior</label><label><input type="checkbox" data-impact-indicator="victim_exposure" />Exposed victims</label></div></fieldset>
                 </div><button class="secondary-btn" id="research-claim-assess" type="button">Record qualified independent assessment</button>
               </details>
             </details>
