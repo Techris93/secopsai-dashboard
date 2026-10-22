@@ -73,7 +73,7 @@ def test_bright_theme_does_not_use_hover_as_the_only_readability_fix():
 
 def test_stylesheet_cache_key_points_to_contrast_revision():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    assert 'styles.css?v=20261023-console-cuts' in html
+    assert 'styles.css?v=20261023-tablet-nav' in html
     assert 'styles.css?v=20260803-subsection-navigation' not in html
 
 
