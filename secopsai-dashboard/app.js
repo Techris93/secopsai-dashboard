@@ -11121,6 +11121,51 @@ async function runResearchOperation(action, data, { identity = '', caseId = '', 
   finally { setButtonBusy(button, false); }
 }
 
+function renderResearchDesk(desk) {
+  const items = desk.items || [];
+  const solo = desk.solo_operation || {};
+  const claimText = claim => `${escapeHtml(claim.claim)}: ${escapeHtml(humanizeSnake(claim.status))}`;
+  return `<section class="research-desk"><h4>Vulnerability research desk</h4><p>Advisories ranked by severity, exploitation and relevance to what SecOpsAI users run. Claims are checked against cve.org and NVD; a ranking is not a verification.</p>
+    ${researchTable(['Item', 'Score', 'Why', 'Claim checks', 'Exposure'], items.map(item => `<tr><td><strong>${escapeHtml(item.label)}</strong>${item.cves?.length ? `<br>${item.cves.map(escapeHtml).join(', ')}` : ''}<br><small>${escapeHtml((item.sources || []).join(', '))}</small></td><td>${escapeHtml(String(item.score))}</td><td>${(item.score_reasons || []).map(escapeHtml).join('<br>')}</td><td>${(item.claims || []).length ? item.claims.map(claimText).join('<br>') : 'Not checked yet'}${(item.needs_attention || []).length ? '<br><strong>Needs attention</strong>' : ''}</td><td>${(item.deployment_exposure || []).length ? item.deployment_exposure.map(escapeHtml).join('<br>') : 'None found'}</td></tr>`), 'No ranked advisories in the current window.')}
+    <details class="research-action-drawer"><summary>Solo operation setup${solo.active ? ` · active for ${escapeHtml(solo.operator_id || '')}` : ''}</summary>
+      <p>Solo operation lets one named person act as author, editor and technical reviewer. Register your roles first (operator, author, editor, technical reviewer). Each record below is your own attestation, made under your identity.</p>
+      <button type="button" class="secondary-btn" id="research-solo-record">Record solo operation for me</button>
+      <button type="button" class="secondary-btn" id="research-solo-roster">Set me on all seven duty days</button>
+      <h5>Legal sign-off</h5><p>Record only a legal review that actually happened. Name the person who gave it and where it is documented.</p>
+      <label><span>Reviewer (real person)</span><input id="research-legal-person" /></label>
+      <label><span>Reference (document, email or ticket)</span><input id="research-legal-reference" /></label>
+      <label><span>Scope</span><input id="research-legal-scope" value="Publication of SecOpsAI daily briefs and vulnerability research notes" /></label>
+      <label><span>Limitations</span><input id="research-legal-limitations" /></label>
+      <button type="button" class="secondary-btn" id="research-legal-record">Record legal sign-off</button>
+    </details></section>`;
+}
+
+function bindResearchSoloSetup(host) {
+  const actor = () => el('research-operation-actor')?.value.trim() || '';
+  const name = () => el('research-person-name')?.value.trim() || actor();
+  const now = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  host.querySelector('#research-solo-record')?.addEventListener('click', event => {
+    if (!actor()) { setStatus('Enter your registered identity first.', true); return; }
+    runResearchOperation('requirement', { kind: 'solo_operation', status: 'accepted', operator_id: actor(), responsible_person: name(),
+      scope: 'Vulnerability research notes and daily briefs', reference: `Operator decision recorded in the dashboard ${now()}`,
+      recorded_at: now(), limitations: 'Single reviewer; drafts come from the automated research desk' }, { button: event.currentTarget });
+  });
+  host.querySelector('#research-solo-roster')?.addEventListener('click', event => {
+    if (!actor()) { setStatus('Enter your registered identity first.', true); return; }
+    const shift = { author_id: actor(), editor_id: actor(), backup_id: actor() };
+    runResearchOperation('roster', { days: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map(day => [String(day), { ...shift }])) }, { button: event.currentTarget });
+  });
+  host.querySelector('#research-legal-record')?.addEventListener('click', event => {
+    const field = id => el(id)?.value.trim() || '';
+    if (!field('research-legal-person') || !field('research-legal-reference') || !field('research-legal-limitations')) {
+      setStatus('Name the legal reviewer, the reference and any limitations.', true); return;
+    }
+    runResearchOperation('requirement', { kind: 'legal_signoff', status: 'accepted', responsible_person: field('research-legal-person'),
+      scope: field('research-legal-scope'), reference: field('research-legal-reference'), recorded_at: now(),
+      limitations: field('research-legal-limitations') }, { button: event.currentTarget });
+  });
+}
+
 function renderResearchOperation() {
   const host = el('research-operation-status');
   if (!host) return;
@@ -11146,6 +11191,7 @@ function renderResearchOperation() {
     <p>Reviewed daily editions: ${Number(operation.reviewed_daily_brief_streak) || 0} consecutive days. Collection and assembly do not grant release approval.</p>
     ${automation.team_dispatch ? `<p>Latest automatic team dispatch: ${escapeHtml(humanizeSnake(automation.team_dispatch.status || 'unknown'))}${automation.team_dispatch.case_id ? ` · ${escapeHtml(automation.team_dispatch.case_id)}` : ''}${automation.team_dispatch.team_id ? ` · ${escapeHtml(automation.team_dispatch.team_id)}` : ''}.</p>` : ''}
     ${researchTable(['Source', 'Coverage', 'Observed', 'Analyzed', 'Last success', 'Health'], sources.map(s => `<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(humanizeSnake(s.coverage_mode || 'unknown'))}${s.collection_scope ? `<br>${escapeHtml(humanizeSnake(s.collection_scope))}` : ''}</td><td>${escapeHtml(String(s.observed_events ?? 'Unknown'))}</td><td>${escapeHtml(String(s.artifacts_analyzed ?? 'Unknown'))}</td><td>${escapeHtml(fmtDate(s.last_success_at))}</td><td>${escapeHtml(s.fresh ? 'Fresh' : s.enabled ? 'Collection gap' : 'Paused')}${s.error_category ? `<br>${escapeHtml(s.error_category === 'source_http_403' ? 'Source denied collector access (HTTP 403)' : humanizeSnake(s.error_category))}` : ''}</td></tr>`), 'No sources have reported a baseline.')}
+    ${renderResearchDesk(operation.research_desk || {})}
     <section class="research-review-queue"><h4>Public source items awaiting human review</h4><p>These are source reports, not SecOpsAI-confirmed findings. Review the cited source and exact excerpt before recording a decision.</p>
       ${pendingSourceReviews.length ? pendingSourceReviews.map(item => `<details class="research-action-drawer research-source-review" data-event="${escapeHtml(item.event_id)}" data-source-class="${escapeHtml(item.source_class)}" data-url="${escapeHtml(item.url)}">
         <summary>${escapeHtml(item.title)} · ${escapeHtml(item.source_name)} · ${escapeHtml(humanizeSnake(item.review_status || 'pending_review'))}</summary>
@@ -11181,6 +11227,7 @@ function renderResearchOperation() {
           <button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
         ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`;
     }).join('')}`;
+  bindResearchSoloSetup(host);
   host.querySelectorAll('.research-edition-save').forEach(button => button.addEventListener('click', () => {
     const card = button.closest('details');
     const editionId = card.querySelector('.research-edition-check')?.dataset.edition || card.querySelector('.research-edition-rationale')?.dataset.edition;
