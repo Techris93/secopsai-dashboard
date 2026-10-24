@@ -1381,6 +1381,18 @@ function helperCapabilityStatus(capability, { error = '', loaded = false } = {})
   return { label: 'Loading', detail: 'The capability is available; its data has not loaded yet.' };
 }
 
+// Core records daily-workflow runs started from the console; the research
+// worker's scheduled runs arrive in its operation snapshot. Show the newer.
+function freshestDailyAutomation(core) {
+  const fromCore = core || {};
+  const worker = state.researchCases?.operation?.automation?.daily;
+  const workerAt = Date.parse(worker?.settings?.last_run_at || worker?.summary?.last_run_at || '');
+  const coreAt = Date.parse(fromCore.settings?.last_run_at || fromCore.summary?.last_run_at || '');
+  if (!worker?.settings || !Number.isFinite(workerAt) || (Number.isFinite(coreAt) && coreAt >= workerAt)) return fromCore;
+  return { ...fromCore, settings: { ...(fromCore.settings || {}), ...worker.settings }, summary: { ...(fromCore.summary || {}), ...worker.summary },
+    runs: worker.latest_run ? [worker.latest_run, ...(fromCore.runs || [])] : (fromCore.runs || []) };
+}
+
 function investigationAutopilotStatus(intelligenceData = state.intelligence.data) {
   const investigations = intelligenceData?.investigations;
   if (investigations?.availability === 'local_only' || investigations?.supported === false) {
@@ -4305,8 +4317,9 @@ function renderMissionControl() {
   const validationBlockers = researchQueue.filter(item => ['validation', 'awaiting_input', 'blocked'].includes(String(item.status || '').toLowerCase())).length;
   const publicationReady = researchQueue.filter(item => String(item.status || '').toLowerCase() === 'ready_to_publish').length;
   const discoveryCandidates = Array.isArray(state.researchCases.discovery?.candidates) ? state.researchCases.discovery.candidates.length : 0;
-  const dailySettings = intelligenceData.daily_automation?.settings || {};
-  const dailySummary = intelligenceData.daily_automation?.summary || {};
+  const dailyView = freshestDailyAutomation(intelligenceData.daily_automation);
+  const dailySettings = dailyView.settings || {};
+  const dailySummary = dailyView.summary || {};
   const alertAutomation = intelligenceData.autopilot?.settings || {};
   const investigationAutomation = intelligenceData.investigations?.settings || {};
   const investigationStatus = investigationAutopilotStatus(state.intelligence.data);
@@ -6871,7 +6884,7 @@ function renderIntelligence() {
   const investigations = data?.investigations || {};
   const investigationSummary = investigations.summary || {};
   const investigationRuns = Array.isArray(investigations.runs) ? investigations.runs.slice(0, 100) : [];
-  const dailyAutomation = data?.daily_automation || {};
+  const dailyAutomation = freshestDailyAutomation(data?.daily_automation);
   const dailySettings = dailyAutomation.settings || {};
   const dailySummary = dailyAutomation.summary || {};
   const dailyRuns = Array.isArray(dailyAutomation.runs) ? dailyAutomation.runs : [];
