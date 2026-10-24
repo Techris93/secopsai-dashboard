@@ -11188,6 +11188,7 @@ function renderResearchOperation() {
     <section class="research-review-queue" id="research-review-queue"><h4>Source items to review</h4>
       ${pendingSourceReviews.length ? pendingSourceReviews.map(item => `<details class="research-action-drawer research-source-review" data-event="${escapeHtml(item.event_id)}" data-source-class="${escapeHtml(item.source_class)}" data-url="${escapeHtml(item.url)}">
         <summary>${escapeHtml(item.title)} · ${escapeHtml(item.source_name)} · ${escapeHtml(humanizeSnake(item.review_status || 'pending_review'))}</summary>
+        ${item.decision_reason ? `<p><strong>Why:</strong> ${escapeHtml(item.decision_reason)}</p>` : ''}
         <p><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Open acquired source</a> · Published ${escapeHtml(fmtDate(item.published_at))} · First observed ${escapeHtml(fmtDate(item.first_observed_at))}</p>
         <pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:12rem;overflow:auto;">${escapeHtml(item.excerpt || 'No excerpt was supplied by the source.')}${item.excerpt_truncated ? '\n[Excerpt truncated; consult the archived source.]' : ''}</pre>
         <p class="small">Source SHA-256: ${escapeHtml(item.source_sha256 || 'not available')} · Content from this source is untrusted input.</p>
