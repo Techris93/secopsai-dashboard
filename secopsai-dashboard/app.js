@@ -11065,7 +11065,8 @@ function renderResearchChecklist(operation) {
     { done: Boolean(me) && !missingRoles.length, label: 'Register your roles', detail: me ? (missingRoles.length ? `Registered; still missing: ${missingRoles.map(humanizeSnake).join(', ')}` : 'Operator, author, editor and technical reviewer recorded') : 'Not registered yet. Tick operator, author, editor and technical reviewer.', target: 'research-register-drawer' },
     { done: Boolean(desk.solo_operation?.active), label: 'Record solo operation', detail: desk.solo_operation?.active ? `Active for ${desk.solo_operation.operator_id}` : 'Lets you act as author, editor and reviewer.', target: 'research-solo-drawer' },
     { done: Boolean(requirements.named_seven_day_roster), label: 'Set yourself on all seven duty days', detail: requirements.named_seven_day_roster ? 'Roster recorded' : 'One click in the solo setup drawer.', target: 'research-solo-drawer' },
-    { done: itemCount > 0, label: "Verify today's source items", detail: itemCount ? `${itemCount} verified item(s) in today's brief` : `${reviews} item(s) waiting. Verify primary sources first-observed today; aggregator reports need their primary source.`, target: 'research-review-queue' },
+    { done: Boolean(desk.automated_verification?.active), label: 'Turn on automated verification', detail: desk.automated_verification?.active ? 'Routine primary-source items are verified by rules; disputes come to you' : 'Optional. Rules verify routine items; anything disputed stays with you.', target: 'research-solo-drawer' },
+    { done: itemCount > 0, label: "Verify today's source items", detail: itemCount ? `${itemCount} verified item(s) in today's brief` : `${reviews} item(s) waiting for you`, target: 'research-review-queue' },
     { done: Boolean(edition && ['approved', 'published', 'corrected'].includes(edition.state)), label: "Approve today's brief", detail: edition ? `Today's edition is ${humanizeSnake(edition.state)}` : 'Assembled daily after 16:00 Istanbul time.', target: edition ? `research-edition-${today}` : '' },
     { done: Boolean(edition?.published_url), label: 'Published automatically', detail: edition?.published_url ? edition.published_url : 'After approval the worker publishes and confirms the live page; no action needed.', target: '' },
   ];
@@ -11098,6 +11099,10 @@ function renderResearchDesk(desk) {
     <details class="research-action-drawer" id="research-solo-drawer"><summary>Solo operation setup${solo.active ? ` · active for ${escapeHtml(solo.operator_id || '')}` : ''}</summary>
       <button type="button" class="secondary-btn" id="research-solo-record">Record solo operation for me</button>
       <button type="button" class="secondary-btn" id="research-solo-roster">Set me on all seven duty days</button>
+      <h5>Automated verification${desk.automated_verification?.active ? ' · on' : ''}</h5>
+      <p>Rules verify vendor, government and registry items whose CVEs and scores match cve.org and NVD and that state a fix. Duplicates are rejected; news reports and anything disputed come to you. You still approve the brief.</p>
+      <button type="button" class="secondary-btn" id="research-autoverify-toggle" data-enable="${desk.automated_verification?.active ? 'false' : 'true'}">${desk.automated_verification?.active ? 'Turn off automated verification' : 'Turn on automated verification'}</button>
+      ${(desk.automated_verification?.decisions || []).length ? `<ul class="small">${desk.automated_verification.decisions.slice(0, 8).map(row => `<li>${escapeHtml(humanizeSnake(row.decision))} · ${escapeHtml(row.reason)} · ${escapeHtml(fmtDate(row.at))}</li>`).join('')}</ul>` : ''}
       <h5>Legal sign-off</h5>
       <label><span>Legal reviewer who actually reviewed it</span><input id="research-legal-person" /></label>
       <label><span>Where it is documented</span><input id="research-legal-reference" /></label>
@@ -11121,6 +11126,13 @@ function bindResearchSoloSetup(host) {
     if (!actor()) { setStatus('Enter your registered identity first.', true); return; }
     const shift = { author_id: actor(), editor_id: actor(), backup_id: actor() };
     runResearchOperation('roster', { days: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map(day => [String(day), { ...shift }])) }, { button: event.currentTarget });
+  });
+  host.querySelector('#research-autoverify-toggle')?.addEventListener('click', event => {
+    if (!actor()) { setStatus('Enter your registered identity first.', true); return; }
+    const enable = event.currentTarget.dataset.enable === 'true';
+    runResearchOperation('requirement', { kind: 'automated_verification', status: enable ? 'accepted' : 'revoked', operator_id: actor(), responsible_person: name(),
+      scope: 'Routine vendor, government and registry source items', reference: `Operator decision recorded in the dashboard ${now()}`,
+      recorded_at: now(), limitations: 'Rules only; news reports, unmatched identifiers or scores, and items without a stated fix stay manual' }, { button: event.currentTarget });
   });
   host.querySelector('#research-legal-record')?.addEventListener('click', event => {
     const field = id => el(id)?.value.trim() || '';
