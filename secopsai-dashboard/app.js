@@ -13041,7 +13041,9 @@ function renderResearchResolutions() {
   const host = el('research-agent-resolution');
   if (!host) return;
   const resolution = state.researchCases.resolution || {};
-  const settings = resolution.settings || {};
+  // Hosted: the policy lives in the research ledger; the worker reports it.
+  const workerPolicy = actionTokenRequired() ? null : state.researchCases.operation?.automation?.resolution;
+  const settings = workerPolicy?.mode ? { ...(resolution.settings || {}), ...workerPolicy } : (resolution.settings || {});
   const summary = resolution.summary || {};
   const runs = Array.isArray(resolution.runs) ? resolution.runs : [];
   host.innerHTML = `
@@ -13067,13 +13069,18 @@ function renderResearchResolutions() {
       return `<tr><td><strong>${escapeHtml(run.case_id)}</strong><div class="small"><code>${escapeHtml(run.run_id)}</code></div></td><td>${escapeHtml(statusLabel(run.verdict))}<div class="small">${escapeHtml(String(run.confidence))}% confidence</div></td><td>${renderStatusPill(run.status)}</td><td>${reasons.length ? escapeHtml(humanizeMachineText(reasons.join('; '))) : 'Passed all closure gates'}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${reviewable ? `<div class="research-rule-review-actions"><button class="mini-btn primary-btn research-resolution-review-btn" data-run-id="${escapeHtml(run.run_id)}" data-decision="accept" type="button">Accept</button><button class="mini-btn secondary-btn research-resolution-review-btn" data-run-id="${escapeHtml(run.run_id)}" data-decision="reopen" type="button">Reopen</button></div>` : escapeHtml(statusLabel(run.status))}</td></tr>`;
     }), 'No agent case resolutions yet.') : '<div class="empty-state compact">No agent case resolutions yet. Completed pipelines appear here after the configured policy evaluates them.</div>'}
   `;
-  el('research-resolution-save-btn')?.addEventListener('click', event => runResearchCaseAction('resolution-configure', {
-    mode: el('research-resolution-mode')?.value || 'advisory',
-    min_confidence: Number(el('research-resolution-confidence')?.value || 90),
-    min_evidence_refs: Number(el('research-resolution-evidence')?.value || 4),
-    max_cases_per_cycle: Number(el('research-resolution-limit')?.value || 10),
-    auto_retract_rules: Boolean(el('research-resolution-retract-rules')?.checked),
-  }, event.currentTarget));
+  el('research-resolution-save-btn')?.addEventListener('click', event => {
+    const policy = {
+      mode: el('research-resolution-mode')?.value || 'advisory',
+      min_confidence: Number(el('research-resolution-confidence')?.value || 90),
+      min_evidence_refs: Number(el('research-resolution-evidence')?.value || 4),
+      max_cases_per_cycle: Number(el('research-resolution-limit')?.value || 10),
+      auto_retract_rules: Boolean(el('research-resolution-retract-rules')?.checked),
+    };
+    // Hosted research cases are read-only; the worker applies the policy.
+    if (actionTokenRequired()) runResearchCaseAction('resolution-configure', policy, event.currentTarget);
+    else runResearchOperation('resolution-configure', policy, { button: event.currentTarget });
+  });
   el('research-resolution-current-btn')?.addEventListener('click', event => runResearchCaseAction('resolution-run', {
     pipeline_id: state.researchCases.selected?.pipelines?.[0]?.pipeline_id || '',
   }, event.currentTarget));
