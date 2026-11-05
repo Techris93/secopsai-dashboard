@@ -484,3 +484,15 @@ def test_research_case_recommendation_does_not_promote_empty_lead():
     assert recommendation["route"] == "keep_in_triage"
     assert recommendation["suggested_case"]["subjects"] == []
     assert any("Add or validate a package" in blocker for blocker in recommendation["blockers"])
+
+
+def test_brief_approval_offers_rationale_templates_and_a_custom_option():
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "function briefRationaleTemplates(edition)" in source
+    for label in ("Approved as drafted", "Approved after my edits", "No items today", "Write my own"):
+        assert f"label: '{label}'" in source
+    assert "research-edition-rationale-template" in source
+    # A template's placeholder must be replaced before approval is sent.
+    assert "Replace the bracketed text in your rationale." in source
+    approve = source[source.index("research-edition-approve').forEach"):]
+    assert approve.index("Replace the bracketed text") < approve.index("runResearchOperation('brief-approve'")
