@@ -11027,6 +11027,27 @@ const RESEARCH_BRIEF_CHECK_LABELS = {
   credits: 'Authors and sources receive credit', conflicts: 'Commercial conflicts are disclosed',
 };
 
+// Editorial rationale starting points, filled from the draft under review.
+// Each states what the editor must actually have done; bracketed text must be replaced.
+function briefRationaleTemplates(edition) {
+  const body = String(edition?.draft?.body_markdown || '');
+  const sections = body.split(/^## /m).slice(1).map(part => ({ title: part.split('\n')[0].trim(), text: part }));
+  const items = sections.filter(section => !['Collection scope', 'Credits and corrections'].includes(section.title))
+    .map(section => section.title + (/exploited in the wild/i.test(section.text) ? ' (exploited)' : ''));
+  const scope = items.length ? `Scope: ${items.length} item${items.length === 1 ? '' : 's'}: ${items.join('; ')}.` : 'Scope: no items passed verification for this edition.';
+  const checked = 'Checked: CVE identifiers, scores and KEV listings against cve.org, NVD and CISA; affected and fixed versions against each item\'s source; every defensive action is one a reader can apply; the page shows no internal material.';
+  const limits = 'Limits: SecOpsAI did not reproduce these issues; the automated checks cover identifiers and scores, not the vendor\'s fix.';
+  const templates = [];
+  if (items.length) {
+    templates.push({ id: 'as-drafted', label: 'Approved as drafted', text: [scope, checked, 'Changed: nothing.', limits, 'Conflicts: none.', 'Decision: approve.'].join('\n') });
+    templates.push({ id: 'after-edits', label: 'Approved after my edits', text: [scope, checked, 'Changed: [describe each edit and why].', limits, 'Conflicts: none.', 'Decision: approve.'].join('\n') });
+  } else {
+    templates.push({ id: 'no-items', label: 'No items today', text: [scope, 'Checked: the collection scope line and credits are accurate; no item that belongs in this edition is waiting for review.', 'Changed: nothing.', 'Conflicts: none.', 'Decision: approve a no-news edition.'].join('\n') });
+  }
+  templates.push({ id: 'custom', label: 'Write my own', text: '' });
+  return templates;
+}
+
 async function runResearchOperation(action, data, { identity = '', caseId = '', button = null } = {}) {
   const actor = el('research-operation-actor')?.value.trim() || '';
   const token = el('research-operation-token')?.value || '';
@@ -11217,7 +11238,8 @@ function renderResearchOperation() {
           <label><span>Complete draft</span><textarea class="research-edition-body" style="min-height:18rem;white-space:pre-wrap;">${escapeHtml(edition.draft.body_markdown || '')}</textarea></label>
           <button type="button" class="secondary-btn research-edition-save" data-mode="${update ? 'incorporate' : 'edit'}">${correction ? 'Save correction draft' : update ? 'Save draft with verified updates' : 'Save editorial changes'}</button>
           <div class="research-form-grid">${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" data-edition="${escapeHtml(edition.edition_id)}" data-check="${key}" />${label}</label>`).join('')}</div>
-          <label><span>Editorial decision rationale</span><textarea class="research-edition-rationale" data-edition="${escapeHtml(edition.edition_id)}"></textarea></label>
+          <label><span>Rationale</span><select class="research-edition-rationale-template" data-edition="${escapeHtml(edition.edition_id)}">${briefRationaleTemplates(edition).map(t => `<option value="${escapeHtml(t.id)}"${t.id === 'custom' ? ' selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}</select></label>
+          <label><span>Editorial decision rationale</span><textarea class="research-edition-rationale" data-edition="${escapeHtml(edition.edition_id)}" style="min-height:9rem;"></textarea></label>
           <button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
         ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`;
     }).join('')}`;
@@ -11240,12 +11262,19 @@ function renderResearchOperation() {
       runResearchOperation('brief-edit', data, { identity: edition.edition_id, button });
     }
   }));
+  host.querySelectorAll('.research-edition-rationale-template').forEach(select => select.addEventListener('change', () => {
+    const edition = (operation.editions || []).find(e => e.edition_id === select.dataset.edition);
+    const template = briefRationaleTemplates(edition).find(t => t.id === select.value);
+    const box = [...host.querySelectorAll('.research-edition-rationale')].find(input => input.dataset.edition === select.dataset.edition);
+    if (box && template) { box.value = template.text; box.focus(); }
+  }));
   host.querySelectorAll('.research-edition-approve').forEach(button => button.addEventListener('click', async () => {
     const edition = (operation.editions || []).find(e => e.edition_id === button.dataset.edition);
     const checks = {};
     host.querySelectorAll('.research-edition-check').forEach(input => { if (input.dataset.edition === edition.edition_id) checks[input.dataset.check] = input.checked ? 'passed' : 'blocked'; });
     const rationale = [...host.querySelectorAll('.research-edition-rationale')].find(input => input.dataset.edition === edition.edition_id)?.value.trim() || '';
     if (Object.values(checks).some(v => v !== 'passed') || !rationale) { setStatus('Complete every release check and explain your editorial decision.', true); return; }
+    if (/\[[^\]]+\]/.test(rationale)) { setStatus('Replace the bracketed text in your rationale.', true); return; }
     await runResearchOperation('brief-approve', { checks, rationale, expected_fingerprint: edition.fingerprint, reviewed_draft: edition.draft.body_markdown }, { identity: edition.edition_id, button });
   }));
   host.querySelectorAll('.research-team-cancel').forEach(button => button.addEventListener('click', () => runResearchOperation('assistant-team-cancel', {}, { identity: button.dataset.team, button })));
