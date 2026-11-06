@@ -10758,7 +10758,7 @@ function renderResearchDiscovery() {
     return;
   }
   const ecosystems = discovery.capabilities?.ecosystems || [];
-  health.innerHTML = [
+  markupOf(health).innerHTML = [
     edgeMetric('Ecosystems', ecosystems.length, 'Capability registry'),
     edgeMetric('Watchlists', discovery.watchlists.length, 'Active scopes'),
     edgeMetric('Monitors', discovery.monitors.length, 'Due and scheduled'),
@@ -10770,7 +10770,7 @@ function renderResearchDiscovery() {
     ? `<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Ecosystem</th><th>Discovery signal (not risk)</th><th>Route / review</th><th>Why</th><th>Status</th></tr></thead><tbody>${candidates.slice(0, 25).map(item => { const route = item.routing || {}; const signalLabel = item.score_kind === 'static_signal_score' ? 'Static signal' : 'Name similarity'; return `<tr><td><strong>${escapeHtml(item.package)}</strong><div class="small">${escapeHtml(item.version)} vs ${escapeHtml(item.reference_identifier)}</div></td><td>${escapeHtml(item.ecosystem)}</td><td><div>${escapeHtml(signalLabel)}: ${escapeHtml(String(item.score))}</div><div class="small">Not confidence or maliciousness probability</div></td><td>${renderStatusPill(route.route || 'validate')}<div class="small">${route.review_required ? 'Routine human review' : 'No human review triggered yet'}</div></td><td>${escapeHtml(item.reason || 'Discovery signal requires evidence-led validation')}</td><td>${escapeHtml(statusLabel(item.status))}</td></tr>`; }).join('')}</tbody></table></div>`
     : '<div class="empty-state compact">No candidates yet. Add a watchlist, run a monitor, and review the resulting scoped candidates.</div>';
   const alertMarkup = discovery.alerts.length ? `<h4>Research alerts</h4><div class="table-wrap"><table><thead><tr><th>Alert</th><th>Severity</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>${discovery.alerts.slice(0, 15).map(item => `<tr><td><code>${escapeHtml(item.alert_id)}</code></td><td>${escapeHtml(statusLabel(item.severity))}</td><td>${escapeHtml(humanizeMachineText(item.reason || 'Review candidate'))}</td><td>${escapeHtml(statusLabel(item.status))}</td><td><div style="display: flex; gap: 8px;"><button class="mini-btn research-alert-deliver-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Email</button>${item.status === 'open' ? `<button class="mini-btn research-alert-resolve-btn" data-alert-id="${escapeHtml(item.alert_id)}" type="button">Resolve</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>` : '';
-  candidatesHost.innerHTML = candidateMarkup + alertMarkup;
+  markupOf(candidatesHost).innerHTML = candidateMarkup + alertMarkup;
   renderResearchStageQueues(candidates);
   renderResearchPromotionPolicy();
   renderResearchCampaigns();
@@ -10847,7 +10847,7 @@ function renderResearchStageQueues(candidates = []) {
         || Number(rightRouting.evidence_gaps?.length || 0) - Number(leftRouting.evidence_gaps?.length || 0)
         || String(right.last_seen || '').localeCompare(String(left.last_seen || ''));
     });
-    inbox.innerHTML = ranked.length ? ranked.slice(0, 30).map((item, index) => {
+    markupOf(inbox).innerHTML = ranked.length ? ranked.slice(0, 30).map((item, index) => {
       const route = item.routing || {};
       const exactHash = /^[a-f0-9]{64}$/i.test(String(item.evidence?.artifact_sha256 || ''));
       const novelty = String(item.status || 'new').toLowerCase() === 'new' ? 'New lead' : statusLabel(item.status || 'review');
@@ -11193,7 +11193,7 @@ function renderResearchOperation() {
   const pendingDelivery = Number.isInteger(health.ontology_pending) && health.ontology_pending >= 0 ? health.ontology_pending : 'Unknown';
   const backup = coverage.artifact_backup || {};
   const pendingBackups = Number.isInteger(backup.pending_registered_public) && backup.pending_registered_public >= 0 ? backup.pending_registered_public : 'Unknown';
-  host.innerHTML = `${state.researchCases.operationError ? `<p role="alert">This view is stale: ${escapeHtml(state.researchCases.operationError)}</p>` : ''}
+  markupOf(host).innerHTML = `${state.researchCases.operationError ? `<p role="alert">This view is stale: ${escapeHtml(state.researchCases.operationError)}</p>` : ''}
     ${renderResearchChecklist(operation)}
     <details class="research-action-drawer" id="research-health-drawer"><summary>How it works and collection health · ${sources.filter(s => s.fresh).length}/${sources.length} sources fresh</summary>
     <p>${escapeHtml(coverage.public_summary || 'Coverage has not been measured.')}</p>
@@ -11243,6 +11243,7 @@ function renderResearchOperation() {
           <button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
         ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`;
     }).join('')}`;
+  if (!markupOf.changed) return;
   bindResearchSoloSetup(host);
   bindResearchGoto(host);
   host.querySelectorAll('.research-edition-save').forEach(button => button.addEventListener('click', () => {
@@ -11266,7 +11267,12 @@ function renderResearchOperation() {
     const edition = (operation.editions || []).find(e => e.edition_id === select.dataset.edition);
     const template = briefRationaleTemplates(edition).find(t => t.id === select.value);
     const box = [...host.querySelectorAll('.research-edition-rationale')].find(input => input.dataset.edition === select.dataset.edition);
-    if (box && template) { box.value = template.text; box.focus(); }
+    if (box && template) {
+      box.value = template.text;
+      // Remembered like typed text, so a refresh does not clear it.
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      box.focus();
+    }
   }));
   host.querySelectorAll('.research-edition-approve').forEach(button => button.addEventListener('click', async () => {
     const edition = (operation.editions || []).find(e => e.edition_id === button.dataset.edition);
@@ -12845,7 +12851,7 @@ function renderResearchCaseDetail(researchCase) {
       + "</div><div class='research-form-actions'><button class='secondary-btn' id='research-case-review-submit-btn' type='button'>Record independent review</button></div></details>"
     : '';
   const routingMarkup = `<section class="research-routing-card route-${escapeHtml(routing.route || 'validate')}" aria-label="Evidence-based routing"><div class="research-routing-head"><div><span class="sr-only">EVIDENCE-BASED ROUTE</span><h4>${escapeHtml(routeLabel)}</h4></div><span class="status-pill">${escapeHtml(humanReviewLabel)}</span></div><div class="research-routing-columns"><div><h5>Human review</h5><p>${escapeHtml(humanReviewLabel)}. This decision is independent of whether the case is publishable.</p>${renderBulletList(routing.reasons || [], 'Route is based on current evidence and case state.')}</div><div><h5>Publication decision</h5><p>${routing.publication_candidate ? 'This case has passed its evidence and review gates and is a publication candidate.' : 'This is not currently a publication candidate.'}</p>${renderBulletList(routing.publication_blockers || [], routing.publication_candidate ? 'No publication blockers remain.' : 'No additional publication blockers recorded.')}</div><div><h5>Next evidence or action</h5>${renderBulletList([...(routing.evidence_gaps || []), ...(routing.next_actions || [])], 'No additional routing action is listed.')}</div></div>${routing.disposition ? `<p class="small">Recorded ${escapeHtml(statusLabel(routing.disposition.decision))} disposition · regression ${escapeHtml(routing.disposition.regression_test?.nodeid || '')} · <a href="${escapeHtml(routing.disposition.regression_test?.run_url || '')}" target="_blank" rel="noopener noreferrer">reviewer-attested test run</a></p>` : ''}${researchCase.status !== 'closed' ? `<details class="research-action-drawer"><summary>Record an evidence-backed benign or duplicate disposition</summary><p class="small">This action closes the case. It requires a qualified technical reviewer, exact evidence, an explanation, and a reviewer-attested regression test result with its run and commit recorded. It does not change linked alert dispositions.</p><div class="research-form-grid"><label><span>Disposition</span><select id="research-disposition-decision"><option value="benign">Documented benign</option><option value="duplicate">Duplicate of known case</option></select></label><label><span>Duplicate case ID, if applicable</span><input id="research-disposition-duplicate" placeholder="RSC-…" /></label><label class="research-span-2"><span>Documented explanation</span><textarea id="research-disposition-explanation" rows="3" minlength="40"></textarea></label><label><span>Evidence record</span><select id="research-disposition-evidence"><option value="">Select exact evidence</option>${evidence.filter(item => item.status === 'active').map(item => `<option value="${escapeHtml(item.evidence_id)}">${escapeHtml(item.title || item.evidence_id)} · ${escapeHtml(item.evidence_type)}</option>`).join('')}</select></label><label><span>Evidence passage location</span><input id="research-disposition-selector" placeholder="/metadata/file_contents/src/install.js" /></label><label><span>Passage start</span><input id="research-disposition-start" type="number" min="0" value="0" /></label><label class="research-span-2"><span>Exact evidence passage</span><textarea id="research-disposition-excerpt" rows="3"></textarea></label><label class="research-span-2"><span>Matching regression test node</span><input id="research-disposition-test-node" placeholder="tests/test_rule.py::test_documented_benign_pattern" /></label><label class="research-span-2"><span>Reviewer-attested test run URL</span><input id="research-disposition-run-url" type="url" placeholder="https://github.com/Techris93/secopsai/actions/runs/…" /></label><label><span>Tested commit SHA</span><input id="research-disposition-commit" maxlength="40" /></label></div><div class="research-form-actions"><button class="secondary-btn" id="research-case-disposition-submit-btn" type="button">Record disposition and close case</button></div></details>` : ''}</section>`;
-  host.innerHTML = `
+  markupOf(host).innerHTML = `
     <div class="research-detail-head">
       <div><div class="detail-eyebrow"><code>${escapeHtml(researchCase.case_id)}</code></div><h3>${escapeHtml(researchCase.title)}</h3><p class="small">Updated ${escapeHtml(fmtDate(researchCase.updated_at))} · ${escapeHtml(statusLabel(researchCase.case_type))}</p></div>
       <div class="research-detail-badges">${renderSeverityPill(researchCase.potential_impact || researchCase.severity)}${renderStatusPill(researchCase.status)}</div>
@@ -12908,6 +12914,7 @@ function renderResearchCaseDetail(researchCase) {
     </div>
     ${state.researchCases.lastAction?.error ? `<div class="error">${escapeHtml(state.researchCases.lastAction.error)}</div>` : ''}
   `;
+  if (!markupOf.changed) return;
   bindResearchCaseDetailActions(researchCase);
   bindResearchCaseTabs();
   el('research-next-action-btn')?.addEventListener('click', () => {
@@ -13012,7 +13019,7 @@ function renderResearchCases() {
     resolved: 'Resolved by agents'
   }[researchView] || 'Research cases';
   const viewSummary = el('research-view-summary');
-  if (viewSummary) viewSummary.innerHTML = `<strong>${escapeHtml(researchViewTitle)}</strong>`;
+  if (viewSummary) markupOf(viewSummary).innerHTML = `<strong>${escapeHtml(researchViewTitle)}</strong>`;
   const page = el('page-research-cases');
   if (page) page.dataset.researchView = researchView;
   document.querySelectorAll('#page-research-cases [data-research-section]').forEach(section => {
@@ -13026,7 +13033,7 @@ function renderResearchCases() {
   const rules = cases.reduce((sum, item) => sum + Number(item.rule_count || 0), 0);
   const ruleProposals = cases.reduce((sum, item) => sum + Number(item.rule_proposal_count || 0), 0);
   const stats = el('research-cases-stats');
-  if (stats) stats.innerHTML = [
+  if (stats) markupOf(stats).innerHTML = [
     edgeMetric('Active cases', active, active === cases.length ? '' : `of ${cases.length}`),
     edgeMetric('Ready to publish', ready, ''),
     edgeMetric('Disclosing', disclosure, ''),
@@ -13044,12 +13051,13 @@ function renderResearchCases() {
   const staleNotice = state.researchCases.stale && cases.length
     ? `<div class="small text-warning" role="status">Showing ${cases.length} previously loaded case${cases.length === 1 ? '' : 's'}; the latest local refresh failed: ${escapeHtml(state.researchCases.error || 'helper unavailable')}.</div>`
     : '';
-  if (list) list.innerHTML = staleNotice + (state.researchCases.loading && !cases.length
+  markupOf.changed = true;
+  if (list) markupOf(list).innerHTML = staleNotice + (state.researchCases.loading && !cases.length
     ? '<div class="empty-state">Loading research cases…</div>'
     : filtered.length
       ? `<div class="small research-case-list-note">Severity is investigation priority, not a maliciousness verdict. Use assessment, evidence quality, and local exposure to decide what is proven.</div><div class="research-case-list">${filtered.map(item => { const assessment = humanizeSnake(item.assessment || 'unconfirmed_static_lead'); const evidenceQuality = humanizeSnake(item.evidence_quality || 'insufficient'); const localExposure = humanizeSnake(item.local_exposure || 'unknown'); return `<button class="research-case-row ${item.case_id === state.researchCases.selectedId ? 'selected' : ''}" type="button" data-research-case-id="${escapeHtml(item.case_id)}"><span class="research-case-row-head"><strong>${escapeHtml(item.title)}</strong>${renderSeverityPill(item.potential_impact || item.severity)}</span><span class="small"><code>${escapeHtml(item.case_id)}</code> · ${escapeHtml(statusLabel(item.status))} · confidence ${escapeHtml(String(item.confidence || 0))}</span><span class="small">Assessment: ${escapeHtml(assessment)} · evidence: ${escapeHtml(evidenceQuality)} · exposure: ${escapeHtml(localExposure)}</span><span class="small">${escapeHtml(String(item.evidence_count || 0))} evidence · ${escapeHtml(String(item.ioc_count || 0))} IOCs · ${escapeHtml(fmtDate(item.updated_at))}</span></button>`; }).join('')}</div>`
       : `<div class="empty-state">${escapeHtml(state.researchCases.error || 'No research cases match this view.')}</div>`);
-  list?.querySelectorAll('[data-research-case-id]').forEach(button => button.addEventListener('click', async () => {
+  if (markupOf.changed) list?.querySelectorAll('[data-research-case-id]').forEach(button => button.addEventListener('click', async () => {
     state.researchCases.selectedId = button.dataset.researchCaseId;
     state.researchCases.loading = true;
     renderResearchCases();
@@ -13076,7 +13084,7 @@ function renderResearchResolutions() {
   const settings = workerPolicy?.mode ? { ...(resolution.settings || {}), ...workerPolicy } : (resolution.settings || {});
   const summary = resolution.summary || {};
   const runs = Array.isArray(resolution.runs) ? resolution.runs : [];
-  host.innerHTML = `
+  markupOf(host).innerHTML = `
     <div class="module-head"><div><h3>Agent resolution policy</h3><p>Models may close only evidence-complete, reversible benign or not-substantiated cases. Likely or confirmed threats are escalated. Publication, disclosure, rule activation, and destructive response remain human-approved.</p></div>${renderStatusPill(settings.mode === 'guarded' ? 'completed' : settings.mode === 'off' ? 'blocked' : 'in_review', settings.mode || 'advisory')}</div>
     <div class="grid cols-4">
       ${edgeMetric('Awaiting review', summary.awaiting_review || 0, 'Applied or recommended')}
@@ -13099,6 +13107,7 @@ function renderResearchResolutions() {
       return `<tr><td><strong>${escapeHtml(run.case_id)}</strong><div class="small"><code>${escapeHtml(run.run_id)}</code></div></td><td>${escapeHtml(statusLabel(run.verdict))}<div class="small">${escapeHtml(String(run.confidence))}% confidence</div></td><td>${renderStatusPill(run.status)}</td><td>${reasons.length ? escapeHtml(humanizeMachineText(reasons.join('; '))) : 'Passed all closure gates'}</td><td>${escapeHtml(fmtDate(run.updated_at))}</td><td>${reviewable ? `<div class="research-rule-review-actions"><button class="mini-btn primary-btn research-resolution-review-btn" data-run-id="${escapeHtml(run.run_id)}" data-decision="accept" type="button">Accept</button><button class="mini-btn secondary-btn research-resolution-review-btn" data-run-id="${escapeHtml(run.run_id)}" data-decision="reopen" type="button">Reopen</button></div>` : escapeHtml(statusLabel(run.status))}</td></tr>`;
     }), 'No agent case resolutions yet.') : '<div class="empty-state compact">No agent case resolutions yet. Completed pipelines appear here after the configured policy evaluates them.</div>'}
   `;
+  if (!markupOf.changed) return;
   el('research-resolution-save-btn')?.addEventListener('click', event => {
     const policy = {
       mode: el('research-resolution-mode')?.value || 'advisory',
@@ -14176,7 +14185,25 @@ function uiStateKey(node) {
   return parts.join('>');
 }
 
-const uiMemory = { open: {}, values: {}, focused: null, focusedKey: '' };
+const uiMemory = { open: {}, values: {}, scroll: {}, focused: null, focusedKey: '' };
+
+// A periodic refresh redraws panels from fresh data. Writing identical markup
+// would still replace every node, which loses what the reader typed, where
+// they had scrolled and what had focus, so unchanged markup is left in place.
+// markupOf.changed reports whether the last write replaced anything.
+function markupOf(node) {
+  return {
+    set innerHTML(html) {
+      const same = node.__markup === html && node.firstChild === node.__markupFirst;
+      markupOf.changed = !same;
+      if (same) return;
+      node.innerHTML = html;
+      node.__markup = html;
+      node.__markupFirst = node.firstChild;
+    },
+  };
+}
+markupOf.changed = true;
 
 function uiStateKeys(root) {
   const counts = {};
@@ -14212,9 +14239,12 @@ function restoreUiMemory() {
       return;
     }
     const saved = uiMemory.values[key];
-    if (!saved) return;
-    if ('checked' in saved) node.checked = saved.checked;
-    else if (node.value !== saved.value) node.value = saved.value;
+    if (saved) {
+      if ('checked' in saved) node.checked = saved.checked;
+      else if (node.value !== saved.value) node.value = saved.value;
+    }
+    // A redrawn text box keeps the position the reader had scrolled to.
+    if (key in uiMemory.scroll && node.scrollTop !== uiMemory.scroll[key]) node.scrollTop = uiMemory.scroll[key];
   });
   // A redraw replaced the field being typed in: put the cursor back.
   if (uiMemory.focused && !uiMemory.focused.isConnected && (!document.activeElement || document.activeElement === document.body)) {
@@ -14234,6 +14264,12 @@ function installUiMemory() {
   document.addEventListener('toggle', rememberUiEvent, true);
   document.addEventListener('input', rememberUiEvent, true);
   document.addEventListener('change', rememberUiEvent, true);
+  document.addEventListener('scroll', event => {
+    const node = event.target;
+    if (node instanceof Element && node.matches('textarea, select') && uiRoot().contains(node)) {
+      uiMemory.scroll[uiStateKeys(uiRoot()).get(node)] = node.scrollTop;
+    }
+  }, true);
   document.addEventListener('focusin', event => {
     const node = event.target;
     if (node instanceof Element && node.matches('input, textarea, select')) {
@@ -14262,31 +14298,38 @@ async function refreshActiveSurface({ force = false } = {}) {
   if (dashboardAuthRequired() && !state.auth.activeUserId) return false;
   if (!force && now - state.lastSurfaceRefreshAt < 4000) return false;
   state.surfaceRefreshInFlight = true;
+  // A redraw can briefly shorten the page, which moved the reader to the top.
+  // The position is taken just before drawing, after the data has arrived.
+  const draw = render => {
+    const top = window.scrollY;
+    render();
+    if (Math.abs(window.scrollY - top) > 1) window.scrollTo({ top, behavior: 'instant' });
+  };
   try {
     const page = currentPageFromLocation();
     if (page === 'mission-control') {
       await Promise.all([refreshOperationalWorkspace(), loadIntelligence({ render: false })]);
-      renderMissionControl();
+      draw(renderMissionControl);
     } else if (page === 'findings') {
       await refreshOperationalWorkspace();
     } else if (page === 'tasks') {
       await Promise.all([refreshOperationalWorkspace(), loadSpecialists({ render: false })]);
-      renderSpecialistOverview();
+      draw(renderSpecialistOverview);
     } else if (page === 'edge') {
       await loadEdgeWorkspace({ render: false });
-      renderEdgeWorkspace();
+      draw(renderEdgeWorkspace);
     } else if (page === 'integrations') {
       await Promise.all([loadIntegrationStatus(), loadLocalTriageState()]);
-      renderIntegrations();
+      draw(renderIntegrations);
     } else if (page === 'automation') {
       await Promise.all([loadIntegrationStatus(), loadIntelligence({ render: false })]);
-      renderAutomation();
+      draw(renderAutomation);
     } else if (page === 'enterprise') {
       await Promise.all([loadEnterpriseStatus({ render: false }), loadArtifactFleetStatus({ render: false })]);
-      renderEnterprise();
+      draw(renderEnterprise);
     } else if (page === 'triage-ops') {
       await loadTriageOpsAlerts({ render: false });
-      renderTriageOps();
+      draw(renderTriageOps);
     } else if (page === 'research-cases') {
       const pipeline = (state.researchCases.selected?.pipelines || [])[0];
       const pipelinePollActive = pipeline && ['running', 'awaiting_ai'].includes(pipeline.status);
@@ -14294,16 +14337,16 @@ async function refreshActiveSurface({ force = false } = {}) {
         await loadResearchCases({ render: false, preserveSelection: true });
         state.lastResearchSurfaceRefreshAt = Date.now();
       }
-      renderResearchCases();
+      draw(renderResearchCases);
     } else if (page === 'coverage') {
       await loadCoverage({ render: false });
-      renderCoverage();
+      draw(renderCoverage);
     } else if (page === 'blog-ops') {
       await loadBlogOpsStatus({ render: false });
-      renderBlogOps();
+      draw(renderBlogOps);
     } else if (page === 'ontology') {
       await loadOntologySearch({ render: false });
-      renderOntology();
+      draw(renderOntology);
     }
     state.lastSurfaceRefreshAt = Date.now();
     return true;
