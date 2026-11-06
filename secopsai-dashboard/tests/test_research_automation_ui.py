@@ -496,3 +496,19 @@ def test_brief_approval_offers_rationale_templates_and_a_custom_option():
     assert "Replace the bracketed text in your rationale." in source
     approve = source[source.index("research-edition-approve').forEach"):]
     assert approve.index("Replace the bracketed text") < approve.index("runResearchOperation('brief-approve'")
+
+
+def test_a_refresh_with_unchanged_data_leaves_the_editor_in_place():
+    """2026-11-06: the 5-second refresh cleared the rationale and scrolled the draft to the top."""
+    source = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "function markupOf(node)" in source
+    start = source.index("function renderResearchOperation()")
+    render = source[start:source.index("\nfunction ", start + 1)]
+    assert "markupOf(host).innerHTML = " in render
+    assert render.index("if (!markupOf.changed) return;") < render.index("bindResearchSoloSetup(host);")
+    # Text a template fills in is remembered like typed text.
+    assert "box.dispatchEvent(new Event('input', { bubbles: true }));" in source
+    # Text boxes keep their scroll position and the page keeps its own across a redraw.
+    assert "uiMemory.scroll[uiStateKeys(uiRoot()).get(node)] = node.scrollTop;" in source
+    refresh = source[source.index("async function refreshActiveSurface("):source.index("function startLiveExecutionRefreshLoop")]
+    assert "draw(renderResearchCases);" in refresh and "window.scrollTo({ top, behavior: 'instant' })" in refresh
