@@ -11225,7 +11225,7 @@ function renderResearchOperation() {
     ${researchTable(['Assistant team', 'Case', 'Progress', 'Status', 'Control'], (operation.assistant_teams || []).map(t => `<tr><td>${escapeHtml(t.team_id)}</td><td>${escapeHtml(t.case_id)}</td><td>${(t.completed_stages || []).length}/6 roles</td><td>${escapeHtml(humanizeSnake(t.status))}${t.reason ? `<br>${escapeHtml(t.reason)}` : ''}</td><td>${!['awaiting_human_review', 'stale', 'failed', 'canceled'].includes(t.status) ? `<button type="button" class="secondary-btn research-team-cancel" data-team="${escapeHtml(t.team_id)}">Stop</button>` : 'Human review required'}</td></tr>`), 'No assistant teams have been started.')}
     ${(operation.editions || []).slice(0, 5).map(edition => {
       const update = edition.pending_update;
-      const correction = update && ['published', 'corrected', 'retracted'].includes(edition.state);
+      const correction = ['published', 'corrected', 'retracted'].includes(edition.state);
       return `<details class="research-action-drawer" id="research-edition-${escapeHtml(edition.edition_date)}"><summary>Daily brief ${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}${update ? ' · verified updates waiting' : ''}</summary>
         ${edition.draft ? `<p>${escapeHtml(edition.draft.title)}</p>
           ${update ? `<section class="research-edition-update" aria-label="Verified source updates awaiting reconciliation"><h4>${correction ? 'Newly verified information needs a correction review' : 'Newly verified information needs editorial reconciliation'}</h4><p>This material is stored separately and has not been added to the edition. Read the sources, update the complete draft below, and save it through the review gate.</p>
@@ -11236,6 +11236,7 @@ function renderResearchOperation() {
           <label><span>Title</span><input class="research-edition-title" value="${escapeHtml(edition.draft.title || '')}" /></label>
           <label><span>Summary</span><textarea class="research-edition-summary">${escapeHtml(edition.draft.summary || '')}</textarea></label>
           <label><span>Complete draft</span><textarea class="research-edition-body" style="min-height:18rem;white-space:pre-wrap;">${escapeHtml(edition.draft.body_markdown || '')}</textarea></label>
+          ${correction ? '<label><span>Public correction reason</span><textarea class="research-edition-correction-reason"></textarea></label>' : ''}
           <button type="button" class="secondary-btn research-edition-save" data-mode="${update ? 'incorporate' : 'edit'}">${correction ? 'Save correction draft' : update ? 'Save draft with verified updates' : 'Save editorial changes'}</button>
           <div class="research-form-grid">${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" data-edition="${escapeHtml(edition.edition_id)}" data-check="${key}" />${label}</label>`).join('')}</div>
           <label><span>Rationale</span><select class="research-edition-rationale-template" data-edition="${escapeHtml(edition.edition_id)}">${briefRationaleTemplates(edition).map(t => `<option value="${escapeHtml(t.id)}"${t.id === 'custom' ? ' selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}</select></label>
@@ -11255,8 +11256,13 @@ function renderResearchOperation() {
       summary: card.querySelector('.research-edition-summary')?.value || '',
       body_markdown: card.querySelector('.research-edition-body')?.value || '' };
     if (button.dataset.mode === 'incorporate' && edition.pending_update) data.incorporate_update_fingerprint = edition.pending_update.fingerprint;
-    if (edition.pending_update && ['published', 'corrected', 'retracted'].includes(edition.state)) {
-      data.action = 'correction'; data.reason = 'Reconcile newly verified source information';
+    if (['published', 'corrected', 'retracted'].includes(edition.state)) {
+      // Published editions change only through a correction, which keeps the
+      // previous version and prints this reason in the correction history.
+      const reason = (card.querySelector('.research-edition-correction-reason')?.value || '').trim()
+        || (edition.pending_update ? 'Reconcile newly verified source information' : '');
+      if (!reason) { setStatus('Write the public correction reason before saving the correction draft.', true); return; }
+      data.action = 'correction'; data.reason = reason;
       delete data.title; delete data.summary;
       runResearchOperation('brief-correct', data, { identity: edition.edition_id, button });
     } else {

@@ -440,6 +440,14 @@ assert.ok(operationHtml.includes('&lt;script&gt;untrusted-team&lt;/script&gt;'))
 assert.ok(operationHtml.includes('Approve this exact draft for release'));
 assert.equal((operationHtml.match(/class="research-edition-check"/g) || []).length, 12);
 assert.ok(!/type="checkbox"[^>]*checked/.test(operationHtml));
+assert.ok(!operationHtml.includes('research-edition-correction-reason'));
+// A published brief with no pending source update can still be corrected.
+operationFixture.editions[0] = {...operationFixture.editions[0], state: 'published'};
+vm.runInContext('renderResearchOperation();', runtime.context);
+const publishedHtml = runtime.elements.get('research-operation-status').innerHTML;
+assert.ok(publishedHtml.includes('research-edition-correction-reason'));
+assert.ok(publishedHtml.includes('Save correction draft'));
+assert.ok(publishedHtml.includes('the public record remains unchanged until a human approves'));
 operationFixture.editions[0] = {edition_id: 'BRIEF-2026-10-13', edition_date: '2026-10-13', state: 'verifying', draft_omitted: 'Complete draft exceeds budget'};
 vm.runInContext('renderResearchOperation();', runtime.context);
 assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes('research-edition-approve'));
