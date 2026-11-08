@@ -462,6 +462,11 @@ assert.equal(vm.runInContext("JSON.stringify(researchApprovalHolds())", runtime.
 vm.runInContext('holdResearchApproval(operationFixture.editions[0]);', runtime.context);
 assert.equal(vm.runInContext('researchApprovalHeld(operationFixture.editions[0])', runtime.context), true);
 assert.equal(vm.runInContext('researchApprovalHeld(operationFixture.editions[0], Date.now() + RESEARCH_APPROVAL_HOLD_MS + 1)', runtime.context), false);
+// A refused save ends the hold at once.
+vm.runInContext('holdResearchApproval(operationFixture.editions[0]);', runtime.context);
+operationFixture.research_desk = {...(operationFixture.research_desk || {}), recent_actions: [{action: 'brief-correct', status: 'refused', error: 'remove source material', at: new Date(Date.now() + 1000).toISOString()}]};
+assert.equal(vm.runInContext('researchApprovalHeld(operationFixture.editions[0])', runtime.context), false);
+operationFixture.research_desk.recent_actions = [];
 operationFixture.editions[0] = {edition_id: 'BRIEF-2026-10-13', edition_date: '2026-10-13', state: 'verifying', draft_omitted: 'Complete draft exceeds budget'};
 vm.runInContext('renderResearchOperation();', runtime.context);
 assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes('research-edition-approve'));
