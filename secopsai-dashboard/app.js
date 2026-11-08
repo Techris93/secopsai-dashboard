@@ -11048,7 +11048,49 @@ function briefRationaleTemplates(edition) {
   return templates;
 }
 
-async function runResearchOperation(action, data, { identity = '', caseId = '', button = null } = {}) {
+// A saved edit or correction is applied by the worker on its next cycle. Until
+// the dashboard receives the new draft, the edition on screen is the old one,
+// and approving it would approve text the editor has just replaced.
+const RESEARCH_APPROVAL_HOLD_KEY = 'secopsai.research.approval-holds';
+const RESEARCH_APPROVAL_HOLD_MS = 3 * 60 * 60 * 1000;
+
+// Kept in memory for this page and mirrored to storage so a reload keeps it.
+let researchApprovalHoldCache = null;
+
+function researchApprovalHolds() {
+  if (!researchApprovalHoldCache) {
+    try { researchApprovalHoldCache = JSON.parse(localStorage.getItem(RESEARCH_APPROVAL_HOLD_KEY) || '{}') || {}; } catch { researchApprovalHoldCache = {}; }
+  }
+  return researchApprovalHoldCache;
+}
+
+function saveResearchApprovalHolds(holds) {
+  researchApprovalHoldCache = holds;
+  try { localStorage.setItem(RESEARCH_APPROVAL_HOLD_KEY, JSON.stringify(holds)); } catch { /* storage unavailable */ }
+}
+
+function holdResearchApproval(edition) {
+  if (!edition?.edition_id) return;
+  const holds = researchApprovalHolds();
+  holds[edition.edition_id] = { fingerprint: edition.fingerprint || '', saved_at: Date.now() };
+  saveResearchApprovalHolds(holds);
+}
+
+function researchApprovalHeld(edition, now = Date.now()) {
+  const holds = researchApprovalHolds();
+  const hold = holds[edition?.edition_id];
+  if (!hold) return false;
+  // The hold ends once the edition changes (the saved draft arrived) or after
+  // a few worker cycles, so a refused save cannot block approval forever.
+  if (hold.fingerprint !== (edition.fingerprint || '') || now - Number(hold.saved_at || 0) > RESEARCH_APPROVAL_HOLD_MS) {
+    delete holds[edition.edition_id];
+    saveResearchApprovalHolds(holds);
+    return false;
+  }
+  return true;
+}
+
+async function runResearchOperation(action, data, { identity = '', caseId = '', button = null, holdEdition = null } = {}) {
   const actor = el('research-operation-actor')?.value.trim() || '';
   const token = el('research-operation-token')?.value || '';
   // The hosted console authorizes with the Cloudflare Access sign-in and its
@@ -11063,6 +11105,7 @@ async function runResearchOperation(action, data, { identity = '', caseId = '', 
     const payload = await response.json();
     if (!response.ok || payload.ok === false) throw new Error(payload.error || payload.result?.error || 'Research action failed');
     setStatus(payload.queued ? 'The authenticated research worker will record this action. Refresh after its next cycle.' : 'Research operation recorded.');
+    if (payload.queued && holdEdition) holdResearchApproval(holdEdition);
     await loadResearchCases();
     return payload;
   } catch (error) { setStatus(error?.message || String(error), true); return null; }
@@ -11241,7 +11284,7 @@ function renderResearchOperation() {
           <div class="research-form-grid">${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" data-edition="${escapeHtml(edition.edition_id)}" data-check="${key}" />${label}</label>`).join('')}</div>
           <label><span>Rationale</span><select class="research-edition-rationale-template" data-edition="${escapeHtml(edition.edition_id)}">${briefRationaleTemplates(edition).map(t => `<option value="${escapeHtml(t.id)}"${t.id === 'custom' ? ' selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}</select></label>
           <label><span>Editorial decision rationale</span><textarea class="research-edition-rationale" data-edition="${escapeHtml(edition.edition_id)}" style="min-height:9rem;"></textarea></label>
-          <button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
+          ${researchApprovalHeld(edition) ? '<button type="button" class="secondary-btn research-edition-approve" disabled>Approval waits until your saved changes load</button>' : `<button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>`}` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
         ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`;
     }).join('')}`;
   if (!markupOf.changed) return;
@@ -11264,9 +11307,9 @@ function renderResearchOperation() {
       if (!reason) { setStatus('Write the public correction reason before saving the correction draft.', true); return; }
       data.action = 'correction'; data.reason = reason;
       delete data.title; delete data.summary;
-      runResearchOperation('brief-correct', data, { identity: edition.edition_id, button });
+      runResearchOperation('brief-correct', data, { identity: edition.edition_id, button, holdEdition: edition });
     } else {
-      runResearchOperation('brief-edit', data, { identity: edition.edition_id, button });
+      runResearchOperation('brief-edit', data, { identity: edition.edition_id, button, holdEdition: edition });
     }
   }));
   host.querySelectorAll('.research-edition-rationale-template').forEach(select => select.addEventListener('change', () => {
@@ -11282,6 +11325,7 @@ function renderResearchOperation() {
   }));
   host.querySelectorAll('.research-edition-approve').forEach(button => button.addEventListener('click', async () => {
     const edition = (operation.editions || []).find(e => e.edition_id === button.dataset.edition);
+    if (!edition || researchApprovalHeld(edition)) { setStatus('Approval waits until your saved changes load.', true); return; }
     const checks = {};
     host.querySelectorAll('.research-edition-check').forEach(input => { if (input.dataset.edition === edition.edition_id) checks[input.dataset.check] = input.checked ? 'passed' : 'blocked'; });
     const rationale = [...host.querySelectorAll('.research-edition-rationale')].find(input => input.dataset.edition === edition.edition_id)?.value.trim() || '';

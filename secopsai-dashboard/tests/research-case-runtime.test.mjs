@@ -448,6 +448,20 @@ const publishedHtml = runtime.elements.get('research-operation-status').innerHTM
 assert.ok(publishedHtml.includes('research-edition-correction-reason'));
 assert.ok(publishedHtml.includes('Save correction draft'));
 assert.ok(publishedHtml.includes('the public record remains unchanged until a human approves'));
+// After a queued save, the old draft on screen cannot be approved; the hold
+// ends when the worker's new draft (a new fingerprint) arrives or expires.
+vm.runInContext('holdResearchApproval(operationFixture.editions[0]); renderResearchOperation();', runtime.context);
+const heldHtml = runtime.elements.get('research-operation-status').innerHTML;
+assert.ok(heldHtml.includes('Approval waits until your saved changes load'));
+assert.ok(!heldHtml.includes('Approve this exact draft for release'));
+assert.ok(!/research-edition-approve" data-edition/.test(heldHtml));
+operationFixture.editions[0] = {...operationFixture.editions[0], state: 'verifying', fingerprint: 'corrected'};
+vm.runInContext('renderResearchOperation();', runtime.context);
+assert.ok(runtime.elements.get('research-operation-status').innerHTML.includes('Approve this exact draft for release'));
+assert.equal(vm.runInContext("JSON.stringify(researchApprovalHolds())", runtime.context), '{}');
+vm.runInContext('holdResearchApproval(operationFixture.editions[0]);', runtime.context);
+assert.equal(vm.runInContext('researchApprovalHeld(operationFixture.editions[0])', runtime.context), true);
+assert.equal(vm.runInContext('researchApprovalHeld(operationFixture.editions[0], Date.now() + RESEARCH_APPROVAL_HOLD_MS + 1)', runtime.context), false);
 operationFixture.editions[0] = {edition_id: 'BRIEF-2026-10-13', edition_date: '2026-10-13', state: 'verifying', draft_omitted: 'Complete draft exceeds budget'};
 vm.runInContext('renderResearchOperation();', runtime.context);
 assert.ok(!runtime.elements.get('research-operation-status').innerHTML.includes('research-edition-approve'));
