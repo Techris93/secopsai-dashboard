@@ -11082,7 +11082,10 @@ function researchApprovalHeld(edition, now = Date.now()) {
   if (!hold) return false;
   // The hold ends once the edition changes (the saved draft arrived) or after
   // a few worker cycles, so a refused save cannot block approval forever.
-  if (hold.fingerprint !== (edition.fingerprint || '') || now - Number(hold.saved_at || 0) > RESEARCH_APPROVAL_HOLD_MS) {
+  // A refused save also ends it: nothing new is coming to wait for.
+  const refused = (state.researchCases?.operation?.research_desk?.recent_actions || []).some(row =>
+    row.status === 'refused' && ['brief-edit', 'brief-correct'].includes(row.action) && Date.parse(row.at) >= Number(hold.saved_at || 0));
+  if (refused || hold.fingerprint !== (edition.fingerprint || '') || now - Number(hold.saved_at || 0) > RESEARCH_APPROVAL_HOLD_MS) {
     delete holds[edition.edition_id];
     saveResearchApprovalHolds(holds);
     return false;
