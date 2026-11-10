@@ -11225,11 +11225,44 @@ function bindResearchSoloSetup(host) {
   });
 }
 
+// The release checks carry the draft fingerprint, so ticks remembered for one
+// draft never carry over to a changed one: the reader re-checks the new text.
+function researchBriefChecksMarkup(edition) {
+  const data = `data-edition="${escapeHtml(edition.edition_id)}" data-fingerprint="${escapeHtml(edition.fingerprint || '')}"`;
+  return `<fieldset class="research-form-grid research-brief-checks"><legend class="sr-only">Release checks</legend>
+            <label class="research-span-2 research-brief-check-all"><input type="checkbox" class="research-edition-check-all" ${data} />All checks</label>
+            ${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" ${data} data-check="${key}" />${label}</label>`).join('')}</fieldset>`;
+}
+
+// "All checks" shows the state of the twelve: ticked, empty or partly ticked.
+function syncResearchCheckAll(root) {
+  root.querySelectorAll('.research-edition-check-all').forEach(all => {
+    const boxes = [...all.closest('fieldset').querySelectorAll('.research-edition-check')];
+    const ticked = boxes.filter(box => box.checked).length;
+    all.checked = boxes.length > 0 && ticked === boxes.length;
+    all.indeterminate = ticked > 0 && ticked < boxes.length;
+  });
+}
+
+// Tell the reader when a draft they had started checking was replaced.
+function noteClearedResearchChecks(editions) {
+  const seen = state.researchCases.briefFingerprints || (state.researchCases.briefFingerprints = {});
+  for (const edition of editions) {
+    const before = seen[edition.edition_id];
+    seen[edition.edition_id] = edition.fingerprint;
+    if (!before || before === edition.fingerprint) continue;
+    const ticked = Object.entries(uiMemory.values).some(([key, value]) => value.checked
+      && key.includes('research-edition-check') && key.includes(`edition=${edition.edition_id}`) && key.includes(`fingerprint=${before}`));
+    if (ticked) setStatus(`The ${edition.edition_date} brief changed, so its release checks were cleared. Review the new draft before approving.`, true);
+  }
+}
+
 function renderResearchOperation() {
   const host = el('research-operation-status');
   if (!host) return;
   const operation = state.researchCases.operation;
   if (!operation) { host.textContent = state.researchCases.operationError || 'Collection and editorial readiness have not been reported yet.'; return; }
+  noteClearedResearchChecks(operation.editions || []);
   const coverage = operation.coverage || {};
   const automation = operation.automation || {};
   const sources = coverage.sources || [];
@@ -11285,7 +11318,7 @@ function renderResearchOperation() {
           <label><span>Complete draft</span><textarea class="research-edition-body" style="min-height:18rem;white-space:pre-wrap;">${escapeHtml(edition.draft.body_markdown || '')}</textarea></label>
           ${correction ? '<label><span>Public correction reason</span><textarea class="research-edition-correction-reason"></textarea></label>' : ''}
           <button type="button" class="secondary-btn research-edition-save" data-mode="${update ? 'incorporate' : 'edit'}">${correction ? 'Save correction draft' : update ? 'Save draft with verified updates' : 'Save editorial changes'}</button>
-          <div class="research-form-grid">${Object.entries(RESEARCH_BRIEF_CHECK_LABELS).map(([key, label]) => `<label><input type="checkbox" class="research-edition-check" data-edition="${escapeHtml(edition.edition_id)}" data-check="${key}" />${label}</label>`).join('')}</div>
+          ${researchBriefChecksMarkup(edition)}
           <label><span>Rationale</span><select class="research-edition-rationale-template" data-edition="${escapeHtml(edition.edition_id)}">${briefRationaleTemplates(edition).map(t => `<option value="${escapeHtml(t.id)}"${t.id === 'custom' ? ' selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}</select></label>
           <label><span>Editorial decision rationale</span><textarea class="research-edition-rationale" data-edition="${escapeHtml(edition.edition_id)}" style="min-height:9rem;"></textarea></label>
           ${researchApprovalHeld(edition) ? '<button type="button" class="secondary-btn research-edition-approve" disabled>Approval waits until your saved changes load</button>' : `<button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>`}` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
@@ -11294,6 +11327,18 @@ function renderResearchOperation() {
   if (!markupOf.changed) return;
   bindResearchSoloSetup(host);
   bindResearchGoto(host);
+  host.querySelectorAll('.research-edition-check-all').forEach(all => all.addEventListener('change', () => {
+    // Each box fires its own change event so the page remembers it on refresh.
+    // Those events recount "All checks", so the target is read once first.
+    const target = all.checked;
+    all.closest('fieldset').querySelectorAll('.research-edition-check').forEach(box => {
+      if (box.checked === target) return;
+      box.checked = target;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    syncResearchCheckAll(all.closest('fieldset'));
+  }));
+  host.querySelectorAll('.research-edition-check').forEach(box => box.addEventListener('change', () => syncResearchCheckAll(box.closest('fieldset'))));
   host.querySelectorAll('.research-edition-save').forEach(button => button.addEventListener('click', () => {
     const card = button.closest('details');
     const editionId = card.querySelector('.research-edition-check')?.dataset.edition || card.querySelector('.research-edition-rationale')?.dataset.edition;
@@ -14310,6 +14355,8 @@ function restoreUiMemory() {
       uiMemory.focused = replacement;
     }
   }
+  // Partly ticked is not a remembered value; work it out from the boxes.
+  syncResearchCheckAll(root);
 }
 
 function installUiMemory() {

@@ -440,6 +440,42 @@ assert.ok(operationHtml.includes('&lt;script&gt;untrusted-team&lt;/script&gt;'))
 assert.ok(operationHtml.includes('Approve this exact draft for release'));
 assert.equal((operationHtml.match(/class="research-edition-check"/g) || []).length, 12);
 assert.ok(!/type="checkbox"[^>]*checked/.test(operationHtml));
+// One "All checks" box per brief, inside a named group, and every box carries
+// the draft fingerprint so remembered ticks belong to one exact draft.
+assert.equal((operationHtml.match(/class="research-edition-check-all"/g) || []).length, 1);
+assert.ok(operationHtml.includes('<legend class="sr-only">Release checks</legend>'));
+assert.equal((operationHtml.match(/class="research-edition-check"[^>]*data-fingerprint="fixture"/g) || []).length, 12);
+{
+  const group = boxes => {
+    const all = { checked: false, indeterminate: false };
+    const fieldset = { querySelectorAll: () => boxes };
+    all.closest = () => fieldset;
+    return { all, root: { querySelectorAll: () => [all] } };
+  };
+  runtime.context.checkGroup = group;
+  for (const [ticks, checkedAll, partly] of [[[true, true], true, false], [[true, false], false, true], [[false, false], false, false]]) {
+    runtime.context.checkTicks = ticks;
+    const result = vm.runInContext('(() => { const g = checkGroup(checkTicks.map(c => ({ checked: c }))); syncResearchCheckAll(g.root); return [g.all.checked, g.all.indeterminate]; })()', runtime.context);
+    assert.deepEqual([...result], [checkedAll, partly], `All checks state for ${ticks}`);
+  }
+}
+// A replaced draft clears its ticks and says so once.
+vm.runInContext(`
+  state.researchCases.briefFingerprints = {};
+  uiMemory.values = {};
+  noteClearedResearchChecks([{ edition_id: 'BRIEF-X', edition_date: '2026-10-13', fingerprint: 'old' }]);
+  uiMemory.values['details:x>INPUT||research-edition-check|edition=BRIEF-X|fingerprint=old|check=claims#1'] = { checked: true };
+  window.__briefNotes = [];
+  var __setStatus = setStatus;
+  setStatus = (message, error) => window.__briefNotes.push([message, error]);
+  noteClearedResearchChecks([{ edition_id: 'BRIEF-X', edition_date: '2026-10-13', fingerprint: 'new' }]);
+  noteClearedResearchChecks([{ edition_id: 'BRIEF-X', edition_date: '2026-10-13', fingerprint: 'new' }]);
+  setStatus = __setStatus;
+  uiMemory.values = {};
+`, runtime.context);
+const notes = vm.runInContext('window.__briefNotes', runtime.context);
+assert.equal(notes.length, 1);
+assert.match(notes[0][0], /2026-10-13 brief changed, so its release checks were cleared/);
 assert.ok(!operationHtml.includes('research-edition-correction-reason'));
 // A published brief with no pending source update can still be corrected.
 operationFixture.editions[0] = {...operationFixture.editions[0], state: 'published'};
