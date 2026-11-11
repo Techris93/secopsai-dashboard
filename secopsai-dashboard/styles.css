@@ -6446,6 +6446,31 @@ fieldset.research-brief-checks {
   margin: 0 0 10px;
 }
 
+.assistant-team-report + .assistant-team-report {
+  margin-top: 16px;
+}
+
+.assistant-team-stage {
+  border: 1px solid var(--signal-line-soft, rgba(74, 78, 85, 0.45));
+  margin-top: 8px;
+  padding: 0 12px;
+}
+
+.assistant-team-stage > summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-weight: 700;
+}
+
+.assistant-team-stage-body {
+  padding-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+
+.assistant-team-stage-body h5 {
+  margin: 12px 0 6px;
+}
+
 .research-pipeline-panel {
   margin: 14px 0 22px;
   padding: 16px;

@@ -12626,6 +12626,44 @@ function latestReliabilityBundle(bundles, stage) {
   return (bundles || []).find(item => item.stage === stage) || null;
 }
 
+const ASSISTANT_STAGE_LABELS = {
+  synthesis: 'Synthesis', intelligence: 'Threat intelligence', application_security: 'Application security',
+  detection: 'Detection', challenge: 'Blind challenge', writing: 'Writing',
+};
+
+function assistantTeamOutputMarkup(output) {
+  if (!output || !Object.keys(output).length) return '<p class="small">No output recorded.</p>';
+  const text = (key, label) => output[key] ? `<p><strong>${label}:</strong> ${escapeHtml(output[key])}</p>` : '';
+  const list = (key, label) => {
+    const items = Array.isArray(output[key]) ? output[key] : [];
+    if (!items.length) return '';
+    const more = Number(output[`${key}_omitted`] || 0);
+    return `<p><strong>${label}:</strong></p><ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}${more ? `<li class="small">${more} more not shown</li>` : ''}</ul>`;
+  };
+  return text('summary', 'Summary') + text('risk_assessment', 'Risk')
+    + (output.verdict_recommendation ? `<p><strong>Verdict:</strong> ${escapeHtml(humanizeSnake(output.verdict_recommendation))}${output.verdict_rationale ? ` · ${escapeHtml(output.verdict_rationale)}` : ''}</p>` : '')
+    + list('evidence', 'Evidence') + list('recommended_actions', 'Recommended actions') + list('limitations', 'Limitations');
+}
+
+// Model proposals from the case's assistant teams, so a reviewer can read
+// them here before recording the review on the Review & workflow tab.
+function renderAssistantTeamReports(researchCase) {
+  const teams = Array.isArray(researchCase.assistant_teams) ? researchCase.assistant_teams : [];
+  if (!teams.length) return '';
+  return researchDetailSection('Assistant team reports', `<p class="small">Model proposals, not findings. Each stage was checked by a blind reviewer; nothing here counts until a person records a review.</p>
+    ${teams.map(team => `<div class="assistant-team-report">
+      <p><strong>${escapeHtml(team.team_id)}</strong> · ${escapeHtml(humanizeSnake(team.status || 'queued'))} · ${escapeHtml(String((team.stages || []).filter(stage => stage.completed).length))}/6 stages</p>
+      ${(team.stages || []).map(stage => `<details class="assistant-team-stage">
+        <summary>${escapeHtml(ASSISTANT_STAGE_LABELS[stage.stage] || humanizeSnake(stage.stage))}${stage.completed ? '' : ' · in progress'}${stage.material_disagreement ? ' · <span class="text-warning">reviewer disagrees</span>' : ''}</summary>
+        <div class="assistant-team-stage-body">
+          <h5>Specialist</h5>${assistantTeamOutputMarkup(stage.output)}
+          <h5>Blind review</h5>${assistantTeamOutputMarkup(stage.review)}
+          <p class="small mono">${escapeHtml(stage.run_id || '')}${stage.model ? ` · ${escapeHtml(stage.model)}` : ''}</p>
+        </div>
+      </details>`).join('')}
+    </div>`).join('')}`);
+}
+
 function renderExecutionGroundedResearch(researchCase) {
   const reliability = researchCase.research_reliability || {};
   const hypotheses = reliability.hypotheses || [];
@@ -12973,6 +13011,7 @@ function renderResearchCaseDetail(researchCase) {
     ${routingMarkup}
     </div>
     <div class="research-tab-panel" data-case-tab="analysis">
+    ${renderAssistantTeamReports(researchCase)}
     ${renderExecutionGroundedResearch(researchCase)}
     ${renderResearchAutomationPanel(researchCase)}
     </div>

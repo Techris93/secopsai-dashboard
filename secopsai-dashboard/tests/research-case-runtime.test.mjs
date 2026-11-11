@@ -159,6 +159,21 @@ for (const label of [
 ]) assert.match(blockedHtml, new RegExp(label));
 assert.equal((blockedHtml.match(/id="research-draft-blog-btn"/g) || []).length, 1);
 assert.doesNotMatch(blockedHtml, /\[object Object\]/i);
+assert.doesNotMatch(blockedHtml, /Assistant team reports/, 'no section without a team');
+runtime.context.renderResearchCaseDetail(sampleCase({ assistant_teams: [{
+  team_id: 'RTM-FIXTURE', status: 'awaiting_human_review', stages: [{
+    stage: 'synthesis', completed: true, run_id: 'SOR-FIXTURE', model: 'anthropic/claude-haiku-5-5', material_disagreement: true,
+    output: { summary: '<script>model-text</script>', evidence: ['EVD-1'], evidence_omitted: 3, verdict_recommendation: 'inconclusive' },
+    review: { summary: 'Blind reviewer view' },
+  }],
+}] }));
+const teamHtml = runtime.elements.get('research-case-detail').innerHTML;
+assert.match(teamHtml, /Assistant team reports/);
+assert.match(teamHtml, /RTM-FIXTURE<\/strong> · Awaiting Human Review · 1\/6 stages/);
+assert.match(teamHtml, /Synthesis · <span class="text-warning">reviewer disagrees<\/span>/);
+assert.match(teamHtml, /Blind reviewer view/);
+assert.match(teamHtml, /3 more not shown/);
+assert.ok(!teamHtml.includes('<script>model-text</script>') && teamHtml.includes('&lt;script&gt;model-text&lt;/script&gt;'));
 
 runtime.context.renderResearchCaseDetail(sampleCase({
   routing: {
