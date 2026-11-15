@@ -12645,6 +12645,22 @@ function assistantTeamOutputMarkup(output) {
     + list('evidence', 'Evidence') + list('recommended_actions', 'Recommended actions') + list('limitations', 'Limitations');
 }
 
+// One page per finished team: verdict table, disagreements, gaps, checklist
+// and the commands that record the review. Text only; nothing is executed.
+function assistantTeamReviewPackMarkup(team) {
+  const pack = typeof team.review_pack === 'string' ? team.review_pack : '';
+  if (!pack) return '';
+  const href = `data:text/markdown;charset=utf-8,${encodeURIComponent(pack)}`;
+  const name = `review-pack-${String(team.team_id || 'team').replace(/[^A-Za-z0-9_-]/g, '')}.md`;
+  return `<details class="assistant-team-stage assistant-team-review-pack" open>
+    <summary>Review pack</summary>
+    <div class="assistant-team-stage-body">
+      <pre class="mono small review-pack-text">${escapeHtml(pack)}</pre>
+      <a class="secondary-btn mini-btn" href="${escapeHtml(href)}" download="${escapeHtml(name)}">Download (.md)</a>
+    </div>
+  </details>`;
+}
+
 // Model proposals from the case's assistant teams, so a reviewer can read
 // them here before recording the review on the Review & workflow tab.
 function renderAssistantTeamReports(researchCase) {
@@ -12653,6 +12669,7 @@ function renderAssistantTeamReports(researchCase) {
   return researchDetailSection('Assistant team reports', `<p class="small">Model proposals, not findings. Each stage was checked by a blind reviewer; nothing here counts until a person records a review.</p>
     ${teams.map(team => `<div class="assistant-team-report">
       <p><strong>${escapeHtml(team.team_id)}</strong> · ${escapeHtml(humanizeSnake(team.status || 'queued'))} · ${escapeHtml(String((team.stages || []).filter(stage => stage.completed).length))}/6 stages</p>
+      ${assistantTeamReviewPackMarkup(team)}
       ${(team.stages || []).map(stage => `<details class="assistant-team-stage">
         <summary>${escapeHtml(ASSISTANT_STAGE_LABELS[stage.stage] || humanizeSnake(stage.stage))}${stage.completed ? '' : ' · in progress'}${stage.material_disagreement ? ' · <span class="text-warning">reviewer disagrees</span>' : ''}</summary>
         <div class="assistant-team-stage-body">

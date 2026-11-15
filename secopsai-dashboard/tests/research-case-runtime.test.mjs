@@ -174,6 +174,18 @@ assert.match(teamHtml, /Synthesis · <span class="text-warning">reviewer disagre
 assert.match(teamHtml, /Blind reviewer view/);
 assert.match(teamHtml, /3 more not shown/);
 assert.ok(!teamHtml.includes('<script>model-text</script>') && teamHtml.includes('&lt;script&gt;model-text&lt;/script&gt;'));
+assert.doesNotMatch(teamHtml, /Review pack/, 'no pack section until the worker sends one');
+
+runtime.context.renderResearchCaseDetail(sampleCase({ assistant_teams: [{
+  team_id: 'RTM-PACK', status: 'awaiting_human_review', stages: [],
+  review_pack: '# Review pack: RTM-PACK\n| Stage | Specialist |\n<img src=x onerror=alert(1)>\nsecopsai research reliability human-review RSC-1 --stage primary',
+}] }));
+const packHtml = runtime.elements.get('research-case-detail').innerHTML;
+assert.match(packHtml, /<summary>Review pack<\/summary>/);
+assert.match(packHtml, /human-review RSC-1 --stage primary/);
+assert.ok(!packHtml.includes('<img src=x') && packHtml.includes('&lt;img src=x onerror=alert(1)&gt;'), 'pack text is escaped');
+assert.match(packHtml, /download="review-pack-RTM-PACK\.md"/);
+assert.match(packHtml, /href="data:text\/markdown;charset=utf-8,%23%20Review%20pack/);
 
 runtime.context.renderResearchCaseDetail(sampleCase({
   routing: {

@@ -6471,6 +6471,13 @@ fieldset.research-brief-checks {
   margin: 12px 0 6px;
 }
 
+.review-pack-text {
+  white-space: pre-wrap;
+  max-height: 520px;
+  overflow: auto;
+  margin: 0 0 10px;
+}
+
 .research-pipeline-panel {
   margin: 14px 0 22px;
   padding: 16px;
