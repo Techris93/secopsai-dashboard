@@ -12718,6 +12718,12 @@ function reviewBriefDone(item) {
   return Boolean(item.assist?.last_review?.current || state.researchCases.reviewBrief.queued[item.caseId]);
 }
 
+// review_case requires at least one material claim; a case without claims
+// cannot take a review until claims are recorded or it is closed.
+function reviewBriefRecordable(item) {
+  return Boolean(item.assist && (item.assist.claim_statements || []).length);
+}
+
 function reviewBriefChecks(item) {
   const checks = {};
   document.querySelectorAll(`[data-review-brief-case="${CSS.escape(item.caseId)}"] [data-review-brief-check]`).forEach(input => {
@@ -12739,6 +12745,7 @@ function reviewBriefItemMarkup(item) {
     : last ? `<p class="review-brief-recorded">${renderStatusPill(last.current ? 'completed' : 'blocked', last.current ? 'Recorded' : 'Out of date')} ${escapeHtml(humanizeSnake(last.decision || ''))} by ${escapeHtml(last.actor || '')} · ${escapeHtml(fmtDate(last.created_at))}</p>` : '';
   // Recorded for this exact draft and case state: nothing left to do here.
   if (reviewBriefDone(item)) return `<article class="review-brief-item done" data-review-brief-case="${escapeHtml(item.caseId)}">${head}${status}</article>`;
+  const noClaims = reviewBriefRecordable(item) ? '' : '<p class="text-warning small">No claims are recorded on this case, so a review cannot be recorded. Add its claims, or close it as benign or duplicate on the case page.</p>';
   const labels = RESEARCH_REVIEW_CHECK_LABELS.technical_reviewer;
   const checks = (assist.checks || []).map(check => `<li class="review-brief-check status-${escapeHtml(check.status)}">
       <label><input type="checkbox" data-review-brief-check="${escapeHtml(check.key)}"${check.status === 'verified' ? ' checked' : ''}> ${escapeHtml(labels[check.key] || humanizeSnake(check.key))}</label>
@@ -12749,7 +12756,7 @@ function reviewBriefItemMarkup(item) {
   const decision = assist.suggested_decision || 'changes_required';
   const draft = joinTextParts(assist.draft_parts);
   return `<article class="review-brief-item" data-review-brief-case="${escapeHtml(item.caseId)}">
-    ${head}${status}
+    ${head}${status}${noClaims}
     ${(assist.blockers || []).length ? `<ul class="text-warning small">${assist.blockers.map(blocker => `<li>${escapeHtml(blocker)}</li>`).join('')}</ul>` : ''}
     <ul class="review-brief-checks">${checks}</ul>
     <details><summary>Draft under review (${(assist.claim_statements || []).length === 1 ? '1 claim' : `${(assist.claim_statements || []).length} claims`})</summary><pre class="mono small review-pack-text">${escapeHtml(draft)}</pre></details>
@@ -12757,7 +12764,7 @@ function reviewBriefItemMarkup(item) {
       <label class="research-span-2"><span>Rationale</span><textarea data-review-brief-rationale rows="3" maxlength="4000">${escapeHtml(assist.suggested_rationale || '')}</textarea></label>
       <label><span>Decision</span><select data-review-brief-decision>${[['changes_required', 'Changes required'], ['approved', 'Approve this review gate'], ['rejected', 'Reject']].map(([value, label]) => `<option value="${value}" ${value === decision ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
     </div>
-    <div class="research-form-actions"><button type="button" class="primary-btn review-brief-record" data-case-id="${escapeHtml(item.caseId)}">Record review</button></div>
+    ${noClaims ? '' : `<div class="research-form-actions"><button type="button" class="primary-btn review-brief-record" data-case-id="${escapeHtml(item.caseId)}">Record review</button></div>`}
   </article>`;
 }
 
@@ -12773,7 +12780,7 @@ function renderResearchReviewBrief() {
   if (actor && !actor.value) actor.value = el('research-operation-actor')?.value || (() => { try { return localStorage.getItem(RESEARCH_ACTOR_STORAGE_KEY) || ''; } catch { return ''; } })();
   const items = brief.items || [];
   const open = items.filter(item => !reviewBriefDone(item));
-  const notReady = open.filter(item => item.assist && item.assist.suggested_decision === 'changes_required');
+  const notReady = open.filter(item => reviewBriefRecordable(item) && item.assist.suggested_decision === 'changes_required');
   const bulk = el('research-review-bulk-btn');
   if (bulk) {
     bulk.disabled = !notReady.length;
@@ -12815,7 +12822,7 @@ function reviewBriefPayload(item, { bulk = false } = {}) {
 
 async function recordReviewBrief(caseIds, { bulk = false, button = null } = {}) {
   const brief = state.researchCases.reviewBrief;
-  const items = caseIds.map(caseId => brief.items.find(item => item.caseId === caseId)).filter(item => item?.assist);
+  const items = caseIds.map(caseId => brief.items.find(item => item.caseId === caseId)).filter(item => item && reviewBriefRecordable(item));
   if (!items.length) return;
   const actor = el('research-review-actor')?.value.trim() || '';
   if (!actor) { setStatus('Enter your registered identity.', true); return; }
@@ -15435,7 +15442,7 @@ function bindEvents() {
     }, { successMessage: 'Review brief refreshed' });
   });
   el('research-review-bulk-btn')?.addEventListener('click', event => {
-    const items = state.researchCases.reviewBrief.items.filter(item => item.assist && !reviewBriefDone(item) && item.assist.suggested_decision === 'changes_required');
+    const items = state.researchCases.reviewBrief.items.filter(item => reviewBriefRecordable(item) && !reviewBriefDone(item) && item.assist.suggested_decision === 'changes_required');
     recordReviewBrief(items.map(item => item.caseId), { bulk: true, button: event.currentTarget });
   });
   el('research-sandbox-provider-verify-btn')?.addEventListener('click', event => {
