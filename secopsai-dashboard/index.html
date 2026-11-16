@@ -1016,6 +1016,15 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
           <div id="research-campaigns-list"></div>
         </section>
 
+        <section class="card research-stage-panel" id="research-review-section" data-research-section="review" aria-labelledby="research-review-title">
+          <div class="page-header compact-header"><div><h3 id="research-review-title" style="margin:0;">Review brief</h3></div><button class="secondary-btn" id="research-review-refresh-btn" type="button">Refresh</button></div>
+          <div class="research-form-grid">
+            <label><span>Your registered identity</span><input id="research-review-actor" autocomplete="username" /></label>
+            <div class="research-form-actions"><button class="secondary-btn" id="research-review-bulk-btn" type="button" disabled>Record changes required</button></div>
+          </div>
+          <div id="research-review-brief"></div>
+        </section>
+
         <section class="card research-stage-panel" id="research-disclosure-section" data-research-section="disclosure" aria-labelledby="research-disclosure-title">
           <div class="page-header compact-header"><div><h3 id="research-disclosure-title" style="margin:0;">Disclosure queue</h3></div></div>
           <div id="research-disclosure-queue"></div>

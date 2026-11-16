@@ -6478,6 +6478,79 @@ fieldset.research-brief-checks {
   margin: 0 0 10px;
 }
 
+.review-brief-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+
+.review-brief-item.done {
+  opacity: 0.7;
+}
+
+.review-brief-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.review-brief-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-brief-head h4 {
+  margin: 0 0 4px;
+  overflow-wrap: break-word;
+}
+
+.review-brief-checks {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+}
+
+.review-brief-check {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 8px 0 8px 10px;
+  border-left: 3px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.review-brief-check > div,
+.review-brief-check > ul {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.review-brief-check label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  font-weight: 600;
+}
+
+.review-brief-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.review-brief-check.status-verified { border-left-color: var(--success, #10b981); }
+.review-brief-check.status-not_established { border-left-color: var(--warning, #f59e0b); }
+
+.review-brief-chip {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .research-pipeline-panel {
   margin: 14px 0 22px;
   padding: 16px;

@@ -187,6 +187,47 @@ assert.ok(!packHtml.includes('<img src=x') && packHtml.includes('&lt;img src=x o
 assert.match(packHtml, /download="review-pack-RTM-PACK\.md"/);
 assert.match(packHtml, /href="data:text\/markdown;charset=utf-8,%23%20Review%20pack/);
 
+// Long packs arrive in parts and are shown joined.
+runtime.context.renderResearchCaseDetail(sampleCase({ assistant_teams: [{
+  team_id: 'RTM-PARTS', status: 'awaiting_human_review', stages: [], review_pack: ['# Review pack: first half\n', 'second half'],
+}] }));
+assert.match(runtime.elements.get('research-case-detail').innerHTML, /first half\nsecond half/);
+
+// Review brief: verified checks come ticked, the rest unticked; text escaped.
+vm.runInContext(`state.researchCases.view = 'review';
+state.researchCases.operation = { assistant_teams: [] };
+state.researchCases.reviewBrief = { loading: false, error: null, loadedAt: 1, queued: {}, items: [
+  { caseId: 'RSC-A', researchCase: { title: '<b>evil</b> pkg' }, team: { team_id: 'RTM-A' }, assist: {
+    role: 'technical_reviewer', target: 'technical_advisory', draft_parts: ['## Material claims\\n', '- claim one'],
+    claim_statements: ['claim one'], blockers: ['No current prior-art search is recorded.'],
+    suggested_decision: 'changes_required', suggested_rationale: 'Not ready for approval. Nothing has run the package.',
+    checks: [{ key: 'attribution', status: 'verified', note: 'No actor named.', proof: [] },
+             { key: 'reproduction', status: 'not_established', note: 'Nothing has run the package.', proof: [] },
+             { key: 'materiality', status: 'judgement', note: 'Is it worth it?', proof: [] }],
+    last_review: null } },
+  { caseId: 'RSC-B', researchCase: { title: 'done one' }, team: { team_id: 'RTM-B' }, assist: {
+    draft_parts: ['x'], claim_statements: ['x'], checks: [], suggested_decision: 'changes_required',
+    last_review: { current: true, decision: 'changes_required', actor: 'chris', created_at: '2026-11-16T00:00:00Z' } } },
+  { caseId: 'RSC-C', team: null, assist: null, researchCase: { title: 'not prefilled' } },
+] };
+renderResearchReviewBrief();`, runtime.context);
+const briefHtml = runtime.elements.get('research-review-brief').innerHTML;
+assert.ok(!briefHtml.includes('<b>evil</b>') && briefHtml.includes('&lt;b&gt;evil&lt;/b&gt;'), 'brief escapes case titles');
+assert.match(briefHtml, /data-review-brief-check="attribution" checked>/);
+assert.match(briefHtml, /data-review-brief-check="reproduction">/);
+assert.match(briefHtml, /data-review-brief-check="materiality">/);
+assert.match(briefHtml, /Not established/);
+assert.match(briefHtml, /<option value="changes_required" selected>/);
+assert.match(briefHtml, /## Material claims\n- claim one/);
+assert.match(briefHtml, /2 to review · 1 recorded/);
+assert.match(briefHtml, /Not prefilled yet/);
+assert.ok(briefHtml.indexOf('RSC-B') > briefHtml.indexOf('RSC-C'), 'recorded cases are listed last');
+assert.equal((briefHtml.match(/review-brief-record"/g) || []).length, 1, 'only the open, prefilled case has a record button');
+if (process.env.SECOPSAI_REVIEW_PREVIEW_PATH) {
+  fs.writeFileSync(process.env.SECOPSAI_REVIEW_PREVIEW_PATH, '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="styles.css"><title>Review brief preview</title></head><body class="okcomputer-skin professional-ui"><main style="padding:16px;max-width:1100px;margin:auto"><section class="card"><h3>Review brief</h3>' + briefHtml + '</section></main></body></html>');
+}
+assert.equal(runtime.elements.get('research-review-bulk-btn').textContent, 'Record changes required on 1 not-ready case');
+
 runtime.context.renderResearchCaseDetail(sampleCase({
   routing: {
     route: 'validate',
