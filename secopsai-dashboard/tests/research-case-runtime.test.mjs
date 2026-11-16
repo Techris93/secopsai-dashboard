@@ -209,6 +209,9 @@ state.researchCases.reviewBrief = { loading: false, error: null, loadedAt: 1, qu
     draft_parts: ['x'], claim_statements: ['x'], checks: [], suggested_decision: 'changes_required',
     last_review: { current: true, decision: 'changes_required', actor: 'chris', created_at: '2026-11-16T00:00:00Z' } } },
   { caseId: 'RSC-C', team: null, assist: null, researchCase: { title: 'not prefilled' } },
+  { caseId: 'RSC-D', researchCase: { title: 'no claims' }, team: { team_id: 'RTM-D' }, assist: {
+    draft_parts: ['## Material claims'], claim_statements: [], blockers: [], checks: [], suggested_decision: 'changes_required',
+    suggested_rationale: 'Not ready for approval. The case has no material claims to review.', last_review: null } },
 ] };
 renderResearchReviewBrief();`, runtime.context);
 const briefHtml = runtime.elements.get('research-review-brief').innerHTML;
@@ -219,10 +222,11 @@ assert.match(briefHtml, /data-review-brief-check="materiality">/);
 assert.match(briefHtml, /Not established/);
 assert.match(briefHtml, /<option value="changes_required" selected>/);
 assert.match(briefHtml, /## Material claims\n- claim one/);
-assert.match(briefHtml, /2 to review · 1 recorded/);
+assert.match(briefHtml, /3 to review · 1 recorded/);
+assert.match(briefHtml, /No claims are recorded on this case/);
 assert.match(briefHtml, /Not prefilled yet/);
 assert.ok(briefHtml.indexOf('RSC-B') > briefHtml.indexOf('RSC-C'), 'recorded cases are listed last');
-assert.equal((briefHtml.match(/review-brief-record"/g) || []).length, 1, 'only the open, prefilled case has a record button');
+assert.equal((briefHtml.match(/review-brief-record"/g) || []).length, 1, 'only the open, prefilled case with claims has a record button');
 if (process.env.SECOPSAI_REVIEW_PREVIEW_PATH) {
   fs.writeFileSync(process.env.SECOPSAI_REVIEW_PREVIEW_PATH, '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="styles.css"><title>Review brief preview</title></head><body class="okcomputer-skin professional-ui"><main style="padding:16px;max-width:1100px;margin:auto"><section class="card"><h3>Review brief</h3>' + briefHtml + '</section></main></body></html>');
 }
