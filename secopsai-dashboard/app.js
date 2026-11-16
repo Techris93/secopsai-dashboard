@@ -371,6 +371,7 @@ const state = {
     stale: false,
     lastAction: null,
     resolution: { settings: {}, summary: {}, runs: [] },
+    reviewBrief: { items: [], loading: false, error: null, loadedAt: 0, queued: {} },
     retractTarget: null,
     watchlist: {
       packages: [],
@@ -500,6 +501,7 @@ const PAGE_ROUTES = Object.freeze({
 const RESEARCH_VIEW_ROUTES = Object.freeze({
   inbox: 'research/inbox',
   cases: 'research/cases',
+  review: 'research/review',
   campaigns: 'research/campaigns',
   watchlists: 'research/watchlists',
   disclosure: 'research/disclosure',
@@ -611,6 +613,11 @@ const OPERATOR_GUIDANCE = Object.freeze({
     title: 'Resolve the selected case’s first evidence blocker.',
     action: 'Open case workflow',
     target: 'research-case-workspace-section'
+  },
+  'research/review': {
+    title: 'Record a review for each case a team has finished.',
+    action: 'Open review brief',
+    target: 'research-review-section'
   },
   'research/campaigns': {
     title: 'Confirm relationships without turning shared infrastructure into attribution.',
@@ -731,6 +738,7 @@ const CONTEXT_NAV = Object.freeze({
   "research-cases": [
     ["Inbox", "research-cases", RESEARCH_VIEW_ROUTES.inbox],
     ["Cases", "research-cases", RESEARCH_VIEW_ROUTES.cases],
+    ["Review brief", "research-cases", RESEARCH_VIEW_ROUTES.review],
     ["Campaigns", "research-cases", RESEARCH_VIEW_ROUTES.campaigns],
     ["Watchlists", "research-cases", RESEARCH_VIEW_ROUTES.watchlists],
     ["Global coverage", "coverage", PAGE_ROUTES.coverage],
@@ -791,6 +799,7 @@ const CONTEXT_SCROLL_TARGETS = Object.freeze({
   'automation/jobs': 'automation-jobs-section',
   'research/inbox': 'research-inbox-title',
   'research/cases': 'research-case-list',
+  'research/review': 'research-review-title',
   'research/campaigns': 'research-campaigns-title',
   'research/watchlists': 'research-discovery-title',
   'research/disclosure': 'research-disclosure-title',
@@ -922,6 +931,7 @@ const PAGE_ROUTE_SUBSECTION_DEFS = Object.freeze({
   'research-cases': [
     ['Inbox', RESEARCH_VIEW_ROUTES.inbox],
     ['Cases', RESEARCH_VIEW_ROUTES.cases],
+    ['Review brief', RESEARCH_VIEW_ROUTES.review],
     ['Campaigns', RESEARCH_VIEW_ROUTES.campaigns],
     ['Watchlists', RESEARCH_VIEW_ROUTES.watchlists],
     ['Global coverage', PAGE_ROUTES.coverage],
@@ -12645,10 +12655,200 @@ function assistantTeamOutputMarkup(output) {
     + list('evidence', 'Evidence') + list('recommended_actions', 'Recommended actions') + list('limitations', 'Limitations');
 }
 
+const RESEARCH_REVIEW_CHECK_LABELS = Object.freeze({
+  technical_reviewer: {
+    claims: 'Material claims match linked evidence',
+    affected_versions: 'Affected versions are established',
+    reproduction: 'Behavior was reproduced or independently corroborated',
+    materiality: 'The finding is materially useful',
+    alternatives: 'Competing explanations were assessed',
+    detections: 'Detection guidance was tested',
+    mitigations: 'Mitigations were verified',
+    attribution: 'Attribution is appropriately scoped',
+    limitations: 'Limitations are stated',
+  },
+  editor: {
+    privacy: 'Privacy and personal data reviewed',
+    secrets: 'Secrets and credentials reviewed',
+    sharing_rights: 'Evidence sharing rights permit release',
+    licensing: 'Licensing reviewed',
+    embargo: 'Embargo and disclosure timing reviewed',
+    vendor_coordination: 'Vendor coordination recorded',
+    credits: 'Authors and sources credited',
+    conflicts: 'Conflicts of interest disclosed',
+    exposure_counts: 'Victim and exposure counts supported',
+  },
+});
+
+function joinTextParts(value) {
+  if (typeof value === 'string') return value;
+  return Array.isArray(value) && value.every(part => typeof part === 'string') ? value.join('') : '';
+}
+
+const REVIEW_CHECK_STATUS_LABELS = Object.freeze({ verified: 'Verified', judgement: 'Your judgement', not_established: 'Not established' });
+
+// Cases whose newest assistant team is waiting for a person. The worker
+// prefills each review (draft, claims, checks, rationale); the person records it.
+async function loadResearchReviewBrief({ render = true } = {}) {
+  const brief = state.researchCases.reviewBrief;
+  const teams = (state.researchCases.operation?.assistant_teams || []).filter(team => team.status === 'awaiting_human_review' && team.case_id);
+  const caseIds = [...new Set(teams.map(team => team.case_id))];
+  brief.loading = true;
+  brief.error = null;
+  if (render) renderResearchReviewBrief();
+  try {
+    brief.items = await Promise.all(caseIds.map(async caseId => {
+      const response = await dashboardApiFetch(researchCasesEndpoint(`/${encodeURIComponent(caseId)}`), { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) return { caseId, error: payload.error || `HTTP ${response.status}` };
+      const researchCase = payload.case || {};
+      const team = (researchCase.assistant_teams || []).find(item => item.status === 'awaiting_human_review') || null;
+      return { caseId, researchCase, team, assist: team?.review_assist || null };
+    }));
+    brief.loadedAt = Date.now();
+  } catch (error) {
+    brief.error = error?.message || String(error);
+  } finally {
+    brief.loading = false;
+    if (render) renderResearchReviewBrief();
+  }
+}
+
+function reviewBriefDone(item) {
+  return Boolean(item.assist?.last_review?.current || state.researchCases.reviewBrief.queued[item.caseId]);
+}
+
+function reviewBriefChecks(item) {
+  const checks = {};
+  document.querySelectorAll(`[data-review-brief-case="${CSS.escape(item.caseId)}"] [data-review-brief-check]`).forEach(input => {
+    checks[input.dataset.reviewBriefCheck] = input.checked ? 'passed' : 'blocked';
+  });
+  return checks;
+}
+
+function reviewBriefItemMarkup(item) {
+  const title = item.researchCase?.title || item.caseId;
+  const head = `<div class="review-brief-head"><div><h4>${escapeHtml(title)}</h4><span class="small"><code>${escapeHtml(item.caseId)}</code>${item.team ? ` · ${escapeHtml(item.team.team_id)}` : ''}</span></div><button type="button" class="secondary-btn mini-btn review-brief-open" data-case-id="${escapeHtml(item.caseId)}">Open case</button></div>`;
+  if (item.error) return `<article class="review-brief-item">${head}<p class="text-warning">${escapeHtml(item.error)}</p></article>`;
+  const assist = item.assist;
+  if (!assist) return `<article class="review-brief-item">${head}<p class="small">Not prefilled yet. The worker adds it the next time it sends this case.</p></article>`;
+  const last = assist.last_review;
+  const queued = state.researchCases.reviewBrief.queued[item.caseId];
+  const status = queued
+    ? `<p class="review-brief-recorded">${renderStatusPill('in_review', 'Queued')} ${escapeHtml(humanizeSnake(queued))}. The worker records it on its next run.</p>`
+    : last ? `<p class="review-brief-recorded">${renderStatusPill(last.current ? 'completed' : 'blocked', last.current ? 'Recorded' : 'Out of date')} ${escapeHtml(humanizeSnake(last.decision || ''))} by ${escapeHtml(last.actor || '')} · ${escapeHtml(fmtDate(last.created_at))}</p>` : '';
+  // Recorded for this exact draft and case state: nothing left to do here.
+  if (reviewBriefDone(item)) return `<article class="review-brief-item done" data-review-brief-case="${escapeHtml(item.caseId)}">${head}${status}</article>`;
+  const labels = RESEARCH_REVIEW_CHECK_LABELS.technical_reviewer;
+  const checks = (assist.checks || []).map(check => `<li class="review-brief-check status-${escapeHtml(check.status)}">
+      <label><input type="checkbox" data-review-brief-check="${escapeHtml(check.key)}"${check.status === 'verified' ? ' checked' : ''}> ${escapeHtml(labels[check.key] || humanizeSnake(check.key))}</label>
+      <span class="review-brief-chip">${escapeHtml(REVIEW_CHECK_STATUS_LABELS[check.status] || check.status)}</span>
+      <div class="small">${escapeHtml(check.note || '')}</div>
+      ${(check.proof || []).length ? `<ul class="small mono">${check.proof.map(proof => `<li>${escapeHtml(proof)}</li>`).join('')}</ul>` : ''}
+    </li>`).join('');
+  const decision = assist.suggested_decision || 'changes_required';
+  const draft = joinTextParts(assist.draft_parts);
+  return `<article class="review-brief-item" data-review-brief-case="${escapeHtml(item.caseId)}">
+    ${head}${status}
+    ${(assist.blockers || []).length ? `<ul class="text-warning small">${assist.blockers.map(blocker => `<li>${escapeHtml(blocker)}</li>`).join('')}</ul>` : ''}
+    <ul class="review-brief-checks">${checks}</ul>
+    <details><summary>Draft under review (${(assist.claim_statements || []).length === 1 ? '1 claim' : `${(assist.claim_statements || []).length} claims`})</summary><pre class="mono small review-pack-text">${escapeHtml(draft)}</pre></details>
+    <div class="research-form-grid">
+      <label class="research-span-2"><span>Rationale</span><textarea data-review-brief-rationale rows="3" maxlength="4000">${escapeHtml(assist.suggested_rationale || '')}</textarea></label>
+      <label><span>Decision</span><select data-review-brief-decision>${[['changes_required', 'Changes required'], ['approved', 'Approve this review gate'], ['rejected', 'Reject']].map(([value, label]) => `<option value="${value}" ${value === decision ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+    </div>
+    <div class="research-form-actions"><button type="button" class="primary-btn review-brief-record" data-case-id="${escapeHtml(item.caseId)}">Record review</button></div>
+  </article>`;
+}
+
+function renderResearchReviewBrief() {
+  const host = el('research-review-brief');
+  if (!host) return;
+  const brief = state.researchCases.reviewBrief;
+  if ((state.researchCases.view || 'cases') === 'review' && !brief.loading && !brief.loadedAt && state.researchCases.operation) {
+    loadResearchReviewBrief();
+    return;
+  }
+  const actor = el('research-review-actor');
+  if (actor && !actor.value) actor.value = el('research-operation-actor')?.value || (() => { try { return localStorage.getItem(RESEARCH_ACTOR_STORAGE_KEY) || ''; } catch { return ''; } })();
+  const items = brief.items || [];
+  const open = items.filter(item => !reviewBriefDone(item));
+  const notReady = open.filter(item => item.assist && item.assist.suggested_decision === 'changes_required');
+  const bulk = el('research-review-bulk-btn');
+  if (bulk) {
+    bulk.disabled = !notReady.length;
+    bulk.textContent = `Record changes required on ${notReady.length} not-ready case${notReady.length === 1 ? '' : 's'}`;
+  }
+  markupOf(host).innerHTML = brief.loading && !items.length
+    ? '<div class="empty-state">Loading…</div>'
+    : brief.error ? `<div class="empty-state">${escapeHtml(brief.error)}</div>`
+    : items.length ? `<p class="small">${escapeHtml(String(open.length))} to review · ${escapeHtml(String(items.length - open.length))} recorded</p>${[...open, ...items.filter(reviewBriefDone)].map(reviewBriefItemMarkup).join('')}`
+    : `<div class="empty-state">${state.researchCases.operation ? 'No cases are waiting for review.' : escapeHtml(state.researchCases.operationError || 'Loading…')}</div>`;
+  // Delegated once: markupOf keeps unchanged markup (and the reviewer's edits).
+  if (!host.dataset.bound) {
+    host.dataset.bound = 'true';
+    host.addEventListener('click', event => {
+      const open = event.target.closest('.review-brief-open');
+      if (open) openResearchCase(open.dataset.caseId);
+      const record = event.target.closest('.review-brief-record');
+      if (record) recordReviewBrief([record.dataset.caseId], { button: record });
+    });
+  }
+}
+
+function reviewBriefPayload(item, { bulk = false } = {}) {
+  const assist = item.assist;
+  const card = document.querySelector(`[data-review-brief-case="${CSS.escape(item.caseId)}"]`);
+  const checks = bulk
+    ? Object.fromEntries((assist.checks || []).map(check => [check.key, check.status === 'verified' ? 'passed' : 'blocked']))
+    : reviewBriefChecks(item);
+  return {
+    role: assist.role || 'technical_reviewer',
+    target: assist.target || 'technical_advisory',
+    decision: bulk ? 'changes_required' : (card?.querySelector('[data-review-brief-decision]')?.value || 'changes_required'),
+    draft: joinTextParts(assist.draft_parts),
+    claim_statements: assist.claim_statements || [],
+    rationale: bulk ? (assist.suggested_rationale || '') : (card?.querySelector('[data-review-brief-rationale]')?.value.trim() || ''),
+    checks,
+  };
+}
+
+async function recordReviewBrief(caseIds, { bulk = false, button = null } = {}) {
+  const brief = state.researchCases.reviewBrief;
+  const items = caseIds.map(caseId => brief.items.find(item => item.caseId === caseId)).filter(item => item?.assist);
+  if (!items.length) return;
+  const actor = el('research-review-actor')?.value.trim() || '';
+  if (!actor) { setStatus('Enter your registered identity.', true); return; }
+  const operationActor = el('research-operation-actor');
+  if (operationActor) operationActor.value = actor;
+  try { localStorage.setItem(RESEARCH_ACTOR_STORAGE_KEY, actor); } catch { /* storage unavailable */ }
+  const payloads = items.map(item => [item, reviewBriefPayload(item, { bulk })]);
+  for (const [, payload] of payloads) {
+    if (!payload.claim_statements.length || payload.rationale.length < 20) { setStatus('Each review needs its claims and a rationale of at least 20 characters.', true); return; }
+    if (payload.decision === 'approved' && Object.values(payload.checks).some(value => value !== 'passed')) { setStatus('Tick every check before approving. Unticked checks are recorded as blocked.', true); return; }
+  }
+  const single = payloads.length === 1 ? payloads[0][1] : null;
+  const confirmed = await requestConfirmation(bulk
+    ? `Record "changes required" on ${payloads.length} cases as ${actor}?`
+    : `Record "${humanizeSnake(single.decision)}" on ${items[0].caseId} as ${actor}?`, {
+    title: bulk ? 'Record changes required' : single.decision === 'approved' ? 'Approve this review gate' : 'Record review outcome',
+    context: 'Each record is your technical review of the exact draft shown. It does not publish.',
+    confirmLabel: 'Record review',
+  });
+  if (!confirmed) return;
+  for (const [item, payload] of payloads) {
+    const result = await runResearchOperation('case-review', payload, { caseId: item.caseId, button });
+    if (!result) return;
+    brief.queued[item.caseId] = payload.decision;
+  }
+  renderResearchReviewBrief();
+}
+
 // One page per finished team: verdict table, disagreements, gaps, checklist
 // and the commands that record the review. Text only; nothing is executed.
 function assistantTeamReviewPackMarkup(team) {
-  const pack = typeof team.review_pack === 'string' ? team.review_pack : '';
+  // Long text arrives in parts (Core cuts single strings at 4,000 characters).
+  const pack = joinTextParts(team.review_pack);
   if (!pack) return '';
   const href = `data:text/markdown;charset=utf-8,${encodeURIComponent(pack)}`;
   const name = `review-pack-${String(team.team_id || 'team').replace(/[^A-Za-z0-9_-]/g, '')}.md`;
@@ -12959,30 +13159,7 @@ function renderResearchCaseDetail(researchCase) {
   const routing = researchCase.routing || {};
   const routeLabel = ({ urgent_review: 'Urgent review', validate: 'Validate', publication_candidate: 'Publication candidate', close_or_suppress: 'Close or suppress' })[routing.route] || 'Validate';
   const humanReviewLabel = routing.review_priority === 'immediate' ? 'Immediate reviewer attention' : routing.review_required ? 'Routine human review' : 'No human review triggered yet';
-  const reviewCheckLabels = {
-    technical_reviewer: {
-      claims: 'Material claims match linked evidence',
-      affected_versions: 'Affected versions are established',
-      reproduction: 'Behavior was reproduced or independently corroborated',
-      materiality: 'The finding is materially useful',
-      alternatives: 'Competing explanations were assessed',
-      detections: 'Detection guidance was tested',
-      mitigations: 'Mitigations were verified',
-      attribution: 'Attribution is appropriately scoped',
-      limitations: 'Limitations are stated',
-    },
-    editor: {
-      privacy: 'Privacy and personal data reviewed',
-      secrets: 'Secrets and credentials reviewed',
-      sharing_rights: 'Evidence sharing rights permit release',
-      licensing: 'Licensing reviewed',
-      embargo: 'Embargo and disclosure timing reviewed',
-      vendor_coordination: 'Vendor coordination recorded',
-      credits: 'Authors and sources credited',
-      conflicts: 'Conflicts of interest disclosed',
-      exposure_counts: 'Victim and exposure counts supported',
-    },
-  };
+  const reviewCheckLabels = RESEARCH_REVIEW_CHECK_LABELS;
   const reviewCheckMarkup = Object.entries(reviewCheckLabels).map(([role, checks]) =>
     "<fieldset data-case-review-check-group='" + role + "'><legend>" + (role === 'technical_reviewer' ? 'Technical review checks' : 'Editorial review checks') + "</legend><div class='research-form-grid'>"
       + Object.entries(checks).map(([key, label]) => "<label><input type='checkbox' data-case-review-check='" + key + "' data-review-role='" + role + "' /> " + escapeHtml(label) + "</label>").join('')
@@ -12990,7 +13167,8 @@ function renderResearchCaseDetail(researchCase) {
   ).join('');
   const reviewClaims = (researchCase.research_assurance?.assessed_claims || [])
     .filter(item => item.current && ['observation', 'source_reported'].includes(item.assessment))
-    .map(item => item.statement).join('\n');
+    .map(item => item.statement).join('\n')
+    || ((researchCase.assistant_teams || []).find(team => team.review_assist)?.review_assist.claim_statements || []).join('\n');
   const reviewMarkup = researchCase.status !== 'closed'
     ? "<details class='research-action-drawer research-independent-review'><summary>Record an independent technical or editorial review</summary>"
       + "<p class='small'>Review decisions are bound to the exact draft and current case evidence. A technical review is separate from editorial approval; neither action publishes.</p>"
@@ -13167,6 +13345,7 @@ function renderResearchCases() {
   const researchViewTitle = {
     inbox: 'Discovery inbox',
     cases: 'Research cases',
+    review: 'Review brief',
     campaigns: 'Campaigns',
     watchlists: 'Watchlists',
     disclosure: 'Disclosure',
@@ -13201,6 +13380,7 @@ function renderResearchCases() {
   renderResearchResolutions();
   renderResearchStageQueues(state.researchCases.discovery.candidates || []);
   renderResearchOperation();
+  renderResearchReviewBrief();
   const list = el('research-case-list');
   const filtered = filteredResearchCases();
   const staleNotice = state.researchCases.stale && cases.length
@@ -15246,6 +15426,17 @@ function bindEvents() {
     await runRefreshAction(event.currentTarget, () => loadResearchCases(), {
       successMessage: 'Research cases refreshed'
     });
+  });
+  el('research-review-refresh-btn')?.addEventListener('click', async event => {
+    await runRefreshAction(event.currentTarget, async () => {
+      state.researchCases.reviewBrief.queued = {};
+      await loadResearchCases({ render: false });
+      await loadResearchReviewBrief();
+    }, { successMessage: 'Review brief refreshed' });
+  });
+  el('research-review-bulk-btn')?.addEventListener('click', event => {
+    const items = state.researchCases.reviewBrief.items.filter(item => item.assist && !reviewBriefDone(item) && item.assist.suggested_decision === 'changes_required');
+    recordReviewBrief(items.map(item => item.caseId), { bulk: true, button: event.currentTarget });
   });
   el('research-sandbox-provider-verify-btn')?.addEventListener('click', event => {
     verifyResearchSandboxProvider(event.currentTarget);
