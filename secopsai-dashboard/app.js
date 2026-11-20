@@ -6124,7 +6124,15 @@ function renderIntegrations() {
   const pendingApprovals = pendingLocalApprovalsCount();
   const selectedSession = state.selectedSessionDetail;
   const currentAiGuard = state.integrationStatus?.ai_guard || aiGuardConfig();
-  if (summary) {
+  if (summary && !triageSnapshotAvailable) {
+    // Hosted console with no local helper: eight cards reading "Local-only"
+    // said nothing. One line says where the counts live.
+    summary.innerHTML = `
+      <div class="card system-local-note" style="grid-column:1/-1;">
+        <div class="kv-row"><div class="kv-key">Native triage</div><div class="kv-val">${escapeHtml(triagePresentation.label)} · counts come from the local SecOpsAI helper</div></div>
+        <div class="kv-row"><div class="kv-key">Hosted AI guardrail</div><div class="kv-val">${escapeHtml(currentAiGuard.hostedEnabled ? 'Guarded enabled' : 'Local-first only')}</div></div>
+      </div>`;
+  } else if (summary) {
     const staleTriageNotice = state.localTriage?.stale
       ? `<div class="text-warning" role="status" style="grid-column:1/-1;"><strong>Native triage snapshot is stale.</strong> Refresh failed: ${escapeHtml(state.localTriage.error || 'the local triage status request failed.')}</div>`
       : '';
