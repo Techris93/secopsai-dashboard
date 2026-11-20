@@ -1187,6 +1187,12 @@ function helperUnavailableResponse() {
 // or Blog Ops action tokens; those remain only for scripts and the API.
 const CONSOLE_SESSION_ACTION_TOKEN = 'console-session';
 const ACTION_TOKEN_HEADERS = ['X-SecOpsAI-Intelligence-Token', 'X-Triage-Ops-Admin-Token', 'X-Blog-Ops-Admin-Token'];
+// The research access form only holds a token field; never navigate on submit.
+// (An inline onsubmit was blocked by the page's script-src 'self' policy.)
+document.addEventListener('submit', event => {
+  if (event.target?.id === 'research-access-section') event.preventDefault();
+});
+
 const ACTION_TOKEN_SECTIONS = ['intelligence-token-field', 'intelligence-token-hint', 'intelligence-clear-token-btn', 'research-access-section', 'blog-access-section', 'triage-access-section'];
 
 function consoleActionsAuthorized() {
