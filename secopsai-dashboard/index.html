@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="./url-safety.js?v=20260803-credential-url-hardening"></script>
-  <link rel="stylesheet" href="./styles.css?v=20261120-design-system" />
+  <link rel="stylesheet" href="./styles.css?v=20261120-page-cleanup" />
 </head>
 <body class="okcomputer-skin professional-ui">
   <section class="auth-gate auth-checking" id="auth-gate" aria-labelledby="auth-title" aria-busy="true">
@@ -22,7 +22,7 @@
         </svg>
       </div>
       <div class="auth-heading">
-        <div class="brand-overline">SECOPSAI CONSOLE</div>
+        <div class="brand-overline sr-only">SecOpsAI console</div>
         <h1 id="auth-title">Verifying access…</h1>
         <p id="auth-summary">Checking your operator session.</p>
       </div>
@@ -292,7 +292,7 @@
             <button class="primary-btn" id="new-task-btn" type="button">New task</button>
           </div>
         </div>
-        <div class="small" id="work-scope-note" style="margin-bottom:12px;">The default queue contains assignments linked to findings, research, approvals, or external work. Internal delivery history is available only through All work.</div>
+        <div class="sr-only" id="work-scope-note">The default queue contains assignments linked to findings, research, approvals, or external work. Internal delivery history is available only through All work.</div>
         <section class="card specialist-orchestrator-card" aria-labelledby="specialist-orchestrator-title">
           <div class="module-head compact-header">
             <div>
@@ -438,7 +438,7 @@
         <section class="intelligence-console" aria-labelledby="intelligence-title">
           <div class="intelligence-console-head">
             <div>
-              <div class="section-kicker">MODEL ASSISTANCE</div>
+              <div class="section-kicker sr-only">Model assistance</div>
               <h3 id="intelligence-title">SecOpsAI Intelligence</h3>
               
             </div>
@@ -581,7 +581,7 @@
           <section class="intelligence-module research-production" id="automation-research-section" data-automation-view="research" aria-labelledby="automation-research-title">
             <div class="module-head research-production-head">
               <div>
-                <div class="section-kicker">SAFE ARTIFACT RESEARCH</div>
+                <div class="section-kicker sr-only">Safe artifact research</div>
                 <h4 id="automation-research-title">Investigation to publication</h4>
                 
               </div>
@@ -598,7 +598,7 @@
             <div class="grid cols-4 intelligence-summary research-fleet-summary" id="artifact-fleet-summary"></div>
             <div class="research-pipeline-layout">
               <section class="research-intake-card" id="source-first-research-panel">
-                <div class="research-card-head"><div><span class="section-kicker">SOURCE-FIRST ARTIFACT RESEARCH</span><h4>Research a package or artifact</h4></div><span class="status-pill">Static only</span></div>
+                <div class="research-card-head"><div><span class="section-kicker sr-only">Source-first artifact research</span><h4>Research a package or artifact</h4></div><span class="status-pill">Static only</span></div>
                 
                 <div class="research-form-grid compact">
                   <label><span>Research type</span><select id="source-research-type"><option value="package_artifact">Package or artifact</option><option value="malicious_package">Malicious package</option><option value="package_compromise">Package compromise</option><option value="vulnerability_advisory">Vulnerability advisory</option><option value="extension_compromise">Extension compromise</option><option value="github_token_breach">GitHub/token breach</option><option value="malware_apt_c2">Malware/APT/C2</option><option value="cross_ecosystem_campaign">Cross-ecosystem campaign</option><option value="slopsquatting">AI/slopsquatting dependency</option></select></label>
@@ -615,7 +615,7 @@
                 <pre class="intelligence-log" id="source-research-output" aria-live="polite" hidden></pre>
               </section>
               <aside class="research-readiness-card">
-                <div class="research-card-head"><div><span class="section-kicker">PUBLICATION READINESS</span><h4>Evidence gate</h4></div><strong id="source-research-readiness-score">0/8</strong></div>
+                <div class="research-card-head"><div><span class="section-kicker sr-only">Publication readiness</span><h4>Evidence gate</h4></div><strong id="source-research-readiness-score">0/8</strong></div>
                 <div class="research-evidence-checklist" id="source-research-readiness"></div>
                 <div class="research-readiness-message" id="source-research-readiness-message">Preview metadata, then run safe research to build an evidence-backed case.</div>
                 <div class="research-followups" id="source-research-followups" aria-label="Source-first research follow-up actions">
@@ -1823,7 +1823,7 @@ secopsai enterprise dast-validate --target-id web-1 --url https://app.example --
   </div>
 
   <script src="./config.js?v=20260914-local-research-recovery"></script>
-  <script src="./app.js?v=20261120-design-system"></script>
+  <script src="./app.js?v=20261120-page-cleanup"></script>
 
 
   <div id="research-retract-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="research-retract-title">
