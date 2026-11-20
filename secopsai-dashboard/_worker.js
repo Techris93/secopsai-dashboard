@@ -19,6 +19,8 @@ const PUBLIC_ASSET_PATHS = new Set([
   "/app.js",
   "/url-safety.js",
   "/styles.css",
+  "/styles.next.css",
+  "/ui-switch.js",
   "/favicon.svg",
   "/radar-texture.png",
   "/view-run-output.html",
