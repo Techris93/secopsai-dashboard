@@ -177,7 +177,7 @@ def test_specialist_work_surface_is_complete_accessible_and_single_instance():
     assert "if action != 'route' and require_intelligence_admin(self):" in server
     assert "subprocess" not in app
     assert ".specialist-orchestrator-card" in styles
-    assert ".professional-ui .modal-head h3 { color: #17211e; }" in styles
+    assert ".modal-head, .command-palette-head { border-bottom: 1px solid var(--border); }" in styles
 
 
 def test_specialist_contract_copy_is_clear_about_model_and_safety_boundaries():
