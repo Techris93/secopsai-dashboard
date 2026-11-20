@@ -2,7 +2,7 @@
 // ?ui=next turns it on for this browser, ?ui=classic turns it off.
 (function () {
   var KEY = 'secopsai-ui';
-  var BUILD = '3';
+  var BUILD = '4';
   try {
     var param = new URLSearchParams(window.location.search).get('ui');
     if (param === 'next') window.localStorage.setItem(KEY, 'next');

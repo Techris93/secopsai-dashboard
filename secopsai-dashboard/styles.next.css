@@ -2860,7 +2860,7 @@ body:not(.local-console) .local-only { display: none !important; }
   --fs-2xl: 24px;
   --fs-metric: 26px;
 
-  --top-strip-height: 48px;
+  --top-strip-height: 92px;
   color-scheme: light;
 }
 
@@ -3313,13 +3313,14 @@ summary:hover { color: var(--accent-text); }
 
 /* ---- Page chrome refinements --------------------------------------------- */
 
-body.professional-ui .main .top-strip { background: var(--surface); backdrop-filter: none; }
+body.professional-ui .main .top-strip { height: auto; min-height: 48px; background: var(--surface); backdrop-filter: none; }
+body.professional-ui .main .topbar-secondary { background: var(--surface); }
 body.professional-ui .main .page-header { padding: 4px 0 0; margin-bottom: 20px; background: transparent; border: 0; }
 body.professional-ui .main .page-header h2 { font-size: 22px; }
 body.professional-ui .main .page-header.compact-header { padding: 0; margin-bottom: 12px; }
 
 /* Overview: workflow step numbers */
-.mission-flow-step > span:first-child {
+body.professional-ui .main .mission-flow-step > span:first-child {
   display: inline-grid;
   place-items: center;
   width: 22px;
@@ -3331,7 +3332,7 @@ body.professional-ui .main .page-header.compact-header { padding: 0; margin-bott
   border: 1px solid var(--border-strong);
   border-radius: 999px;
 }
-.mission-flow-step.active > span:first-child { color: #fff; background: var(--accent); border-color: var(--accent); }
+body.professional-ui .main .mission-flow-step.active > span:first-child { color: #fff; background: var(--accent); border-color: var(--accent); }
 .mission-decision-rank {
   display: inline-grid;
   place-items: center;
@@ -3342,4 +3343,29 @@ body.professional-ui .main .page-header.compact-header { padding: 0; margin-bott
   color: var(--accent-text);
   background: var(--accent-soft);
   border-radius: 999px;
+}
+
+/* Small tags that sit inside flex/grid cells must keep their own size. */
+.finding-origin {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+}
+:is(.status-pill, .badge, .pill, .severity-pill, .finding-origin, [class*="-pill"]:not([class*="-pills"])) {
+  align-self: center;
+  justify-self: start;
+  flex: 0 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 720px) {
+  .mobile-card-table td :is(.status-pill, .badge, .finding-origin) { justify-self: end; }
 }
