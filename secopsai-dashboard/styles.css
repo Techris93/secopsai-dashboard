@@ -781,8 +781,8 @@ tr.artifact-row:hover { background: rgba(15,23,42,0.02); }
 }
 
 
-html, body { width: 100%; overflow-x: hidden; }
-.main { min-width: 0; overflow-x: hidden; }
+html, body { width: 100%; overflow-x: clip; }
+.main { min-width: 0; overflow-x: clip; }
 .page-header { flex-wrap: wrap; }
 .page-header > div { min-width: 0; }
 .grid { min-width: 0; }
@@ -5451,7 +5451,7 @@ label span,
 
 @media (max-width: 1024px) {
   html, body {
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   .app-shell {
@@ -7241,7 +7241,7 @@ body.professional-ui::before {
   min-width: 0;
   padding: 0;
   background: #11171d;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .professional-ui .top-strip {
@@ -9386,7 +9386,7 @@ body.professional-ui {
 .professional-ui .automation-tab:hover { background: #f7faf8; color: #17634f; }
 .professional-ui .automation-tab.active { background: #fff; color: #086b58; border-color: #9fc1b5; box-shadow: 0 2px 8px rgba(24,56,45,.07); }
 .professional-ui #page-automation .intelligence-console { margin-top: 12px; }
-.professional-ui #page-automation .intelligence-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.professional-ui #page-automation .intelligence-summary { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 
 .professional-ui .model-routing-workspace { margin-top: 18px; padding: 15px; border: 1px solid #c4d3cc; background: #f7faf8; }
 .professional-ui .model-routing-head,
@@ -9467,7 +9467,6 @@ body.professional-ui {
 #page-enterprise .enterprise-tab.active::after { background: #0b8068; }
 
 @media (max-width: 1100px) {
-  .professional-ui #page-automation .intelligence-summary { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .professional-ui .research-stage-ribbon { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .professional-ui .research-stage:nth-child(3) { border-right: 0; }
   .professional-ui .research-pipeline-layout { grid-template-columns: 1fr; }
@@ -11224,3 +11223,33 @@ body.professional-ui .icon-btn:hover {
 /* Token fields exist for the local helper only; the hosted console
    authorizes actions from the Cloudflare Access sign-in. */
 body:not(.local-console) .local-only { display: none !important; }
+
+/* Layout fixes (2026-11-20).
+   Research cases: long mono lines set the list's min-content width, so rows
+   spilled out of the 340px column; the detail panel scrolled away with the
+   page while the much taller queue stayed, leaving an empty column. */
+.professional-ui .research-case-layout { align-items: start; }
+.professional-ui .research-case-list { grid-template-columns: minmax(0, 1fr); }
+.professional-ui .research-case-row,
+.professional-ui .research-case-row > * { min-width: 0; }
+.professional-ui .research-case-row * { overflow-wrap: anywhere; }
+.professional-ui .research-case-row :is(.badge, .pill, .severity-pill, [class*="severity-"]) { white-space: nowrap; overflow-wrap: normal; flex-shrink: 0; }
+@media (min-width: 1025px) {
+  .professional-ui .research-case-detail-panel {
+    position: sticky;
+    top: calc(var(--top-strip-height, 48px) + 12px);
+    max-height: calc(100vh - var(--top-strip-height, 48px) - 24px);
+    overflow-y: auto;
+  }
+}
+
+/* Phone header: the "Workspace" label pushed Sign out onto two lines and cut
+   the workspace name to three letters. */
+@media (max-width: 720px) {
+  .professional-ui .top-strip-live { display: none; }
+  .professional-ui .topbar-primary { gap: 8px; }
+  .professional-ui .workspace-context { flex: 1 1 auto; min-width: 0; }
+  .professional-ui .workspace-switcher { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .professional-ui .topbar-actions { flex: 0 0 auto; }
+  .professional-ui .topbar-actions button { white-space: nowrap; }
+}
