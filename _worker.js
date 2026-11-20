@@ -7,6 +7,8 @@ const ROOT_ASSET_PATHS = new Set([
   "/app.js",
   "/url-safety.js",
   "/styles.css",
+  "/styles.next.css",
+  "/ui-switch.js",
   "/radar-texture.png",
   "/view-run-output.html",
   "/view-run-output.js",
