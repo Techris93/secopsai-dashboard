@@ -3389,3 +3389,18 @@ body.professional-ui .main .mission-flow-step.active > span:first-child { color:
 
 /* Selection */
 body.professional-ui .main .research-case-row.selected { background: var(--accent-soft); border-color: var(--accent-border); }
+
+/* View summaries only name the active view for assistive tech; the tabs and
+   sidebar already show it. */
+#automation-view-summary, #system-view-summary, #publication-view-summary,
+#asset-view-summary, #research-view-summary {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}

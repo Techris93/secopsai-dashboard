@@ -282,7 +282,7 @@ def test_investigation_queue_metrics_separate_running_from_backlog():
     assert "latestCasePipelines" in app
     assert "pipeline:${pipeline}:${action}" in app
     assert "Failed history" in app
-    assert "remain parked" in app
+    assert "parked for another model" in app
 
 
 def test_analysis_jobs_use_responsive_deduplicated_pipeline_cards():

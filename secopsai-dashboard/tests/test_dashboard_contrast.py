@@ -79,6 +79,6 @@ def test_focus_is_always_visible():
 
 def test_stylesheet_cache_key_points_to_design_system_revision():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    assert "styles.css?v=20261120-design-system" in html
+    assert "styles.css?v=20261120-page-cleanup" in html
     assert "family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500" in html
     assert "Space+Grotesk" not in html and "Manrope" not in html

@@ -57,7 +57,7 @@ for (const marker of ['research-view-summary', 'publication-view-summary', 'auto
 for (const marker of ['mission-primary-decision', 'mission-next-decisions', 'mission-automation-flow', 'mission-health-strip', 'mission-secondary-details']) {
   assert.ok(index.includes(marker), `missing decision-first Overview surface: ${marker}`);
 }
-for (const marker of ['OPERATOR_GUIDANCE', 'renderOperatorGuidance', 'Do this first', 'Reported automation policies meet their safety gates', 'finding-decision-summary', 'finding-assessment-grid', 'Unconfirmed Static Lead']) {
+for (const marker of ['OPERATOR_GUIDANCE', 'renderOperatorGuidance', 'Do this first', 'finding-decision-summary', 'finding-assessment-grid', 'Unconfirmed Static Lead']) {
   assert.ok((app + styles).includes(marker) || (marker === 'Unconfirmed Static Lead' && app.includes('unconfirmed_static_lead')), `missing decision workflow marker: ${marker}`);
 }
 const guidanceStart = app.indexOf('const OPERATOR_GUIDANCE');
@@ -185,8 +185,8 @@ assert.equal((index.match(/id="intelligence-clear-token-btn"/g) || []).length, 1
 assert.ok(index.indexOf('id="intelligence-admin-token"') < index.indexOf('id="intelligence-service-actions"'));
 assert.ok(index.indexOf('id="intelligence-service-actions"') < index.indexOf('id="intelligence-request-title"'));
 
-assert.match(index, /styles\.css\?v=20261120-design-system/);
-assert.match(index, /app\.js\?v=20261120-design-system/);
+assert.match(index, /styles\.css\?v=20261120-page-cleanup/);
+assert.match(index, /app\.js\?v=20261120-page-cleanup/);
 assert.doesNotMatch(index, /styles\.css\?v=20260803-subsection-navigation/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function humanizeMachineText/);

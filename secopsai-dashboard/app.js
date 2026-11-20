@@ -2877,6 +2877,7 @@ function renderAiDependencyGuardSurface(findings) {
   const guardFindings = aiDependencyGuardFindings(findings);
   const latest = guardFindings[0] || null;
   const highRisk = guardFindings.filter(item => ['high', 'critical', 'urgent'].includes(String(findingSeverity(item)).toLowerCase())).length;
+  if (!guardFindings.length) return '';
   return `
     <div class="card finding-detail-card">
       <h4>AI Dependency Guard</h4>
@@ -2885,7 +2886,6 @@ function renderAiDependencyGuardSurface(findings) {
         <div class="kv-row"><div class="kv-key">High risk</div><div class="kv-val">${escapeHtml(String(highRisk))}</div></div>
         <div class="kv-row"><div class="kv-key">Latest</div><div class="kv-val">${latest ? `${escapeHtml(findingTitle(latest))} • ${escapeHtml(fmtDate(findingDetectedAt(latest)))}` : 'No persisted guard findings loaded yet'}</div></div>
       </div>
-      <div class="small" style="margin-top:12px;">Run <code>${escapeHtml(aiDependencyGuardCliFallback())}</code> locally. The guard warns by default and only fails CI when <code>--fail-on high</code> or <code>--fail-on critical</code> is set.</div>
     </div>
   `;
 }
@@ -4387,7 +4387,7 @@ function renderMissionControl() {
     tone: 'high',
     label: 'Coverage incomplete',
     title: `${degradedCollectors.length} collector${degradedCollectors.length === 1 ? '' : 's'} need attention`,
-    summary: 'A quiet source cannot be treated as clean while its cursor, coverage window, or dead-letter queue is degraded.',
+    summary: '',
     evidence: degradedCollectors.slice(0, 3).map(item => item.source || item.ecosystem || item.name || 'Collector needs review'),
     action: 'Review source coverage',
     route: 'research/coverage'
@@ -4405,7 +4405,7 @@ function renderMissionControl() {
     tone: 'high',
     label: 'Ownership blocked',
     title: `${blocked} work item${blocked === 1 ? '' : 's'} need an owner decision`,
-    summary: 'Resolve the oldest blocker before adding more work or specialist runs.',
+    summary: '',
     evidence: [`${inReview} in review`, `${activeRuns} active operational run${activeRuns === 1 ? '' : 's'}`],
     action: 'Open blocked work',
     route: 'work'
@@ -4414,7 +4414,7 @@ function renderMissionControl() {
     tone: 'medium',
     label: 'Evidence decision',
     title: `${validationBlockers} research case${validationBlockers === 1 ? '' : 's'} need validation`,
-    summary: 'Resolve the first missing or contradictory evidence item before asking a model or preparing publication.',
+    summary: '',
     evidence: [`${researchQueue.length} total cases`, `${publicationReady} publication ready`],
     action: 'Review research blockers',
     route: 'research/cases'
@@ -4423,7 +4423,7 @@ function renderMissionControl() {
     tone: 'medium',
     label: 'Analyst decision',
     title: `${openFindingsForCockpit.length} finding${openFindingsForCockpit.length === 1 ? '' : 's'} need triage`,
-    summary: 'Review priority, confidence, maliciousness, and local exposure as separate facts before choosing a disposition.',
+    summary: '',
     evidence: openFindingsForCockpit.slice(0, 2).map(item => `${findingSeverity(item)} · ${findingTitle(item)}`),
     action: 'Open decision queue',
     route: 'findings'
@@ -4432,7 +4432,7 @@ function renderMissionControl() {
     tone: 'info',
     label: 'Automation active',
     title: `${modelQueued} model job${modelQueued === 1 ? '' : 's'} queued; ${modelRunning} running`,
-    summary: 'Avoid starting duplicate runs.',
+    summary: '',
     evidence: [`${modelFailed} historical failure${modelFailed === 1 ? '' : 's'}`, ...(bridge.selected_model ? [`Model: ${selectedModel}`] : [])],
     action: 'Monitor model jobs',
     route: 'automation/jobs'
@@ -4441,7 +4441,7 @@ function renderMissionControl() {
     tone: 'success',
     label: 'Workspace clear',
     title: 'No urgent operator decision is waiting',
-    summary: 'Continue the scheduled workflow and review new evidence as it arrives.',
+    summary: '',
     evidence: [`${activeRuns} active run${activeRuns === 1 ? '' : 's'}`, `${discoveryCandidates} discovery candidate${discoveryCandidates === 1 ? '' : 's'}`],
     action: 'Review automation schedule',
     route: 'automation/investigations'
@@ -4455,7 +4455,7 @@ function renderMissionControl() {
       <article class="mission-primary-card tone-${escapeHtml(primaryDecision.tone)}">
         <div class="mission-decision-heading"><span class="sr-only">Do this first · ${escapeHtml(primaryDecision.label)}</span><span class="mission-decision-rank">1</span></div>
         <h3>${escapeHtml(primaryDecision.title)}</h3>
-        <p class="mission-decision-summary">${escapeHtml(primaryDecision.summary)}</p>
+        ${primaryDecision.summary ? `<p class="mission-decision-summary">${escapeHtml(primaryDecision.summary)}</p>` : ''}
         <div class="mission-decision-evidence"><strong>Current evidence</strong>${primaryDecision.evidence.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
         <div class="mission-decision-actions"><button class="primary-btn" type="button" data-decision-route="${escapeHtml(primaryDecision.route)}">${escapeHtml(primaryDecision.action)}</button></div>
       </article>`;
@@ -4470,7 +4470,7 @@ function renderMissionControl() {
         <div class="mission-section-heading"><div><span class="sr-only">After that</span><h3>Next decisions</h3></div><span>${Math.max(0, decisions.length - 1)} remaining</span></div>
         <div class="mission-next-list">${next.length ? next.map((item, index) => `
           <button class="mission-decision-row tone-${escapeHtml(item.tone)}" type="button" data-decision-route="${escapeHtml(item.route)}">
-            <span class="mission-decision-rank">${index + 2}</span><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.summary)}</small></span><span aria-hidden="true">›</span>
+            <span class="mission-decision-rank">${index + 2}</span><span><strong>${escapeHtml(item.title)}</strong>${item.summary ? `<small>${escapeHtml(item.summary)}</small>` : ''}</span><span aria-hidden="true">›</span>
           </button>`).join('') : '<div class="mission-clear-state"><strong>You are caught up.</strong></div>'}</div>
       </section>`;
     nextDecisionHost.querySelectorAll('[data-decision-route]').forEach(button => button.addEventListener('click', () => openDecisionRoute(button.dataset.decisionRoute)));
@@ -4484,7 +4484,7 @@ function renderMissionControl() {
       <section class="mission-flow-card">
         <div class="mission-section-heading"><div><span class="sr-only">Automatic workflow</span><h3>What SecOpsAI is doing now</h3></div></div>
         <div class="mission-flow">
-          <div class="mission-flow-step ${degradedCollectors.length ? 'needs-attention' : 'active'}"><span>1</span><strong>Discovery</strong><small>${coverageFresh ? (collectorRows.length ? `${healthyCollectors}/${collectorRows.length} collectors healthy` : '0 collectors configured') : escapeHtml(sourceCoveragePresentation().label)}</small></div>
+          <div class="mission-flow-step ${degradedCollectors.length ? 'needs-attention' : 'active'}"><span>1</span><strong>Discovery</strong>${coverageFresh ? `<small>${collectorRows.length ? `${healthyCollectors}/${collectorRows.length} collectors healthy` : '0 collectors configured'}</small>` : sourceCoveragePresentation().label === 'Local-only' ? '' : `<small>${escapeHtml(sourceCoveragePresentation().label)}</small>`}</div>
           <div class="mission-flow-step active"><span>2</span><strong>Evidence</strong><small>${discoveryCandidates} candidate${discoveryCandidates === 1 ? '' : 's'}</small></div>
           <div class="mission-flow-step ${modelBlocked ? 'needs-attention' : modelRunning ? 'active' : ''}"><span>3</span><strong>Model review</strong><small>${modelFlowStatus} · ${modelQueued} queued</small></div>
           <div class="mission-flow-step approval"><span>4</span><strong>Decision & publish</strong><small>${publicationReady} ready</small></div>
@@ -4492,9 +4492,9 @@ function renderMissionControl() {
         <div class="mission-automation-policy">
           <div><span>Daily workflow</span><strong>${dailySettings.enabled === true ? `Enabled${nextDailyRun ? ` · next ${fmtDate(nextDailyRun)}` : ''}` : dailySettings.enabled === false ? 'Paused' : 'Status unavailable'}</strong></div>
           <div><span>Alert review</span><strong>${escapeHtml(alertPolicyKnown ? humanizeSnake(alertAutomation.mode) : 'Status unavailable')}</strong></div>
-          <div><span>Investigation autopilot</span><strong title="${escapeHtml(investigationStatus.detail)}">${escapeHtml(investigationSettingsKnown ? `${investigationStatus.label}${investigationAutomation.auto_start_pipeline ? ' · auto-start' : ''}` : investigationStatus.label)}</strong></div>
-          <div><span>Specialist routing</span><strong title="${escapeHtml(specialistStatus.detail)}">${escapeHtml(specialistPolicyKnown && specialistStatus.label !== 'Local-only' ? `${specialistStatus.label}${specialistPolicy.maximum_automatic_tier ? ` · ${humanizeSnake(specialistPolicy.maximum_automatic_tier)}` : ''}` : specialistStatus.label)}</strong></div>
-          <p><strong>${safeAutomationGaps.length ? 'Automation can be improved.' : automationPolicyIncomplete ? 'Automation status is incomplete.' : localOnlyAutomation.length ? 'Some automation is local-only.' : 'Reported automation policies meet their safety gates.'}</strong> ${safeAutomationGaps.length ? escapeHtml(safeAutomationGaps.join('; ')) : localOnlyAutomation.length ? `${escapeHtml(localOnlyAutomation.join(' and '))} ${localOnlyAutomation.length === 1 ? 'is' : 'are'} not exposed by this hosted dashboard. Daily workflow limits are separate.` : automationPolicyIncomplete ? 'Refresh integration status before treating unavailable policies as configured.' : 'Verdicts, containment, sandbox submission, disclosure, publication, deployment, and destructive changes still require a person.'}</p>
+          ${investigationStatus.label === 'Local-only' ? '' : `<div><span>Investigation autopilot</span><strong title="${escapeHtml(investigationStatus.detail)}">${escapeHtml(investigationSettingsKnown ? `${investigationStatus.label}${investigationAutomation.auto_start_pipeline ? ' · auto-start' : ''}` : investigationStatus.label)}</strong></div>`}
+          ${specialistStatus.label === 'Local-only' ? '' : `<div><span>Specialist routing</span><strong title="${escapeHtml(specialistStatus.detail)}">${escapeHtml(specialistPolicyKnown ? `${specialistStatus.label}${specialistPolicy.maximum_automatic_tier ? ` · ${humanizeSnake(specialistPolicy.maximum_automatic_tier)}` : ''}` : specialistStatus.label)}</strong></div>`}
+          <p>${safeAutomationGaps.length ? `<strong>Automation can be improved.</strong> ${escapeHtml(safeAutomationGaps.join('; '))}` : 'Verdicts, containment, sandbox submission, disclosure, publication, deployment, and destructive changes still require a person.'}</p>
         </div>
       </section>`;
   }
@@ -4505,19 +4505,19 @@ function renderMissionControl() {
     healthStripHost.innerHTML = `
       <section class="mission-health-card" aria-label="Workspace health summary">
         <div><span>Findings</span><strong>${openFindingsForCockpit.length} need review</strong></div>
-        <div><span>Native triage</span><strong title="${escapeHtml(nativeTriagePresentation().detail)}">${escapeHtml(nativeTriagePresentation().value)}</strong></div>
+        ${nativeTriagePresentation().value === 'Local-only' ? '' : `<div><span>Native triage</span><strong title="${escapeHtml(nativeTriagePresentation().detail)}">${escapeHtml(nativeTriagePresentation().value)}</strong></div>`}
         <div><span>Model queue</span><strong>${modelRunning} running · ${modelQueued} queued</strong></div>
-        <div><span>Source coverage</span><strong title="${escapeHtml(sourceCoveragePresentation().detail)}">${escapeHtml(sourceCoveragePresentation().label)}</strong></div>
+        ${sourceCoveragePresentation().label === 'Local-only' ? '' : `<div><span>Source coverage</span><strong title="${escapeHtml(sourceCoveragePresentation().detail)}">${escapeHtml(sourceCoveragePresentation().label)}</strong></div>`}
         <div class="mission-health-updated"><span>Updated</span><strong>${escapeHtml(fmtDate(generatedAt))}</strong></div>
       </section>`;
   }
 
   const cockpitItems = [];
-  if (blocked) cockpitItems.push({ tone: 'critical', title: `${blocked} blocked work item${blocked === 1 ? '' : 's'}`, detail: 'Review the blocker and assign the next owner.', page: 'tasks' });
-  if (pendingApprovals) cockpitItems.push({ tone: 'high', title: `${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`, detail: 'Review the requested action before it can run.', page: 'integrations' });
-  if (openFindingsForCockpit.length) cockpitItems.push({ tone: 'medium', title: `${openFindingsForCockpit.length} open finding${openFindingsForCockpit.length === 1 ? '' : 's'}`, detail: 'Read evidence and decide the next action.', page: 'findings' });
-  if (researchReady) cockpitItems.push({ tone: 'high', title: `${researchReady} research case${researchReady === 1 ? '' : 's'} need review`, detail: 'Check evidence, disclosure, or publication readiness.', page: 'research-cases' });
-  if (!edgeWorkspaceReady) cockpitItems.push({ tone: 'info', title: 'Asset context is unavailable', detail: 'Check the Edge/Core connection before relying on network changes.', page: 'edge' });
+  if (blocked) cockpitItems.push({ tone: 'critical', title: `${blocked} blocked work item${blocked === 1 ? '' : 's'}`, detail: '', page: 'tasks' });
+  if (pendingApprovals) cockpitItems.push({ tone: 'high', title: `${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`, detail: '', page: 'integrations' });
+  if (openFindingsForCockpit.length) cockpitItems.push({ tone: 'medium', title: `${openFindingsForCockpit.length} open finding${openFindingsForCockpit.length === 1 ? '' : 's'}`, detail: '', page: 'findings' });
+  if (researchReady) cockpitItems.push({ tone: 'high', title: `${researchReady} research case${researchReady === 1 ? '' : 's'} need review`, detail: '', page: 'research-cases' });
+  if (!edgeWorkspaceReady) cockpitItems.push({ tone: 'info', title: 'Asset context is unavailable', detail: '', page: 'edge' });
 
   const attentionHost = el('mission-attention');
   if (attentionHost) {
@@ -4525,8 +4525,8 @@ function renderMissionControl() {
       <section class="card cockpit-panel">
         <div class="cockpit-panel-head"><div><span class="sr-only">Operator cockpit</span><h3>Needs attention</h3></div><span class="small">${cockpitItems.length ? `${cockpitItems.length} priority item${cockpitItems.length === 1 ? '' : 's'}` : 'Nothing urgent'}</span></div>
         <div class="cockpit-items">${cockpitItems.length ? cockpitItems.slice(0, 5).map(item => `
-          <button class="cockpit-item tone-${escapeHtml(item.tone)}" type="button" data-cockpit-page="${escapeHtml(item.page)}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></span><span aria-hidden="true">›</span></button>
-        `).join('') : '<div class="cockpit-clear"><strong>Workspace is clear</strong><span>Continue with scheduled scans, evidence review, or research intake.</span></div>'}</div>
+          <button class="cockpit-item tone-${escapeHtml(item.tone)}" type="button" data-cockpit-page="${escapeHtml(item.page)}"><span><strong>${escapeHtml(item.title)}</strong>${item.detail ? `<small>${escapeHtml(item.detail)}</small>` : ''}</span><span aria-hidden="true">›</span></button>
+        `).join('') : '<div class="cockpit-clear"><strong>Workspace is clear</strong></div>'}</div>
       </section>
       <section class="card cockpit-panel cockpit-summary"><span class="sr-only">System context</span><h3>Current operating mode</h3><div class="cockpit-facts"><span><strong>${edgeWorkspaceReady ? 'Connected' : 'Degraded'}</strong><small>Asset context</small></span><span><strong>${escapeHtml(nativeTriagePresentation().label)}</strong><small>Native triage</small></span><span><strong>${state.auth.user?.email ? 'Signed in' : 'Pilot'}</strong><small>Operator session</small></span></div></section>`;
     attentionHost.querySelectorAll('[data-cockpit-page]').forEach(button => button.addEventListener('click', () => setPage(button.dataset.cockpitPage)));
@@ -6059,16 +6059,16 @@ function renderSessionDetail(session) {
 function renderAutomation() {
   const view = state.intelligence.view || 'models';
   const viewCopy = {
-    models: ['Model routing', 'Choose any catalog model, persist it as the primary, and configure explicit ordered fallbacks.'],
-    review: ['Alert review', 'Queue bounded analysis and control evidence-gated review policy without granting publication rights.'],
-    investigations: ['Investigations', 'Track high-priority evidence collection and the coordinated daily workflow.'],
-    research: ['Research pipeline', 'Move package, artifact, repository, and extension evidence through safe static analysis, minimized model triage, analyst review, and a review-only draft.'],
-    learning: ['Detection learning', 'Evaluate evidence-backed rule changes in replay, shadow, and canary stages before activation.'],
-    jobs: ['Analysis jobs', 'Inspect durable requests, provider outcomes, complete results, and recovery actions.']
-  }[view] || ['Model routing', 'Choose and persist an approved analysis model.'];
+    models: 'Model routing',
+    review: 'Alert review',
+    investigations: 'Investigations',
+    research: 'Research pipeline',
+    learning: 'Detection learning',
+    jobs: 'Analysis jobs'
+  }[view] || 'Model routing';
   const summary = el('automation-view-summary');
   if (summary) {
-    summary.innerHTML = `<span class="sr-only">Automation workspace</span><strong>${escapeHtml(viewCopy[0])}</strong><span>${escapeHtml(viewCopy[1])}</span>`;
+    summary.innerHTML = `<span class="sr-only">Automation workspace: ${escapeHtml(viewCopy)}</span>`;
   }
   const page = el('page-automation');
   if (page) page.dataset.automationView = view;
@@ -6087,13 +6087,13 @@ function renderAutomation() {
 function renderIntegrations() {
   const systemView = state.integrationView || 'health';
   const systemViewCopy = {
-    health: ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'],
-    integrations: ['Integrations', 'Review the runtime connections and data boundaries used by this workspace.'],
-    credentials: ['Credentials', 'Review which credentials are required for protected actions and where they are kept.'],
-    audit: ['Audit and jobs', 'Trace queued analysis, native actions, investigation sessions, and orchestrator history.']
-  }[systemView] || ['Platform health', 'Check whether Core, Edge, native triage, and the event stream are available.'];
+    health: 'Platform health',
+    integrations: 'Integrations',
+    credentials: 'Credentials',
+    audit: 'Audit and jobs'
+  }[systemView] || 'Platform health';
   const systemSummary = el('system-view-summary');
-  if (systemSummary) systemSummary.innerHTML = `<span class="sr-only">System workspace</span><strong>${escapeHtml(systemViewCopy[0])}</strong><span>${escapeHtml(systemViewCopy[1])}</span>`;
+  if (systemSummary) systemSummary.innerHTML = `<span class="sr-only">System workspace: ${escapeHtml(systemViewCopy)}</span>`;
   const systemPage = el('page-integrations');
   if (systemPage) systemPage.dataset.systemView = systemView;
   document.querySelectorAll('#page-integrations [data-system-section]').forEach(section => {
@@ -6935,7 +6935,7 @@ function renderIntelligence() {
     <div class="metric-card"><div class="metric">${counts.running || 0}</div><div class="metric-label">Running</div></div>
     <div class="metric-card"><div class="metric">${counts.failed || 0}</div><div class="metric-label">Failed history</div></div>
     ${data?.jobs?.current_counts ? `<div class="metric-card"><div class="metric">${data.jobs.current_counts.failed || 0}</div><div class="metric-label">Currently blocked targets</div></div>` : ''}
-    <div class="small" style="grid-column:1/-1;">Counts include durable attempts. Current pipeline rows below are deduplicated; transport failures can be recovered in a bounded pass, while ${parkedProviderJobs ? `${parkedProviderJobs} provider-wait job(s) captured for another model remain parked` : 'jobs captured for another model remain parked'} rather than being silently rerouted.</div>`;
+    ${parkedProviderJobs ? `<div class="small" style="grid-column:1/-1;">${parkedProviderJobs} provider-wait job${parkedProviderJobs === 1 ? '' : 's'} parked for another model</div>` : ''}`;
 
   const bridgePill = el('intelligence-bridge-pill');
   const bridgeDetail = el('intelligence-bridge-detail');
@@ -7978,15 +7978,15 @@ function renderBlogOps() {
   const status = state.blogOps.status || {};
   const publicationView = state.blogOps.view || 'review';
   const publicationViewCopy = {
-    research: ['Original research', 'Prepare and review evidence-led SecOpsAI investigations for publication.'],
-    advisories: ['Advisories', 'Publish confirmed defensive guidance, indicators, and mitigations with explicit review.'],
-    news: ['News intake', 'Collect and prepare external security news. This content is not original SecOpsAI research.'],
-    drafts: ['Drafts', 'Inspect generated editorial drafts and their source references before review.'],
-    review: ['Editorial review', 'Approve, reject, or return public content after checking claims, references, disclosure, and safety.'],
-    published: ['Published output', 'Review delivery state and deployment history for approved public content.']
-  }[publicationView] || ['Editorial review', 'Approve, reject, or return public content after checking claims, references, disclosure, and safety.'];
+    research: 'Original research',
+    advisories: 'Advisories',
+    news: 'News intake',
+    drafts: 'Drafts',
+    review: 'Editorial review',
+    published: 'Published output'
+  }[publicationView] || 'Editorial review';
   const publicationSummary = el('publication-view-summary');
-  if (publicationSummary) publicationSummary.innerHTML = `<span class="sr-only">Publication workspace</span><strong>${escapeHtml(publicationViewCopy[0])}</strong><span>${escapeHtml(publicationViewCopy[1])}</span>`;
+  if (publicationSummary) publicationSummary.innerHTML = `<span class="sr-only">Publication workspace: ${escapeHtml(publicationViewCopy)}</span>`;
   const publicationPage = el('page-blog-ops');
   if (publicationPage) publicationPage.dataset.publicationView = publicationView;
   const contentFilter = el('blog-content-filter');
@@ -10256,14 +10256,14 @@ function renderEdgeWorkspace() {
   const workspace = state.edgeWorkspace.data;
   const assetView = state.edgeWorkspace.view || 'inventory';
   const assetViewCopy = {
-    inventory: ['Asset inventory', 'Review the current device inventory and its related Core findings.'],
-    changes: ['Network changes', 'Trace new devices, missing devices, service changes, and observation history.'],
-    sensors: ['Sensors', 'Check sensor connectivity, runtime state, version, and last error.'],
-    schedules: ['Scans and schedules', 'Review recurring scan coverage and active scan jobs.'],
-    wifi: ['Wi-Fi observations', 'Review reported wireless networks, BSSIDs, channels, and encryption state.']
-  }[assetView] || ['Asset inventory', 'Review the current device inventory and its related Core findings.'];
+    inventory: 'Asset inventory',
+    changes: 'Network changes',
+    sensors: 'Sensors',
+    schedules: 'Scans and schedules',
+    wifi: 'Wi-Fi observations'
+  }[assetView] || 'Asset inventory';
   const assetSummary = el('asset-view-summary');
-  if (assetSummary) assetSummary.innerHTML = `<span class="sr-only">Asset workspace</span><strong>${escapeHtml(assetViewCopy[0])}</strong><span>${escapeHtml(assetViewCopy[1])}</span>`;
+  if (assetSummary) assetSummary.innerHTML = `<span class="sr-only">Asset workspace: ${escapeHtml(assetViewCopy)}</span>`;
   const assetPage = el('page-edge');
   if (assetPage) assetPage.dataset.assetView = assetView;
   document.querySelectorAll('#page-edge [data-edge-section]').forEach(section => {
@@ -13368,7 +13368,7 @@ function renderResearchCases() {
     resolved: 'Resolved by agents'
   }[researchView] || 'Research cases';
   const viewSummary = el('research-view-summary');
-  if (viewSummary) markupOf(viewSummary).innerHTML = `<strong>${escapeHtml(researchViewTitle)}</strong>`;
+  if (viewSummary) markupOf(viewSummary).innerHTML = `<span class="sr-only">${escapeHtml(researchViewTitle)}</span>`;
   const page = el('page-research-cases');
   if (page) page.dataset.researchView = researchView;
   document.querySelectorAll('#page-research-cases [data-research-section]').forEach(section => {
