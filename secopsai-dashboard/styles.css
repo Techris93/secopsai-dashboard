@@ -3404,3 +3404,5 @@ body.professional-ui .main .research-case-row.selected { background: var(--accen
   white-space: nowrap !important;
   border: 0 !important;
 }
+
+body.professional-ui .main .system-local-note { min-height: 0; padding: 4px 16px; }
