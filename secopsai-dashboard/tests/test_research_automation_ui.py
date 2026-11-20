@@ -59,7 +59,7 @@ def test_research_actions_are_typed_and_not_shell_commands():
     assert "finding?.finding_id || finding?.id" in source
     assert "nativeCloseDraft" in source
     styles = (ROOT / "styles.css").read_text(encoding="utf-8")
-    assert ".research-pipeline-targets {\n  grid-template-columns: repeat(2, minmax(0, 1fr));" in styles
+    assert ".research-pipeline-targets { grid-template-columns: repeat(2, minmax(0, 1fr)); }" in styles
 
 
 def test_helper_research_actions_map_to_allowlisted_cli_args():

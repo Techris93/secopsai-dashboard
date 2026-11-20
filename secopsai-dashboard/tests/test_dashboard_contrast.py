@@ -1,7 +1,11 @@
+"""The console design system: one palette, readable contrast, no decoration."""
+import re
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CSS = (ROOT / "styles.css").read_text(encoding="utf-8")
+DESIGN = CSS.split("SecOpsAI console design system", 1)[1]
 
 
 def _relative_luminance(hex_color):
@@ -19,67 +23,62 @@ def _contrast_ratio(foreground, background):
     return (max(first, second) + 0.05) / (min(first, second) + 0.05)
 
 
-def test_bright_contrast_layer_defines_readable_tokens_and_controls():
-    css = (ROOT / "styles.css").read_text(encoding="utf-8")
-    assert "/* Bright contrast correction." in css
-    assert "--contrast-text: #17211e" in css
-    assert "--contrast-text-soft: #40534b" in css
-    assert "--contrast-text-muted: #53645d" in css
-    assert "--contrast-green: #087963" in css
-    assert "--surface-muted" in css
-    assert "body.professional-ui .main :is(button, a, input, select, textarea, summary):focus-visible" in css
-    assert "body.professional-ui .main :is(button, input, select, textarea)[disabled]" in css
-    assert "body.professional-ui #page-tasks .task-card" in css
-    assert "body.professional-ui .main .metric-scope" in css
-    assert "body.professional-ui .main :is(.operations-cockpit, .cockpit-panel, .cockpit-summary)" in css
-    assert "body.professional-ui .main .table-link" in css
-    assert "body.professional-ui .main :is(.severity-urgent, .severity-critical)" in css
-    assert "body.professional-ui .main option" in css
-    assert "body.professional-ui .main .research-evidence-row > span:first-child" in css
-    assert "opacity: 0.9 !important" in css
-    assert "body.professional-ui .main .badge" in css
-    assert "body.professional-ui .main .inline-action-menu > div" in css
-    assert "body.professional-ui .main #work-scope-note" in css
-    assert "body.professional-ui .sidebar .sidebar-footer" in css
-    assert "body.professional-ui .sidebar #global-status" in css
-    assert "background: #173229 !important" in css
-    assert "color: #f4f8f6 !important" in css
-    assert "body.professional-ui #page-triage-ops :is(" in css
-    assert ".triage-alert-card" in css
-    assert "body.professional-ui #page-operator-guide .guide-pill" in css
+def _token(name):
+    match = re.search(rf"--{name}:\s*#([0-9a-f]{{6}});", DESIGN)
+    assert match, name
+    return match.group(1)
 
 
-def test_bright_theme_text_and_green_tokens_meet_wcag_aa_on_white():
-    for token in ("17211e", "40534b", "53645d", "62716b", "087963", "086b58", "0f4c81", "8a5a00", "9e1b1b"):
-        assert _contrast_ratio(token, "ffffff") >= 4.5, token
+def test_design_system_is_the_last_word():
+    assert CSS.index("SecOpsAI console design system") > len(CSS) // 2
+    for name in ("bg", "surface", "border", "text", "text-2", "text-3", "accent", "danger", "warning", "info", "nav-bg"):
+        _token(name)
 
 
-def test_operator_status_panel_keeps_rail_text_readable():
-    assert _contrast_ratio("f4f8f6", "173229") >= 4.5
-    assert _contrast_ratio("9fbbb2", "173229") >= 4.5
+def test_text_tokens_meet_wcag_aa_on_every_surface():
+    for text in ("text", "text-2", "text-3"):
+        for surface in ("surface", "surface-2", "bg"):
+            assert _contrast_ratio(_token(text), _token(surface)) >= 4.5, (text, surface)
 
 
-def test_bright_theme_does_not_use_hover_as_the_only_readability_fix():
-    css = (ROOT / "styles.css").read_text(encoding="utf-8")
-    bright_layer = css.split("/* Bright contrast correction.", 1)[1]
-    assert "color: var(--contrast-text-soft) !important" in bright_layer
-    assert "opacity: 1 !important" in bright_layer
-    assert "cursor: not-allowed !important" in bright_layer
-    # The final layer uses a stable resting color for controls; hover is only
-    # an interaction affordance and cannot be the source of text visibility.
-    assert ".main :is(.secondary-btn, .mini-btn" in bright_layer
-    assert "color: var(--contrast-text) !important" in bright_layer
+def test_status_colours_are_readable_on_their_tints():
+    for strong, soft in (("danger", "danger-soft"), ("warning", "warning-soft"), ("info", "info-soft"), ("accent-text", "accent-soft")):
+        assert _contrast_ratio(_token(strong), _token(soft)) >= 4.5, strong
+    assert _contrast_ratio("ffffff", _token("accent")) >= 4.5
+    assert _contrast_ratio("ffffff", _token("danger")) >= 4.5
 
 
-def test_stylesheet_cache_key_points_to_contrast_revision():
+def test_navigation_rail_text_is_readable():
+    for text in ("nav-text", "nav-text-strong"):
+        assert _contrast_ratio(_token(text), _token("nav-bg")) >= 4.5, text
+        assert _contrast_ratio(_token(text), _token("nav-active")) >= 4.5, text
+    assert _contrast_ratio(_token("nav-muted"), _token("nav-bg")) >= 4.5
+
+
+def test_no_decoration_survives_anywhere():
+    assert "gradient(" not in CSS.split("SecOpsAI console design system", 1)[0]
+    assert "text-transform: uppercase" not in CSS
+    assert "radar-texture" not in CSS
+    assert "text-shadow:" not in CSS.replace("text-shadow: none", "")
+    families = set(re.findall(r"font-family:\s*([^;!}]+)", CSS))
+    assert families <= {"inherit", "var(--font-sans)", "var(--font-mono)"}, families
+
+
+def test_every_colour_comes_from_the_palette():
+    palette = {value.lower() for value in re.findall(r"--[\w-]+:\s*(#[0-9a-fA-F]{6})", DESIGN)}
+    palette |= {"#ffffff", "#fff", "#f1f3f2", "#cdd4cf", "#e2e6e3", "#eef1ef", "#f8f9f8", "#131b17", "#45514b", "#66726b"}
+    used = {value.lower() for value in re.findall(r"#[0-9a-fA-F]{6}\b", CSS)}
+    stray = used - palette
+    assert len(stray) <= 14, sorted(stray)
+
+
+def test_focus_is_always_visible():
+    assert ":focus-visible { outline: 2px solid var(--accent)" in DESIGN
+    assert "var(--focus-ring)" in DESIGN
+
+
+def test_stylesheet_cache_key_points_to_design_system_revision():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    assert 'styles.css?v=20261120-layout-fixes' in html
-    assert 'styles.css?v=20260803-subsection-navigation' not in html
-
-
-def test_operator_identity_uses_readable_bright_header_color():
-    css = (ROOT / "styles.css").read_text(encoding="utf-8")
-    assert "body.professional-ui .top-strip .operator-identity" in css
-    assert "color: #33413b !important;" in css
-    assert "body.professional-ui .topbar .operator-identity" not in css
-    assert _contrast_ratio("33413b", "ffffff") >= 4.5
+    assert "styles.css?v=20261120-design-system" in html
+    assert "family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500" in html
+    assert "Space+Grotesk" not in html and "Manrope" not in html

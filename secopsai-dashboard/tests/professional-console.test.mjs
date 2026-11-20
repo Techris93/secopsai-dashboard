@@ -185,8 +185,8 @@ assert.equal((index.match(/id="intelligence-clear-token-btn"/g) || []).length, 1
 assert.ok(index.indexOf('id="intelligence-admin-token"') < index.indexOf('id="intelligence-service-actions"'));
 assert.ok(index.indexOf('id="intelligence-service-actions"') < index.indexOf('id="intelligence-request-title"'));
 
-assert.match(index, /styles\.css\?v=20261120-layout-fixes/);
-assert.match(index, /app\.js\?v=20261120-layout-fixes/);
+assert.match(index, /styles\.css\?v=20261120-design-system/);
+assert.match(index, /app\.js\?v=20261120-design-system/);
 assert.doesNotMatch(index, /styles\.css\?v=20260803-subsection-navigation/);
 assert.match(app, /window\.addEventListener\('popstate'/);
 assert.match(app, /function humanizeMachineText/);
@@ -196,12 +196,12 @@ assert.match(app, /const currentButton = buttonId \? el\(buttonId\) : originalBu
 assert.match(app, /function renderContextNav\(pageId, routeOverride = null\)/);
 assert.match(app, /renderContextNav\(normalizedPageId, activeRoute\)/);
 assert.match(styles, /^\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/m);
-assert.match(styles, /Accessibility pass: retain the bright green control-room concept/);
-assert.match(styles, /\.professional-ui \.small,[\s\S]*font-size: \.82rem/);
+assert.match(styles, /SecOpsAI console design system/);
+assert.match(styles, /\.small, small \{ font-size: var\(--fs-sm\)/);
+assert.match(styles, /\.research-case-row\.selected \{ background: var\(--accent-soft\)/);
+assert.match(styles, /:is\(\.severity-pill, \.badge, \.pill, \.status-pill\):is\(\.high, \.severity-high\)/);
+assert.match(styles, /\.brand-overline/);
 assert.match(styles, /\.professional-ui \.research-pipeline-operational/);
-assert.match(styles, /\.professional-ui \.research-case-row\.selected[\s\S]*background: #e5f5ef/);
-assert.match(styles, /\.professional-ui \.severity-pill\.high,[\s\S]*background: #fff0dc/);
-assert.match(styles, /\.professional-ui \.brand-overline \{ font-size: \.66rem/);
 assert.match(app, /function refreshActiveSurface/);
 assert.match(app, /surfaceRefreshInFlight/);
 assert.match(app, /setInterval\(\(\) => \{\s*refreshActiveSurface\(\);\s*\}, 5000\)/s);

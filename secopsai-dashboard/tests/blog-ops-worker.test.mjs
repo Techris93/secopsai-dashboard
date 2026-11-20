@@ -853,9 +853,8 @@ function testOkComputerSkinIsPresent() {
   const audit = readFileSync(new URL("../docs/okcomputer-reference-audit.md", import.meta.url), "utf8");
   assert.match(html, /class="okcomputer-skin(?: professional-ui)?"/);
   assert.match(html, /<span class="nav-icon" aria-hidden="true"><svg/);
-  assert.match(css, /OKComputer_Sec reference skin/);
-  assert.match(css, /--void-black: #050507/);
-  assert.match(css, /--teal-primary: #00d4c8/);
+  assert.match(css, /SecOpsAI console design system/);
+  assert.doesNotMatch(css, /--void-black|--teal-primary/);
   assert.match(audit, /Live reference/);
   assert.match(audit, /Kimi seed script was not copied/);
   assert.equal(html.includes("kimi.com/sdk-seed.js"), false);
@@ -915,7 +914,6 @@ function testOperatorGuideUiIsPresent() {
   assert.match(app, /sanitizeCampaignSummary/);
   assert.match(app, /Sources, IOCs, actors, and behavior indicators/);
   assert.match(app, /Import or inspect Campaign JSON/);
-  assert.match(css, /Operator guide/);
   assert.match(css, /\.guide-layout/);
   assert.match(css, /\.guide-step/);
   assert.match(css, /\.guide-toc/);
