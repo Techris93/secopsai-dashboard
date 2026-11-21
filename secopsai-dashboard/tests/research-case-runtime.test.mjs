@@ -494,6 +494,28 @@ vm.runInContext('state.intelligence.data.models = genericModelFixture;', runtime
 assert.equal(vm.runInContext("intelligenceModelSupportsAction('native', 'analyze_research_case')", runtime.context), true);
 assert.equal(vm.runInContext("intelligenceModelSupportsAction('uncatalogued/model', 'analyze_research_case')", runtime.context), false);
 console.log('research case, decision capability, and detection learning runtime rendering checks passed');
+{
+  // Approval status: queued from the hosted console, refused by the worker, then recorded.
+  const edition = {edition_id: 'BRIEF-2026-11-21', edition_date: '2026-11-21', state: 'verifying', fingerprint: 'f1', updated_at: '2026-11-21T16:00:00Z',
+    draft: {title: 'Approval status fixture', body_markdown: 'Body.'}};
+  const render = (fixture) => { runtime.context.approvalFixture = fixture; vm.runInContext('state.researchCases.operation = approvalFixture; renderResearchOperation();', runtime.context); return runtime.elements.get('research-operation-status').innerHTML; };
+  const base = {coverage: {sources: []}, editions: [edition]};
+  let html = render({...base, commands: [{action: 'brief-approve', id: 'BRIEF-2026-11-21', status: 'queued', queued_at: '2026-11-21T16:33:13Z'}]});
+  assert.ok(html.includes('Approval submitted'), 'a queued approval is visible');
+  assert.ok(html.includes('approval queued'));
+  assert.ok(html.includes('>Approval queued</button>') && !/research-edition-approve" data-edition/.test(html), 'it cannot be submitted twice');
+  html = render({...base, commands: [{action: 'brief-approve', id: 'BRIEF-2026-11-21', status: 'failed', queued_at: '2026-11-21T16:33:13Z', completed_at: '2026-11-21T17:01:00Z', error: 'editor must approve the fingerprint of the exact edition they reviewed'}]});
+  assert.ok(html.includes('Approval was not recorded') && html.includes('fingerprint of the exact edition'), 'a refusal shows its reason');
+  assert.ok(/research-edition-approve" data-edition/.test(html), 'and approval can be tried again');
+  html = render({...base, editions: [{...edition, updated_at: '2026-11-21T18:00:00Z'}], commands: [{action: 'brief-approve', id: 'BRIEF-2026-11-21', status: 'failed', queued_at: '2026-11-21T16:33:13Z', error: 'old'}]});
+  assert.ok(!html.includes('Approval was not recorded'), 'a later save supersedes an old refusal');
+  html = render({coverage: {sources: []}, editions: [{...edition, state: 'approved', approval: {approved_by: 'editor@example.test', approved_at: '2026-11-21T17:01:00Z', current: true}}],
+    commands: [{action: 'brief-approve', id: 'BRIEF-2026-11-21', status: 'succeeded', queued_at: '2026-11-21T16:33:13Z'}]});
+  assert.ok(html.includes('<strong>Approved</strong> by editor@example.test'), 'an approval names who and when');
+  assert.ok(html.includes(' · approved</summary>'));
+  assert.ok(!html.includes('Approve this exact draft for release') && !html.includes('class="research-edition-check"'), 'an approved edition is not offered for approval again');
+  console.log('edition approval status rendering checks passed');
+}
 
 const operationFixture = {
   coverage: {public_summary: 'Synthetic preview: bounded collection; upstream denominators remain unknown.', sources: [{name: 'Primary vendor fixture', enabled: true, fresh: true, coverage_mode: 'source_reporting', observed_events: 12, artifacts_analyzed: null, last_success_at: '2026-10-13T09:00:00Z'}]},
@@ -558,6 +580,11 @@ assert.ok(publishedHtml.includes('Save correction draft'));
 assert.ok(publishedHtml.includes('the public record remains unchanged until a human approves'));
 // After a queued save, the old draft on screen cannot be approved; the hold
 // ends when the worker's new draft (a new fingerprint) arrives or expires.
+// A published edition is not approvable again: no checks or approve button.
+assert.ok(!publishedHtml.includes('Approve this exact draft for release'));
+assert.ok(!publishedHtml.includes('class="research-edition-check"'));
+// A correction draft goes back to verifying and can be approved again.
+operationFixture.editions[0] = {...operationFixture.editions[0], state: 'verifying'};
 vm.runInContext('holdResearchApproval(operationFixture.editions[0]); renderResearchOperation();', runtime.context);
 const heldHtml = runtime.elements.get('research-operation-status').innerHTML;
 assert.ok(heldHtml.includes('Approval waits until your saved changes load'));
