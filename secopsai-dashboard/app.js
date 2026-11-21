@@ -11100,6 +11100,36 @@ function holdResearchApproval(edition) {
   saveResearchApprovalHolds(holds);
 }
 
+// Where an edition's release decision stands. Approvals from the hosted
+// console are queued for the research worker, which records them on its next
+// cycle; until then only the queued command shows the decision was made.
+const RESEARCH_COMMAND_DONE = new Set(['succeeded', 'failed', 'canceled', 'degraded', 'recovered']);
+const RESEARCH_APPROVED_STATES = new Set(['approved', 'published', 'corrected', 'retracted']);
+
+function researchEditionDecision(edition, commands = []) {
+  const mine = (commands || []).filter(c => c.id === edition.edition_id && c.action === 'brief-approve');
+  const pending = mine.find(c => !RESEARCH_COMMAND_DONE.has(c.status)) || null;
+  const latest = mine.find(c => RESEARCH_COMMAND_DONE.has(c.status)) || null;
+  // A failure matters only if nothing changed since: a later save or approval supersedes it.
+  const failed = !pending && latest?.status === 'failed' && Date.parse(latest.queued_at || 0) >= Date.parse(edition.updated_at || 0) ? latest : null;
+  const approved = RESEARCH_APPROVED_STATES.has(edition.state) && edition.approval?.current !== false;
+  return { pending, failed, approved, approval: edition.approval || null };
+}
+
+function researchEditionDecisionMarkup(decision) {
+  if (decision.pending) return `<p class="research-edition-decision" role="status"><strong>Approval submitted</strong> ${escapeHtml(fmtDate(decision.pending.queued_at))}. The research worker records it on its next cycle (about hourly); this card updates then.</p>`;
+  if (decision.failed) return `<p class="research-edition-decision" role="alert"><strong>Approval was not recorded</strong> (${escapeHtml(fmtDate(decision.failed.completed_at || decision.failed.queued_at))}): ${escapeHtml(decision.failed.error || 'the worker refused it')}. Review the current draft and approve again.</p>`;
+  if (decision.approved) return `<p class="research-edition-decision" role="status"><strong>Approved</strong>${decision.approval?.approved_by ? ` by ${escapeHtml(decision.approval.approved_by)}` : ''}${decision.approval?.approved_at ? ` on ${escapeHtml(fmtDate(decision.approval.approved_at))}` : ''}.</p>`;
+  return '';
+}
+
+function researchEditionDecisionLabel(decision) {
+  if (decision.pending) return ' · approval queued';
+  if (decision.failed) return ' · approval failed';
+  if (decision.approved) return ' · approved';
+  return '';
+}
+
 function researchApprovalHeld(edition, now = Date.now()) {
   const holds = researchApprovalHolds();
   const hold = holds[edition?.edition_id];
@@ -11330,7 +11360,11 @@ function renderResearchOperation() {
     ${(operation.editions || []).slice(0, 5).map(edition => {
       const update = edition.pending_update;
       const correction = ['published', 'corrected', 'retracted'].includes(edition.state);
-      return `<details class="research-action-drawer" id="research-edition-${escapeHtml(edition.edition_date)}"><summary>Daily brief ${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}${update ? ' · verified updates waiting' : ''}</summary>
+      const decision = researchEditionDecision(edition, operation.commands);
+      // The backend accepts an approval only for a verifying draft.
+      const approvable = edition.state === 'verifying';
+      return `<details class="research-action-drawer" id="research-edition-${escapeHtml(edition.edition_date)}"><summary>Daily brief ${escapeHtml(edition.edition_date)} · ${escapeHtml(humanizeSnake(edition.state))}${researchEditionDecisionLabel(decision)}${update ? ' · verified updates waiting' : ''}</summary>
+        ${researchEditionDecisionMarkup(decision)}
         ${edition.draft ? `<p>${escapeHtml(edition.draft.title)}</p>
           ${update ? `<section class="research-edition-update" aria-label="Verified source updates awaiting reconciliation"><h4>${correction ? 'Newly verified information needs a correction review' : 'Newly verified information needs editorial reconciliation'}</h4><p>This material is stored separately and has not been added to the edition. Read the sources, update the complete draft below, and save it through the review gate.</p>
             ${update.new_items?.length ? `<ul>${update.new_items.map(item => `<li><strong>${escapeHtml(item.title)}</strong> · ${escapeHtml(item.source)} · <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">source</a><br>${escapeHtml(item.summary)}<br>Defensive action: ${escapeHtml(item.defensive_action)}<br>Limitations: ${escapeHtml(item.limitations)}</li>`).join('')}</ul>` : '<p>No new item was added. Review the changed verification or collection scope before reconciling this update.</p>'}
@@ -11342,10 +11376,12 @@ function renderResearchOperation() {
           <label><span>Complete draft</span><textarea class="research-edition-body" style="min-height:18rem;white-space:pre-wrap;">${escapeHtml(edition.draft.body_markdown || '')}</textarea></label>
           ${correction ? '<label><span>Public correction reason</span><textarea class="research-edition-correction-reason"></textarea></label>' : ''}
           <button type="button" class="secondary-btn research-edition-save" data-mode="${update ? 'incorporate' : 'edit'}">${correction ? 'Save correction draft' : update ? 'Save draft with verified updates' : 'Save editorial changes'}</button>
-          ${researchBriefChecksMarkup(edition)}
+          ${approvable ? `${researchBriefChecksMarkup(edition)}
           <label><span>Rationale</span><select class="research-edition-rationale-template" data-edition="${escapeHtml(edition.edition_id)}">${briefRationaleTemplates(edition).map(t => `<option value="${escapeHtml(t.id)}"${t.id === 'custom' ? ' selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}</select></label>
           <label><span>Editorial decision rationale</span><textarea class="research-edition-rationale" data-edition="${escapeHtml(edition.edition_id)}" style="min-height:9rem;"></textarea></label>
-          ${researchApprovalHeld(edition) ? '<button type="button" class="secondary-btn research-edition-approve" disabled>Approval waits until your saved changes load</button>' : `<button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>`}` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
+          ${decision.pending ? '<button type="button" class="secondary-btn research-edition-approve" disabled>Approval queued</button>'
+            : researchApprovalHeld(edition) ? '<button type="button" class="secondary-btn research-edition-approve" disabled>Approval waits until your saved changes load</button>'
+            : `<button type="button" class="secondary-btn research-edition-approve" data-edition="${escapeHtml(edition.edition_id)}">Approve this exact draft for release</button>`}` : ''}` : `<p>${escapeHtml(edition.draft_omitted || 'The complete draft remains in the ledger. Review it there before approval.')}</p>`}
         ${edition.published_url ? `<p>Publication recorded: ${escapeHtml(edition.published_url)}</p>` : ''}</details>`;
     }).join('')}`;
   if (!markupOf.changed) return;
